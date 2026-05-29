@@ -1,0 +1,120 @@
+#!/bin/bash
+#SBATCH --job-name=lightmunet_arcade
+#SBATCH --partition=gpu_a100
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=18
+#SBATCH --gpus=1
+#SBATCH --mem=120G
+#SBATCH --time=24:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+# Prefer conda-installed CUDA toolkit if you installed cuda-toolkit=11.8 there
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- Move to LightM-UNet package root -----------------------------------------
+cd "$HOME/LightM-UNet/lightm-unet"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Working dir: $(pwd)"
+echo "Conda env: $CONDA_PREFIX"
+
+echo "=== GPU info ==="
+nvidia-smi
+echo "GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader | head -n 1)"
+
+echo "=== Python/CUDA environment check ==="
+which python
+python --version
+which nvcc || true
+nvcc --version || true
+
+python - <<'PY'
+import torch
+import numpy
+import transformers
+import mamba_ssm
+import nnunetv2
+import cv2
+
+print("torch:", torch.__version__)
+print("torch CUDA:", torch.version.cuda)
+print("CUDA available:", torch.cuda.is_available())
+print("GPU:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)
+print("numpy:", numpy.__version__)
+print("transformers:", transformers.__version__)
+print("cv2:", cv2.__version__)
+print("mamba_ssm OK")
+print("nnunetv2 OK")
+
+assert torch.cuda.is_available(), "CUDA is not available in PyTorch"
+assert numpy.__version__.startswith("1.26"), numpy.__version__
+assert transformers.__version__ == "4.35.2", transformers.__version__
+PY
+
+echo "=== nnU-Net paths ==="
+echo "nnUNet_raw=$nnUNet_raw"
+echo "nnUNet_preprocessed=$nnUNet_preprocessed"
+echo "nnUNet_results=$nnUNet_results"
+
+echo "=== Dataset check ==="
+ls "$nnUNet_raw/Dataset501_ARCADE"
+ls "$nnUNet_preprocessed/Dataset501_ARCADE"
+
+echo "=== Ensure official split is present ==="
+cp "$nnUNet_raw/Dataset501_ARCADE/splits_final.json" \
+   "$nnUNet_preprocessed/Dataset501_ARCADE/splits_final.json"
+
+echo "=== Plan check ==="
+python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+p = Path(os.environ["nnUNet_preprocessed"]) / "Dataset501_ARCADE" / "nnUNetPlans.json"
+with open(p, "r") as f:
+    plans = json.load(f)
+
+cfg = plans["configurations"]["2d"]
+
+print("patch_size:", cfg["patch_size"])
+print("batch_size:", cfg["batch_size"])
+print("median_image_size_in_voxels:", cfg["median_image_size_in_voxels"])
+
+assert cfg["patch_size"] == [512, 512], "You are not using the 512x512 HPC plan"
+assert cfg["median_image_size_in_voxels"] == [512.0, 512.0], "Unexpected median image size"
+PY
+
+echo "=== Start LightM-UNet training ==="
+nnUNetv2_train 501 2d 0 -tr nnUNetTrainerLightMUNet
+
+echo "Training finished."
