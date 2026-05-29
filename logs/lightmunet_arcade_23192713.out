@@ -1,0 +1,96 @@
+=== Job info ===
+Host: gcn47.local.snellius.surf.nl
+Date: Thu May 28 20:36:36 CEST 2026
+Working dir: /home/yhussein/LightM-UNet/lightm-unet
+Conda env: /home/yhussein/conda-envs/lightmunet
+=== GPU info ===
+Thu May 28 20:36:36 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 595.71.05              Driver Version: 595.71.05      CUDA Version: 13.2     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA A100-SXM4-40GB          On  |   00000000:32:00.0 Off |                    0 |
+| N/A   30C    P0             46W /  400W |       0MiB /  40960MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+GPU: NVIDIA A100-SXM4-40GB
+=== Python/CUDA environment check ===
+/home/yhussein/conda-envs/lightmunet/bin/python
+Python 3.10.20
+/home/yhussein/conda-envs/lightmunet/bin/nvcc
+nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2026 NVIDIA Corporation
+Built on Thu_Mar_19_11:12:51_PM_PDT_2026
+Cuda compilation tools, release 13.2, V13.2.78
+Build cuda_13.2.r13.2/compiler.37668154_0
+torch: 2.0.1+cu118
+torch CUDA: 11.8
+CUDA available: True
+GPU: NVIDIA A100-SXM4-40GB
+numpy: 1.26.4
+transformers: 4.35.2
+cv2: 4.9.0
+mamba_ssm OK
+nnunetv2 OK
+=== nnU-Net paths ===
+nnUNet_raw=/home/yhussein/LightM-UNet/data/nnUNet_raw
+nnUNet_preprocessed=/home/yhussein/LightM-UNet/data/nnUNet_preprocessed
+nnUNet_results=/home/yhussein/LightM-UNet/data/nnUNet_results
+=== Dataset check ===
+dataset.json
+imagesTr
+imagesTs
+labelsTr
+labelsTs
+splits_final.json
+dataset.json
+dataset_fingerprint.json
+gt_segmentations
+nnUNetPlans.json
+nnUNetPlans_2d
+splits_final.json
+=== Ensure official split is present ===
+=== Plan check ===
+patch_size: [512, 512]
+batch_size: 8
+median_image_size_in_voxels: [512.0, 512.0]
+=== Start LightM-UNet training ===
+Using device: cuda:0
+
+#######################################################################
+Please cite the following paper when using nnU-Net:
+Isensee, F., Jaeger, P. F., Kohl, S. A., Petersen, J., & Maier-Hein, K. H. (2021). nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature methods, 18(2), 203-211.
+#######################################################################
+
+
+This is the configuration used by this training:
+Configuration name: 2d
+ {'data_identifier': 'nnUNetPlans_2d', 'preprocessor_name': 'DefaultPreprocessor', 'batch_size': 8, 'patch_size': [512, 512], 'median_image_size_in_voxels': [512.0, 512.0], 'spacing': [1.0, 1.0], 'normalization_schemes': ['ZScoreNormalization'], 'use_mask_for_norm': [False], 'UNet_class_name': 'PlainConvUNet', 'UNet_base_num_features': 32, 'n_conv_per_stage_encoder': [2, 2, 2, 2, 2, 2, 2, 2], 'n_conv_per_stage_decoder': [2, 2, 2, 2, 2, 2, 2], 'num_pool_per_axis': [7, 7], 'pool_op_kernel_sizes': [[1, 1], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2]], 'conv_kernel_sizes': [[3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3]], 'unet_max_num_features': 512, 'resampling_fn_data': 'resample_data_or_seg_to_shape', 'resampling_fn_seg': 'resample_data_or_seg_to_shape', 'resampling_fn_data_kwargs': {'is_seg': False, 'order': 3, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_seg_kwargs': {'is_seg': True, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_probabilities': 'resample_data_or_seg_to_shape', 'resampling_fn_probabilities_kwargs': {'is_seg': False, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'batch_dice': True} 
+
+These are the global plan.json settings:
+ {'dataset_name': 'Dataset501_ARCADE', 'plans_name': 'nnUNetPlans', 'original_median_spacing_after_transp': [999.0, 1.0, 1.0], 'original_median_shape_after_transp': [1, 512, 512], 'image_reader_writer': 'NaturalImage2DIO', 'transpose_forward': [0, 1, 2], 'transpose_backward': [0, 1, 2], 'experiment_planner_used': 'ExperimentPlanner', 'label_manager': 'LabelManager', 'foreground_intensity_properties_per_channel': {'0': {'max': 255.0, 'mean': 98.67886352539062, 'median': 96.0, 'min': 0.0, 'percentile_00_5': 32.0, 'percentile_99_5': 186.0, 'std': 31.84078025817871}}} 
+
+2026-05-28 20:36:50.876756: unpacking dataset...
+2026-05-28 20:36:55.216597: unpacking done...
+2026-05-28 20:36:55.217296: do_dummy_2d_data_aug: False
+2026-05-28 20:36:55.223838: Using splits from existing split file: /gpfs/home1/yhussein/LightM-UNet/data/nnUNet_preprocessed/Dataset501_ARCADE/splits_final.json
+2026-05-28 20:36:55.224329: The split file contains 1 splits.
+2026-05-28 20:36:55.224397: Desired fold for training: 0
+2026-05-28 20:36:55.224447: This split has 1000 training and 200 validation cases.
+2026-05-28 20:36:55.259546: Unable to plot network architecture:
+2026-05-28 20:36:55.259662: No module named 'IPython'
+2026-05-28 20:36:55.276185: 
+2026-05-28 20:36:55.276301: Epoch 0
+2026-05-28 20:36:55.276431: Current learning rate: 0.0001
+using pin_memory on device 0
