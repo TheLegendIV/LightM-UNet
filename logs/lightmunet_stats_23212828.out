@@ -1,0 +1,62 @@
+=== GPU check ===
+Fri May 29 12:09:57 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 595.71.05              Driver Version: 595.71.05      CUDA Version: 13.2     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA A100-SXM4-40GB          On  |   00000000:E3:00.0 Off |                    0 |
+| N/A   30C    P0             49W /  400W |       0MiB /  40960MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+CUDA available: True
+GPU: NVIDIA A100-SXM4-40GB
+=== Running params/GFLOPs script ===
+Using plans: /home/yhussein/LightM-UNet/data/nnUNet_preprocessed/Dataset501_ARCADE/nnUNetPlans.json
+Using dataset.json: /home/yhussein/LightM-UNet/data/nnUNet_preprocessed/Dataset501_ARCADE/dataset.json
+
+=== Plan info ===
+Configuration: 2d
+Patch size: [512, 512]
+Batch size: 8
+
+=== CUDA check ===
+torch: 2.0.1+cu118
+torch CUDA: 11.8
+CUDA available: True
+GPU: NVIDIA A100-SXM4-40GB
+Using device: cuda:0
+
+#######################################################################
+Please cite the following paper when using nnU-Net:
+Isensee, F., Jaeger, P. F., Kohl, S. A., Petersen, J., & Maier-Hein, K. H. (2021). nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature methods, 18(2), 203-211.
+#######################################################################
+
+
+=== Parameters ===
+Total parameters:     5,011,749
+Trainable parameters: 5,011,749
+Total parameters:     5.012 M
+Trainable parameters: 5.012 M
+
+=== FLOPs estimate ===
+Input shape: (1, 1, 512, 512)
+MACs:   8.517 GMACs
+FLOPs:  17.034 GFLOPs
+THOP parameters: 0.728 M
+
+Note:
+GFLOPs are estimated with THOP.
+FLOPs are reported using the convention FLOPs = 2 x MACs.
+Custom Mamba/selective-scan CUDA operations may be undercounted.
+Parameter count is reliable; GFLOPs should be treated as approximate.
