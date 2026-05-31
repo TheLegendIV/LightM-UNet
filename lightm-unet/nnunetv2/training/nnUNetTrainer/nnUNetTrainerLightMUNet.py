@@ -125,3 +125,40 @@ class nnUNetTrainerLightMUNet(nnUNetTrainerNoDeepSupervision):
     
     def set_deep_supervision_enabled(self, enabled: bool):
         pass
+
+
+class nnUNetTrainerLightMUNetXL(nnUNetTrainerLightMUNet):
+
+    def __init__(
+            self,
+            plans: dict,
+            configuration: str,
+            fold: int,
+            dataset_json: dict,
+            unpack_dataset: bool = True,
+            device: torch.device = torch.device('cuda')
+        ):
+        super().__init__(plans, configuration, fold, dataset_json, unpack_dataset, device)
+        self.num_epochs = 100
+
+    @staticmethod
+    def build_network_architecture(plans_manager: PlansManager,
+                                   dataset_json,
+                                   configuration_manager: ConfigurationManager,
+                                   num_input_channels,
+                                   enable_deep_supervision: bool = False) -> nn.Module:
+
+        label_manager = plans_manager.get_label_manager(dataset_json)
+
+        model = LightMUNet(
+            spatial_dims=len(configuration_manager.patch_size),
+            init_filters=48,
+            in_channels=num_input_channels,
+            out_channels=label_manager.num_segmentation_heads,
+            blocks_down=[2, 3, 4, 6],
+            blocks_up=[2, 2, 2],
+            mamba_d_state=32,
+            mamba_expand=4,
+        )
+
+        return model
