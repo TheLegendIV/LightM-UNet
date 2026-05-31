@@ -30,11 +30,11 @@ class MambaLayer(nn.Module):
         self.output_dim = output_dim
         self.norm = nn.LayerNorm(input_dim)
         self.mamba = Mamba(
-                d_model=input_dim, # Model dimension d_model
+      d_model=input_dim, # Model dimension d_model
                 d_state=d_state,  # SSM state expansion factor
                 d_conv=d_conv,    # Local convolution width
                 expand=expand,    # Block expansion factor
-        )
+        )          
         self.proj = nn.Linear(input_dim, output_dim)
         self.skip_scale= nn.Parameter(torch.ones(1))
     
@@ -55,9 +55,21 @@ class MambaLayer(nn.Module):
 
 
 def get_mamba_layer(
-    spatial_dims: int, in_channels: int, out_channels: int, stride: int = 1
+    spatial_dims: int,
+    in_channels: int,
+    out_channels: int,
+    stride: int = 1,
+    d_state: int = 16,
+    d_conv: int = 4,
+    expand: int = 2,
 ):
-    mamba_layer = MambaLayer(input_dim=in_channels, output_dim=out_channels)
+    mamba_layer = MambaLayer(
+        input_dim=in_channels,
+        output_dim=out_channels,
+        d_state=d_state,
+        d_conv=d_conv,
+        expand=expand,
+    )
     if stride != 1:
         if spatial_dims==2:
             return nn.Sequential(mamba_layer, nn.MaxPool2d(kernel_size=stride, stride=stride))
@@ -75,6 +87,9 @@ class ResMambaBlock(nn.Module):
         norm: tuple | str,
         kernel_size: int = 3,
         act: tuple | str = ("RELU", {"inplace": True}),
+        mamba_d_state: int = 16,
+        mamba_d_conv: int = 4,
+        mamba_expand: int = 2,
     ) -> None:
         """
         Args:
@@ -94,10 +109,20 @@ class ResMambaBlock(nn.Module):
         self.norm2 = get_norm_layer(name=norm, spatial_dims=spatial_dims, channels=in_channels)
         self.act = get_act_layer(act)
         self.conv1 = get_mamba_layer(
-            spatial_dims, in_channels=in_channels, out_channels=in_channels
+            spatial_dims,
+            in_channels=in_channels,
+            out_channels=in_channels,
+            d_state=mamba_d_state,
+            d_conv=mamba_d_conv,
+            expand=mamba_expand,
         )
         self.conv2 = get_mamba_layer(
-            spatial_dims, in_channels=in_channels, out_channels=in_channels
+            spatial_dims,
+            in_channels=in_channels,
+            out_channels=in_channels,
+            d_state=mamba_d_state,
+            d_conv=mamba_d_conv,
+            expand=mamba_expand,
         )
 
     def forward(self, x):
@@ -175,6 +200,9 @@ class LightMUNet(nn.Module):
         use_conv_final: bool = True,
         blocks_down: tuple = (1, 2, 2, 4),
         blocks_up: tuple = (1, 1, 1),
+        mamba_d_state: int = 16,
+        mamba_d_conv: int = 4,
+        mamba_expand: int = 2,
         upsample_mode: UpsampleMode | str = UpsampleMode.NONTRAINABLE,
     ):
         super().__init__()
@@ -187,6 +215,9 @@ class LightMUNet(nn.Module):
         self.in_channels = in_channels
         self.blocks_down = blocks_down
         self.blocks_up = blocks_up
+        self.mamba_d_state = mamba_d_state
+        self.mamba_d_conv = mamba_d_conv
+        self.mamba_expand = mamba_expand
         self.dropout_prob = dropout_prob
         self.act = act  # input options
         self.act_mod = get_act_layer(act)
@@ -211,12 +242,32 @@ class LightMUNet(nn.Module):
         for i, item in enumerate(blocks_down):
             layer_in_channels = filters * 2**i
             downsample_mamba = (
-                get_mamba_layer(spatial_dims, layer_in_channels // 2, layer_in_channels, stride=2)
+                get_mamba_layer(
+                    spatial_dims,
+                    layer_in_channels // 2,
+                    layer_in_channels,
+                    stride=2,
+                    d_state=self.mamba_d_state,
+                    d_conv=self.mamba_d_conv,
+                    expand=self.mamba_expand,
+                )
                 if i > 0
                 else nn.Identity()
             )
             down_layer = nn.Sequential(
-                downsample_mamba, *[ResMambaBlock(spatial_dims, layer_in_channels, norm=norm, act=self.act) for _ in range(item)]
+                downsample_mamba,
+                *[
+                    ResMambaBlock(
+                        spatial_dims,
+                        layer_in_channels,
+                        norm=norm,
+                        act=self.act,
+                        mamba_d_state=self.mamba_d_state,
+                        mamba_d_conv=self.mamba_d_conv,
+                        mamba_expand=self.mamba_expand,
+                    )
+                    for _ in range(item)
+                ]
             )
             down_layers.append(down_layer)
         return down_layers
