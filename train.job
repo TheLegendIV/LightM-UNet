@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=lightmunet16_arcade
+#SBATCH --job-name=lightmunet16v1_arcade
 #SBATCH --partition=gpu_a100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -114,7 +114,7 @@ assert cfg["patch_size"] == [512, 512], "You are not using the 512x512 HPC plan"
 assert cfg["median_image_size_in_voxels"] == [512.0, 512.0], "Unexpected median image size"
 PY
 
-echo "=== Start LightM-UNet training, init_filters=16 ==="
-nnUNetv2_train 501 2d 0 -tr nnUNetTrainerLightMUNet
+echo "=== Start LightM-UNet training, init_filters=16, blocks_down=[2,3,3,4] ==="
+nnUNetv2_train 501 2d 0 -tr nnUNetTrainerLightMUNet16v1
 
 echo "Training finished."
