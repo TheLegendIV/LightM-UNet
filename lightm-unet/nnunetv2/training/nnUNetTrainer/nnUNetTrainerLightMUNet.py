@@ -37,7 +37,7 @@ class nnUNetTrainerLightMUNet(nnUNetTrainerNoDeepSupervision):
 
         model = LightMUNet(
             spatial_dims = len(configuration_manager.patch_size),
-            init_filters = 32,
+            init_filters = 16,
             in_channels=num_input_channels,
             out_channels=label_manager.num_segmentation_heads,
             blocks_down=[1, 2, 2, 4],

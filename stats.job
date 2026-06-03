@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=lightmunet_stats
+#SBATCH --job-name=lightmunet16_stats
 #SBATCH --partition=gpu_a100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -41,5 +41,5 @@ print("GPU:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else No
 assert torch.cuda.is_available(), "CUDA is not available"
 PY
 
-echo "=== Running params/GFLOPs script ==="
+echo "=== Running params/GFLOPs script, init_filters=16 ==="
 python params_gflops.py
