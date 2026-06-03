@@ -39,7 +39,7 @@ python -m pip install \
     hiddenlayer \
     importlib_metadata \
     importlib_resources
-8
+
 echo "=== Installing OpenCV headless ==="
 python -m pip uninstall -y opencv-python opencv-python-headless || true
 python -m pip install opencv-python-headless==4.9.0.80
