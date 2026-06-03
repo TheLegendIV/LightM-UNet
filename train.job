@@ -115,6 +115,6 @@ assert cfg["median_image_size_in_voxels"] == [512.0, 512.0], "Unexpected median 
 PY
 
 echo "=== Start LightM-UNet training ==="
-nnUNetv2_train 501 2d 0 -tr nnUNetTrainerLightMUNet
+nnUNetv2_train 501 2d 0 -tr nnUNetTrainerLightMUNet --c
 
 echo "Training finished."
