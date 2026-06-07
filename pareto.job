@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=lmunet_pareto
+#SBATCH --job-name=lmunet_handoff
 #SBATCH --partition=gpu_a100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -114,15 +114,15 @@ assert cfg["patch_size"] == [512, 512], "You are not using the 512x512 HPC plan"
 assert cfg["median_image_size_in_voxels"] == [512.0, 512.0], "Unexpected median image size"
 PY
 
-echo "=== Start LM-UNet Pareto sweep ==="
-python pareto_experiments/run_lmunet_pareto.py \
+echo "=== Start LM-UNet handoff follow-up sweep ==="
+python pareto_experiments/run_lmunet_handoff_followup.py \
   --epochs 10 \
   --batch-size 4 \
   --fold 0 \
   --seed 42 \
   --overwrite \
-  --output-root "$HOME/LightM-UNet/data/nnUNET_results_pareto/lmunet_pareto_bs4_e10"
+  --output-root "$HOME/LightM-UNet/data/nnUNET_results_pareto/lmunet_handoff_bs4_e10"
 
-echo "=== Pareto sweep finished ==="
+echo "=== Handoff follow-up sweep finished ==="
 echo "Summary:"
-cat "$HOME/LightM-UNet/data/nnUNET_results_pareto/lmunet_pareto_bs4_e10/summary.csv"
+cat "$HOME/LightM-UNet/data/nnUNET_results_pareto/lmunet_handoff_bs4_e10/summary.csv"

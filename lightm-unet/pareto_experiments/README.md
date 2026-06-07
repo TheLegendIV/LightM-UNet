@@ -67,13 +67,32 @@ The job runs:
 ```bash
 python pareto_experiments/run_lmunet_pareto.py \
   --epochs 10 \
-  --batch-size 8 \
+  --batch-size 4 \
   --fold 0 \
   --seed 42 \
   --overwrite
 ```
 
 The fold is explicitly `0`, not `all`.
+
+## Handoff Follow-Up Sweep
+
+The first sweep suggested that capacity around the conv-to-PV-Mamba transition was most useful. The follow-up runner tests that directly:
+
+```bash
+python pareto_experiments/run_lmunet_handoff_followup.py --epochs 10 --batch-size 4 --fold 0 --seed 42 --overwrite
+```
+
+Default follow-up configs:
+
+```text
+B0   baseline                    12,20,32,44,64,72    edge 20   0.526M
+M0   middle_original             16,32,56,56,72,72    edge 20   0.740M
+H1   pre_mamba_wide_only         16,32,56,44,72,72    edge 20   0.686M
+H2   mamba_entry_wide_only       16,32,44,56,72,72    edge 20   0.697M
+H3   smooth_handoff_52           16,32,52,52,72,72    edge 20   0.706M
+DS0  downscaled_smooth_handoff   12,24,40,40,56,56    edge 20   0.442M
+```
 
 ## Outputs
 
