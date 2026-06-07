@@ -107,7 +107,7 @@ cfg = plans["configurations"]["2d"]
 
 print("patch_size:", cfg["patch_size"])
 print("planned_batch_size:", cfg["batch_size"])
-print("pareto_batch_size:", 8)
+print("pareto_batch_size:", 4)
 print("median_image_size_in_voxels:", cfg["median_image_size_in_voxels"])
 
 assert cfg["patch_size"] == [512, 512], "You are not using the 512x512 HPC plan"
@@ -117,12 +117,12 @@ PY
 echo "=== Start LM-UNet Pareto sweep ==="
 python pareto_experiments/run_lmunet_pareto.py \
   --epochs 10 \
-  --batch-size 8 \
+  --batch-size 4 \
   --fold 0 \
   --seed 42 \
   --overwrite \
-  --output-root "$HOME/LightM-UNet/data/nnUNET_results_pareto/lmunet_pareto_bs8_e10"
+  --output-root "$HOME/LightM-UNet/data/nnUNET_results_pareto/lmunet_pareto_bs4_e10"
 
 echo "=== Pareto sweep finished ==="
 echo "Summary:"
-cat "$HOME/LightM-UNet/data/nnUNET_results_pareto/lmunet_pareto_bs8_e10/summary.csv"
+cat "$HOME/LightM-UNet/data/nnUNET_results_pareto/lmunet_pareto_bs4_e10/summary.csv"
