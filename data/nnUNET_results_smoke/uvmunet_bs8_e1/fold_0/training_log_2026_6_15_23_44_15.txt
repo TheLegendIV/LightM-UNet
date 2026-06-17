@@ -1,0 +1,28 @@
+
+This is the configuration used by this training:
+Configuration name: 2d
+ {'data_identifier': 'nnUNetPlans_2d', 'preprocessor_name': 'DefaultPreprocessor', 'batch_size': 4, 'patch_size': [512, 512], 'median_image_size_in_voxels': [512.0, 512.0], 'spacing': [1.0, 1.0], 'normalization_schemes': ['ZScoreNormalization'], 'use_mask_for_norm': [False], 'UNet_class_name': 'PlainConvUNet', 'UNet_base_num_features': 32, 'n_conv_per_stage_encoder': [2, 2, 2, 2, 2, 2, 2, 2], 'n_conv_per_stage_decoder': [2, 2, 2, 2, 2, 2, 2], 'num_pool_per_axis': [7, 7], 'pool_op_kernel_sizes': [[1, 1], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2]], 'conv_kernel_sizes': [[3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3]], 'unet_max_num_features': 512, 'resampling_fn_data': 'resample_data_or_seg_to_shape', 'resampling_fn_seg': 'resample_data_or_seg_to_shape', 'resampling_fn_data_kwargs': {'is_seg': False, 'order': 3, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_seg_kwargs': {'is_seg': True, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_probabilities': 'resample_data_or_seg_to_shape', 'resampling_fn_probabilities_kwargs': {'is_seg': False, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'batch_dice': True} 
+ 
+These are the global plan.json settings:
+ {'dataset_name': 'Dataset501_ARCADE', 'plans_name': 'nnUNetPlans', 'original_median_spacing_after_transp': [999.0, 1.0, 1.0], 'original_median_shape_after_transp': [1, 512, 512], 'image_reader_writer': 'NaturalImage2DIO', 'transpose_forward': [0, 1, 2], 'transpose_backward': [0, 1, 2], 'experiment_planner_used': 'ExperimentPlanner', 'label_manager': 'LabelManager', 'foreground_intensity_properties_per_channel': {'0': {'max': 255.0, 'mean': 98.67886352539062, 'median': 96.0, 'min': 0.0, 'percentile_00_5': 32.0, 'percentile_99_5': 186.0, 'std': 31.84078025817871}}} 
+ 
+2026-06-15 23:44:17.640766: unpacking dataset... 
+2026-06-15 23:44:23.177910: unpacking done... 
+2026-06-15 23:44:23.182769: do_dummy_2d_data_aug: False 
+2026-06-15 23:44:23.215890: Using splits from existing split file: /workspace/LightM-UNet/data/nnUNet_preprocessed/Dataset501_ARCADE/splits_final.json 
+2026-06-15 23:44:23.224643: The split file contains 1 splits. 
+2026-06-15 23:44:23.229079: Desired fold for training: 0 
+2026-06-15 23:44:23.239539: This split has 1000 training and 200 validation cases. 
+2026-06-15 23:44:23.317248: Skipping network architecture plot because ULVMUNET_SKIP_ARCH_PLOT=1 
+2026-06-15 23:44:23.329444:  
+2026-06-15 23:44:23.332920: Epoch 0 
+2026-06-15 23:44:23.343759: Current learning rate: 0.001 
+2026-06-15 23:45:48.394871: train_loss 0.0804 
+2026-06-15 23:45:48.403677: val_loss -0.0123 
+2026-06-15 23:45:48.429241: Pseudo dice [0.0204, 0.2337, 0.2077] 
+2026-06-15 23:45:48.444556: Epoch time: 85.07 s 
+2026-06-15 23:45:48.456899: Yayy! New best EMA pseudo Dice: 0.1539 
+2026-06-15 23:45:48.470907: No checkpoint written, checkpointing is disabled 
+2026-06-15 23:45:49.405369: No checkpoint written, checkpointing is disabled 
+2026-06-15 23:45:49.489635: Training done. 
+2026-06-15 23:45:49.498441: Skipping final full validation because ULVMUNET_SKIP_FINAL_VALIDATION=1 

@@ -79,6 +79,7 @@ PY
 
 echo "=== Installing LightM-UNet editable package ==="
 
+cd lightm-unet
 python -m pip install -e .
 
 python -m pip install numpy==1.26.4 --force-reinstall
