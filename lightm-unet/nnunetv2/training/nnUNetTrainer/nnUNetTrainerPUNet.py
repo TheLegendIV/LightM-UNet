@@ -29,7 +29,7 @@ class nnUNetTrainerPUNet(nnUNetTrainerLightMUNet):
     ):
         super().__init__(plans, configuration, fold, dataset_json, unpack_dataset, device)
         self.initial_lr = float(os.environ.get("PUNET_LR", "1e-3"))
-        self.weight_decay = float(os.environ.get("PUNET_WEIGHT_DECAY", "5e-4"))
+        self.weight_decay = float(os.environ.get("PUNET_WEIGHT_DECAY", "1e-2"))
         if os.environ.get("PUNET_EPOCHS"):
             self.num_epochs = int(os.environ["PUNET_EPOCHS"])
         if os.environ.get("PUNET_BATCH_SIZE"):
