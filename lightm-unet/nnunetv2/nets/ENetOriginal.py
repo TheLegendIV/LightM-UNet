@@ -199,37 +199,50 @@ class UpsamplingBottleneck(nn.Module):
 
 
 class ENetOriginal(nn.Module):
-    def __init__(self, in_channels: int = 1, out_channels: int = 4):
+    def __init__(
+        self,
+        in_channels: int = 1,
+        out_channels: int = 4,
+        channels: tuple[int, int, int, int, int] = (16, 64, 128, 64, 16),
+    ):
         super().__init__()
+        if len(channels) != 5:
+            raise ValueError("ENetOriginal expects five channel values: initial, stage1, stage2/3, stage4, stage5.")
+        initial_channels, stage1_channels, stage23_channels, stage4_channels, stage5_channels = channels
+        if stage1_channels % 4 != 0 or stage23_channels % 4 != 0 or stage4_channels % 4 != 0 or stage5_channels % 4 != 0:
+            raise ValueError("ENetOriginal stage channels must be divisible by 4 for bottleneck reduction.")
+        if initial_channels <= in_channels:
+            raise ValueError("ENetOriginal initial channels must exceed input channels.")
+
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.channels = (16, 64, 128, 64, 16)
+        self.channels = tuple(int(channel) for channel in channels)
 
-        self.initial = InitialBlock(in_channels, 16)
-        self.down1 = DownsamplingBottleneck(16, 64, dropout_p=0.01)
-        self.regular1 = nn.Sequential(*[RegularBottleneck(64, dropout_p=0.01) for _ in range(4)])
+        self.initial = InitialBlock(in_channels, initial_channels)
+        self.down1 = DownsamplingBottleneck(initial_channels, stage1_channels, dropout_p=0.01)
+        self.regular1 = nn.Sequential(*[RegularBottleneck(stage1_channels, dropout_p=0.01) for _ in range(4)])
 
-        self.down2 = DownsamplingBottleneck(64, 128, dropout_p=0.1)
+        self.down2 = DownsamplingBottleneck(stage1_channels, stage23_channels, dropout_p=0.1)
         def make_context_stage() -> nn.Sequential:
             return nn.Sequential(
-                RegularBottleneck(128, dropout_p=0.1),
-                RegularBottleneck(128, padding=2, dilation=2, dropout_p=0.1),
-                RegularBottleneck(128, kernel_size=5, padding=2, asymmetric=True, dropout_p=0.1),
-                RegularBottleneck(128, padding=4, dilation=4, dropout_p=0.1),
-                RegularBottleneck(128, dropout_p=0.1),
-                RegularBottleneck(128, padding=8, dilation=8, dropout_p=0.1),
-                RegularBottleneck(128, kernel_size=5, padding=2, asymmetric=True, dropout_p=0.1),
-                RegularBottleneck(128, padding=16, dilation=16, dropout_p=0.1),
+                RegularBottleneck(stage23_channels, dropout_p=0.1),
+                RegularBottleneck(stage23_channels, padding=2, dilation=2, dropout_p=0.1),
+                RegularBottleneck(stage23_channels, kernel_size=5, padding=2, asymmetric=True, dropout_p=0.1),
+                RegularBottleneck(stage23_channels, padding=4, dilation=4, dropout_p=0.1),
+                RegularBottleneck(stage23_channels, dropout_p=0.1),
+                RegularBottleneck(stage23_channels, padding=8, dilation=8, dropout_p=0.1),
+                RegularBottleneck(stage23_channels, kernel_size=5, padding=2, asymmetric=True, dropout_p=0.1),
+                RegularBottleneck(stage23_channels, padding=16, dilation=16, dropout_p=0.1),
             )
 
         self.stage2 = make_context_stage()
         self.stage3 = make_context_stage()
-        self.up4 = UpsamplingBottleneck(128, 64)
-        self.regular4 = nn.Sequential(RegularBottleneck(64, dropout_p=0.1, relu=True),
-                                      RegularBottleneck(64, dropout_p=0.1, relu=True))
-        self.up5 = UpsamplingBottleneck(64, 16)
-        self.regular5 = RegularBottleneck(16, dropout_p=0.1, relu=True)
-        self.final = nn.ConvTranspose2d(16, out_channels, kernel_size=2, stride=2)
+        self.up4 = UpsamplingBottleneck(stage23_channels, stage4_channels)
+        self.regular4 = nn.Sequential(RegularBottleneck(stage4_channels, dropout_p=0.1, relu=True),
+                                      RegularBottleneck(stage4_channels, dropout_p=0.1, relu=True))
+        self.up5 = UpsamplingBottleneck(stage4_channels, stage5_channels)
+        self.regular5 = RegularBottleneck(stage5_channels, dropout_p=0.1, relu=True)
+        self.final = nn.ConvTranspose2d(stage5_channels, out_channels, kernel_size=2, stride=2)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         input_size = x.shape[2:]

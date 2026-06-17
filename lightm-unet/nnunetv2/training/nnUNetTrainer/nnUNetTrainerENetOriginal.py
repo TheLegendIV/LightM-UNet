@@ -10,6 +10,13 @@ from nnunetv2.training.nnUNetTrainer.nnUNetTrainerLightMUNet import nnUNetTraine
 from nnunetv2.utilities.plans_handling.plans_handler import ConfigurationManager, PlansManager
 
 
+def _parse_channels(value: str) -> tuple[int, ...]:
+    channels = tuple(int(item.strip()) for item in value.split(",") if item.strip())
+    if len(channels) != 5:
+        raise ValueError("ENET_CHANNELS must contain five comma-separated integers.")
+    return channels
+
+
 class nnUNetTrainerENetOriginal(nnUNetTrainerLightMUNet):
     def __init__(
         self,
@@ -50,9 +57,11 @@ class nnUNetTrainerENetOriginal(nnUNetTrainerLightMUNet):
         if len(configuration_manager.patch_size) != 2:
             raise ValueError("ENetOriginal is a 2D architecture. Use the nnU-Net 2d configuration.")
         label_manager = plans_manager.get_label_manager(dataset_json)
+        channels = _parse_channels(os.environ.get("ENET_CHANNELS", "16,64,128,64,16"))
         return ENetOriginal(
             in_channels=num_input_channels,
             out_channels=label_manager.num_segmentation_heads,
+            channels=channels,
         )
 
     def configure_optimizers(self):
