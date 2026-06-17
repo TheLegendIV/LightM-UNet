@@ -75,7 +75,7 @@ class nnUNetTrainerLMUNet(nnUNetTrainerLightMUNet):
                                    num_input_channels,
                                    enable_deep_supervision: bool = False) -> nn.Module:
         label_manager = plans_manager.get_label_manager(dataset_json)
-        channels = _parse_channels(os.environ.get("LMUNET_CHANNELS", "12,20,32,44,64,72"))
+        channels = _parse_channels(os.environ.get("LMUNET_CHANNELS", "12,24,44,44,60,60"))
         edge_channels = int(os.environ.get("LMUNET_EDGE_CHANNELS", "20"))
 
         return LMUNet(
