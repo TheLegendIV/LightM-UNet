@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=enet_modified_arcade
+#SBATCH --job-name=punet_arcade
 #SBATCH --partition=gpu_a100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -34,9 +34,9 @@ export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
 export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNET_preprocessed"
 export nnUNet_results="$HOME/LightM-UNet/data/nnUNET_results"
 
-export ENETMOD_EPOCHS=150
-export ENETMOD_BATCH_SIZE=8
-export ENETMOD_SKIP_ARCH_PLOT=1
+export PUNET_EPOCHS=150
+export PUNET_BATCH_SIZE=8
+export PUNET_SKIP_ARCH_PLOT=1
 
 cd "$HOME/LightM-UNet/lightm-unet"
 
@@ -49,9 +49,9 @@ echo "Conda env: $CONDA_PREFIX"
 echo "=== GPU info ==="
 nvidia-smi
 
-echo "=== Training ENet modified ==="
-echo "ENETMOD_EPOCHS=$ENETMOD_EPOCHS"
-echo "ENETMOD_BATCH_SIZE=$ENETMOD_BATCH_SIZE"
-nnUNetv2_train 501 2d 0 -tr nnUNetTrainerENetModified
+echo "=== Training PUNet ==="
+echo "PUNET_EPOCHS=$PUNET_EPOCHS"
+echo "PUNET_BATCH_SIZE=$PUNET_BATCH_SIZE"
+nnUNetv2_train 501 2d 0 -tr nnUNetTrainerPUNet
 
 echo "Training finished."
