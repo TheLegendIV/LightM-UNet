@@ -203,7 +203,7 @@ class ENetOriginal(nn.Module):
         self,
         in_channels: int = 1,
         out_channels: int = 4,
-        channels: tuple[int, int, int, int, int] = (16, 64, 128, 64, 16),
+        channels: tuple[int, int, int, int, int] = (20,72,144,72,20),
     ):
         super().__init__()
         if len(channels) != 5:

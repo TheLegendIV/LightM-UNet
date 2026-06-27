@@ -248,7 +248,7 @@ class LMUNet(nn.Module):
         self,
         in_channels: int = 1,
         out_channels: int = 2,
-        channels: tuple[int, ...] = (12,24,44,44,60,60), # DS1
+        channels: tuple[int, ...] = (16,32,56,56,72,72), # M0
         edge_channels: int = 20,
     ):
         super().__init__()

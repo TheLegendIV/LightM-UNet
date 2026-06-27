@@ -57,7 +57,7 @@ class nnUNetTrainerENetOriginal(nnUNetTrainerLightMUNet):
         if len(configuration_manager.patch_size) != 2:
             raise ValueError("ENetOriginal is a 2D architecture. Use the nnU-Net 2d configuration.")
         label_manager = plans_manager.get_label_manager(dataset_json)
-        channels = _parse_channels(os.environ.get("ENET_CHANNELS", "16,64,128,64,16"))
+        channels = _parse_channels(os.environ.get("ENET_CHANNELS", "20,72,144,72,20"))
         return ENetOriginal(
             in_channels=num_input_channels,
             out_channels=label_manager.num_segmentation_heads,
