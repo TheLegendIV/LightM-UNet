@@ -12,10 +12,10 @@ from nnunetv2.utilities.plans_handling.plans_handler import ConfigurationManager
 
 def _parse_channels(value: str) -> tuple[int, ...]:
     channels = tuple(int(item.strip()) for item in value.split(",") if item.strip())
-    if len(channels) != 8:
+    if len(channels) != 5:
         raise ValueError(
-            "ENETUSC_CHANNELS must contain eight comma-separated integers: "
-            "ch0,ch1,ch2,ch3,ch4,ch_d3,ch_d2,ch_d1"
+            "ENETUSC_CHANNELS must contain five comma-separated integers: "
+            "ch0,ch1,ch2,ch3,ch4"
         )
     return channels
 
@@ -61,7 +61,7 @@ class nnUNetTrainerENetUpscaled(nnUNetTrainerLightMUNet):
             raise ValueError("ENetUpscaled is a 2D architecture. Use the nnU-Net 2d configuration.")
         label_manager = plans_manager.get_label_manager(dataset_json)
         channels = _parse_channels(
-            os.environ.get("ENETUSC_CHANNELS", "20,72,72,144,256,144,72,20")
+            os.environ.get("ENETUSC_CHANNELS", "20,72,72,144,256")
         )
         asym_heavy_stage3 = os.environ.get("ENETUSC_ASYM_STAGE3", "0") == "1"
         return ENetUpscaled(

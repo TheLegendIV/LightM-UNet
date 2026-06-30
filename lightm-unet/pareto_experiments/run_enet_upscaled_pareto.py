@@ -20,64 +20,63 @@ from run_lmunet_pareto import (
 
 # ---------------------------------------------------------------------------
 # Experiment table
-# channels = (ch0, ch1, ch2, ch3, ch4, ch_d3, ch_d2, ch_d1)
+# channels = (ch0, ch1, ch2, ch3, ch4)
 #   ch0   initial block (H/2)
-#   ch1   stage-1 encoder (H/4)
-#   ch2   stage-2 flat encoder (H/4, no stride)
-#   ch3   stage-3 encoder (H/8)
-#   ch4   stage-4 deep encoder (H/16)
-#   ch_d3 decoder H/8
-#   ch_d2 decoder H/4
-#   ch_d1 decoder H/2
+#   ch1   stage-1 encoder (H/4, 6 blocks)
+#   ch2   stage-2 flat encoder (H/4, 12 blocks, no stride)
+#   ch3   stage-3 encoder (H/8, 12 blocks)
+#   ch4   stage-4 deep encoder (H/16, 4 blocks)
+# Decoder channels are fixed by MaxUnpool constraint:
+#   H/8 decoder = ch3, H/4 decoder = ch2, H/2 decoder = ch0
 # ---------------------------------------------------------------------------
 EXPERIMENTS = [
     {
         "id": "EU0",
         "name": "baseline",
-        "channels": (20, 72, 72, 144, 256, 144, 72, 20),
-        "hypothesis": "ENetUpscaled reference: all five changes, original-width channels",
+        "channels": (20, 72, 72, 144, 256),
+        "hypothesis": "ENetUpscaled reference: all five changes, original ENet channel widths",
     },
     {
         "id": "EU1",
         "name": "narrow",
-        "channels": (16, 56, 56, 112, 192, 112, 56, 16),
+        "channels": (16, 56, 56, 112, 192),
         "hypothesis": "Narrow budget — test whether architecture improvement beats width",
     },
     {
         "id": "EU2",
         "name": "wide_context",
-        "channels": (20, 72, 128, 192, 256, 192, 72, 20),
-        "hypothesis": "Wider stage-2 flat + stage-3 context at H/4 and H/8",
+        "channels": (20, 72, 128, 192, 256),
+        "hypothesis": "Wider stage-2 flat (ch2=128) + stage-3 (ch3=192) context at H/4 and H/8",
     },
     {
         "id": "EU3",
         "name": "deep_stage4",
-        "channels": (20, 72, 72, 144, 320, 196, 72, 20),
-        "hypothesis": "Extra capacity at the new H/16 stage and its decoder mirror",
+        "channels": (20, 72, 72, 144, 320),
+        "hypothesis": "Extra capacity at the new H/16 stage (ch4=320)",
     },
     {
         "id": "EU4",
-        "name": "decoder_wide",
-        "channels": (20, 72, 72, 144, 256, 196, 96, 24),
-        "hypothesis": "Wider decoder path for finer boundary reconstruction",
+        "name": "shallow_wide",
+        "channels": (20, 96, 96, 144, 256),
+        "hypothesis": "Wider stages 1+2 (ch1=ch2=96) — tests if the extra blocks benefit from more width",
     },
     {
         "id": "EU5",
         "name": "stage3_stage4_heavy",
-        "channels": (20, 72, 72, 196, 288, 196, 96, 20),
-        "hypothesis": "Deep encoder emphasis: extra capacity in stage-3 and stage-4",
+        "channels": (20, 72, 72, 196, 288),
+        "hypothesis": "Deep encoder emphasis: extra capacity in stage-3 (ch3=196) and stage-4 (ch4=288)",
     },
     {
         "id": "EU6",
         "name": "fully_scaled",
-        "channels": (24, 96, 96, 192, 256, 192, 96, 24),
+        "channels": (24, 96, 96, 192, 256),
         "hypothesis": "Uniformly wider network — global capacity increase",
     },
     # --- Additional vessel-aware configs for 3-class ARCADE segmentation ---
     {
         "id": "EU7",
         "name": "highres_flat",
-        "channels": (24, 96, 144, 144, 256, 144, 96, 24),
+        "channels": (24, 96, 144, 144, 256),
         "hypothesis": (
             "Wide flat H/4 stage (ch2=144) preserves high-resolution detail "
             "for thin vessel segmentation before downsampling"
@@ -86,7 +85,7 @@ EXPERIMENTS = [
     {
         "id": "EU8",
         "name": "narrow_deep",
-        "channels": (16, 48, 48, 192, 288, 192, 48, 16),
+        "channels": (16, 48, 48, 192, 288),
         "hypothesis": (
             "Narrow early stages, heavy bottleneck — concentrate capacity where "
             "long-range context discriminates vessel classes"
@@ -95,12 +94,11 @@ EXPERIMENTS = [
     {
         "id": "EU9",
         "name": "asym_stage3",
-        "channels": (20, 72, 72, 144, 256, 144, 72, 20),
+        "channels": (20, 72, 72, 144, 256),
         "asym_stage3": True,
         "hypothesis": (
-            "Same channels as EU0 baseline but stage-3 extra blocks use asym-heavy pattern "
-            "(reg, asym, asym, dil4) — tests whether vessel-oriented 5×1/1×5 kernels "
-            "beat dil8 for elongated coronary structures"
+            "Same channels as EU0 but stage-3 extra blocks use asym-heavy pattern "
+            "(reg, asym, asym, dil4) — tests vessel-oriented 5×1/1×5 kernels vs dil8"
         ),
     },
 ]
