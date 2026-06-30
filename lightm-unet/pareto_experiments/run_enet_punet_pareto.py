@@ -22,7 +22,7 @@ EXPERIMENTS = [
         "id": "EN0",
         "name": "enet_baseline",
         "family": "enet",
-        "trainer": "nnUNetTrainerENetOriginal",
+        "trainer": "nnUNetTrainerENet",
         "channels": (16, 64, 128, 64, 16),
         "budget_group": "base_75pct",
         "hypothesis": "paper-faithful ENetOriginal baseline",
@@ -31,7 +31,7 @@ EXPERIMENTS = [
         "id": "EN1",
         "name": "enet_stage_balanced_small",
         "family": "enet",
-        "trainer": "nnUNetTrainerENetOriginal",
+        "trainer": "nnUNetTrainerENet",
         "channels": (20, 72, 144, 72, 20),
         "budget_group": "base_75pct",
         "hypothesis": "balanced ENet width increase below the main budget target",
@@ -40,7 +40,7 @@ EXPERIMENTS = [
         "id": "EN2",
         "name": "enet_stage_balanced_mid",
         "family": "enet",
-        "trainer": "nnUNetTrainerENetOriginal",
+        "trainer": "nnUNetTrainerENet",
         "channels": (20, 80, 160, 80, 20),
         "budget_group": "base_75pct",
         "hypothesis": "balanced ENet width increase around the middle of the budget",
@@ -49,7 +49,7 @@ EXPERIMENTS = [
         "id": "EN3",
         "name": "enet_context_heavy_target",
         "family": "enet",
-        "trainer": "nnUNetTrainerENetOriginal",
+        "trainer": "nnUNetTrainerENet",
         "channels": (16, 72, 176, 72, 16),
         "budget_group": "base_75pct",
         "hypothesis": "ENet capacity concentrated in the dilated context stages near +75 percent params",
@@ -133,9 +133,9 @@ def env_prefix(family: str) -> str:
 
 def count_params(family: str, channels: tuple[int, ...]) -> int:
     if family == "enet":
-        from nnunetv2.nets.ENetOriginal import ENetOriginal
+        from nnunetv2.nets.ENet import ENet
 
-        model = ENetOriginal(in_channels=1, out_channels=4, channels=channels)
+        model = ENet(in_channels=1, out_channels=4, channels=channels)
     elif family == "punet":
         from nnunetv2.nets.PUNet import PUNet
 

@@ -6,7 +6,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-from nnunetv2.nets.ENetOriginal import (
+from nnunetv2.nets.ENet import (
     DownsamplingBottleneck,
     InitialBlock,
     RegularBottleneck,

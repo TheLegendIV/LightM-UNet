@@ -106,8 +106,11 @@ def repo_root() -> Path:
 
 
 def parse_float_list(raw: str) -> list[float]:
-    values = ast.literal_eval("[" + raw + "]")
-    return [float(value) for value in values]
+    # ast.literal_eval cannot parse 'nan'; replace with None sentinel first
+    import re as _re
+    cleaned = _re.sub(r"\bnan\b", "None", raw)
+    values = ast.literal_eval("[" + cleaned + "]")
+    return [float("nan") if v is None else float(v) for v in values]
 
 
 def parse_metrics_text(text: str) -> ParsedMetrics:
@@ -117,8 +120,10 @@ def parse_metrics_text(text: str) -> ParsedMetrics:
         dice_match = PSEUDO_DICE_RE.search(line)
         if dice_match:
             dice_values = parse_float_list(dice_match.group(1))
-            if dice_values:
-                epoch_means.append(sum(dice_values) / len(dice_values))
+            # Ignore nan (class absent from this mini-batch / epoch)
+            valid = [v for v in dice_values if v == v]  # nan != nan
+            if valid:
+                epoch_means.append(sum(valid) / len(valid))
         time_match = EPOCH_TIME_RE.search(line)
         if time_match:
             epoch_times.append(float(time_match.group(1)))
