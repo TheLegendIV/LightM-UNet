@@ -26,10 +26,10 @@
         "2d": {
             "data_identifier": "nnUNetPlans_2d",
             "preprocessor_name": "DefaultPreprocessor",
-            "batch_size": 1,
+            "batch_size": 4,
             "patch_size": [
-                256,
-                256
+                512,
+                512
             ],
             "median_image_size_in_voxels": [
                 512.0,
