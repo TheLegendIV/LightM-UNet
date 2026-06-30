@@ -54,7 +54,7 @@ class ENetUpscaled(nn.Module):
 
     Changes:
     - [C5] 2 extra regular bottlenecks after InitialBlock (H/2)
-    - [C2] +50% blocks in every encoder stage: stage1 4→6, stage2_flat 8→12, stage3 8→12
+    - [C2] +50% blocks in dilated stages: stage2_flat 8→12, stage3 8→12 (stage1 unchanged: dilation-free regular blocks add no useful inductive bias before the dilated flat stage)
     - [C3] Downsampling delayed: stage2 runs flat at H/4 (no stride), stride moved to stage3 entry
     - [C1] New encoder stage4 at H/16
     - [C6] Matching decoder stage H/16→H/8; MaxUnpool throughout (paper-faithful)
@@ -64,7 +64,7 @@ class ENetUpscaled(nn.Module):
 
     channels: 5-tuple (ch0, ch1, ch2, ch3, ch4)
         ch0   = initial block output  (H/2)
-        ch1   = stage1 encoder        (H/4, 6 blocks)
+        ch1   = stage1 encoder        (H/4, 4 blocks — unchanged from ENetOriginal)
         ch2   = stage2 flat encoder   (H/4, 12 blocks, no stride)
         ch3   = stage3 encoder        (H/8, 12 blocks)
         ch4   = stage4 deep encoder   (H/16, 4 blocks)
@@ -101,9 +101,9 @@ class ENetUpscaled(nn.Module):
             RegularBottleneck(ch0, dropout_p=0.01),
         )
 
-        # Stage 1: stride-2 downsample to H/4, then 6 regular blocks [C2: +50%, 4→6]
+        # Stage 1: stride-2 downsample to H/4, then 4 regular blocks (unchanged from ENetOriginal)
         self.down1 = DownsamplingBottleneck(ch0, ch1, dropout_p=0.01)
-        self.stage1 = nn.Sequential(*[RegularBottleneck(ch1, dropout_p=0.01) for _ in range(6)])
+        self.stage1 = nn.Sequential(*[RegularBottleneck(ch1, dropout_p=0.01) for _ in range(4)])
 
         # [C3] Stage 2: flat at H/4 (NO downsampling), 12 blocks [C2: +50%, 8→12]
         self.proj1_to_2 = (

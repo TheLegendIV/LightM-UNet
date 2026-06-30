@@ -22,7 +22,7 @@ from run_lmunet_pareto import (
 # Experiment table
 # channels = (ch0, ch1, ch2, ch3, ch4)
 #   ch0   initial block (H/2)
-#   ch1   stage-1 encoder (H/4, 6 blocks)
+#   ch1   stage-1 encoder (H/4, 4 blocks)
 #   ch2   stage-2 flat encoder (H/4, 12 blocks, no stride)
 #   ch3   stage-3 encoder (H/8, 12 blocks)
 #   ch4   stage-4 deep encoder (H/16, 4 blocks)
