@@ -1,0 +1,12 @@
+id,name,params,params_m,param_delta_pct,best_dice,final_dice,mean_epoch_time_s,total_time_s,returncode,hypothesis
+G1,mamba_bridge,612184,0.612184,31.24153189153962,,,,473.4857802391052,0,+1 PVMamba at bridge; minimal global context probe
+G2,mamba_s3,865120,0.86512,85.4665820570429,,,,553.418265581131,0,Stage 3 replaced by 4 PVMamba (forward scan); Mamba as dilated-conv substitute
+G3,mamba_s3_4dir,865120,0.86512,85.4665820570429,,,,558.0996949672699,0,Stage 3 replaced by 4 directional PVMamba (0→1→2→3); multi-direction scan
+G4,mamba_s23,1263784,1.263784,170.9331641140858,,,,684.1766741275787,0,Stages 2+3 both replaced by 4 PVMamba each; maximum Mamba coverage
+G5,mamba_transitions,757912,0.757912,62.48306378307922,,,,529.169600725174,0,+1 PVMamba after down2 and +1 after stage 3; global context at transition points
+G6,mamba_parallel_eca,841726,0.841726,80.45131802356494,,,,558.7532405853271,0,"Parallel Mamba+conv branches at stages 2+3, ECA fusion; additive global context"
+G7,mamba_decoder,507064,0.507064,8.705644262266965,,,,515.114250421524,0,+1 PVMamba at decoder H/4 (after up4); global context during reconstruction
+G8,mha_bridge,550264,0.550264,17.9669679455297,,,,1681.2514667510986,0,+1 full MHA at bridge (O(N²)); pairwise vs Mamba sequential scan
+G9,window_attn_bridge,550264,0.550264,17.9669679455297,,,,484.8842821121216,0,+1 windowed MHA at bridge (8×8 windows); local pairwise attention
+G10,cross_depth_mamba,612184,0.612184,31.24153189153962,,,,542.238776922226,0,Stages 2+3 concatenated into 8192-token sequence for Mamba; cross-depth context
+G11,linear_attn_s1,487336,0.487336,4.4763064469103275,,,,525.447527885437,0,"+1 linear attention at stage 1 (H/4, 16384 tokens); high-res O(N) global context"

@@ -1,0 +1,349 @@
+
+#######################################################################
+Please cite the following paper when using nnU-Net:
+Isensee, F., Jaeger, P. F., Kohl, S. A., Petersen, J., & Maier-Hein, K. H. (2021). nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature methods, 18(2), 203-211.
+#######################################################################
+ 
+
+This is the configuration used by this training:
+Configuration name: 2d
+ {'data_identifier': 'nnUNetPlans_2d', 'preprocessor_name': 'DefaultPreprocessor', 'batch_size': 4, 'patch_size': [512, 512], 'median_image_size_in_voxels': [512.0, 512.0], 'spacing': [1.0, 1.0], 'normalization_schemes': ['ZScoreNormalization'], 'use_mask_for_norm': [False], 'UNet_class_name': 'PlainConvUNet', 'UNet_base_num_features': 32, 'n_conv_per_stage_encoder': [2, 2, 2, 2, 2, 2, 2, 2], 'n_conv_per_stage_decoder': [2, 2, 2, 2, 2, 2, 2], 'num_pool_per_axis': [7, 7], 'pool_op_kernel_sizes': [[1, 1], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2]], 'conv_kernel_sizes': [[3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3]], 'unet_max_num_features': 512, 'resampling_fn_data': 'resample_data_or_seg_to_shape', 'resampling_fn_seg': 'resample_data_or_seg_to_shape', 'resampling_fn_data_kwargs': {'is_seg': False, 'order': 3, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_seg_kwargs': {'is_seg': True, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_probabilities': 'resample_data_or_seg_to_shape', 'resampling_fn_probabilities_kwargs': {'is_seg': False, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'batch_dice': True} 
+ 
+These are the global plan.json settings:
+ {'dataset_name': 'Dataset501_ARCADE', 'plans_name': 'nnUNetPlans', 'original_median_spacing_after_transp': [999.0, 1.0, 1.0], 'original_median_shape_after_transp': [1, 512, 512], 'image_reader_writer': 'NaturalImage2DIO', 'transpose_forward': [0, 1, 2], 'transpose_backward': [0, 1, 2], 'experiment_planner_used': 'ExperimentPlanner', 'label_manager': 'LabelManager', 'foreground_intensity_properties_per_channel': {'0': {'max': 255.0, 'mean': 98.67886352539062, 'median': 96.0, 'min': 0.0, 'percentile_00_5': 32.0, 'percentile_99_5': 186.0, 'std': 31.84078025817871}}} 
+ 
+2026-07-01 18:39:33.425975: unpacking dataset... 
+2026-07-01 18:39:37.586550: unpacking done... 
+2026-07-01 18:39:37.586964: do_dummy_2d_data_aug: False 
+2026-07-01 18:39:37.592851: Using splits from existing split file: /gpfs/home1/yhussein/LightM-UNet/data/nnUNet_preprocessed/Dataset501_ARCADE/splits_final.json 
+2026-07-01 18:39:37.593157: The split file contains 1 splits. 
+2026-07-01 18:39:37.593221: Desired fold for training: 0 
+2026-07-01 18:39:37.593271: This split has 1000 training and 200 validation cases. 
+2026-07-01 18:39:37.610092: Skipping architecture plot (GCX_SKIP_ARCH_PLOT=1) 
+2026-07-01 18:39:37.623714:  
+2026-07-01 18:39:37.623822: Epoch 0 
+2026-07-01 18:39:37.623934: Current learning rate: 0.001 
+2026-07-01 18:40:10.302001: train_loss 0.4121 
+2026-07-01 18:40:10.302279: val_loss -0.0302 
+2026-07-01 18:40:10.302401: Pseudo dice [0.0, 0.0, 0.0] 
+2026-07-01 18:40:10.302511: Epoch time: 32.68 s 
+2026-07-01 18:40:10.302602: Yayy! New best EMA pseudo Dice: 0.0 
+2026-07-01 18:40:11.385675:  
+2026-07-01 18:40:11.385862: Epoch 1 
+2026-07-01 18:40:11.385979: Current learning rate: 0.00094 
+2026-07-01 18:40:41.434129: train_loss -0.0562 
+2026-07-01 18:40:41.434411: val_loss -0.087 
+2026-07-01 18:40:41.434533: Pseudo dice [0.0, 0.0, 0.0] 
+2026-07-01 18:40:41.434640: Epoch time: 30.05 s 
+2026-07-01 18:40:41.434720: Yayy! New best EMA pseudo Dice: 0.0 
+2026-07-01 18:40:42.692269:  
+2026-07-01 18:40:42.692443: Epoch 2 
+2026-07-01 18:40:42.692561: Current learning rate: 0.00088 
+2026-07-01 18:41:12.772535: train_loss -0.0873 
+2026-07-01 18:41:12.772766: val_loss -0.0943 
+2026-07-01 18:41:12.773785: Pseudo dice [0.0, 0.0001, 0.0] 
+2026-07-01 18:41:12.773890: Epoch time: 30.08 s 
+2026-07-01 18:41:12.773965: Yayy! New best EMA pseudo Dice: 0.0 
+2026-07-01 18:41:14.044742:  
+2026-07-01 18:41:14.044891: Epoch 3 
+2026-07-01 18:41:14.045002: Current learning rate: 0.00082 
+2026-07-01 18:41:43.963729: train_loss -0.1003 
+2026-07-01 18:41:43.963976: val_loss -0.1071 
+2026-07-01 18:41:43.964089: Pseudo dice [0.0005, 0.4644, 0.0] 
+2026-07-01 18:41:43.964185: Epoch time: 29.92 s 
+2026-07-01 18:41:43.964263: Yayy! New best EMA pseudo Dice: 0.0155 
+2026-07-01 18:41:45.392408:  
+2026-07-01 18:41:45.392554: Epoch 4 
+2026-07-01 18:41:45.392663: Current learning rate: 0.00076 
+2026-07-01 18:42:15.299377: train_loss -0.11 
+2026-07-01 18:42:15.299617: val_loss -0.1048 
+2026-07-01 18:42:15.299724: Pseudo dice [0.0018, 0.3699, 0.0] 
+2026-07-01 18:42:15.299829: Epoch time: 29.91 s 
+2026-07-01 18:42:15.299907: Yayy! New best EMA pseudo Dice: 0.0263 
+2026-07-01 18:42:16.583186:  
+2026-07-01 18:42:16.583349: Epoch 5 
+2026-07-01 18:42:16.583465: Current learning rate: 0.00069 
+2026-07-01 18:42:46.596547: train_loss -0.1169 
+2026-07-01 18:42:46.596736: val_loss -0.1117 
+2026-07-01 18:42:46.596848: Pseudo dice [0.0223, 0.4744, 0.0] 
+2026-07-01 18:42:46.596939: Epoch time: 30.01 s 
+2026-07-01 18:42:46.597010: Yayy! New best EMA pseudo Dice: 0.0403 
+2026-07-01 18:42:47.840582:  
+2026-07-01 18:42:47.840744: Epoch 6 
+2026-07-01 18:42:47.840863: Current learning rate: 0.00063 
+2026-07-01 18:43:17.930481: train_loss -0.1216 
+2026-07-01 18:43:17.930672: val_loss -0.1235 
+2026-07-01 18:43:17.930769: Pseudo dice [0.0688, 0.4604, 0.0002] 
+2026-07-01 18:43:17.930862: Epoch time: 30.09 s 
+2026-07-01 18:43:17.930931: Yayy! New best EMA pseudo Dice: 0.0539 
+2026-07-01 18:43:19.187699:  
+2026-07-01 18:43:19.187867: Epoch 7 
+2026-07-01 18:43:19.187978: Current learning rate: 0.00057 
+2026-07-01 18:43:49.127716: train_loss -0.131 
+2026-07-01 18:43:49.128275: val_loss -0.1419 
+2026-07-01 18:43:49.128397: Pseudo dice [0.2692, 0.4928, 0.0002] 
+2026-07-01 18:43:49.128500: Epoch time: 29.94 s 
+2026-07-01 18:43:49.128580: Yayy! New best EMA pseudo Dice: 0.0739 
+2026-07-01 18:43:50.547001:  
+2026-07-01 18:43:50.547153: Epoch 8 
+2026-07-01 18:43:50.547262: Current learning rate: 0.0005 
+2026-07-01 18:44:20.477964: train_loss -0.1722 
+2026-07-01 18:44:20.478199: val_loss -0.2268 
+2026-07-01 18:44:20.478305: Pseudo dice [0.5609, 0.5095, 0.0144] 
+2026-07-01 18:44:20.478398: Epoch time: 29.93 s 
+2026-07-01 18:44:20.478474: Yayy! New best EMA pseudo Dice: 0.1027 
+2026-07-01 18:44:21.748995:  
+2026-07-01 18:44:21.749151: Epoch 9 
+2026-07-01 18:44:21.749258: Current learning rate: 0.00044 
+2026-07-01 18:44:51.843039: train_loss -0.2837 
+2026-07-01 18:44:51.843235: val_loss -0.3927 
+2026-07-01 18:44:51.843346: Pseudo dice [0.6442, 0.6876, 0.2094] 
+2026-07-01 18:44:51.843439: Epoch time: 30.1 s 
+2026-07-01 18:44:51.843513: Yayy! New best EMA pseudo Dice: 0.1438 
+2026-07-01 18:44:53.075187:  
+2026-07-01 18:44:53.075399: Epoch 10 
+2026-07-01 18:44:53.075565: Current learning rate: 0.00037 
+2026-07-01 18:45:23.093398: train_loss -0.3906 
+2026-07-01 18:45:23.093617: val_loss -0.479 
+2026-07-01 18:45:23.093719: Pseudo dice [0.6236, 0.7093, 0.5294] 
+2026-07-01 18:45:23.093816: Epoch time: 30.02 s 
+2026-07-01 18:45:23.093891: Yayy! New best EMA pseudo Dice: 0.1915 
+2026-07-01 18:45:24.352996:  
+2026-07-01 18:45:24.353152: Epoch 11 
+2026-07-01 18:45:24.353271: Current learning rate: 0.0003 
+2026-07-01 18:45:54.258999: train_loss -0.446 
+2026-07-01 18:45:54.259253: val_loss -0.4808 
+2026-07-01 18:45:54.259358: Pseudo dice [0.6326, 0.6814, 0.5489] 
+2026-07-01 18:45:54.259451: Epoch time: 29.91 s 
+2026-07-01 18:45:54.259528: Yayy! New best EMA pseudo Dice: 0.2344 
+2026-07-01 18:45:55.493203:  
+2026-07-01 18:45:55.493364: Epoch 12 
+2026-07-01 18:45:55.493473: Current learning rate: 0.00023 
+2026-07-01 18:46:25.593634: train_loss -0.4981 
+2026-07-01 18:46:25.593910: val_loss -0.5668 
+2026-07-01 18:46:25.594019: Pseudo dice [0.6388, 0.8058, 0.6386] 
+2026-07-01 18:46:25.594112: Epoch time: 30.1 s 
+2026-07-01 18:46:25.594189: Yayy! New best EMA pseudo Dice: 0.2804 
+2026-07-01 18:46:26.855489:  
+2026-07-01 18:46:26.855670: Epoch 13 
+2026-07-01 18:46:26.855782: Current learning rate: 0.00016 
+2026-07-01 18:46:56.885617: train_loss -0.5106 
+2026-07-01 18:46:56.885865: val_loss -0.5851 
+2026-07-01 18:46:56.885980: Pseudo dice [0.682, 0.8032, 0.6716] 
+2026-07-01 18:46:56.886080: Epoch time: 30.03 s 
+2026-07-01 18:46:56.886158: Yayy! New best EMA pseudo Dice: 0.3243 
+2026-07-01 18:46:58.215588:  
+2026-07-01 18:46:58.215972: Epoch 14 
+2026-07-01 18:46:58.216092: Current learning rate: 9e-05 
+2026-07-01 18:47:28.256153: train_loss -0.5307 
+2026-07-01 18:47:28.256336: val_loss -0.6058 
+2026-07-01 18:47:28.256441: Pseudo dice [0.6889, 0.8134, 0.6692] 
+2026-07-01 18:47:28.256532: Epoch time: 30.04 s 
+2026-07-01 18:47:28.256603: Yayy! New best EMA pseudo Dice: 0.3642 
+2026-07-01 18:47:35.177949: Training done. 
+2026-07-01 18:47:35.215693: Using splits from existing split file: /gpfs/home1/yhussein/LightM-UNet/data/nnUNet_preprocessed/Dataset501_ARCADE/splits_final.json 
+2026-07-01 18:47:35.216428: The split file contains 1 splits. 
+2026-07-01 18:47:35.216535: Desired fold for training: 0 
+2026-07-01 18:47:35.216595: This split has 1000 training and 200 validation cases. 
+2026-07-01 18:47:35.219042: predicting val_1 
+2026-07-01 18:47:35.963453: predicting val_10 
+2026-07-01 18:47:36.022779: predicting val_100 
+2026-07-01 18:47:36.080743: predicting val_101 
+2026-07-01 18:47:36.141583: predicting val_102 
+2026-07-01 18:47:36.199745: predicting val_103 
+2026-07-01 18:47:36.258512: predicting val_104 
+2026-07-01 18:47:36.317048: predicting val_105 
+2026-07-01 18:47:36.376096: predicting val_106 
+2026-07-01 18:47:36.434952: predicting val_107 
+2026-07-01 18:47:40.300514: predicting val_108 
+2026-07-01 18:47:40.448852: predicting val_109 
+2026-07-01 18:47:40.562654: predicting val_11 
+2026-07-01 18:47:40.665469: predicting val_110 
+2026-07-01 18:47:40.752089: predicting val_111 
+2026-07-01 18:47:40.843502: predicting val_112 
+2026-07-01 18:47:40.957612: predicting val_113 
+2026-07-01 18:47:41.044874: predicting val_114 
+2026-07-01 18:47:41.143393: predicting val_115 
+2026-07-01 18:47:41.221978: predicting val_116 
+2026-07-01 18:47:41.295858: predicting val_117 
+2026-07-01 18:47:41.352644: predicting val_118 
+2026-07-01 18:47:41.471437: predicting val_119 
+2026-07-01 18:47:41.602924: predicting val_12 
+2026-07-01 18:47:41.680914: predicting val_120 
+2026-07-01 18:47:41.752317: predicting val_121 
+2026-07-01 18:47:41.851562: predicting val_122 
+2026-07-01 18:47:41.941864: predicting val_123 
+2026-07-01 18:47:42.058125: predicting val_124 
+2026-07-01 18:47:42.117076: predicting val_125 
+2026-07-01 18:47:42.197385: predicting val_126 
+2026-07-01 18:47:42.293770: predicting val_127 
+2026-07-01 18:47:42.385615: predicting val_128 
+2026-07-01 18:47:42.482563: predicting val_129 
+2026-07-01 18:47:42.570428: predicting val_13 
+2026-07-01 18:47:42.695630: predicting val_130 
+2026-07-01 18:47:42.755460: predicting val_131 
+2026-07-01 18:47:42.865880: predicting val_132 
+2026-07-01 18:47:42.960407: predicting val_133 
+2026-07-01 18:47:43.019541: predicting val_134 
+2026-07-01 18:47:43.094506: predicting val_135 
+2026-07-01 18:47:43.170707: predicting val_136 
+2026-07-01 18:47:43.230027: predicting val_137 
+2026-07-01 18:47:43.342668: predicting val_138 
+2026-07-01 18:47:43.486957: predicting val_139 
+2026-07-01 18:47:43.543895: predicting val_14 
+2026-07-01 18:47:43.630991: predicting val_140 
+2026-07-01 18:47:43.705934: predicting val_141 
+2026-07-01 18:47:43.799512: predicting val_142 
+2026-07-01 18:47:43.886700: predicting val_143 
+2026-07-01 18:47:43.985892: predicting val_144 
+2026-07-01 18:47:44.075719: predicting val_145 
+2026-07-01 18:47:44.162248: predicting val_146 
+2026-07-01 18:47:44.252074: predicting val_147 
+2026-07-01 18:47:44.347081: predicting val_148 
+2026-07-01 18:47:44.422287: predicting val_149 
+2026-07-01 18:47:44.533059: predicting val_15 
+2026-07-01 18:47:44.640212: predicting val_150 
+2026-07-01 18:47:44.717433: predicting val_151 
+2026-07-01 18:47:44.779090: predicting val_152 
+2026-07-01 18:47:44.884382: predicting val_153 
+2026-07-01 18:47:44.976823: predicting val_154 
+2026-07-01 18:47:45.054859: predicting val_155 
+2026-07-01 18:47:45.163517: predicting val_156 
+2026-07-01 18:47:45.291829: predicting val_157 
+2026-07-01 18:47:45.351219: predicting val_158 
+2026-07-01 18:47:45.455082: predicting val_159 
+2026-07-01 18:47:45.527057: predicting val_16 
+2026-07-01 18:47:45.618959: predicting val_160 
+2026-07-01 18:47:45.695628: predicting val_161 
+2026-07-01 18:47:45.837094: predicting val_162 
+2026-07-01 18:47:45.894971: predicting val_163 
+2026-07-01 18:47:45.999551: predicting val_164 
+2026-07-01 18:47:46.072920: predicting val_165 
+2026-07-01 18:47:46.161355: predicting val_166 
+2026-07-01 18:47:46.296091: predicting val_167 
+2026-07-01 18:47:46.382992: predicting val_168 
+2026-07-01 18:47:46.460528: predicting val_169 
+2026-07-01 18:47:46.542571: predicting val_17 
+2026-07-01 18:47:46.664433: predicting val_170 
+2026-07-01 18:47:46.730003: predicting val_171 
+2026-07-01 18:47:46.836841: predicting val_172 
+2026-07-01 18:47:46.940707: predicting val_173 
+2026-07-01 18:47:47.034144: predicting val_174 
+2026-07-01 18:47:47.089279: predicting val_175 
+2026-07-01 18:47:47.186699: predicting val_176 
+2026-07-01 18:47:47.271316: predicting val_177 
+2026-07-01 18:47:47.337453: predicting val_178 
+2026-07-01 18:47:47.416428: predicting val_179 
+2026-07-01 18:47:47.528366: predicting val_18 
+2026-07-01 18:47:47.589830: predicting val_180 
+2026-07-01 18:47:47.673920: predicting val_181 
+2026-07-01 18:47:47.787974: predicting val_182 
+2026-07-01 18:47:47.867810: predicting val_183 
+2026-07-01 18:47:47.968417: predicting val_184 
+2026-07-01 18:47:48.060883: predicting val_185 
+2026-07-01 18:47:48.163103: predicting val_186 
+2026-07-01 18:47:48.228042: predicting val_187 
+2026-07-01 18:47:48.299064: predicting val_188 
+2026-07-01 18:47:48.416338: predicting val_189 
+2026-07-01 18:47:48.502608: predicting val_19 
+2026-07-01 18:47:48.589741: predicting val_190 
+2026-07-01 18:47:48.700983: predicting val_191 
+2026-07-01 18:47:48.788233: predicting val_192 
+2026-07-01 18:47:48.860321: predicting val_193 
+2026-07-01 18:47:48.963339: predicting val_194 
+2026-07-01 18:47:49.043584: predicting val_195 
+2026-07-01 18:47:49.140918: predicting val_196 
+2026-07-01 18:47:49.268408: predicting val_197 
+2026-07-01 18:47:49.322627: predicting val_198 
+2026-07-01 18:47:49.411146: predicting val_199 
+2026-07-01 18:47:49.503214: predicting val_2 
+2026-07-01 18:47:49.582225: predicting val_20 
+2026-07-01 18:47:49.708423: predicting val_200 
+2026-07-01 18:47:49.781962: predicting val_21 
+2026-07-01 18:47:49.866813: predicting val_22 
+2026-07-01 18:47:49.975080: predicting val_23 
+2026-07-01 18:47:50.034533: predicting val_24 
+2026-07-01 18:47:50.107911: predicting val_25 
+2026-07-01 18:47:50.211317: predicting val_26 
+2026-07-01 18:47:50.271342: predicting val_27 
+2026-07-01 18:47:50.389909: predicting val_28 
+2026-07-01 18:47:50.489866: predicting val_29 
+2026-07-01 18:47:50.560925: predicting val_3 
+2026-07-01 18:47:50.641633: predicting val_30 
+2026-07-01 18:47:50.738925: predicting val_31 
+2026-07-01 18:47:50.821651: predicting val_32 
+2026-07-01 18:47:50.910404: predicting val_33 
+2026-07-01 18:47:51.003565: predicting val_34 
+2026-07-01 18:47:51.131933: predicting val_35 
+2026-07-01 18:47:51.220925: predicting val_36 
+2026-07-01 18:47:51.315042: predicting val_37 
+2026-07-01 18:47:51.426054: predicting val_38 
+2026-07-01 18:47:51.480561: predicting val_39 
+2026-07-01 18:47:51.577924: predicting val_4 
+2026-07-01 18:47:51.659495: predicting val_40 
+2026-07-01 18:47:51.756180: predicting val_41 
+2026-07-01 18:47:51.858750: predicting val_42 
+2026-07-01 18:47:51.962260: predicting val_43 
+2026-07-01 18:47:52.048936: predicting val_44 
+2026-07-01 18:47:52.150934: predicting val_45 
+2026-07-01 18:47:52.228072: predicting val_46 
+2026-07-01 18:47:52.301113: predicting val_47 
+2026-07-01 18:47:52.372243: predicting val_48 
+2026-07-01 18:47:52.485994: predicting val_49 
+2026-07-01 18:47:52.581788: predicting val_5 
+2026-07-01 18:47:52.636544: predicting val_50 
+2026-07-01 18:47:52.707382: predicting val_51 
+2026-07-01 18:47:52.829942: predicting val_52 
+2026-07-01 18:47:52.890960: predicting val_53 
+2026-07-01 18:47:52.961212: predicting val_54 
+2026-07-01 18:47:53.051941: predicting val_55 
+2026-07-01 18:47:53.181609: predicting val_56 
+2026-07-01 18:47:53.255927: predicting val_57 
+2026-07-01 18:47:53.360562: predicting val_58 
+2026-07-01 18:47:53.443050: predicting val_59 
+2026-07-01 18:47:53.512455: predicting val_6 
+2026-07-01 18:47:53.602983: predicting val_60 
+2026-07-01 18:47:53.673952: predicting val_61 
+2026-07-01 18:47:53.809417: predicting val_62 
+2026-07-01 18:47:53.901050: predicting val_63 
+2026-07-01 18:47:53.983106: predicting val_64 
+2026-07-01 18:47:54.070345: predicting val_65 
+2026-07-01 18:47:54.159468: predicting val_66 
+2026-07-01 18:47:54.227113: predicting val_67 
+2026-07-01 18:47:54.298270: predicting val_68 
+2026-07-01 18:47:54.361250: predicting val_69 
+2026-07-01 18:47:54.444873: predicting val_7 
+2026-07-01 18:47:54.582690: predicting val_70 
+2026-07-01 18:47:54.652654: predicting val_71 
+2026-07-01 18:47:54.745500: predicting val_72 
+2026-07-01 18:47:54.831004: predicting val_73 
+2026-07-01 18:47:54.915174: predicting val_74 
+2026-07-01 18:47:54.987012: predicting val_75 
+2026-07-01 18:47:55.048690: predicting val_76 
+2026-07-01 18:47:55.124820: predicting val_77 
+2026-07-01 18:47:55.217057: predicting val_78 
+2026-07-01 18:47:55.331964: predicting val_79 
+2026-07-01 18:47:55.429327: predicting val_8 
+2026-07-01 18:47:55.505263: predicting val_80 
+2026-07-01 18:47:55.601907: predicting val_81 
+2026-07-01 18:47:55.681117: predicting val_82 
+2026-07-01 18:47:55.792718: predicting val_83 
+2026-07-01 18:47:55.858724: predicting val_84 
+2026-07-01 18:47:55.965966: predicting val_85 
+2026-07-01 18:47:56.056271: predicting val_86 
+2026-07-01 18:47:56.180528: predicting val_87 
+2026-07-01 18:47:56.255977: predicting val_88 
+2026-07-01 18:47:56.342980: predicting val_89 
+2026-07-01 18:47:56.410406: predicting val_9 
+2026-07-01 18:47:56.483837: predicting val_90 
+2026-07-01 18:47:56.605302: predicting val_91 
+2026-07-01 18:47:56.696383: predicting val_92 
+2026-07-01 18:47:56.773779: predicting val_93 
+2026-07-01 18:47:56.872702: predicting val_94 
+2026-07-01 18:47:56.968875: predicting val_95 
+2026-07-01 18:47:57.041006: predicting val_96 
+2026-07-01 18:47:57.137152: predicting val_97 
+2026-07-01 18:47:57.235707: predicting val_98 
+2026-07-01 18:47:57.319948: predicting val_99 
+2026-07-01 18:48:01.924819: Validation complete 
+2026-07-01 18:48:01.924947: Mean Validation Dice:  0.609433271080677 
