@@ -58,7 +58,6 @@ python pareto_experiments/run_enet_skip_pareto.py \
     --epochs 15 \
     --batch-size 8 \
     --output-root "$OUTPUT_ROOT" \
-    --reuse-baseline "$BASELINE_SRC" \
     --overwrite
 
 echo "=== Sweep done at $(date) ==="

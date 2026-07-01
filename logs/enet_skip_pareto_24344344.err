@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/gpfs/home1/yhussein/LightM-UNet/lightm-unet/pareto_experiments/run_enet_skip_pareto.py", line 417, in <module>
+    raise SystemExit(main())
+  File "/gpfs/home1/yhussein/LightM-UNet/lightm-unet/pareto_experiments/run_enet_skip_pareto.py", line 395, in main
+    row = reuse_result(exp, args.reuse_baseline, args.output_root)
+  File "/gpfs/home1/yhussein/LightM-UNet/lightm-unet/pareto_experiments/run_enet_skip_pareto.py", line 161, in reuse_result
+    shutil.copytree(source, exp_results_root)
+  File "/home/yhussein/conda-envs/lightmunet/lib/python3.10/shutil.py", line 557, in copytree
+    with os.scandir(src) as itr:
+FileNotFoundError: [Errno 2] No such file or directory: '/home/yhussein/LightM-UNet/data/nnUNet_results/Dataset501_ARCADE/nnUNetTrainerENetOriginal__nnUNetPlans__2d'
