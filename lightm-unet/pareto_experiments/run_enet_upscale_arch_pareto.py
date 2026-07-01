@@ -145,7 +145,6 @@ def run_experiment(exp: dict, args: argparse.Namespace, package_root: Path,
         "param_delta_pct": exp.get("param_delta_pct", 0.0),
         "best_dice": metrics.best_dice,
         "final_dice": metrics.final_dice,
-        "best_epoch": metrics.best_epoch,
         "mean_epoch_time_s": mean_epoch_time,
         "total_time_s": duration,
         "returncode": result.returncode,
@@ -159,7 +158,7 @@ def write_csv(rows: list[dict], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fields = [
         "id", "name", "params", "params_m", "param_delta_pct",
-        "best_dice", "final_dice", "best_epoch",
+        "best_dice", "final_dice",
         "mean_epoch_time_s", "total_time_s", "returncode", "hypothesis",
     ]
     with open(path, "w", newline="") as f:
