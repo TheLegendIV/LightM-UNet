@@ -1,0 +1,88 @@
+import os
+
+import torch
+from torch import nn
+from torch.optim import AdamW
+
+from nnunetv2.nets.ENetCombo import VALID_EXPERIMENTS, build_combo_model
+from nnunetv2.training.lr_scheduler.polylr import PolyLRScheduler
+from nnunetv2.training.nnUNetTrainer.nnUNetTrainerLightMUNet import nnUNetTrainerLightMUNet
+from nnunetv2.utilities.plans_handling.plans_handler import ConfigurationManager, PlansManager
+
+
+def _parse_channels(value: str) -> tuple[int, ...]:
+    parts = tuple(int(v.strip()) for v in value.split(",") if v.strip())
+    if len(parts) != 5:
+        raise ValueError("COMBO_CHANNELS must be five comma-separated ints: ch0,ch1,ch23,ch4,ch5")
+    return parts
+
+
+class nnUNetTrainerENetCombo(nnUNetTrainerLightMUNet):
+
+    def __init__(self, plans, configuration, fold, dataset_json, unpack_dataset=True,
+                 device=torch.device("cuda")):
+        super().__init__(plans, configuration, fold, dataset_json, unpack_dataset, device)
+        self.initial_lr = float(os.environ.get("COMBO_LR", "1e-3"))
+        self.weight_decay = float(os.environ.get("COMBO_WEIGHT_DECAY", "1e-2"))
+        if os.environ.get("COMBO_EPOCHS"):
+            self.num_epochs = int(os.environ["COMBO_EPOCHS"])
+        if os.environ.get("COMBO_BATCH_SIZE"):
+            self.batch_size = int(os.environ["COMBO_BATCH_SIZE"])
+        if os.environ.get("COMBO_ITERATIONS_PER_EPOCH"):
+            self.num_iterations_per_epoch = int(os.environ["COMBO_ITERATIONS_PER_EPOCH"])
+        if os.environ.get("COMBO_VAL_ITERATIONS_PER_EPOCH"):
+            self.num_val_iterations_per_epoch = int(os.environ["COMBO_VAL_ITERATIONS_PER_EPOCH"])
+        if os.environ.get("COMBO_DISABLE_CHECKPOINTING", "0") == "1":
+            self.disable_checkpointing = True
+            self.save_every = 10**9
+        if os.environ.get("COMBO_OUTPUT_FOLDER"):
+            self.output_folder = os.environ["COMBO_OUTPUT_FOLDER"]
+            self.output_folder_base = os.path.dirname(self.output_folder)
+            os.makedirs(self.output_folder, exist_ok=True)
+
+    @staticmethod
+    def build_network_architecture(
+        plans_manager: PlansManager,
+        dataset_json,
+        configuration_manager: ConfigurationManager,
+        num_input_channels: int,
+        enable_deep_supervision: bool = False,
+    ) -> nn.Module:
+        if len(configuration_manager.patch_size) != 2:
+            raise ValueError("ENetCombo is a 2D architecture. Use nnU-Net 2d configuration.")
+        label_manager = plans_manager.get_label_manager(dataset_json)
+        experiment = os.environ.get("COMBO_EXPERIMENT", "EG3")
+        if experiment not in VALID_EXPERIMENTS:
+            raise ValueError(
+                f"COMBO_EXPERIMENT='{experiment}' is not valid. Valid: {sorted(VALID_EXPERIMENTS)}"
+            )
+        channels = _parse_channels(os.environ.get("COMBO_CHANNELS", "20,72,144,72,20"))
+        return build_combo_model(
+            experiment=experiment,
+            in_channels=num_input_channels,
+            out_channels=label_manager.num_segmentation_heads,
+            channels=channels,
+        )
+
+    def configure_optimizers(self):
+        optimizer = AdamW(
+            self.network.parameters(),
+            lr=self.initial_lr,
+            betas=(0.9, 0.999),
+            eps=1e-8,
+            weight_decay=self.weight_decay,
+        )
+        scheduler = PolyLRScheduler(optimizer, self.initial_lr, self.num_epochs, exponent=0.9)
+        return optimizer, scheduler
+
+    def perform_actual_validation(self, save_probabilities: bool = False):
+        if os.environ.get("COMBO_SKIP_FINAL_VALIDATION", "0") == "1":
+            self.print_to_log_file("Skipping final validation (COMBO_SKIP_FINAL_VALIDATION=1)")
+            return
+        return super().perform_actual_validation(save_probabilities)
+
+    def plot_network_architecture(self):
+        if os.environ.get("COMBO_SKIP_ARCH_PLOT", "0") == "1":
+            self.print_to_log_file("Skipping architecture plot (COMBO_SKIP_ARCH_PLOT=1)")
+            return
+        return super().plot_network_architecture()
