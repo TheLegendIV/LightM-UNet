@@ -12,9 +12,9 @@
 # Architectural Search (enet_upscale_arch_e15, 15-epoch screen):
 #   UAS2 — extra_ctx (best_dice 0.7423, final_dice 0.7415)
 #   UAS8 — asym_s1   (best_dice 0.7377, final_dice 0.7377)
-# Checkpoints and final validation are kept by default by
-# run_enet_upscale_arch_pareto.py (UAS_DISABLE_CHECKPOINTING=0,
-# UAS_SKIP_FINAL_VALIDATION=0), so no extra flags are needed for that.
+# Unlike the other pareto scripts, run_enet_upscale_arch_pareto.py hardcodes
+# UAS_DISABLE_CHECKPOINTING=0 (no --keep-checkpoints flag exists here) --
+# checkpointing and final validation always run, no extra flags needed.
 # Experiments run sequentially. If the job times out before both finish,
 # re-run with --configs <remaining ID>.
 

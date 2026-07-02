@@ -16,9 +16,11 @@
 #   AG1  A3 (raw skip 4x+5x)   + G3 (Mamba stage3)
 #   AG2  A3 (raw skip 4x+5x)   + UAS2 (stage2 +2 blocks)
 #   AG3  A3 (raw skip 4x+5x)   + G3 + UAS2
-# Checkpoints and final validation are kept by default by
-# run_enet_combo_pareto.py (COMBO_DISABLE_CHECKPOINTING=0,
-# COMBO_SKIP_FINAL_VALIDATION=0), so no extra flags are needed for that.
+# --keep-checkpoints is required: run_enet_combo_pareto.py disables ALL
+# checkpointing by default (checkpoint_best.pth, checkpoint_final.pth, the
+# periodic checkpoint_latest.pth -- all of it, see nnUNetTrainer.save_checkpoint)
+# unless that flag is passed. Final validation runs by default
+# (COMBO_SKIP_FINAL_VALIDATION=0), no flag needed for that part.
 # summary.csv (with momentum/acceleration per config, matching the other
 # pareto scripts) and pareto_final_dice.png / pareto_momentum.png are written
 # after every experiment, so a timeout still leaves usable partial results.
@@ -70,6 +72,7 @@ python pareto_experiments/run_enet_combo_pareto.py \
     --epochs 150 \
     --batch-size 8 \
     --output-root "$OUTPUT_ROOT" \
+    --keep-checkpoints \
     --overwrite
 
 echo "=== Training done at $(date) ==="
