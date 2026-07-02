@@ -1,3 +1,8 @@
 id,name,params,params_m,param_delta_pct,best_dice,final_dice,mean_epoch_time_s,total_time_s,returncode,hypothesis
+<<<<<<< HEAD
 UAS2,extra_ctx,557176,0.557176,19.44877973485173,0.803267,0.792433,,4199.645916461945,0,+2 bottlenecks in stages 2+3 (8→10 each); more depth at fixed H/8 resolution
 UAS8,asym_s1,467968,0.467968,0.3241463289141988,0.802133,0.796333,,4021.446014881134,0,Stage 1 uses asymmetric 5×1/1×5 convs at H/4; anisotropic bias for elongated vessel structures
+=======
+UAS2,extra_ctx,557176,0.557176,19.44877973,,0.662398696,,4199.645916,0,+2 bottlenecks in stages 2+3 (8→10 each); more depth at fixed H/8 resolution
+UAS8,asym_s1,467968,0.467968,0.324146329,,,,4021.446015,0,Stage 1 uses asymmetric 5×1/1×5 convs at H/4; anisotropic bias for elongated vessel structures
+>>>>>>> c4a6cd14 (Sync HPC)
