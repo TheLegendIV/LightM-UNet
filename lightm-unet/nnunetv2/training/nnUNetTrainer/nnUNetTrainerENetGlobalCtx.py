@@ -51,7 +51,7 @@ class nnUNetTrainerENetGlobalCtx(nnUNetTrainerLightMUNet):
         if len(configuration_manager.patch_size) != 2:
             raise ValueError("ENetGlobalCtx is a 2D architecture. Use nnU-Net 2d configuration.")
         label_manager = plans_manager.get_label_manager(dataset_json)
-        experiment = os.environ.get("GCX_EXPERIMENT", "G1")
+        experiment = os.environ.get("GCX_EXPERIMENT", "G3")
         if experiment not in VALID_EXPERIMENTS:
             raise ValueError(
                 f"GCX_EXPERIMENT='{experiment}' is not valid. Valid: {sorted(VALID_EXPERIMENTS)}"

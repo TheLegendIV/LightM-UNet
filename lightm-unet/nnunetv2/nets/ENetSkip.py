@@ -193,7 +193,7 @@ class ENetSkip(nn.Module):
         in_channels: int = 1,
         out_channels: int = 4,
         channels: tuple[int, int, int, int, int] = (16, 64, 128, 64, 16),
-        experiment: str = "A3",
+        experiment: str = "D2",
     ):
         super().__init__()
         if experiment not in VALID_EXPERIMENTS:

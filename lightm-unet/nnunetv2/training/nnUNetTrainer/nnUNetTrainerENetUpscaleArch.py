@@ -51,7 +51,7 @@ class nnUNetTrainerENetUpscaleArch(nnUNetTrainerLightMUNet):
         if len(configuration_manager.patch_size) != 2:
             raise ValueError("ENetUpscaleArch is a 2D architecture. Use the nnU-Net 2d configuration.")
         label_manager = plans_manager.get_label_manager(dataset_json)
-        experiment = os.environ.get("UAS_EXPERIMENT", "UAS0")
+        experiment = os.environ.get("UAS_EXPERIMENT", "UAS2") # UAS2
         if experiment not in VALID_EXPERIMENTS:
             raise ValueError(
                 f"UAS_EXPERIMENT='{experiment}' is not valid. Valid: {sorted(VALID_EXPERIMENTS)}"
