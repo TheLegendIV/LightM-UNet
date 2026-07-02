@@ -1,10 +1,10 @@
 id,name,params,params_m,param_delta_pct,best_dice,final_dice,mean_epoch_time_s,total_time_s,returncode,hypothesis
-UAS0,baseline,466456,0.466456,0.0,,,,428.6154520511627,0,"ENetOriginal — 2-stage encoder, control for all modifications"
-UAS1,deep_h16,770872,0.770872,65.26146088805804,,,,483.85862588882446,0,3rd downsampling to H/16 + 8-block context + decoder stage; deeper hierarchy for vessel topology
-UAS2,extra_ctx,557176,0.557176,19.44877973485173,,,,457.8743872642517,0,+2 bottlenecks in stages 2+3 (8→10 each); more depth at fixed H/8 resolution
-UAS3,flat_h4,329620,0.32962,-29.335242766734694,,,,504.5043385028839,0,Stage 2 flat at H/4 (delayed stride); preserves resolution through semantic aggregation
-UAS4,flat_h4_reldil,329620,0.32962,-29.335242766734694,,,,505.74923300743103,0,UAS3 + dilation rates 4/8/16/32; compensates proportional receptive field lost by resolution change
-UAS5,double_cycle,834952,0.834952,78.99909101823108,,,,556.2431280612946,0,Double context cycle in stages 2+3 (8→16 blocks); second pass through full dilation sequence
-UAS6,learnable_ds,488976,0.488976,4.827893734886035,,,,432.24811697006226,0,Strided 2×2 conv replaces MaxPool in both downsampling bottlenecks; learnable spatial aggregation
-UAS7,wide_bottle,1211656,1.211656,159.7578335362821,,,,476.73152780532837,0,Stages 2+3 internal_ratio=2 (ch/2 vs ch/4); wider bottleneck compression for thin-structure features
-UAS8,asym_s1,467968,0.467968,0.3241463289141988,,,,478.68412232398987,0,Stage 1 uses asymmetric 5×1/1×5 convs at H/4; anisotropic bias for elongated vessel structures
+UAS0,baseline,466456,0.466456,0.0,0.730900,0.730200,,428.6154520511627,0,"ENetOriginal — 2-stage encoder, control for all modifications"
+UAS1,deep_h16,770872,0.770872,65.26146088805804,0.746133,0.719167,,483.85862588882446,0,3rd downsampling to H/16 + 8-block context + decoder stage; deeper hierarchy for vessel topology
+UAS2,extra_ctx,557176,0.557176,19.44877973485173,0.742300,0.741467,,457.8743872642517,0,+2 bottlenecks in stages 2+3 (8→10 each); more depth at fixed H/8 resolution
+UAS3,flat_h4,329620,0.32962,-29.335242766734694,0.709300,0.705500,,504.5043385028839,0,Stage 2 flat at H/4 (delayed stride); preserves resolution through semantic aggregation
+UAS4,flat_h4_reldil,329620,0.32962,-29.335242766734694,0.739300,0.739300,,505.74923300743103,0,UAS3 + dilation rates 4/8/16/32; compensates proportional receptive field lost by resolution change
+UAS5,double_cycle,834952,0.834952,78.99909101823108,0.738800,0.727367,,556.2431280612946,0,Double context cycle in stages 2+3 (8→16 blocks); second pass through full dilation sequence
+UAS6,learnable_ds,488976,0.488976,4.827893734886035,0.728433,0.726067,,432.24811697006226,0,Strided 2×2 conv replaces MaxPool in both downsampling bottlenecks; learnable spatial aggregation
+UAS7,wide_bottle,1211656,1.211656,159.7578335362821,0.734000,0.734000,,476.73152780532837,0,Stages 2+3 internal_ratio=2 (ch/2 vs ch/4); wider bottleneck compression for thin-structure features
+UAS8,asym_s1,467968,0.467968,0.3241463289141988,0.737667,0.737667,,478.68412232398987,0,Stage 1 uses asymmetric 5×1/1×5 convs at H/4; anisotropic bias for elongated vessel structures

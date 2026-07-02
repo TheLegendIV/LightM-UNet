@@ -1,0 +1,69 @@
+#!/bin/bash
+#SBATCH --job-name=enet_upscale_arch_UAS2_UAS8
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=9
+#SBATCH --gpus=1
+#SBATCH --partition=gpu_mig
+#SBATCH --time=12:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+# Full 150-epoch training for two top performers from the ENet Upscale
+# Architectural Search (enet_upscale_arch_e15, 15-epoch screen):
+#   UAS2 — extra_ctx (best_dice 0.7423, final_dice 0.7415)
+#   UAS8 — asym_s1   (best_dice 0.7377, final_dice 0.7377)
+# Checkpoints and final validation are kept by default by
+# run_enet_upscale_arch_pareto.py (UAS_DISABLE_CHECKPOINTING=0,
+# UAS_SKIP_FINAL_VALIDATION=0), so no extra flags are needed for that.
+# Experiments run sequentially. If the job times out before both finish,
+# re-run with --configs <remaining ID>.
+
+set -e
+
+mkdir -p logs
+
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+
+cd "$HOME/LightM-UNet/lightm-unet"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Working dir: $(pwd)"
+echo "Conda env: $CONDA_PREFIX"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+echo "=== Ensure official split is present ==="
+cp "$nnUNet_raw/Dataset501_ARCADE/splits_final.json" \
+   "$nnUNet_preprocessed/Dataset501_ARCADE/splits_final.json"
+
+OUTPUT_ROOT="$HOME/LightM-UNet/data/nnUNET_results/enet_upscale_arch_e150"
+
+python pareto_experiments/run_enet_upscale_arch_pareto.py \
+    --configs UAS2 UAS8 \
+    --epochs 150 \
+    --batch-size 8 \
+    --output-root "$OUTPUT_ROOT" \
+    --overwrite
+
+echo "=== Training done at $(date) ==="
+echo "Results: $OUTPUT_ROOT/summary.csv"

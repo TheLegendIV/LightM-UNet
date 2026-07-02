@@ -63,7 +63,7 @@ class nnUNetTrainerENetSkip(nnUNetTrainerLightMUNet):
         channels = _parse_channels(
             os.environ.get("ENETSK_CHANNELS", "20,72,144,72,20")
         )
-        experiment = os.environ.get("ENETSK_EXPERIMENT", "baseline")
+        experiment = os.environ.get("ENETSK_EXPERIMENT", "A3")
         if experiment not in VALID_EXPERIMENTS:
             raise ValueError(
                 f"ENETSK_EXPERIMENT='{experiment}' is not a valid experiment. "
