@@ -51,7 +51,7 @@ class nnUNetTrainerENetCombo(nnUNetTrainerLightMUNet):
         if len(configuration_manager.patch_size) != 2:
             raise ValueError("ENetCombo is a 2D architecture. Use nnU-Net 2d configuration.")
         label_manager = plans_manager.get_label_manager(dataset_json)
-        experiment = os.environ.get("COMBO_EXPERIMENT", "EG3")
+        experiment = os.environ.get("COMBO_EXPERIMENT", "AG1")
         if experiment not in VALID_EXPERIMENTS:
             raise ValueError(
                 f"COMBO_EXPERIMENT='{experiment}' is not valid. Valid: {sorted(VALID_EXPERIMENTS)}"
