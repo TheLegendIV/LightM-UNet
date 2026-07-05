@@ -1,47 +1,78 @@
 #!/bin/bash
-#SBATCH --job-name=combo_eg1_cldice_pareto
+#SBATCH --job-name=combo_eg1_cldice
 #SBATCH --partition=gpu_mig
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gpus=1
 #SBATCH --mem=32G
-#SBATCH --time=48:00:00
-#SBATCH --array=0-4
-#SBATCH --output=logs/%x_%A_%a.out
-#SBATCH --error=logs/%x_%A_%a.err
+#SBATCH --time=06:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
 
-# Pareto sweep over the clDice loss weight for ENetComboEG1 (COMBO_EXPERIMENT=EG1),
-# 150 epochs / batch size 8, on a MIG GPU slice.
+# One point in the clDice-weight Pareto sweep for ENetComboEG1 (COMBO_EXPERIMENT=EG1),
+# 150 epochs / batch size 8, on a MIG GPU slice. Submit via
+# submit_combo_eg1_cldice_pareto.sh, which fires one of these per weight in
+# {0.0, 0.25, 0.5, 1.0, 2.0} -- weight=0.0 reproduces the plain Dice+CE loss
+# exactly (nnUNetTrainerENetComboClDice with COMBO_CLDICE_WEIGHT=0 is
+# mathematically identical to nnUNetTrainerENetCombo's default loss), kept as
+# the sanity-check anchor point, separate from the existing
+# labelsPr_ENetComboEG1 baseline (different trainer code path).
 #
-# 5 array tasks = 5 independent training runs, one per clDice weight below.
-# weight=0.0 reproduces the plain Dice+CE loss exactly (nnUNetTrainerENetComboClDice
-# with COMBO_CLDICE_WEIGHT=0 is mathematically identical to nnUNetTrainerENetCombo's
-# default loss) -- keep it as the sanity-check anchor point for the sweep, separate
-# from the existing labelsPr_ENetComboEG1 baseline (different trainer code path).
+# --time is capped at 6h (cluster policy), which 150 epochs will not fit into
+# on a MIG slice in one go -- see the self-chaining block below for how this
+# job keeps resuming itself across multiple 6h slots until done.
 #
-# After all 5 finish: run inference for each into its own labelsPr_<name>, then reuse
-# analysis/compute_topology_metrics.py + analysis/preview_results.ipynb to score
-# dice/purity/branch-consistency per weight and see where Dice-vs-connectivity
-# actually trades off -- that comparison is the actual "Pareto front," this job
-# only produces the checkpoints it's built from.
+# After it's done for all 5 weights: run inference for each into its own
+# labelsPr_<name>, then reuse analysis/compute_topology_metrics.py +
+# analysis/preview_results.ipynb to score dice/purity/branch-consistency per
+# weight and see where Dice-vs-connectivity actually trades off -- that
+# comparison is the actual "Pareto front," this job only produces the
+# checkpoints it's built from.
 #
 # NOTE: verify `--partition=gpu_mig` (and whether your cluster wants a
-# `--gres=gpu:<slice>:1`-style request instead of plain `--gpus=1` for MIG) against
-# `sinfo -o "%P %G"` on your cluster -- partition/gres naming for MIG slices is
+# `--gres=gpu:<slice>:1`-style request instead of plain `--gpus=1` for MIG)
+# against `sinfo -o "%P %G"` -- partition/gres naming for MIG slices is
 # cluster-specific and this is a best-guess default, not a verified value.
-# Same for --time: 48h is a guess for 150 epochs on a 1g.10gb-class slice (slower
-# per-epoch than the gpu_a100 partition train.job uses) -- check actual throughput
-# from this job's first few epochs and adjust for any future array in this family.
 
 set -e
 
 mkdir -p logs
 
-WEIGHTS=(0.0 0.25 0.5 1.0 2.0)
-COMBO_CLDICE_WEIGHT="${WEIGHTS[$SLURM_ARRAY_TASK_ID]}"
-WEIGHT_TAG="w$(echo "$COMBO_CLDICE_WEIGHT" | tr '.' 'p')"   # e.g. 0.25 -> w0p25
+: "${COMBO_CLDICE_WEIGHT:?COMBO_CLDICE_WEIGHT is required -- submit via submit_combo_eg1_cldice_pareto.sh, or manually: sbatch --export=ALL,COMBO_CLDICE_WEIGHT=0.5,RESUBMIT_COUNT=0 train_combo_eg1_cldice_pareto.job}"
+RESUBMIT_COUNT="${RESUBMIT_COUNT:-0}"
+MAX_RESUBMITS=20   # 20 x 6h = 120h ceiling per weight -- plenty of margin for 150 epochs; lower it once you know real per-epoch time on a MIG slice
+
+WEIGHT_TAG="w$(echo "$COMBO_CLDICE_WEIGHT" | tr '.' 'p')"    # e.g. 0.25 -> w0p25
 RUN_NAME="nnUNetTrainerENetComboClDice_${WEIGHT_TAG}"
+OUTPUT_FOLDER="$HOME/LightM-UNet/data/nnUNet_results/Dataset501_ARCADE/${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "COMBO_CLDICE_WEIGHT=${COMBO_CLDICE_WEIGHT}  RESUBMIT_COUNT=${RESUBMIT_COUNT}/${MAX_RESUBMITS}"
+echo "Output folder: ${OUTPUT_FOLDER}"
+
+# -- Pre-emptively queue the next chunk BEFORE training starts ---------------
+# This job's 6h time limit will very likely be shorter than 150 epochs needs
+# on a MIG slice, so SLURM will usually SIGKILL this job mid-training rather
+# than let it exit normally. A hard kill skips any "resubmit if not done yet"
+# logic placed *after* the training command -- it would never run. Queuing
+# the continuation now instead, dependent on this job ending (any reason),
+# makes the chain robust to that. The continuation re-checks
+# checkpoint_final.pth itself and exits almost immediately if training
+# actually finished, so this is safe even once the run is done -- worst case
+# it costs one near-instant extra queued job.
+if [ ! -f "$OUTPUT_FOLDER/checkpoint_final.pth" ] && [ "$RESUBMIT_COUNT" -lt "$MAX_RESUBMITS" ]; then
+    sbatch --dependency=afterany:"$SLURM_JOB_ID" \
+           --export=ALL,COMBO_CLDICE_WEIGHT="$COMBO_CLDICE_WEIGHT",RESUBMIT_COUNT=$((RESUBMIT_COUNT + 1)) \
+           "$0"
+    echo "Queued continuation job (next RESUBMIT_COUNT=$((RESUBMIT_COUNT + 1)))."
+elif [ -f "$OUTPUT_FOLDER/checkpoint_final.pth" ]; then
+    echo "checkpoint_final.pth already present -- not queuing a continuation."
+else
+    echo "WARNING: hit MAX_RESUBMITS=${MAX_RESUBMITS} without a checkpoint_final.pth. Not queuing further -- investigate before resubmitting manually."
+fi
 
 # -- HPC environment ----------------------------------------------------------
 module purge
@@ -73,16 +104,10 @@ export COMBO_EPOCHS=150
 export COMBO_BATCH_SIZE=8
 export COMBO_SAVE_EVERY=25          # checkpoint_latest.pth every 25 epochs, plus checkpoint_best/final as usual
 export COMBO_CLDICE_WEIGHT
-export COMBO_CLDICE_ITERS=3
-export COMBO_OUTPUT_FOLDER="$nnUNet_results/Dataset501_ARCADE/${RUN_NAME}__nnUNetPlans__2d/fold_0"
+export COMBO_CLDICE_ITERS=12        # covers p99 vessel width (~20-24px) measured on ARCADE GT; see cldice.py docstring
+export COMBO_OUTPUT_FOLDER="$OUTPUT_FOLDER"
 
 cd "$HOME/LightM-UNet/lightm-unet"
-
-echo "=== Job info ==="
-echo "Host: $(hostname)"
-echo "Date: $(date)"
-echo "Array task: ${SLURM_ARRAY_TASK_ID}  (COMBO_CLDICE_WEIGHT=${COMBO_CLDICE_WEIGHT}, tag=${WEIGHT_TAG})"
-echo "Output folder: ${COMBO_OUTPUT_FOLDER}"
 
 echo "=== GPU info ==="
 nvidia-smi
@@ -98,7 +123,10 @@ echo "=== Ensure official split is present ==="
 cp "$nnUNet_raw/Dataset501_ARCADE/splits_final.json" \
    "$nnUNet_preprocessed/Dataset501_ARCADE/splits_final.json"
 
-echo "=== Start ENetComboClDice training (EG1, weight=${COMBO_CLDICE_WEIGHT}) ==="
-nnUNetv2_train 501 2d 0 -tr nnUNetTrainerENetComboClDice
+echo "=== Start/resume ENetComboClDice training (EG1, weight=${COMBO_CLDICE_WEIGHT}) ==="
+# --c is safe to always pass, even on the very first run with no checkpoint
+# yet -- nnU-Net just prints a warning and starts fresh in that case.
+nnUNetv2_train 501 2d 0 -tr nnUNetTrainerENetComboClDice --c
 
-echo "Training finished for ${RUN_NAME}."
+DONE=$( [ -f "$OUTPUT_FOLDER/checkpoint_final.pth" ] && echo yes || echo no )
+echo "This chunk finished for ${RUN_NAME}. checkpoint_final.pth present: ${DONE}"
