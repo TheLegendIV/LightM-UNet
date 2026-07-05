@@ -35,6 +35,8 @@ class nnUNetTrainerENetCombo(nnUNetTrainerLightMUNet):
         if os.environ.get("COMBO_DISABLE_CHECKPOINTING", "0") == "1":
             self.disable_checkpointing = True
             self.save_every = 10**9
+        elif os.environ.get("COMBO_SAVE_EVERY"):
+            self.save_every = int(os.environ["COMBO_SAVE_EVERY"])
         if os.environ.get("COMBO_OUTPUT_FOLDER"):
             self.output_folder = os.environ["COMBO_OUTPUT_FOLDER"]
             self.output_folder_base = os.path.dirname(self.output_folder)
