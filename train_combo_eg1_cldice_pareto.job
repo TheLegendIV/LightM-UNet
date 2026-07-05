@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=combo_eg1_cldice_pareto
+#SBATCH --job-name=combo_eg1_cldice
 #SBATCH --partition=gpu_mig
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -7,24 +7,17 @@
 #SBATCH --gpus=1
 #SBATCH --mem=32G
 #SBATCH --time=06:00:00
-#SBATCH --array=0-4
-#SBATCH --output=logs/%x_%A_%a.out
-#SBATCH --error=logs/%x_%A_%a.err
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
 
-# Pareto sweep over the clDice loss weight for ENetComboEG1 (COMBO_EXPERIMENT=EG1),
-# 150 epochs / batch size 8, on a MIG GPU slice.
+# Single training run: ENetComboEG1 (COMBO_EXPERIMENT=EG1) with the Dice+CE+clDice
+# loss at the most aggressive clDice weight (COMBO_CLDICE_WEIGHT=2.0, i.e. clDice
+# weighted twice as heavily as Dice or CE alone), 150 epochs / batch size 8, on a
+# MIG GPU slice.
 #
-# 5 array tasks = 5 independent training runs, one per clDice weight below.
-# weight=0.0 reproduces the plain Dice+CE loss exactly (nnUNetTrainerENetComboClDice
-# with COMBO_CLDICE_WEIGHT=0 is mathematically identical to nnUNetTrainerENetCombo's
-# default loss) -- keep it as the sanity-check anchor point for the sweep, separate
-# from the existing labelsPr_ENetComboEG1 baseline (different trainer code path).
-#
-# After all 5 finish: run inference for each into its own labelsPr_<name>, then reuse
-# analysis/compute_topology_metrics.py + analysis/preview_results.ipynb to score
-# dice/purity/branch-consistency per weight and see where Dice-vs-connectivity
-# actually trades off -- that comparison is the actual "Pareto front," this job
-# only produces the checkpoints it's built from.
+# To evaluate afterward: run inference into its own labelsPr_<name>, then reuse
+# analysis/compute_topology_metrics.py + analysis/preview_results.ipynb to compare
+# dice/purity/branch-consistency against the existing labelsPr_ENetComboEG1 baseline.
 #
 # NOTE: verify `--partition=gpu_mig` (and whether your cluster wants a
 # `--gres=gpu:<slice>:1`-style request instead of plain `--gpus=1` for MIG) against
@@ -35,10 +28,7 @@ set -e
 
 mkdir -p logs
 
-WEIGHTS=(0.0 0.25 0.5 1.0 2.0)
-COMBO_CLDICE_WEIGHT="${WEIGHTS[$SLURM_ARRAY_TASK_ID]}"
-WEIGHT_TAG="w$(echo "$COMBO_CLDICE_WEIGHT" | tr '.' 'p')"   # e.g. 0.25 -> w0p25
-RUN_NAME="nnUNetTrainerENetComboClDice_${WEIGHT_TAG}"
+RUN_NAME="nnUNetTrainerENetComboClDice_w2p0"
 
 # -- HPC environment ----------------------------------------------------------
 module purge
@@ -69,7 +59,7 @@ export COMBO_EXPERIMENT=EG1
 export COMBO_EPOCHS=150
 export COMBO_BATCH_SIZE=8
 export COMBO_SAVE_EVERY=25          # checkpoint_latest.pth every 25 epochs, plus checkpoint_best/final as usual
-export COMBO_CLDICE_WEIGHT
+export COMBO_CLDICE_WEIGHT=2.0      # most aggressive point of the weights considered (0.0/0.25/0.5/1.0/2.0)
 export COMBO_CLDICE_ITERS=12        # covers p99 vessel width (~20-24px) measured on ARCADE GT; see cldice.py docstring
 export COMBO_OUTPUT_FOLDER="$nnUNet_results/Dataset501_ARCADE/${RUN_NAME}__nnUNetPlans__2d/fold_0"
 
@@ -78,7 +68,7 @@ cd "$HOME/LightM-UNet/lightm-unet"
 echo "=== Job info ==="
 echo "Host: $(hostname)"
 echo "Date: $(date)"
-echo "Array task: ${SLURM_ARRAY_TASK_ID}  (COMBO_CLDICE_WEIGHT=${COMBO_CLDICE_WEIGHT}, tag=${WEIGHT_TAG})"
+echo "COMBO_CLDICE_WEIGHT=${COMBO_CLDICE_WEIGHT}"
 echo "Output folder: ${COMBO_OUTPUT_FOLDER}"
 
 echo "=== GPU info ==="
