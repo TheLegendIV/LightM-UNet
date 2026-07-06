@@ -26,9 +26,10 @@ How it works, per foreground class channel of one image:
   3. The ground truth mask for this class has some true connected-component
      count k (usually 1 for a single vessel tree, occasionally more if
      genuinely disjoint in-frame -- computed fresh per image via
-     scipy.ndimage.label, not assumed). The top k predicted components by
-     persistence are treated as the real anatomical pieces; anything beyond
-     that is a spurious fragment.
+     scipy.ndimage.label, not assumed, and always from the FULL image, not
+     the patch_size crop below -- see that section's comment for why this
+     matters). The top k predicted components by persistence are treated as
+     the real anatomical pieces; anything beyond that is a spurious fragment.
   4. The loss pushes the probability at each spurious component's birth
      pixel toward 0 -- directly discouraging the network from keeping that
      island alive as a separate piece.
@@ -154,6 +155,24 @@ def _spurious_birth_pixels(
     return [bar[0] for bar in ranked[expected_components:]]
 
 
+def expected_components_per_channel(gt_onehot_np: np.ndarray) -> np.ndarray:
+    """Ground-truth connected-component count per (batch, class), from the
+    FULL image -- gt_onehot_np: (B, C, H, W) array, values > 0.5 = foreground.
+
+    Deliberately takes the full image rather than any sub-crop: see the
+    "expected_components must come from the FULL image" comment in
+    Betti0Loss.forward for why using a small crop's own GT here silently
+    breaks training (measured: collapses predicted foreground to nothing).
+    """
+    batch, n_classes = gt_onehot_np.shape[:2]
+    expected = np.zeros((batch, n_classes), dtype=int)
+    for b in range(batch):
+        for c in range(n_classes):
+            gt_mask = gt_onehot_np[b, c] > 0.5
+            expected[b, c] = 0 if not gt_mask.any() else ndi.label(gt_mask)[1]
+    return expected
+
+
 class Betti0Loss(nn.Module):
     """Penalizes excess (beyond ground truth's connected-component count)
     0-dimensional topological features in a predicted probability map --
@@ -206,31 +225,45 @@ class Betti0Loss(nn.Module):
 
         batch, n_classes, height, width = net_output.shape
 
+        # expected_components must come from the FULL image's GT, not the crop
+        # taken below. ARCADE vessels are thin and sparse, so a small random
+        # crop very often contains none of a given class's pixels even though
+        # that class is genuinely present elsewhere in the same image. Deriving
+        # expected_components from the crop's own (locally empty) GT would then
+        # judge that class "absent here" and penalize any emerging correct
+        # probability inside the crop as spurious -- since most crops of a
+        # sparse class are "empty" purely by chance, this fires far more often
+        # than it should and was measured to collapse training to predicting no
+        # foreground at all (see nnUNetTrainerENetComboClDiceBetti's smoke-test
+        # history: clDice alone reached ~0.74 mean Dice; adding Betti-0 with the
+        # crop-derived expected_components drove Dice to exactly 0.0 in every
+        # case, at both weight=0.5 and weight=1.0). Using the full image here
+        # avoids that false "absent" verdict; the crop below still bounds the
+        # cost of the expensive part (the per-pixel persistence diagram).
+        with torch.no_grad():
+            gt_full_np = y_onehot.detach().cpu().numpy()
+        expected_components = expected_components_per_channel(gt_full_np)
+
         # Random crop bounds the Union-Find cost regardless of image size --
-        # see module docstring's cost warning.
+        # see module docstring's cost warning. Only the probability map is
+        # cropped; expected_components above already reflects the full image.
         if self.patch_size is not None and (height > self.patch_size or width > self.patch_size):
             ph = min(self.patch_size, height)
             pw = min(self.patch_size, width)
             y0 = int(torch.randint(0, height - ph + 1, (1,)).item())
             x0 = int(torch.randint(0, width - pw + 1, (1,)).item())
             net_output_patch = net_output[:, :, y0:y0 + ph, x0:x0 + pw]
-            y_onehot_patch = y_onehot[:, :, y0:y0 + ph, x0:x0 + pw]
         else:
             net_output_patch = net_output
-            y_onehot_patch = y_onehot
 
         with torch.no_grad():
             prob_np = net_output_patch.detach().cpu().numpy()
-            gt_np = y_onehot_patch.detach().cpu().numpy()
 
         penalty_terms = []
         for b in range(batch):
             for c in range(n_classes):
-                gt_mask = gt_np[b, c] > 0.5
-                expected_components = 0 if not gt_mask.any() else ndi.label(gt_mask)[1]
-
                 spurious_idx = _spurious_birth_pixels(
-                    prob_np[b, c], expected_components,
+                    prob_np[b, c], int(expected_components[b, c]),
                     connectivity=self.connectivity, prob_floor=self.prob_floor,
                 )
                 if not spurious_idx:
@@ -334,6 +367,23 @@ if __name__ == "__main__":
     logits_clean = make_logits(with_spurious_blob=False)
     loss_clean = betti_loss_fn(logits_clean, gt)
     print("Loss WITHOUT spurious blob (expect ~0):", loss_clean.item())
+
+    # Regression test for the full-image vs. crop expected_components bug
+    # (see Betti0Loss.forward's comment): a crop that happens to miss a
+    # class's only GT component must NOT cause that class to be treated as
+    # "absent" -- expected_components_per_channel must always report it
+    # using the full image, independent of patch_size cropping.
+    gt_np = gt.numpy().astype(np.float32)
+    gt_onehot_np = np.stack([1 - gt_np[:, 0], gt_np[:, 0]], axis=1)  # (1, 2, H, W): bg, fg
+    full_image_expected = expected_components_per_channel(gt_onehot_np)
+    crop_missing_vessel = gt_onehot_np[:, :, 25:, 25:]  # bottom-right corner, vessel is at rows 10-14
+    crop_expected = expected_components_per_channel(crop_missing_vessel)
+    print("expected_components, full image  (class 1 should be 1):", full_image_expected[0, 1])
+    print("expected_components, empty crop  (class 1 should be 0 -- this is exactly the bug: a crop"
+          " missing the vessel must never be the number Betti0Loss.forward actually uses):",
+          crop_expected[0, 1])
+    assert full_image_expected[0, 1] == 1
+    assert crop_expected[0, 1] == 0
 
     combo_loss_fn = DC_and_CE_and_Betti_loss(
         soft_dice_kwargs={"batch_dice": True, "smooth": 1e-5, "do_bg": False, "ddp": False},

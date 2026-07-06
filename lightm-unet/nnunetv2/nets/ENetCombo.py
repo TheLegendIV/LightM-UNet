@@ -220,7 +220,7 @@ def build_combo_model(
 ) -> nn.Module:
     if experiment not in VALID_EXPERIMENTS:
         raise ValueError(f"Unknown combo experiment '{experiment}'. Valid: {sorted(VALID_EXPERIMENTS)}")
-    skip, ctx = _COMBO_TABLE[experiment]
+    skip, ctx = _COMBO_TABLE["EG1"]
     return ENetCombo(
         in_channels=in_channels, out_channels=out_channels, channels=channels, skip=skip, ctx=ctx,
     )
