@@ -1,0 +1,116 @@
+#!/bin/bash
+#SBATCH --job-name=combo_eg1_cldice_territory
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=06:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+# Single training run: ENetComboEG1 (COMBO_EXPERIMENT=EG1) with the
+# Dice+CE+clDice+territory-consistency loss (nnUNetTrainerENetComboClDiceTerritory).
+# clDice is kept in the loss rather than replaced -- same reasoning as the
+# earlier clDice+Betti-0 run this mirrors: COMBO_CLDICE_WEIGHT=1.0,
+# COMBO_TERRITORY_WEIGHT=1.0, splitting the previous single-term run's
+# most-aggressive clDice weight (2.0) evenly between the two terms rather
+# than doubling the total auxiliary loss magnitude.
+#
+# Betti-0 is NOT included here. It was measured to collapse
+# nnUNetTrainerENetComboClDiceBetti's training entirely (Mean Validation Dice
+# 0.0 at both weight=0.5 and weight=1.0, vs. clDice-alone's 0.742) -- see
+# betti.py's Betti0Loss.forward comment for the root cause (its
+# expected_components was derived from a random crop's GT, which very often
+# made a genuinely-present class look "absent" and pushed real foreground
+# probability toward 0). That's been fixed in betti.py separately, but this
+# run intentionally isolates clDice+territory-consistency alone first, per
+# instruction ("combine with clDice for now without betti").
+#
+# territory-consistency (territory.py) does not share Betti-0's failure mode:
+# it reads the true RCA-vs-LAD/LCX territory straight from ground truth
+# (available at training time), so there's nothing to guess and nothing
+# crop-dependent -- see territory.py's module docstring.
+#
+# To evaluate afterward: run inference into its own labelsPr_<name>, then reuse
+# analysis/compute_topology_metrics.py + analysis/preview_results.ipynb to compare
+# dice/purity/branch-consistency/territory-leakage against the existing
+# labelsPr_ENetComboEG1 baseline and against the clDice-only run.
+#
+# NOTE: verify `--partition=gpu_mig` (and whether your cluster wants a
+# `--gres=gpu:<slice>:1`-style request instead of plain `--gpus=1` for MIG) against
+# `sinfo -o "%P %G"` on your cluster -- partition/gres naming for MIG slices is
+# cluster-specific and this is a best-guess default, not a verified value.
+
+set -e
+
+mkdir -p logs
+
+RUN_NAME="nnUNetTrainerENetComboClDiceTerritory_c1p0_t1p0"
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- ENetCombo / clDice+territory trainer knobs --------------------------------
+export COMBO_EXPERIMENT=EG1
+export COMBO_EPOCHS=150
+export COMBO_BATCH_SIZE=8
+export COMBO_SAVE_EVERY=25          # checkpoint_latest.pth every 25 epochs, plus checkpoint_best/final as usual
+export COMBO_CLDICE_WEIGHT=1.0      # split from the previous single-term run's most-aggressive weight (2.0)
+export COMBO_CLDICE_ITERS=12        # covers p99 vessel width (~20-24px) measured on ARCADE GT; see cldice.py docstring
+export COMBO_TERRITORY_WEIGHT=1.0   # other half of the split; see territory.py
+export COMBO_TERRITORY_MARGIN=0.05  # below this wrong-territory probability, the term is exactly 0 (loss and grad)
+export COMBO_TERRITORY_POWER=2.0    # squared above the margin -- a large violation costs much more than a marginal one
+export COMBO_OUTPUT_FOLDER="$nnUNet_results/Dataset501_ARCADE/${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+cd "$HOME/LightM-UNet/lightm-unet"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "COMBO_CLDICE_WEIGHT=${COMBO_CLDICE_WEIGHT}"
+echo "COMBO_TERRITORY_WEIGHT=${COMBO_TERRITORY_WEIGHT}"
+echo "COMBO_TERRITORY_MARGIN=${COMBO_TERRITORY_MARGIN}"
+echo "COMBO_TERRITORY_POWER=${COMBO_TERRITORY_POWER}"
+echo "Output folder: ${COMBO_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+python - <<'PY'
+import torch
+print("CUDA available:", torch.cuda.is_available())
+print("GPU:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)
+assert torch.cuda.is_available(), "CUDA is not available in PyTorch"
+PY
+
+echo "=== Ensure official split is present ==="
+cp "$nnUNet_raw/Dataset501_ARCADE/splits_final.json" \
+   "$nnUNet_preprocessed/Dataset501_ARCADE/splits_final.json"
+
+echo "=== Start ENetComboClDiceTerritory training (EG1, cldice=${COMBO_CLDICE_WEIGHT}, territory=${COMBO_TERRITORY_WEIGHT}) ==="
+nnUNetv2_train 501 2d 0 -tr nnUNetTrainerENetComboClDiceTerritory
+
+echo "Training finished for ${RUN_NAME}."
