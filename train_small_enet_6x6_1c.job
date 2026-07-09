@@ -1,0 +1,123 @@
+#!/bin/bash
+#SBATCH --job-name=small_enet_6x6_1c
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+# Full training run for nnUNetTrainerSmallENet (nnunetv2/nets/SmallENet.py) on
+# Dataset502_ARCADE_6x6_1c: 6x6 grid + 5x5 border-straddling layer-2 patches of
+# the ARCADE syntax subset, binary vessel mask (dataset-prep/prepare_arcade.py).
+# batch_size=12, 150 epochs, per user instruction.
+#
+# SmallENet is a small, full-resolution (no pooling anywhere) ENet variant:
+# stride-1 initial block -> 2 regular bottlenecks (16->32ch) -> dilated
+# 2/4/8 bottlenecks -> one asymmetric-5 bottleneck -> 1x1 conv head, single
+# logit channel (sigmoid probability at inference, raw logits during
+# training). The second input channel (local-contrast-norm) is derived
+# on-the-fly inside the network from the single grayscale channel nnU-Net
+# loads, so the dataset itself only needs channel_names={"0": "grayscale"}
+# (already the case for Dataset502_ARCADE_6x6_1c).
+#
+# NOTE: this dataset's numeric ID was deliberately bumped from 501 to 502
+# (the name says "ARCADE_6x6_1c" but the folder is Dataset502_..., not
+# Dataset501_...) because nnUNetv2_plan_and_preprocess's -d flag only takes
+# an integer ID, and Dataset501_ARCADE (the original multi-class, unpatched
+# dataset) already occupies id 501 -- two folders sharing a "DatasetNNN"
+# prefix makes nnU-Net's id->folder lookup raise "more than one dataset
+# name found". Do not rename this folder back to Dataset501_* without also
+# moving/renaming the original Dataset501_ARCADE, or preprocessing will break.
+#
+# IMPORTANT: nnUNetTrainerSmallENet.perform_actual_validation() deliberately
+# raises unless SMALLENET_SKIP_FINAL_VALIDATION=1 -- the network's single
+# sigmoid logit channel isn't wired up to nnU-Net's final sliding-window
+# export path (which assumes num_segmentation_heads channels for this
+# dataset's plain, non-"regions" binary label dict). Per-epoch pseudo-dice
+# is still logged normally during training/validation_step. This must stay
+# set to 1 until that export path is implemented -- see the trainer's
+# module docstring.
+#
+# NOTE: verify `--partition=gpu_mig` (and whether your cluster wants a
+# `--gres=gpu:<slice>:1`-style request instead of plain `--gpus=1` for MIG) against
+# `sinfo -o "%P %G"` on your cluster, and adjust --time if 04:00:00 turns out to be
+# too tight/loose once you've seen real iteration speed on 85x85 patches.
+
+set -e
+
+mkdir -p logs
+
+RUN_NAME="nnUNetTrainerSmallENet"
+DATASET_ID=502
+DATASET_NAME="Dataset502_ARCADE_6x6_1c"
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- SmallENet trainer knobs ----------------------------------------------------
+export SMALLENET_EPOCHS=150
+export SMALLENET_BATCH_SIZE=12
+export SMALLENET_SAVE_EVERY=25
+export SMALLENET_SKIP_FINAL_VALIDATION=1   # required -- see NOTE above
+export SMALLENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+cd "$HOME/LightM-UNet/lightm-unet"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Dataset: ${DATASET_NAME} (id ${DATASET_ID})"
+echo "SMALLENET_EPOCHS=${SMALLENET_EPOCHS}"
+echo "SMALLENET_BATCH_SIZE=${SMALLENET_BATCH_SIZE}"
+echo "Output folder: ${SMALLENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+python - <<'PY'
+import torch
+print("CUDA available:", torch.cuda.is_available())
+print("GPU:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)
+assert torch.cuda.is_available(), "CUDA is not available in PyTorch"
+PY
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist at $nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json, skipping."
+fi
+
+echo "=== Ensure official split is present ==="
+cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+   "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+
+echo "=== Start SmallENet training (batch_size=${SMALLENET_BATCH_SIZE}, epochs=${SMALLENET_EPOCHS}) ==="
+nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr nnUNetTrainerSmallENet
+
+echo "Training finished for ${RUN_NAME}."
