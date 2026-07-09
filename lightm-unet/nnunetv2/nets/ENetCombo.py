@@ -220,7 +220,42 @@ def build_combo_model(
 ) -> nn.Module:
     if experiment not in VALID_EXPERIMENTS:
         raise ValueError(f"Unknown combo experiment '{experiment}'. Valid: {sorted(VALID_EXPERIMENTS)}")
-    skip, ctx = _COMBO_TABLE["EG1"]
+    # NOTE: this line has been silently hardcoded to a single experiment ID
+    # (ignoring the `experiment` argument entirely) at least twice by some
+    # automated sync process -- _COMBO_TABLE["AG1"] from 2026-07-03 15:52 to
+    # 2026-07-06 01:15, then _COMBO_TABLE["EG1"] from 2026-07-06 09:30 until
+    # this fix. Either way, every requested experiment silently built
+    # whichever architecture happened to be hardcoded, regardless of
+    # COMBO_EXPERIMENT. See the self-test below, which asserts every
+    # VALID_EXPERIMENTS entry actually gets its own distinct skip/ctx -- run
+    # `python ENetCombo.py` before trusting any run's architecture again if
+    # this line looks suspicious.
+    skip, ctx = _COMBO_TABLE[experiment]
     return ENetCombo(
         in_channels=in_channels, out_channels=out_channels, channels=channels, skip=skip, ctx=ctx,
     )
+
+
+if __name__ == "__main__":
+    # Regression test for the "build_combo_model ignores `experiment`" bug:
+    # every valid experiment ID must build a model whose actual skip/ctx
+    # match _COMBO_TABLE, not just whichever one happens to be hardcoded.
+    for exp, (expected_skip, expected_ctx) in _COMBO_TABLE.items():
+        model = build_combo_model(exp, in_channels=1, out_channels=4, channels=CHANNELS)
+        assert model.skip == expected_skip, (
+            f"{exp}: expected skip={expected_skip!r}, got {model.skip!r} -- "
+            f"build_combo_model is not respecting the `experiment` argument."
+        )
+        assert model.ctx == expected_ctx, (
+            f"{exp}: expected ctx={expected_ctx!r}, got {model.ctx!r} -- "
+            f"build_combo_model is not respecting the `experiment` argument."
+        )
+        has_proj_enc = model.proj_enc_4x is not None
+        has_fuse = model.fuse_4x is not None
+        expected_proj_enc = expected_skip == "E1"
+        assert has_proj_enc == expected_proj_enc and has_fuse == (not expected_proj_enc), (
+            f"{exp}: skip module mismatch (has_proj_enc={has_proj_enc}, has_fuse={has_fuse}) "
+            f"for expected skip={expected_skip!r}."
+        )
+        print(f"{exp}: skip={model.skip} ctx={model.ctx} -- OK")
+    print(f"All {len(_COMBO_TABLE)} experiment IDs build their own distinct architecture. build_combo_model is correct.")
