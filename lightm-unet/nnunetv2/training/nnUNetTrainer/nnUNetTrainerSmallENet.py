@@ -1,13 +1,20 @@
 import os
+from datetime import datetime
+from typing import List, Tuple, Union
 
+import numpy as np
 import torch
+from batchgenerators.transforms.abstract_transforms import AbstractTransform
+from batchgenerators.transforms.utility_transforms import RemoveLabelTransform
 from torch import nn
 from torch.optim import AdamW
 
 from nnunetv2.nets.SmallENet import SmallENet
-from nnunetv2.training.loss.compound_losses import DC_and_BCE_loss
+from nnunetv2.training.data_augmentation.custom_transforms.vessel_gap_transform import VesselGapTransform
+from nnunetv2.training.loss.cldice import DC_and_BCE_and_clDice_loss
 from nnunetv2.training.loss.dice import MemoryEfficientSoftDiceLoss, get_tp_fp_fn_tn
 from nnunetv2.training.lr_scheduler.polylr import PolyLRScheduler
+from nnunetv2.training.nnUNetTrainer.nnUNetTrainer import nnUNetTrainer
 from nnunetv2.training.nnUNetTrainer.nnUNetTrainerLightMUNet import nnUNetTrainerLightMUNet
 from nnunetv2.utilities.plans_handling.plans_handler import ConfigurationManager, PlansManager
 
@@ -29,6 +36,24 @@ correctly. perform_actual_validation() (the final full-resolution
 sliding-window export) is NOT compatible with this single-channel output
 against a has_regions=False label manager and is left disabled by default
 -- see SMALLENET_SKIP_FINAL_VALIDATION below.
+
+get_training_transforms() is overridden to optionally splice in
+VesselGapTransform (see
+nnunetv2/training/data_augmentation/custom_transforms/vessel_gap_transform.py
+and dataset-prep/preview_augmentations.ipynb) -- off by default, enable with
+SMALLENET_GAP_AUG=1.
+
+_build_loss() uses DC_and_BCE_and_clDice_loss (nnunetv2/training/loss/cldice.py)
+-- Dice+BCE plus a soft-clDice term rewarding topological connectivity, same
+idea as nnUNetTrainerENetComboClDice but adapted for this trainer's single-
+logit sigmoid output (do_bg=True: there's no separate background channel to
+exclude, the one output channel *is* the foreground). weight_cldice defaults
+to 1.0 -- the same weight as Dice and BCE, not a token amount -- so it
+actually competes for gradient, not diluted noise. Tune with
+SMALLENET_CLDICE_WEIGHT (0.0 reproduces the plain Dice+BCE loss exactly) and
+SMALLENET_CLDICE_ITERS (default 12; see cldice.py's soft_skeletonize
+docstring for why -- num_iter needs to cover roughly half the widest vessel's
+width in pixels or that region contributes nothing to the loss).
 """
 
 
@@ -59,10 +84,27 @@ class nnUNetTrainerSmallENet(nnUNetTrainerLightMUNet):
             self.save_every = 10**9
         elif os.environ.get("SMALLENET_SAVE_EVERY"):
             self.save_every = int(os.environ["SMALLENET_SAVE_EVERY"])
+        self.cldice_weight = float(os.environ.get("SMALLENET_CLDICE_WEIGHT", "1.0"))
+        self.cldice_num_iter = int(os.environ.get("SMALLENET_CLDICE_ITERS", "12"))
         if os.environ.get("SMALLENET_OUTPUT_FOLDER"):
             self.output_folder = os.environ["SMALLENET_OUTPUT_FOLDER"]
             self.output_folder_base = os.path.dirname(self.output_folder)
             os.makedirs(self.output_folder, exist_ok=True)
+            # super().__init__() already computed self.log_file from the default
+            # (pre-override) output_folder, so it must be redirected here too --
+            # otherwise the training log and the checkpoints silently end up in
+            # two different directories whenever SMALLENET_OUTPUT_FOLDER differs
+            # from nnU-Net's default path (e.g. a stale/differently-cased
+            # $nnUNet_results in the shell that exported it).
+            timestamp = datetime.now()
+            self.log_file = os.path.join(
+                self.output_folder,
+                "training_log_%d_%d_%d_%02.0d_%02.0d_%02.0d.txt"
+                % (
+                    timestamp.year, timestamp.month, timestamp.day,
+                    timestamp.hour, timestamp.minute, timestamp.second,
+                ),
+            )
 
     @staticmethod
     def build_network_architecture(
@@ -95,10 +137,50 @@ class nnUNetTrainerSmallENet(nnUNetTrainerLightMUNet):
             lcn_kernel_size=int(os.environ.get("SMALLENET_LCN_KERNEL", "9")),
         )
 
+    @staticmethod
+    def get_training_transforms(
+        patch_size: Union[np.ndarray, Tuple[int]],
+        rotation_for_DA: dict,
+        deep_supervision_scales: Union[List, Tuple, None],
+        mirror_axes: Tuple[int, ...],
+        do_dummy_2d_data_aug: bool,
+        order_resampling_data: int = 3,
+        order_resampling_seg: int = 1,
+        border_val_seg: int = -1,
+        use_mask_for_norm: List[bool] = None,
+        is_cascaded: bool = False,
+        foreground_labels: Union[Tuple[int, ...], List[int]] = None,
+        regions: List = None,
+        ignore_label: int = None,
+    ) -> AbstractTransform:
+        tr_transforms = nnUNetTrainer.get_training_transforms(
+            patch_size, rotation_for_DA, deep_supervision_scales, mirror_axes, do_dummy_2d_data_aug,
+            order_resampling_data, order_resampling_seg, border_val_seg, use_mask_for_norm,
+            is_cascaded, foreground_labels, regions, ignore_label,
+        )
+        gap_transform = VesselGapTransform.from_env()
+        if gap_transform is not None:
+            # Insert right after the geometric/appearance augmentations (spatial warp,
+            # mirror, ...) so data and seg are already co-registered in their final
+            # orientation, and before RemoveLabelTransform/RenameTransform so 'seg'
+            # still holds raw class-index labels under its original key.
+            insert_at = next(
+                (i for i, t in enumerate(tr_transforms.transforms) if isinstance(t, RemoveLabelTransform)),
+                len(tr_transforms.transforms),
+            )
+            tr_transforms.transforms.insert(insert_at, gap_transform)
+        return tr_transforms
+
     def _build_loss(self):
-        return DC_and_BCE_loss(
-            {},
-            {"batch_dice": self.configuration_manager.batch_dice, "do_bg": True, "smooth": 1e-5, "ddp": self.is_ddp},
+        return DC_and_BCE_and_clDice_loss(
+            bce_kwargs={},
+            soft_dice_kwargs={
+                "batch_dice": self.configuration_manager.batch_dice, "do_bg": True, "smooth": 1e-5, "ddp": self.is_ddp,
+            },
+            cldice_kwargs={"num_iter": self.cldice_num_iter, "do_bg": True},
+            weight_ce=1.0,
+            weight_dice=1.0,
+            weight_cldice=self.cldice_weight,
             use_ignore_label=self.label_manager.has_ignore_label,
             dice_class=MemoryEfficientSoftDiceLoss,
         )

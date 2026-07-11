@@ -1,0 +1,86 @@
+#!/bin/bash
+#SBATCH --job-name=small_enet_6x6_1c_ve2to1
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+# Same nnUNetTrainerSmallENet run as train_small_enet_6x6_1c.job, but on
+# Dataset503_ARCADE_6x6_1c_ve2to1 -- a copy of Dataset502_ARCADE_6x6_1c whose
+# *training* pool has empty (all-background) patches randomly downsampled to a
+# 2:1 vessel:empty ratio (dataset-prep/downsample_empty_patches.py), to test
+# whether that fixes the class imbalance hurting Dice. Validation patches are
+# left at the natural (imbalanced) distribution -- only train was downsampled --
+# so per-epoch pseudo-dice stays comparable to the Dataset502 baseline run.
+# The test split isn't duplicated; Dataset503 has no imagesTs/labelsTs, so
+# evaluation notebooks should still read GT from Dataset502_ARCADE_6x6_1c's
+# imagesTs/labelsTs (identical patches, not touched by the downsampling).
+#
+# See train_small_enet_6x6_1c.job for the SmallENet architecture notes, the
+# NOTE on why this dataset needs its own numeric nnU-Net id (503), and the
+# IMPORTANT note on SMALLENET_SKIP_FINAL_VALIDATION -- all identical here.
+#
+# NOTE: verify `--partition=gpu_mig` (and whether your cluster wants a
+# `--gres=gpu:<slice>:1`-style request instead of plain `--gpus=1` for MIG) against
+# `sinfo -o "%P %G"` on your cluster, and adjust --time if 04:00:00 turns out to be
+# too tight/loose once you've seen real iteration speed on 85x85 patches.
+
+
+
+RUN_NAME="nnUNetTrainerSmallENet"
+DATASET_ID=503
+DATASET_NAME="Dataset503_ARCADE_6x6_1c_ve2to1"
+
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNET_results"
+
+# -- SmallENet trainer knobs ----------------------------------------------------
+export SMALLENET_EPOCHS=150
+export SMALLENET_BATCH_SIZE=12
+export SMALLENET_SAVE_EVERY=25
+export SMALLENET_SKIP_FINAL_VALIDATION=1   # required -- see train_small_enet_6x6_1c.job
+export SMALLENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+cd "$HOME/LightM-UNet/lightm-unet"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Dataset: ${DATASET_NAME} (id ${DATASET_ID})"
+echo "SMALLENET_EPOCHS=${SMALLENET_EPOCHS}"
+echo "SMALLENET_BATCH_SIZE=${SMALLENET_BATCH_SIZE}"
+echo "Output folder: ${SMALLENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+python - <<'PY'
+import torch
+print("CUDA available:", torch.cuda.is_available())
+print("GPU:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)
+assert torch.cuda.is_available(), "CUDA is not available in PyTorch"
+PY
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist at $nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json, skipping."
+fi
+
+echo "=== Ensure official split is present ==="
+cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+   "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+
+echo "=== Start SmallENet training (batch_size=${SMALLENET_BATCH_SIZE}, epochs=${SMALLENET_EPOCHS}) ==="
+nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr nnUNetTrainerSmallENet
+
+echo "Training finished for ${RUN_NAME} on ${DATASET_NAME}."

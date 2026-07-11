@@ -184,6 +184,65 @@ class DC_and_CE_and_clDice_loss(nn.Module):
         return self.weight_ce * ce_loss + self.weight_dice * dc_loss + self.weight_cldice * cldice_loss
 
 
+class DC_and_BCE_and_clDice_loss(nn.Module):
+    """Dice + BCE + soft-clDice, for a single-logit sigmoid output (e.g.
+    nnUNetTrainerSmallENet). The Dice+BCE part is identical to
+    compound_losses.DC_and_BCE_loss (same kwargs, same target[:, -1]
+    ignore-channel convention); clDice is added as a third weighted term.
+
+    Unlike the softmax/CE version above (DC_and_CE_and_clDice_loss), there is
+    no background channel to exclude -- the single output channel *is* the
+    foreground -- so SoftclDiceLoss must be constructed with do_bg=True here.
+    """
+
+    def __init__(
+        self,
+        bce_kwargs: dict,
+        soft_dice_kwargs: dict,
+        cldice_kwargs: dict,
+        weight_ce: float = 1.0,
+        weight_dice: float = 1.0,
+        weight_cldice: float = 1.0,
+        use_ignore_label: bool = False,
+        dice_class=MemoryEfficientSoftDiceLoss,
+    ):
+        super().__init__()
+        if use_ignore_label:
+            bce_kwargs = {**bce_kwargs, "reduction": "none"}
+
+        self.weight_dice = weight_dice
+        self.weight_ce = weight_ce
+        self.weight_cldice = weight_cldice
+        self.use_ignore_label = use_ignore_label
+
+        self.ce = nn.BCEWithLogitsLoss(**bce_kwargs)
+        self.dc = dice_class(apply_nonlin=torch.sigmoid, **soft_dice_kwargs)
+        self.cldice = SoftclDiceLoss(apply_nonlin=torch.sigmoid, **cldice_kwargs)
+
+    def forward(self, net_output: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        if self.use_ignore_label:
+            # target is one hot encoded here. invert it so that it is True wherever we can compute the loss
+            mask = (1 - target[:, -1:]).bool()
+            # remove ignore channel now that we have the mask
+            target_regions = torch.clone(target[:, :-1])
+        else:
+            target_regions = target
+            mask = None
+
+        dc_loss = self.dc(net_output, target_regions, loss_mask=mask) if self.weight_dice != 0 else 0
+        if mask is not None:
+            ce_loss = (self.ce(net_output, target_regions) * mask).sum() / torch.clip(mask.sum(), min=1e-8)
+        else:
+            ce_loss = self.ce(net_output, target_regions)
+        # SoftclDiceLoss has no loss_mask support (see its docstring) -- ignored
+        # pixels are left as whatever target_regions already has there (0/
+        # background), the same best-effort handling DC_and_CE_and_clDice_loss
+        # above uses for the softmax/CE case.
+        cldice_loss = self.cldice(net_output, target_regions) if self.weight_cldice != 0 else 0
+
+        return self.weight_ce * ce_loss + self.weight_dice * dc_loss + self.weight_cldice * cldice_loss
+
+
 if __name__ == "__main__":
     # Quick shape/gradient self-test -- run directly (`python cldice.py`) on a
     # machine with torch installed (this repo's conda env) before relying on

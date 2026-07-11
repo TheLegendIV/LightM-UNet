@@ -1,0 +1,130 @@
+#!/bin/bash
+#SBATCH --job-name=small_enet_504_noempty
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=64G
+#SBATCH --time=08:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+# nnUNetTrainerSmallENet on Dataset504_ARCADE_6x6_1c_noempty -- a copy of
+# Dataset502_ARCADE_6x6_1c whose *training* pool has ALL empty (all-
+# background) patches removed entirely (dataset-prep/downsample_empty_patches.py
+# --ratio inf), not just downsampled to a ratio like Dataset503. Validation
+# patches are left at the natural (imbalanced) distribution, same convention
+# as Dataset503 -- only train was filtered -- so per-epoch pseudo-dice stays
+# comparable to the Dataset502/503 baseline runs. The test split isn't
+# duplicated; Dataset504 has no imagesTs/labelsTs, so evaluation notebooks
+# should still read GT from Dataset502_ARCADE_6x6_1c's imagesTs/labelsTs
+# (identical patches, not touched by the filtering).
+#
+# Two new things on top of train_small_enet_6x6_1c_ve2to1.job, both smoke-
+# tested (unit test + a real short nnUNetv2_train run) before this job was
+# written -- see nnUNetTrainerSmallENet.py's module docstring for the full
+# rationale on each:
+#
+#   1. VesselGapTransform (SMALLENET_GAP_AUG=1 below) -- a training-time
+#      augmentation that reduces image contrast by ~55% in a small block
+#      centered on a random point along a vessel's skeleton (both stumps
+#      guaranteed well-defined, not background/bifurcation), label left
+#      untouched. Meant to push the network toward predicting connectivity
+#      through locally low-evidence regions instead of only tracing visible
+#      contrast. Applied per-sample with probability SMALLENET_GAP_AUG_P=0.6.
+#      Prototyped/visualized in dataset-prep/preview_augmentations.ipynb.
+#
+#   2. clDice loss term (SMALLENET_CLDICE_WEIGHT=1.0 below) -- Dice+BCE+
+#      soft-clDice (nnunetv2/training/loss/cldice.py), same idea as the
+#      existing nnUNetTrainerENetComboClDice trainer but adapted for this
+#      trainer's single-logit sigmoid output. Weight 1.0 is the same weight
+#      as Dice and BCE (not a token amount), so it actually competes for
+#      gradient -- confirmed in the smoke test that toggling it changes the
+#      loss value by a large, non-negligible amount.
+#
+# Batch size 362 is nnU-Net's own auto-configured planner default for this
+# dataset's 2d plan (see nnUNetPlans.json after preprocessing) -- much larger
+# than the batch_size=12/64 used in the earlier train_small_enet_6x6_1c*.job
+# smoke tests, which only validated up to bs=64 (see
+# smoke_test_small_enet_6x6_1c_ve2to1_bs64.job's reasoning for why headroom
+# was expected). This is the first real test at the full planner batch size,
+# so --mem=64G and --time=08:00:00 above are conservative first guesses, not
+# measured numbers -- watch the first couple of epochs' wall-clock time and
+# memory in the log and tighten both for future runs once you have real data.
+#
+# IMPORTANT: SMALLENET_SKIP_FINAL_VALIDATION=1 is required -- SmallENet's
+# single-channel sigmoid output isn't wired up to nnU-Net's final sliding-
+# window validation/export path (see nnUNetTrainerSmallENet.py). Per-epoch
+# pseudo-dice from the training log is the evaluation signal for this run.
+#
+# NOTE: verify `--partition=gpu_mig` (and whether your cluster wants a
+# `--gres=gpu:<slice>:1`-style request instead of plain `--gpus=1` for MIG)
+# against `sinfo -o "%P %G"` on your cluster.
+
+
+
+RUN_NAME="nnUNetTrainerSmallENet"
+DATASET_ID=504
+DATASET_NAME="Dataset504_ARCADE_6x6_1c_noempty"
+
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNET_results"
+
+# -- SmallENet trainer knobs ----------------------------------------------------
+export SMALLENET_EPOCHS=150
+export SMALLENET_BATCH_SIZE=362
+export SMALLENET_SAVE_EVERY=25
+export SMALLENET_SKIP_FINAL_VALIDATION=1   # required -- see note above
+export SMALLENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+# -- Vessel-gap augmentation (new) ---------------------------------------------
+export SMALLENET_GAP_AUG=1
+export SMALLENET_GAP_AUG_P=0.6
+# SMALLENET_GAP_AUG_DROP / _MARGIN / _MIN_SEGMENT left at their defaults
+# (0.55 / 8 / 40) -- see vessel_gap_transform.py.
+
+# -- clDice loss term (new) -----------------------------------------------------
+export SMALLENET_CLDICE_WEIGHT=1.0
+export SMALLENET_CLDICE_ITERS=12
+
+cd "$HOME/LightM-UNet/lightm-unet"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Dataset: ${DATASET_NAME} (id ${DATASET_ID})"
+echo "SMALLENET_EPOCHS=${SMALLENET_EPOCHS}"
+echo "SMALLENET_BATCH_SIZE=${SMALLENET_BATCH_SIZE}"
+echo "SMALLENET_GAP_AUG=${SMALLENET_GAP_AUG} (p=${SMALLENET_GAP_AUG_P})"
+echo "SMALLENET_CLDICE_WEIGHT=${SMALLENET_CLDICE_WEIGHT} (iters=${SMALLENET_CLDICE_ITERS})"
+echo "Output folder: ${SMALLENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+python - <<'PY'
+import torch
+print("CUDA available:", torch.cuda.is_available())
+print("GPU:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)
+assert torch.cuda.is_available(), "CUDA is not available in PyTorch"
+PY
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist at $nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json, skipping."
+fi
+
+echo "=== Ensure official split is present ==="
+cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+   "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+
+echo "=== Start SmallENet training (batch_size=${SMALLENET_BATCH_SIZE}, epochs=${SMALLENET_EPOCHS}, gap_aug_p=${SMALLENET_GAP_AUG_P}, cldice_weight=${SMALLENET_CLDICE_WEIGHT}) ==="
+nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr nnUNetTrainerSmallENet
+
+echo "Training finished for ${RUN_NAME} on ${DATASET_NAME}."
