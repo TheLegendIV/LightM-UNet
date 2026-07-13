@@ -130,6 +130,7 @@ def process_split(
     patch_size: int,
     patches_per_image: int,
     supported_ids: Optional[Set[int]],
+    case_prefix: str = "",
 ) -> List[str]:
     json_path = source_dir / split / "annotations" / f"{split}.json"
     images_dir = source_dir / split / "images"
@@ -156,7 +157,10 @@ def process_split(
         if boxes:
             n_images_with_vessel += 1
         for i, box in enumerate(boxes):
-            case_id = f"{split}_{stem}_v{i:02d}"
+            # case_prefix distinguishes sources sharing the same underlying
+            # image-id namespace (e.g. syntax's "234.png" and stenosis's
+            # "234.png" are unrelated images) when merged into one dataset.
+            case_id = f"{case_prefix}{split}_{stem}_v{i:02d}"
             save_patch(gray, mask, box, images_out, labels_out, case_id)
             case_ids.append(case_id)
 
@@ -174,6 +178,7 @@ def build_dataset(
     patches_per_image: int,
     supported_ids: Optional[Set[int]] = None,
     dataset_name: Optional[str] = None,
+    case_prefix: str = "",
 ) -> Tuple[Path, List[str], List[str]]:
     source_dir = ARCADE_ROOT / source
     name = dataset_name or f"Dataset{dataset_id:03d}_ARCADE_oversampled"
@@ -185,8 +190,12 @@ def build_dataset(
         d.mkdir(parents=True, exist_ok=True)
 
     print(f"Building {name} (patch_size={patch_size}, target {patches_per_image} patches/image)...")
-    train_cases = process_split("train", source_dir, images_tr, labels_tr, patch_size, patches_per_image, supported_ids)
-    val_cases = process_split("val", source_dir, images_tr, labels_tr, patch_size, patches_per_image, supported_ids)
+    train_cases = process_split(
+        "train", source_dir, images_tr, labels_tr, patch_size, patches_per_image, supported_ids, case_prefix
+    )
+    val_cases = process_split(
+        "val", source_dir, images_tr, labels_tr, patch_size, patches_per_image, supported_ids, case_prefix
+    )
 
     dataset_json = {
         "channel_names": {"0": "grayscale"},
@@ -215,6 +224,13 @@ def parse_args() -> argparse.Namespace:
         "(default: every category except 'stenosis')",
     )
     parser.add_argument("--name", help="Override the generated dataset folder name")
+    parser.add_argument(
+        "--case-prefix",
+        default="",
+        help="Prepend to every case id (e.g. 'stn_') -- needed when merging multiple sources that "
+        "share the same underlying image-id namespace into one dataset (see "
+        "prepare_arcade_506_combined.py).",
+    )
     return parser.parse_args()
 
 
@@ -229,6 +245,7 @@ def main() -> None:
         patches_per_image=args.patches_per_image,
         supported_ids=supported_ids,
         dataset_name=args.name,
+        case_prefix=args.case_prefix,
     )
 
     print(f"Wrote dataset to {out_root}")

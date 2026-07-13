@@ -12,6 +12,15 @@ data/nnUNET_results_smoke/*
 data/nnUNET_results_smoke_test/*
 data/*.log
 
+*/imagesTs
+*/lablesTs
+
+
+data\nnUNet_raw\Dataset503_ARCADE_6x6_1c_ve2to1
+data\nnUNet_raw\Dataset504_ARCADE_6x6_1c_noempty
+data\nnUNet_raw\Dataset505_ARCADE_oversampled
+data\nnUNet_raw\Dataset506_stn_stx_oversampled
+
 # Raw datasets: keep only what's needed for full Dataset504/505 training
 # runs. Other configs' raw patches (Dataset501/502/503, Dataset801/802, ...)
 # are excluded for now -- rebuild via dataset-prep/ scripts if needed again.

@@ -37,6 +37,18 @@ sliding-window export) is NOT compatible with this single-channel output
 against a has_regions=False label manager and is left disabled by default
 -- see SMALLENET_SKIP_FINAL_VALIDATION below.
 
+SmallENet always takes exactly 1 input channel (in_channels=1 is hardcoded
+in build_network_architecture's SmallENet(...) call below -- it's not
+derived from the dataset). SMALLENET_INPUT_CHANNELS (default "0") selects
+which channel index/indices of a multi-channel dataset to actually feed the
+network -- e.g. Dataset507_ARCADE_refinement declares 2 channels
+(grayscale, predicted_mask) for the *planned* two-channel refinement net,
+but this trainer only supports 1, so by default it just uses channel 0
+(grayscale) and ignores predicted_mask. Sliced in train_step/
+validation_step, right after data moves to device; build_network_architecture
+only checks the dataset actually *has* the requested channel(s), it doesn't
+change how many the network is built with.
+
 get_training_transforms() is overridden to optionally splice in
 VesselGapTransform (see
 nnunetv2/training/data_augmentation/custom_transforms/vessel_gap_transform.py
@@ -86,6 +98,7 @@ class nnUNetTrainerSmallENet(nnUNetTrainerLightMUNet):
             self.save_every = int(os.environ["SMALLENET_SAVE_EVERY"])
         self.cldice_weight = float(os.environ.get("SMALLENET_CLDICE_WEIGHT", "1.0"))
         self.cldice_num_iter = int(os.environ.get("SMALLENET_CLDICE_ITERS", "12"))
+        self.input_channels = [int(x) for x in os.environ.get("SMALLENET_INPUT_CHANNELS", "0").split(",")]
         if os.environ.get("SMALLENET_OUTPUT_FOLDER"):
             self.output_folder = os.environ["SMALLENET_OUTPUT_FOLDER"]
             self.output_folder_base = os.path.dirname(self.output_folder)
@@ -116,10 +129,16 @@ class nnUNetTrainerSmallENet(nnUNetTrainerLightMUNet):
     ) -> nn.Module:
         if len(configuration_manager.patch_size) != 2:
             raise ValueError("SmallENet is a 2D architecture. Use the nnU-Net 2d configuration.")
-        if num_input_channels != 1:
+        selected_channels = [int(x) for x in os.environ.get("SMALLENET_INPUT_CHANNELS", "0").split(",")]
+        if len(selected_channels) != 1:
             raise ValueError(
-                "SmallENet derives its local-contrast-norm channel from a single grayscale "
-                f"input channel; this dataset has {num_input_channels} input channels."
+                f"SmallENet takes exactly 1 input channel; SMALLENET_INPUT_CHANNELS={selected_channels} "
+                "selects more/fewer than one."
+            )
+        if max(selected_channels) >= num_input_channels:
+            raise ValueError(
+                f"SMALLENET_INPUT_CHANNELS={selected_channels} selects a channel not present in this "
+                f"dataset (it only has {num_input_channels})."
             )
         label_manager = plans_manager.get_label_manager(dataset_json)
         if label_manager.has_regions or label_manager.num_segmentation_heads != 2:
@@ -196,11 +215,31 @@ class nnUNetTrainerSmallENet(nnUNetTrainerLightMUNet):
         scheduler = PolyLRScheduler(optimizer, self.initial_lr, self.num_epochs, exponent=0.9)
         return optimizer, scheduler
 
+    def train_step(self, batch: dict) -> dict:
+        data = batch["data"]
+        target = batch["target"]
+
+        data = data.to(self.device, non_blocking=True)[:, self.input_channels]
+        if isinstance(target, list):
+            target = [i.to(self.device, non_blocking=True) for i in target]
+        else:
+            target = target.to(self.device, non_blocking=True)
+
+        self.optimizer.zero_grad(set_to_none=True)
+
+        output = self.network(data)
+        l = self.loss(output, target)
+        l.backward()
+        torch.nn.utils.clip_grad_norm_(self.network.parameters(), 12)
+        self.optimizer.step()
+
+        return {"loss": l.detach().cpu().numpy()}
+
     def validation_step(self, batch: dict) -> dict:
         data = batch["data"]
         target = batch["target"]
 
-        data = data.to(self.device, non_blocking=True)
+        data = data.to(self.device, non_blocking=True)[:, self.input_channels]
         if isinstance(target, list):
             target = [i.to(self.device, non_blocking=True) for i in target]
         else:
