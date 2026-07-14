@@ -94,7 +94,7 @@ print("GPU:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else No
 assert torch.cuda.is_available(), "CUDA is not available in PyTorch"
 PY
 
-echo "=== Plan + preprocess (skipped if already done) ==="
+echo "=== Plan + preprocess (skipped if already done -- or run preprocess_dataset507.job first on a CPU-only partition) ==="
 if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
     nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
 else
