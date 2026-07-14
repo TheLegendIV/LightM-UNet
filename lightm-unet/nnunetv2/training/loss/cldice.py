@@ -219,7 +219,17 @@ class DC_and_BCE_and_clDice_loss(nn.Module):
         self.dc = dice_class(apply_nonlin=torch.sigmoid, **soft_dice_kwargs)
         self.cldice = SoftclDiceLoss(apply_nonlin=torch.sigmoid, **cldice_kwargs)
 
-    def forward(self, net_output: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, net_output: torch.Tensor, target: torch.Tensor, pixel_weight: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """pixel_weight: optional (B, 1, ...) elementwise BCE weight, same
+        shape as target -- e.g. nnUNetTrainerSmallRefinementENet's gap-focused
+        weighting (higher weight where the input predicted-mask channel
+        disagrees with GT, so the loss cares about *changing* those pixels,
+        not just reproducing the ones a trivial passthrough already gets
+        right). Only scales the BCE term; Dice/clDice score global area
+        overlap and skeleton topology respectively, not something a per-pixel
+        weight map has an obviously correct way to modulate."""
         if self.use_ignore_label:
             # target is one hot encoded here. invert it so that it is True wherever we can compute the loss
             mask = (1 - target[:, -1:]).bool()
@@ -230,10 +240,17 @@ class DC_and_BCE_and_clDice_loss(nn.Module):
             mask = None
 
         dc_loss = self.dc(net_output, target_regions, loss_mask=mask) if self.weight_dice != 0 else 0
-        if mask is not None:
-            ce_loss = (self.ce(net_output, target_regions) * mask).sum() / torch.clip(mask.sum(), min=1e-8)
+        if self.weight_ce != 0:
+            if pixel_weight is not None:
+                elementwise_ce = F.binary_cross_entropy_with_logits(net_output, target_regions, reduction="none")
+                combined_weight = pixel_weight if mask is None else pixel_weight * mask
+                ce_loss = (elementwise_ce * combined_weight).sum() / torch.clip(combined_weight.sum(), min=1e-8)
+            elif mask is not None:
+                ce_loss = (self.ce(net_output, target_regions) * mask).sum() / torch.clip(mask.sum(), min=1e-8)
+            else:
+                ce_loss = self.ce(net_output, target_regions)
         else:
-            ce_loss = self.ce(net_output, target_regions)
+            ce_loss = 0
         # SoftclDiceLoss has no loss_mask support (see its docstring) -- ignored
         # pixels are left as whatever target_regions already has there (0/
         # background), the same best-effort handling DC_and_CE_and_clDice_loss
@@ -271,3 +288,34 @@ if __name__ == "__main__":
     combo.backward()
     print("DC_and_CE_and_clDice_loss value:", combo.item())
     print("logits2.grad is not None:", logits2.grad is not None)
+
+    # DC_and_BCE_and_clDice_loss's pixel_weight path (nnUNetTrainerSmallRefinementENet's
+    # gap-focused weighting) -- single-logit sigmoid output, matching SmallENet/
+    # SmallRefinementENet's convention.
+    bce_target = torch.randint(0, 2, (batch, 1, height, width)).float()
+    bce_logits = torch.randn(batch, 1, height, width, requires_grad=True)
+    bce_combo_fn = DC_and_BCE_and_clDice_loss(
+        bce_kwargs={}, soft_dice_kwargs={"batch_dice": True, "do_bg": True, "smooth": 1e-5, "ddp": False},
+        cldice_kwargs={"num_iter": 3, "do_bg": True},
+        weight_ce=1.0, weight_dice=1.0, weight_cldice=1.0,
+    )
+    unweighted = bce_combo_fn(bce_logits, bce_target)
+    unweighted.backward()
+    print("DC_and_BCE_and_clDice_loss (no pixel_weight) value:", unweighted.item())
+    print("bce_logits.grad is not None:", bce_logits.grad is not None)
+
+    bce_logits2 = torch.randn(batch, 1, height, width, requires_grad=True)
+    # Weight only a small corner strongly, like a gap region within a mostly-agreeing patch.
+    pixel_weight = torch.ones(batch, 1, height, width)
+    pixel_weight[:, :, :8, :8] = 9.0
+    weighted = bce_combo_fn(bce_logits2, bce_target, pixel_weight=pixel_weight)
+    weighted.backward()
+    print("DC_and_BCE_and_clDice_loss (with pixel_weight) value:", weighted.item())
+    print("bce_logits2.grad is not None:", bce_logits2.grad is not None)
+    print("bce_logits2.grad has NaNs:", torch.isnan(bce_logits2.grad).any().item())
+    corner_grad_mag = bce_logits2.grad[:, :, :8, :8].abs().mean().item()
+    rest_grad_mag = bce_logits2.grad[:, :, 8:, 8:].abs().mean().item()
+    print(f"mean |grad| inside weighted corner: {corner_grad_mag:.5f}, outside: {rest_grad_mag:.5f} "
+          f"(inside should be noticeably larger)")
+    assert corner_grad_mag > rest_grad_mag, "pixel_weight should make the weighted region's BCE gradient larger"
+    print("pixel_weight self-test PASSED")
