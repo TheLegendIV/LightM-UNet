@@ -218,7 +218,7 @@ class ENet(nn.Module):
         self.out_channels = out_channels
         self.channels = tuple(int(channel) for channel in channels)
 
-        self.initial = InitialBlock(in_channels, initial_channels)
+        self.initial = self._build_initial_block(in_channels, initial_channels)
         self.down1 = DownsamplingBottleneck(initial_channels, stage1_channels, dropout_p=0.01)
         self.regular1 = nn.Sequential(*[RegularBottleneck(stage1_channels, dropout_p=0.01) for _ in range(4)])
 
@@ -243,6 +243,14 @@ class ENet(nn.Module):
         self.up5 = UpsamplingBottleneck(stage4_channels, stage5_channels)
         self.regular5 = RegularBottleneck(stage5_channels, dropout_p=0.1, relu=True)
         self.final = nn.ConvTranspose2d(stage5_channels, out_channels, kernel_size=2, stride=2)
+
+    def _build_initial_block(self, in_channels: int, initial_channels: int) -> nn.Module:
+        """Overridable hook so subclasses can swap in a different first stage
+        (e.g. ENetPostRefinement.py's two-stem variant) without duplicating
+        the rest of __init__ -- everything downstream of self.initial is
+        architecture-agnostic to how it got built, it just needs to receive
+        (in_channels, H/2, W/2) and emit (initial_channels, H/2, W/2)."""
+        return InitialBlock(in_channels, initial_channels)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         input_size = x.shape[2:]
