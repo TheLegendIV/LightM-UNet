@@ -1,3 +1,0 @@
-id,name,params,params_m,param_delta_pct,best_dice,final_dice,mean_epoch_time_s,total_time_s,returncode,hypothesis
-G3,mamba_s3_4dir,865120,0.86512,85.4665820570429,0.804367,0.769933,,5323.540564537048,0,Stage 3 replaced by 4 directional PVMamba (0→1→2→3); multi-direction scan
-G10,cross_depth_mamba,612184,0.612184,31.24153189153962,0.805933,0.789733,,4928.477292060852,0,Stages 2+3 concatenated into 8192-token sequence for Mamba; cross-depth context
