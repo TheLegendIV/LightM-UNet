@@ -20,7 +20,7 @@ analysis/*/predictions/
 # archived out to ~/models via scripts/archive_checkpoint.sh -- never worth
 # committing. Checkpoints and per-case validation PNGs in particular must
 # never be pushed.
-# data/nnUNet_preprocessed/*
+data/nnUNet_preprocessed/*
 data/nnUNet_results/*
 data/*.log
 *.pth
