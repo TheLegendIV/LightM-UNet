@@ -25,7 +25,7 @@ Requirements: `CUDA ≥ 11.6`
 2. Install [Pytorch](https://pytorch.org/get-started/previous-versions/#linux-and-windows-4) 2.0.1: `pip install torch==2.0.1 torchvision==0.15.2`
 3. Install [Mamba](https://github.com/state-spaces/mamba): `pip install causal-conv1d==1.1.1` and `pip install mamba-ssm`
 4. Download code: `git clone https://github.com/MrBlankness/LightM-UNet`
-5. `cd LightM-UNet/lightm-unet` and run `pip install -e .`
+5. `cd LightM-UNet/enet` and run `pip install -e .`
 
 
 sanity test: Enter python command-line interface and run
