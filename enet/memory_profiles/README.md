@@ -173,7 +173,7 @@ int8 = 1 byte per element
 ## Example
 
 ```bash
-cd lightm-unet
+cd enet
 python memory_profiles/tensor_memory.py --dtype fp32
 python memory_profiles/working_memory.py --dtype fp32
 ```
