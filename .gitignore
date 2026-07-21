@@ -21,9 +21,9 @@ analysis/*/predictions/
 # committing. Checkpoints and per-case validation PNGs in particular must
 # never be pushed.
 data/nnUNet_preprocessed/*
-data/nnUNet_results/*
-data/*.log
-*.pth
+# data/nnUNet_results/*
+# data/*.log
+# *.pth
 
 # Raw datasets: keep only Dataset501 (what this branch trains on) -- and
 # even within it, drop any inference-output labelsPr_* dirs a preview
