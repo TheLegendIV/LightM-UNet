@@ -1,16 +1,13 @@
-"""Diagnostics for class-mixing, fragmentation, and anatomical consistency in
-ARCADE vessel-class segmentations (Background=0, LAD=1, RCA=2, LCX=3).
+"""Diagnostics for fragmentation and component-level TP/FP structure in
+ARCADE binary vessel segmentations (Background=0, Vessel=1).
 
-RCA lives on the right coronary tree and LAD/LCX on the left tree; a single
-angiogram is always exclusively one or the other, so any predicted pixel of
-the "other" territory is a hard anatomical error. LAD and LCX are both on the
-left tree and can only change identity at a bifurcation -- a single physical
-vessel segment should not carry two labels, and a branch should never revert
-to a label it already left behind further downstream.
+Dice/precision/recall (see preview_results.ipynb) score raw pixel overlap
+but say nothing about whether a prediction is a single clean vessel tree or
+a scatter of fragments, or whether false positives are diffuse noise vs a
+few large hallucinated blobs. This module measures exactly that.
 """
 from __future__ import annotations
 
-from collections import deque
 from pathlib import Path
 from typing import Iterator
 
@@ -23,9 +20,8 @@ try:
 except Exception:
     skeletonize = None
 
-BACKGROUND, LAD, RCA, LCX = 0, 1, 2, 3
-CLASS_LABELS = ["Background", "LAD", "RCA", "LCX"]
-LEFT_CLASSES = {LAD, LCX}
+BACKGROUND, VESSEL = 0, 1
+CLASS_LABELS = ["Background", "Vessel"]
 EPS = 1e-8
 IMG_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
 
@@ -51,7 +47,7 @@ def load_class_id_mask(path: Path) -> np.ndarray:
     if arr.ndim == 3:
         # Defensive fallback only: this framework should write class-ID masks, not RGB masks.
         arr = arr[..., 0]
-    return arr.astype(np.uint8)
+    return (arr > BACKGROUND).astype(np.uint8)  # binary: anything nonzero is vessel
 
 
 def resize_mask_to(mask: np.ndarray, shape_hw: tuple[int, int]) -> np.ndarray:
@@ -87,87 +83,53 @@ def dice_score(gt_bool: np.ndarray, pred_bool: np.ndarray) -> float:
 
 
 # ---------------------------------------------------------------------------
-# 1. Territory leakage: RCA predicted inside an LAD/LCX case or vice versa.
+# 1. Component-level TP/FP structure: is each predicted blob a real vessel
+#    match or a pure hallucination? Replaces the multi-class "component
+#    purity" diagnostic, which is vacuous for a single foreground class.
 # ---------------------------------------------------------------------------
 
-def territory_of(classes_present: set[int]) -> str:
-    has_rca = RCA in classes_present
-    has_left = bool(classes_present & LEFT_CLASSES)
-    if has_rca and has_left:
-        return "mixed"  # not expected to occur in ARCADE ground truth
-    if has_rca:
-        return "RCA"
-    if has_left:
-        return "LAD_LCX"
-    return "empty"
-
-
-def territory_leakage(gt: np.ndarray, pred: np.ndarray) -> dict:
-    """Fraction of predicted foreground that lies in the anatomically wrong territory."""
-    gt_classes = set(np.unique(gt).tolist()) - {BACKGROUND}
-    territory = territory_of(gt_classes)
-    pred_fg_px = int((pred > BACKGROUND).sum())
-
-    if territory == "RCA":
-        leaked_px = int(np.isin(pred, list(LEFT_CLASSES)).sum())
-    elif territory == "LAD_LCX":
-        leaked_px = int((pred == RCA).sum())
-    else:
-        leaked_px = 0
-
-    return {
-        "territory": territory,
-        "pred_fg_px": pred_fg_px,
-        "leaked_px": leaked_px,
-        "territory_leakage_rate": (leaked_px / pred_fg_px) if pred_fg_px else 0.0,
-    }
-
-
-# ---------------------------------------------------------------------------
-# 2. Component purity: does one spatially-connected blob carry >1 class?
-# ---------------------------------------------------------------------------
-
-def component_purity_rows(class_map: np.ndarray, case_id: str, connectivity: int = 2) -> list[dict]:
-    """One row per connected foreground component describing its class purity."""
+def component_overlap_rows(gt: np.ndarray, pred: np.ndarray, case_id: str, connectivity: int = 2) -> list[dict]:
+    """One row per connected predicted-foreground component describing how
+    much of it overlaps the GT vessel mask."""
     structure = ndi.generate_binary_structure(2, connectivity)
-    labeled, n = ndi.label(class_map > BACKGROUND, structure=structure)
+    labeled, n = ndi.label(pred > BACKGROUND, structure=structure)
+    gt_fg = gt > BACKGROUND
     rows = []
     for comp_id in range(1, n + 1):
         comp_mask = labeled == comp_id
         area = int(comp_mask.sum())
-        classes, counts = np.unique(class_map[comp_mask], return_counts=True)
-        dominant_idx = int(counts.argmax())
+        overlap_px = int((comp_mask & gt_fg).sum())
         rows.append({
             "case_id": case_id,
             "component_id": comp_id,
             "area_px": area,
-            "dominant_class": CLASS_LABELS[int(classes[dominant_idx])],
-            "purity": float(counts[dominant_idx] / counts.sum()),
-            "n_classes_present": int((counts > 0).sum()),
+            "overlap_px": overlap_px,
+            "overlap_frac": float(overlap_px / area) if area else 0.0,
         })
     return rows
 
 
-def purity_summary(rows: list[dict]) -> dict:
+def component_overlap_summary(rows: list[dict]) -> dict:
     if not rows:
         return {
-            "n_components": 0, "mean_purity": np.nan, "area_weighted_purity": np.nan,
-            "n_mixed_components": 0, "mixed_px_fraction": 0.0,
+            "n_pred_components": 0, "mean_component_overlap": np.nan,
+            "area_weighted_component_overlap": np.nan,
+            "n_pure_fp_components": 0, "pure_fp_pixel_frac": 0.0,
         }
     areas = np.array([r["area_px"] for r in rows], dtype=float)
-    purities = np.array([r["purity"] for r in rows], dtype=float)
-    mixed = np.array([r["n_classes_present"] for r in rows]) > 1
+    overlaps = np.array([r["overlap_frac"] for r in rows], dtype=float)
+    pure_fp = overlaps == 0.0
     return {
-        "n_components": len(rows),
-        "mean_purity": float(purities.mean()),
-        "area_weighted_purity": float((purities * areas).sum() / areas.sum()),
-        "n_mixed_components": int(mixed.sum()),
-        "mixed_px_fraction": float(areas[mixed].sum() / areas.sum()) if mixed.any() else 0.0,
+        "n_pred_components": len(rows),
+        "mean_component_overlap": float(overlaps.mean()),
+        "area_weighted_component_overlap": float((overlaps * areas).sum() / areas.sum()),
+        "n_pure_fp_components": int(pure_fp.sum()),
+        "pure_fp_pixel_frac": float(areas[pure_fp].sum() / areas.sum()) if pure_fp.any() else 0.0,
     }
 
 
 # ---------------------------------------------------------------------------
-# 3. Fragmentation: island counts vs. ground truth.
+# 2. Fragmentation: island counts vs. ground truth.
 # ---------------------------------------------------------------------------
 
 def fragmentation_stats(gt: np.ndarray, pred: np.ndarray, min_area_px: int = 5, connectivity: int = 2) -> dict:
@@ -194,7 +156,9 @@ def fragmentation_stats(gt: np.ndarray, pred: np.ndarray, min_area_px: int = 5, 
 
 
 # ---------------------------------------------------------------------------
-# 4. Branch consistency: LAD/LCX label should not revert along one vessel.
+# 3. Skeleton connectivity: vessel-tree complexity, computed for both GT and
+#    prediction so they can be compared directly (endpoint/branch-point
+#    counts, skeleton length, number of disconnected tree fragments).
 # ---------------------------------------------------------------------------
 
 def skeleton_degree(skel: np.ndarray) -> np.ndarray:
@@ -207,150 +171,30 @@ def skeleton_degree(skel: np.ndarray) -> np.ndarray:
     return deg
 
 
-def _skeleton_adjacency(skel: np.ndarray) -> dict[tuple[int, int], list[tuple[int, int]]]:
-    coords = [tuple(p) for p in np.argwhere(skel)]
-    coord_set = set(coords)
-    adj = {}
-    for y, x in coords:
-        adj[(y, x)] = [
-            (y + dy, x + dx) for dy, dx in _NEIGHBOR_OFFSETS if (y + dy, x + dx) in coord_set
-        ]
-    return adj
-
-
-def _bfs_path(adj: dict, start: tuple, end: tuple) -> list[tuple] | None:
-    if start == end:
-        return [start]
-    visited = {start}
-    parent = {}
-    queue = deque([start])
-    while queue:
-        node = queue.popleft()
-        for nb in adj[node]:
-            if nb in visited:
-                continue
-            visited.add(nb)
-            parent[nb] = node
-            if nb == end:
-                path = [end]
-                while path[-1] != start:
-                    path.append(parent[path[-1]])
-                path.reverse()
-                return path
-            queue.append(nb)
-    return None
-
-
-def _run_length_classes(values: list[int]) -> list[tuple[int, int, int]]:
-    runs = []
-    if not values:
-        return runs
-    cur, start = values[0], 0
-    for i in range(1, len(values)):
-        if values[i] != cur:
-            runs.append((cur, start, i - start))
-            cur, start = values[i], i
-    runs.append((cur, start, len(values) - start))
-    return runs
-
-
-def _smooth_short_runs(values: list[int], min_run: int, max_passes: int = 5) -> list[int]:
-    """Relabel runs shorter than min_run to a neighboring class to strip pixel-level
-    flicker from skeletonization/resizing before checking for real class switches."""
-    values = list(values)
-    for _ in range(max_passes):
-        runs = _run_length_classes(values)
-        if len(runs) <= 1 or all(length >= min_run for _, _, length in runs):
-            break
-        changed = False
-        for cls, start, length in runs:
-            if length >= min_run:
-                continue
-            left_cls = values[start - 1] if start > 0 else None
-            right_idx = start + length
-            right_cls = values[right_idx] if right_idx < len(values) else None
-            neighbor_cls = left_cls if left_cls is not None else right_cls
-            if neighbor_cls is None:
-                continue
-            for i in range(start, start + length):
-                values[i] = neighbor_cls
-            changed = True
-        if not changed:
-            break
-    return values
-
-
-def _path_class_runs(path_pixels: list[tuple[int, int]], class_map: np.ndarray, min_run: int) -> list[int]:
-    values = [int(class_map[p]) for p in path_pixels]
-    values = [v for v in values if v != BACKGROUND]
-    if not values:
-        return []
-    values = _smooth_short_runs(values, min_run=min_run)
-    return [cls for cls, _, _ in _run_length_classes(values)]
-
-
-def branch_consistency_stats(pred: np.ndarray, min_run_px: int = 3, max_endpoints_per_component: int = 40) -> dict:
-    """Check LAD/LCX label consistency along the predicted vessel tree.
-
-    A physical vessel branch can only change identity (LAD<->LCX) at a
-    bifurcation, and once it has changed it should not revert. We
-    skeletonize the predicted LAD+LCX mask and, for every pair of tree
-    endpoints within the same skeleton component, read the class labels
-    along the connecting path. If a class shows up, is superseded by a
-    different class, and then shows up again on the same path, that's an
-    illegal "LAD -> LCX -> LAD"-style reversal.
-    """
-    empty_result = {
-        "n_endpoints": 0, "n_paths": 0, "n_inconsistent_paths": 0,
-        "inconsistent_path_rate": np.nan, "skipped": False,
+def skeleton_connectivity_stats(mask: np.ndarray, connectivity: int = 2) -> dict:
+    """n_endpoints (degree==1), n_branch_points (degree>=3), skeleton_length_px,
+    n_skeleton_components -- a compact fingerprint of vessel-tree shape/
+    complexity, independent of raw pixel-area overlap."""
+    empty = {
+        "n_endpoints": 0, "n_branch_points": 0,
+        "skeleton_length_px": 0, "n_skeleton_components": 0, "skipped": False,
     }
     if skeletonize is None:
-        return {**empty_result, "skipped": True}
-
-    left_mask = np.isin(pred, list(LEFT_CLASSES))
-    if left_mask.sum() < 2:
-        return empty_result
-
-    skel = skeletonize(left_mask)
-    if skel.sum() < 2:
-        return empty_result
-
+        return {**empty, "skipped": True}
+    mask = mask.astype(bool)
+    if not mask.any():
+        return empty
+    skel = skeletonize(mask)
+    if not skel.any():
+        return empty
     deg = skeleton_degree(skel)
-    endpoints = [tuple(p) for p in np.argwhere(skel & (deg == 1))]
-    if len(endpoints) < 2:
-        return {**empty_result, "n_endpoints": len(endpoints)}
-
-    adj = _skeleton_adjacency(skel)
-    skel_labeled, _ = ndi.label(skel, structure=ndi.generate_binary_structure(2, 2))
-
-    endpoints_by_component: dict[int, list[tuple[int, int]]] = {}
-    for p in endpoints:
-        comp = int(skel_labeled[p])
-        endpoints_by_component.setdefault(comp, []).append(p)
-
-    n_paths = 0
-    n_bad = 0
-    for pts in endpoints_by_component.values():
-        if len(pts) < 2:
-            continue
-        pts = pts[:max_endpoints_per_component]
-        for i in range(len(pts)):
-            for j in range(i + 1, len(pts)):
-                path = _bfs_path(adj, pts[i], pts[j])
-                if not path:
-                    continue
-                run_classes = _path_class_runs(path, pred, min_run=min_run_px)
-                if len(run_classes) < 2:
-                    continue
-                n_paths += 1
-                if len(run_classes) != len(set(run_classes)):
-                    n_bad += 1
-
+    structure = ndi.generate_binary_structure(2, connectivity)
+    _, n_comp = ndi.label(skel, structure=structure)
     return {
-        "n_endpoints": len(endpoints),
-        "n_paths": n_paths,
-        "n_inconsistent_paths": n_bad,
-        "inconsistent_path_rate": (n_bad / n_paths) if n_paths else np.nan,
+        "n_endpoints": int((skel & (deg == 1)).sum()),
+        "n_branch_points": int((skel & (deg >= 3)).sum()),
+        "skeleton_length_px": int(skel.sum()),
+        "n_skeleton_components": int(n_comp),
         "skipped": False,
     }
 
@@ -359,11 +203,11 @@ def branch_consistency_stats(pred: np.ndarray, min_run_px: int = 3, max_endpoint
 # Convenience: everything for one (gt, pred) pair.
 # ---------------------------------------------------------------------------
 
-def evaluate_case(case_id: str, gt: np.ndarray, pred: np.ndarray, min_run_px: int = 3, min_noise_area_px: int = 5) -> dict:
+def evaluate_case(case_id: str, gt: np.ndarray, pred: np.ndarray, min_noise_area_px: int = 5) -> dict:
     row = {"case_id": case_id}
-    row.update(territory_leakage(gt, pred))
-    purity_rows = component_purity_rows(pred, case_id)
-    row.update(purity_summary(purity_rows))
+    overlap_rows = component_overlap_rows(gt, pred, case_id)
+    row.update(component_overlap_summary(overlap_rows))
     row.update(fragmentation_stats(gt, pred, min_area_px=min_noise_area_px))
-    row.update({f"branch_{k}": v for k, v in branch_consistency_stats(pred, min_run_px=min_run_px).items()})
+    row.update({f"gt_skeleton_{k}": v for k, v in skeleton_connectivity_stats(gt > BACKGROUND).items()})
+    row.update({f"pred_skeleton_{k}": v for k, v in skeleton_connectivity_stats(pred > BACKGROUND).items()})
     return row

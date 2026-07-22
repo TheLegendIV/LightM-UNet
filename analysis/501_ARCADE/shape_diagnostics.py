@@ -1,22 +1,17 @@
-"""Shape diagnostics for ARCADE predictions: class purity, cleanliness, catheter-like FPs.
+"""Shape diagnostics for ARCADE binary vessel predictions: cleanliness,
+catheter-like FPs.
 
 Complements the dice/precision/recall/boundary_f1/cldice metrics in
-preview_results.ipynb with three self-consistency signals that don't require
-ground truth to be meaningful (purity, cleanliness), plus one that isolates a
+preview_results.ipynb with a self-consistency signal that doesn't require
+ground truth to be meaningful (cleanliness), plus one that isolates a
 specific known confounder (the contrast catheter, which has no GT class of
 its own and can get mislabeled as vessel):
 
-  1. Class purity   — does a single uninterrupted vessel branch (skeleton
-                       segment between bifurcations) get assigned more than
-                       one class? Splitting at junctions on purpose: LAD/RCA/
-                       LCX legitimately meet at the ostium, so mixing *at* a
-                       branch point isn't the failure mode this measures —
-                       mixing *within* one unbranched run is.
-  2. Cleanliness    — per-class fragmentation (component count, largest-
+  1. Cleanliness    — vessel-mask fragmentation (component count, largest-
                        component ratio) and skeleton "spurs" (short branches
                        ending in a free endpoint — the standard artifact from
                        ragged mask boundaries after skeletonization).
-  3. Catheter-like FP shapes — false-positive components (predicted vessel,
+  2. Catheter-like FP shapes — false-positive components (predicted vessel,
                        GT background) scored on elongation, skeleton junction
                        count (0 = simple path, a catheter signature), width
                        uniformity (catheters are constant-diameter; vessels
@@ -24,9 +19,15 @@ its own and can get mislabeled as vessel):
                        There's no GT catheter mask, so catheter_score is a
                        tunable heuristic, not a validated label.
 
+(Class purity -- does one skeleton branch carry more than one label -- is
+not meaningful for a binary background/vessel mask, since every foreground
+pixel is trivially "the same class"; that diagnostic lived here when this
+folder covered 4-class LAD/RCA/LCX segmentation and has been dropped. See
+segmentation_topology.py for the skeleton-connectivity stats that replaced it.)
+
 Usage:
-    python analysis/501_ARCADE/shape_diagnostics.py --net-name ENetGlobalCtxG3
-    python analysis/501_ARCADE/shape_diagnostics.py --net-name ENetE1 --catheter-threshold 0.6
+    python analysis/501_ARCADE/shape_diagnostics.py --net-name nnUNetTrainerENet_E1
+    python analysis/501_ARCADE/shape_diagnostics.py --net-name nnUNetTrainerENet_Original --catheter-threshold 0.6
 
 Writes analysis/501_ARCADE/results/{net_name}_shape_diagnostics.csv (per image) and
 analysis/501_ARCADE/results/{net_name}_shape_diagnostics_overall.csv (mean across images).
@@ -52,20 +53,20 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DATASET_DIR = REPO_ROOT / "data" / "nnUNet_raw" / "Dataset501_ARCADE"
 LABELS_TS_DIR = DATASET_DIR / "labelsTs"
 
-CLASS_NAMES = ("Background", "LAD", "RCA", "LCX")
+CLASS_NAMES = ("Background", "Vessel")
 
 
 # ---------------------------------------------------------------------------
-# Skeleton branch decomposition (shared by purity, cleanliness, catheter analysis)
+# Skeleton branch decomposition (shared by cleanliness, catheter analysis)
 # ---------------------------------------------------------------------------
 
-def skeleton_branches(mask: np.ndarray, pred: np.ndarray, n_classes: int) -> pd.DataFrame:
+def skeleton_branches(mask: np.ndarray) -> pd.DataFrame:
     """Skeletonize `mask`, split at junctions (degree >= 3), and summarize each
-    resulting branch: pixel count, majority-class purity, whether it ends in
-    a free endpoint (degree == 1)."""
+    resulting branch: pixel count, whether it ends in a free endpoint
+    (degree == 1)."""
     skel = skeletonize(mask)
     if not skel.any():
-        return pd.DataFrame(columns=["size", "purity", "majority_class", "is_endpoint_branch"])
+        return pd.DataFrame(columns=["size", "is_endpoint_branch"])
     deg = skeleton_degree(skel)
     junctions = skel & (deg >= 3)
     endpoints = skel & (deg == 1)
@@ -76,57 +77,32 @@ def skeleton_branches(mask: np.ndarray, pred: np.ndarray, n_classes: int) -> pd.
         coords = np.argwhere(branch_labels == lbl)
         if coords.size == 0:
             continue
-        values = pred[coords[:, 0], coords[:, 1]]
-        counts = np.bincount(values, minlength=n_classes)
-        majority = int(counts.argmax())
-        purity = float(counts[majority] / values.size)
         is_endpoint_branch = bool(endpoints[coords[:, 0], coords[:, 1]].any())
         rows.append({
-            "size": int(values.size),
-            "purity": purity,
-            "majority_class": majority,
+            "size": int(coords.shape[0]),
             "is_endpoint_branch": is_endpoint_branch,
         })
     return pd.DataFrame(rows)
 
 
 # ---------------------------------------------------------------------------
-# 1. Class purity
-# ---------------------------------------------------------------------------
-
-def purity_metrics(branches: pd.DataFrame, min_branch_len: int) -> dict:
-    usable = branches[branches["size"] >= min_branch_len]
-    if usable.empty:
-        return {"mean_branch_purity": np.nan, "impure_branch_frac": np.nan, "n_branches": 0}
-    mean_purity = float(np.average(usable["purity"], weights=usable["size"]))
-    impure_frac = float((usable["purity"] < 0.95).mean())
-    return {
-        "mean_branch_purity": mean_purity,
-        "impure_branch_frac": impure_frac,
-        "n_branches": int(len(usable)),
-    }
-
-
-# ---------------------------------------------------------------------------
-# 2. Cleanliness
+# 1. Cleanliness
 # ---------------------------------------------------------------------------
 
 def cleanliness_metrics(pred: np.ndarray, branches: pd.DataFrame, spur_len_px: int) -> dict:
     out = {}
-    for c, name in enumerate(CLASS_NAMES):
-        if c == 0:
-            continue
-        class_mask = pred == c
-        if not class_mask.any():
-            out[f"n_components_{name}"] = 0
-            out[f"largest_component_ratio_{name}"] = np.nan
-            continue
+    class_mask = pred > 0
+    if not class_mask.any():
+        out["n_components_Vessel"] = 0
+        out["largest_component_ratio_Vessel"] = np.nan
+    else:
         labeled = cc_label(class_mask, connectivity=2)
         sizes = np.bincount(labeled.ravel())[1:]  # drop background label 0
-        out[f"n_components_{name}"] = int(len(sizes))
-        out[f"largest_component_ratio_{name}"] = float(sizes.max() / sizes.sum())
+        out["n_components_Vessel"] = int(len(sizes))
+        out["largest_component_ratio_Vessel"] = float(sizes.max() / sizes.sum())
 
     spurs = branches[branches["is_endpoint_branch"] & (branches["size"] < spur_len_px)]
+    out["n_skeleton_branches"] = int(len(branches))
     out["spur_count"] = int(len(spurs))
     out["spur_density"] = float(len(spurs) / len(branches)) if len(branches) else np.nan
     return out
@@ -197,15 +173,12 @@ def catheter_summary(fp_components: pd.DataFrame, catheter_threshold: float) -> 
 def diagnostics_for_image(
     gt: np.ndarray,
     pred: np.ndarray,
-    n_classes: int,
-    min_branch_len: int,
     spur_len_px: int,
     min_fp_area: int,
     catheter_threshold: float,
 ) -> dict:
-    fg_branches = skeleton_branches(pred > 0, pred, n_classes)
+    fg_branches = skeleton_branches(pred > 0)
     row = {}
-    row.update(purity_metrics(fg_branches, min_branch_len))
     row.update(cleanliness_metrics(pred, fg_branches, spur_len_px))
     fp_components = catheter_like_fp_components(gt, pred, min_fp_area)
     row.update(catheter_summary(fp_components, catheter_threshold))
@@ -213,13 +186,11 @@ def diagnostics_for_image(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Class purity / cleanliness / catheter-FP shape diagnostics.")
+    parser = argparse.ArgumentParser(description="Cleanliness / catheter-FP shape diagnostics for binary vessel masks.")
     parser.add_argument("--net-name", required=True, help="Matches labelsPr_<net-name> under Dataset501_ARCADE.")
-    parser.add_argument("--min-branch-len", type=int, default=3, help="Ignore skeleton branches shorter than this for purity.")
     parser.add_argument("--spur-len-px", type=int, default=8, help="Endpoint branches shorter than this count as spurs.")
     parser.add_argument("--min-fp-area", type=int, default=15, help="Ignore FP components smaller than this (speckle floor).")
     parser.add_argument("--catheter-threshold", type=float, default=0.5, help="catheter_score cutoff for 'catheter-like'.")
-    parser.add_argument("--n-classes", type=int, default=4)
     parser.add_argument("--out-dir", type=Path, default=REPO_ROOT / "analysis" / "501_ARCADE" / "results")
     args = parser.parse_args()
 
@@ -230,8 +201,7 @@ def main() -> None:
     rows = []
     for case_id, gt, pred in topo.iter_matched_cases(LABELS_TS_DIR, prediction_dir):
         row = diagnostics_for_image(
-            gt, pred, args.n_classes, args.min_branch_len, args.spur_len_px,
-            args.min_fp_area, args.catheter_threshold,
+            gt, pred, args.spur_len_px, args.min_fp_area, args.catheter_threshold,
         )
         row["case_id"] = case_id
         rows.append(row)

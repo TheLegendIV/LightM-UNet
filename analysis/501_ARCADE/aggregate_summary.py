@@ -1,10 +1,11 @@
 """Aggregate all *_overall_metrics.csv files in this directory into summary_overall_metrics.csv.
 
-Also computes mean_class_dice: the macro-average of per-class dice across the
-foreground classes (LAD, RCA, LCX), read from each model's *_per_class_metrics.csv.
-Unlike the binary "dice_f1" column (foreground vs. background, blind to which
-vessel class was predicted), this drops if a model finds the right vessel but
-assigns it the wrong class.
+Dataset501_ARCADE is binary (background/vessel), so there's no separate
+"per-class dice" to macro-average -- dice_f1 (pooled foreground-vs-background)
+already is the single foreground class's dice. (When this folder covered
+4-class LAD/RCA/LCX segmentation, this script also computed mean_class_dice
+from *_per_class_metrics.csv; that's dropped now since it'd be a duplicate
+of dice_f1.)
 """
 from pathlib import Path
 
@@ -13,16 +14,6 @@ import pandas as pd
 METRICS_DIR = Path(__file__).resolve().parent / "results"
 SUFFIX = "_overall_metrics.csv"
 OUTPUT_PATH = METRICS_DIR / "summary_overall_metrics.csv"
-BACKGROUND_CLASS_ID = 0
-
-
-def mean_class_dice(model: str) -> float:
-    per_class_path = METRICS_DIR / f"{model}_per_class_metrics.csv"
-    if not per_class_path.exists():
-        return float("nan")
-    per_class = pd.read_csv(per_class_path)
-    fg = per_class[per_class["class_id"] != BACKGROUND_CLASS_ID]
-    return float(fg["dice_f1"].mean())
 
 
 def main() -> None:
@@ -33,7 +24,6 @@ def main() -> None:
         model = path.name[: -len(SUFFIX)]
         df = pd.read_csv(path)
         df.insert(0, "model", model)
-        df["mean_class_dice"] = mean_class_dice(model)
         rows.append(df)
 
     summary = pd.concat(rows, ignore_index=True)

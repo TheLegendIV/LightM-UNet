@@ -1,0 +1,210 @@
+# Instructions for Claude-in-VSCode: ENet→FINN compression pipeline
+# Repo structure and framework assumed known.
+# STAGED, NOT UNATTENDED: halt at each checkpoint and report.
+# Do NOT start 150-epoch runs until Stage 0 passes.
+
+# Convert the .md into a jupyter notebook and run the cells to generate the tables and plot the graphs. This will be the single reporting point. Prepare for visualization of the results. The notebook should be able to read the results.csv and generate the plots and tables for each stage covering all parameters (e.g. dice, params, flop, clDice, quantization ...etc). The CSVs should explicitly contain parameter counts, FLOP, channel numbers, bottleneck, quantization (Even if known FP32).
+# Start by filling in the analyical results for the stages that contain them, e.g parameter/FLOP cost tables.
+# Each stage results live in nnUNet_results/enet_compression_stage_x
+# Estimate the training time of a small network (UF1) using a local docker smoket test. Use that to estimate the total time for the entire sweep. This will help in planning the compute resources and scheduling the runs. Start without chanigng batch size first to see if training it on PC works at all. Calculate the total number of runs and provide me the number. 
+# Create a slurm job array for each sweep in the plan on gpu_mig (1 gpu each). Naming should include stage name. Do not sweep secondary/optional stages yet.
+# Each sweep should also render a png with all the configurations in the sweep as a progress update. Decide on axis yourself. e.g. Dice vs Params.
+# Ensure one thing across all runs. Sometimes sweeps will cover already existing runs. In that case, do not re-run the existing runs. Instead skip them, or simply assume they exist and copy them into the dir. Choose the easiest option.
+# Ensure you keep the logs + checkpoints for all runs. Keep the best, you can skip the latest except at ep 50,100 and 150 (overwrite).
+
+project:
+  task: binary coronary vessel segmentation (C=1)
+  goal: ENet config meeting Stage-1 goals, exported to QONNX for FINN
+  target_board: ZU7EV
+  toolchain: PyTorch + Brevitas (QAT) + FINN (QONNX export)
+  execution_mode: staged; halt at each checkpoint for human inspection
+
+ordering_principle:
+  structural_first: decoder topology (max-unpool vs Upsample+conv) decided in
+                    Stage 1b — changes topology AND parameter count, so deciding
+                    it late would invalidate the Stage-2 budget
+  capacity_jointly: filters AND bottlenecks swept together as a 2D grid (S2) —
+                    both are capacity knobs in the same direction, so a greedy
+                    sequential path can miss the joint optimum
+  quantization_next: bit-width (S4), near-orthogonal to structure
+  cheap_swaps_late: within-block conv types (dilated/asymmetric/strided) in S3;
+                    FINN-native either way, no topology change
+
+metrics:
+  primary_gate: dice
+  tracked_not_gated: [cldice, n_components]
+  efficiency_fp32: [params, flops]
+  efficiency_quantized: [bops, params_x_bits]
+
+global_conventions:
+  results_file: results.csv
+  results_columns: [config_name, stage, f_i, f1, f2, f3, f4, f5,
+                    bottlenecks_per_stage, decoder_type, ops_flags, quant_bits,
+                    params, flops, bops, dice, cldice, n_components,
+                    epochs, converged_flag, seed]
+  training:
+    epochs: 150
+    fixed: [optimizer, lr_schedule, augmentation, loss, split, seed]
+    split: image-level
+    converged_flag: false if val Dice still rising at epoch 150
+  normalization: per-image z-norm       # matches real-time detector scenario
+  channel_constraint:
+    rule: divisible by 4 (bottleneck projects to C/4); round UP
+    reason: also gives FINN folding freedom (PE | out_ch, SIMD | in_ch)
+    floor_note: at 4 channels the C/4 projection yields 1 internal channel
+               (4->1->1->4), the degenerate limit. Needs max(1,·) clamp.
+               UF0/1 are floor-finding, not a candidate.
+  skip_connections: assert channel dims match at each bottleneck residual Add
+
+parametric_model_requirement:
+  file: models/enet.py
+  must_accept: [f_i, f1, f2, f3, f4, f5, bottlenecks_per_stage,
+                use_dilated, use_asymmetric, use_strided, decoder_type, C]
+  decoder_type: [max_unpool, upsample_conv]
+  note: one builder makes any variant; sweeps = config files, not code edits
+
+foundation_tasks:
+  - models/blocks.py: initial block; bottleneck variants (regular/dilated/
+      asymmetric/strided) with max(1,·) clamp on the C/4 projection;
+      decoder block supporting BOTH max_unpool and upsample_conv
+  - models/enet.py: fully parametric per above
+  - metrics.py: dice, cldice, connected_component_count
+  - losses.py
+  - data/dataset.py: ARCADE binary loader, image-level split, augmentation,
+      per-image z-norm
+  - train.py: 150-ep run, curve logging, converged_flag, results.csv row
+  - run_sweep.py: YAML config list -> one run each (supports parallel batch)
+  - utils: count_params(), count_flops(), count_bops(model, bits)
+
+stage_0_validation:
+  steps:
+    - smoke_test: full pipeline, ~20 images, 3 epochs, end-to-end
+    - metric_sanity: Dice + clDice on synthetic connected mask vs. same mask
+        with induced gap; assert expected behaviour
+  gate: do not proceed until both pass
+
+stage_1_baselines:
+  status: ALREADY RUN (max-unpool retained)
+  runs:
+    - {name: enet_paper, f_i: 16, f1: 64, f2: 128, f3: 128, f4: 64, f5: 16,
+       bottlenecks: paper, decoder_type: max_unpool}
+    - {name: e1, f_i: 20, f1: 72, f2: 144, f3: 144, f4: 72, f5: 20,
+       bottlenecks: tuned, decoder_type: max_unpool}
+  after: set D0=best.dice, F0=best.flops, C0=best.cldice -> constants file
+  goals:
+    dice: ">= 0.9 * D0"
+    params: "< 75000"
+    flops: "<= 0.3 * F0"
+    latency_ms: "< 10"
+    fit: fully on-chip ZU7EV
+  checkpoint: confirm e1 dominates before Stage 1b
+
+stage_1b_decoder_topology:      # STRUCTURAL — before any capacity tuning
+  runs:
+    - {name: e1_unpool,   base: e1, decoder_type: max_unpool}   # may reuse S1
+    - {name: e1_upsample, base: e1, decoder_type: upsample_conv}
+  decision_rule: choose upsample_conv unless max_unpool wins by a margin
+                 justifying (a) adding FINN support and (b) the param delta
+  note: upsample_conv ADDS params — record delta, it shifts the Stage-2 budget
+  checkpoint: decoder fixed for all downstream stages
+
+early_probes:              # run in PARALLEL with stage_2; not on critical path
+  p1_finn_resource_probe:
+    purpose: retire the risk that Stage-1 goals don't map to a real ZU7EV fit —
+             otherwise only discovered at stage_5
+    action: take U8 @ INT8, push through FINN to the ANALYTICAL resource/
+            throughput estimation step (no full synthesis)
+    report: [est_lut, est_bram, est_dsp, est_latency_ms, fits_bool]
+    outcome: if it does not fit, revise Stage-1 goals BEFORE interpreting the grid
+    cost: ~1 day, no training
+  p2_quantization_probe:
+    purpose: characterise quantization early — near-orthogonal to structure, and
+             it determines how much param budget is actually needed
+    on: E1 or U4 (no need to wait for final architecture)
+    bits: [8, 4, 2]
+    record: [params_x_bits, bops, dice, cldice, n_components]
+    note: scouting run — stage_4 still runs properly on the final arch
+
+stage_2_architecture_grid:      # FILTERS x BOTTLENECKS, JOINT
+  rationale: filters and bottlenecks are both capacity knobs acting in the same
+             direction; a greedy sequential path can land off the joint optimum.
+             The grid eliminates that ordering risk and subsumes a separate
+             filter re-check. All cells independent -> one parallel batch.
+  2_2_cost_tables:           # architecture-only, no training. Run FIRST.
+    filter_cost: per stage, +Δ filters, record Δparams / ΔFLOPs -> filter_cost.csv
+    bottleneck_cost: per stage, +1 bottleneck, record Δparams / ΔFLOPs
+                     -> bottleneck_cost.csv
+  2_3_grid:
+    fix: f_i = 20
+    filter_axis:
+      - {name: E1,  f_i: 20, f1: 72, f2: 144, f3: 144, f4: 72, f5: 20}
+      - {name: U2,  f_i: 20, f1: 36, f2: 72,  f3: 72,  f4: 36, f5: 12}
+      - {name: U4,  f_i: 20, f1: 20, f2: 36,  f3: 36,  f4: 20, f5: 8}
+      - {name: U8,  f_i: 20, f1: 12, f2: 20,  f3: 20,  f4: 12, f5: 4}
+      - {name: U16, f_i: 20, f1: 8,  f2: 12,  f3: 12,  f4: 8,  f5: 4}
+      - {name: UF, f_i: 20, f1: 4,  f2: 4,   f3: 4,   f4: 4,  f5: 4}  # floor
+
+    bottleneck_axis: [enet_native, 5, 3, 2]
+    grid: filter_axis x bottleneck_axis (run as one parallel batch)
+    select: cell meeting goals with lowest params/FLOPs -> Cfinal_arch
+  2_4_fi_reduction:
+    priority: RUN
+    purpose: Reduce f_i, the heaviest stage to find out how sensitive ENets at different stages are sensitive to to f_i. 
+    on: U2, U16 (likely where the best in the grid is)
+    sweep_f_i: [20, 12, 8, 4]
+  2_5_heterogeneous_bottlenecks:
+    priority: SECONDARY / OPTIONAL, wait for use cue. 
+    action: hold total bottlenecks constant, redistribute across stages
+    variants: [uniform, encoder_heavy, decoder_heavy]
+  2_6_single_stage_finetune:
+    priority: CONTINGENCY — only if grid misses goals. Inform user first and wait for cue before running.
+    action: use cost tables; adjust ONE stage per run
+  checkpoint: report grid; human selects -> Cfinal_arch
+
+stage_2b_seed_variance:
+  priority: DEFERRED, budget permitting. Wait for use cue to run.
+  purpose: grid cells are single-seed point estimates across ~15 configs;
+           without variance, small differences are uninterpretable and the
+           winner is partly selection luck
+  action: 3 seeds each on 2-3 configs (E1, Cfinal_arch, one adjacent cell)
+  report: [per_seed_dice, mean, std]
+  use: state noise floor ("differences below ±X Dice not interpreted");
+       re-read the grid against it; if margin is within noise, break tie on cost
+  checkpoint: report noise floor before stage_3
+
+stage_3_within_block_ops:
+  on: Cfinal_arch
+  note: all FINN-native (RTL SWG).
+  ablate_one_per_run:
+    - {disable: dilated,    replace: 3x3}
+    - {disable: asymmetric, replace: 3x3}
+    - {disable: strided,    replace: 3x3}
+  keep_op_if: earns its params/FLOP cost given goals
+  checkpoint: -> Cfinal_ops
+
+stage_4_quantization:
+  framework: Brevitas QAT
+  4_1_homogeneous: {bits: [32, 8, 4, 2], record: dice (gate) + cldice (tracked)}
+  4_2_heterogeneous: quantize one layer at a time, others FP32
+  4_3_select: Pareto-optimal (Dice vs BOPs) meeting goals; export QONNX
+  escape_hatch: if a different grid cell quantizes markedly better, revisit
+                stage_2 rather than freezing Cfinal_ops
+
+stage_5_finn_folding:
+  action: QONNX -> FINN; per-layer PE×SIMD for latency<10ms and ZU7EV fit
+  report: [LUT, FF, DSP, BRAM, latency_ms, fits_bool]
+  note: include per-image z-norm frame buffer in latency budget
+
+execution_order: [foundation_tasks, stage_0_validation, stage_1_baselines,
+                  stage_1b_decoder_topology, stage_2_architecture_grid,
+                  stage_2b_seed_variance, stage_3_within_block_ops,
+                  stage_4_quantization, stage_5_finn_folding]
+
+parallel_track: [early_probes]    # P1/P2 run alongside stage_2, do not block it
+
+reminders:
+  - HALT at each stage checkpoint and report; do not auto-continue
+  - stage_2 grid cells are independent — run as ONE parallel batch
+  - Dice gates; clDice and nr. components logged but not gating
+  - round channel counts UP to multiples of 4
+  - flag under-trained (still-improving) models

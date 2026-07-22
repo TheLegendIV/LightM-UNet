@@ -37,6 +37,7 @@ python -m pip install \
     matplotlib \
     pandas \
     hiddenlayer \
+    thop \
     importlib_metadata \
     importlib_resources
 
