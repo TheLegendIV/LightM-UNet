@@ -121,7 +121,7 @@ early_probes:              # run in PARALLEL with stage_2; not on critical path
     purpose: characterise quantization early — near-orthogonal to structure, and
              it determines how much param budget is actually needed
     on: E1 or U4 (no need to wait for final architecture)
-    bits: [8, 4, 2]
+    bits: [32, 8, 4, 2]
     record: [params_x_bits, bops, dice, cldice, n_components]
     note: scouting run — stage_4 still runs properly on the final arch
 
