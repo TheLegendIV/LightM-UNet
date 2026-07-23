@@ -56,7 +56,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from pareto_common import repo_root, run_subprocess_and_parse
+from pareto_common import ensure_preprocessed, repo_root, run_subprocess_and_parse
 
 REPO_ROOT = repo_root()
 sys.path.insert(0, str(REPO_ROOT / "enet"))
@@ -339,6 +339,9 @@ def main() -> int:
         max_params = max(e["params"] for e in experiments)
         print(f"\nWorst-case params across all {len(EXPERIMENTS)} configs: {max_params:,}")
         return 0
+
+    ensure_preprocessed(args.dataset, "Dataset501_ARCADE", args.nnunet_raw, args.nnunet_preprocessed,
+                        args.output_root)  # nnUNet_results value doesn't matter for preprocessing itself
 
     args.output_root.mkdir(parents=True, exist_ok=True)
     rows = []

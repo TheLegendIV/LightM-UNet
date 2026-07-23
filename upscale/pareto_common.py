@@ -18,7 +18,9 @@ supplies the EXPERIMENTS table and the ENET_* env vars per run.
 from __future__ import annotations
 
 import ast
+import os
 import re
+import shutil
 import subprocess
 import time
 from dataclasses import dataclass
@@ -92,6 +94,35 @@ def latest_training_log(results_root: Path) -> Path | None:
     if not logs:
         return None
     return max(logs, key=lambda path: path.stat().st_mtime)
+
+
+def ensure_preprocessed(dataset_id: str, dataset_name: str, nnunet_raw: Path, nnunet_preprocessed: Path, nnunet_results: Path) -> None:
+    """Plan+preprocess `dataset_id` if it hasn't been already, and sync
+    splits_final.json from raw -- the exact guard compression/slurm/*.job
+    already has as shell, needed here too since run_upscale_pareto.py /
+    graduate.py can be invoked directly (not just via the Slurm wrapper),
+    e.g. on a fresh HPC checkout where Dataset501_ARCADE was never
+    preprocessed: nnUNetv2_train fails deep inside dataloader setup
+    (FileNotFoundError on nnUNetPlans_2d/train_*.pkl) rather than with a
+    clear "not preprocessed" message, so it's worth guarding against
+    up front instead of debugging that traceback every time."""
+    plans_path = nnunet_preprocessed / dataset_name / "nnUNetPlans.json"
+    env = os.environ.copy()
+    env["nnUNet_raw"] = str(nnunet_raw)
+    env["nnUNet_preprocessed"] = str(nnunet_preprocessed)
+    env["nnUNet_results"] = str(nnunet_results)
+    if not plans_path.exists():
+        print(f"=== {plans_path} missing -- running nnUNetv2_plan_and_preprocess -d {dataset_id} ===")
+        subprocess.run(
+            ["nnUNetv2_plan_and_preprocess", "-d", dataset_id, "--verify_dataset_integrity"],
+            env=env, check=True,
+        )
+    else:
+        print(f"=== Plans already exist at {plans_path}, skipping preprocessing ===")
+
+    raw_splits = nnunet_raw / dataset_name / "splits_final.json"
+    if raw_splits.exists():
+        shutil.copy(raw_splits, nnunet_preprocessed / dataset_name / "splits_final.json")
 
 
 def run_subprocess_and_parse(command: list[str], cwd: Path, env: dict, log_root: Path) -> tuple[ParsedMetrics, subprocess.CompletedProcess, float]:

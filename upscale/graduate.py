@@ -37,7 +37,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from pareto_common import repo_root
+from pareto_common import ensure_preprocessed, repo_root
 from run_upscale_pareto import (
     EXPERIMENTS, USE_ASYMMETRIC, USE_DILATED, USE_DSC, USE_STRIDED,
 )
@@ -136,6 +136,8 @@ def main() -> int:
     unknown = [c for c in args.configs if c not in by_id]
     if unknown:
         raise ValueError(f"Unknown config IDs: {unknown}. Valid: {list(by_id)}")
+
+    ensure_preprocessed("501", "Dataset501_ARCADE", args.nnunet_raw, args.nnunet_preprocessed, args.nnunet_results)
 
     for cid in args.configs:
         rc = graduate_one(by_id[cid], args)
