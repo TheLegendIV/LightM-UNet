@@ -1,0 +1,160 @@
+
+#######################################################################
+Please cite the following paper when using nnU-Net:
+Isensee, F., Jaeger, P. F., Kohl, S. A., Petersen, J., & Maier-Hein, K. H. (2021). nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature methods, 18(2), 203-211.
+#######################################################################
+ 
+
+This is the configuration used by this training:
+Configuration name: 2d
+ {'data_identifier': 'nnUNetPlans_2d', 'preprocessor_name': 'DefaultPreprocessor', 'batch_size': 12, 'patch_size': [512, 512], 'median_image_size_in_voxels': [512.0, 512.0], 'spacing': [1.0, 1.0], 'normalization_schemes': ['ZScoreNormalization'], 'use_mask_for_norm': [False], 'UNet_class_name': 'PlainConvUNet', 'UNet_base_num_features': 32, 'n_conv_per_stage_encoder': [2, 2, 2, 2, 2, 2, 2, 2], 'n_conv_per_stage_decoder': [2, 2, 2, 2, 2, 2, 2], 'num_pool_per_axis': [7, 7], 'pool_op_kernel_sizes': [[1, 1], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2]], 'conv_kernel_sizes': [[3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3]], 'unet_max_num_features': 512, 'resampling_fn_data': 'resample_data_or_seg_to_shape', 'resampling_fn_seg': 'resample_data_or_seg_to_shape', 'resampling_fn_data_kwargs': {'is_seg': False, 'order': 3, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_seg_kwargs': {'is_seg': True, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_probabilities': 'resample_data_or_seg_to_shape', 'resampling_fn_probabilities_kwargs': {'is_seg': False, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'batch_dice': True} 
+ 
+These are the global plan.json settings:
+ {'dataset_name': 'Dataset501_ARCADE', 'plans_name': 'nnUNetPlans', 'original_median_spacing_after_transp': [999.0, 1.0, 1.0], 'original_median_shape_after_transp': [1, 512, 512], 'image_reader_writer': 'NaturalImage2DIO', 'transpose_forward': [0, 1, 2], 'transpose_backward': [0, 1, 2], 'experiment_planner_used': 'ExperimentPlanner', 'label_manager': 'LabelManager', 'foreground_intensity_properties_per_channel': {'0': {'max': 255.0, 'mean': 97.36139678955078, 'median': 94.0, 'min': 0.0, 'percentile_00_5': 31.0, 'percentile_99_5': 185.0, 'std': 31.739503860473633}}} 
+ 
+2026-07-23 23:44:40.382720: unpacking dataset... 
+2026-07-23 23:44:44.450202: unpacking done... 
+2026-07-23 23:44:44.450590: do_dummy_2d_data_aug: False 
+2026-07-23 23:44:44.458900: Using splits from existing split file: /gpfs/home1/yhussein/LightM-UNet/data/nnUNet_preprocessed/Dataset501_ARCADE/splits_final.json 
+2026-07-23 23:44:44.460127: The split file contains 1 splits. 
+2026-07-23 23:44:44.460203: Desired fold for training: 0 
+2026-07-23 23:44:44.460255: This split has 1000 training and 200 validation cases. 
+2026-07-23 23:44:44.477264: Skipping network architecture plot because ENET_SKIP_ARCH_PLOT=1 
+2026-07-23 23:44:44.487535:  
+2026-07-23 23:44:44.487665: Epoch 0 
+2026-07-23 23:44:44.487787: Current learning rate: 0.001 
+2026-07-23 23:45:14.625484: train_loss -0.25 
+2026-07-23 23:45:14.626069: val_loss -0.558 
+2026-07-23 23:45:14.626174: Pseudo dice [0.6723] 
+2026-07-23 23:45:14.626271: Epoch time: 30.14 s 
+2026-07-23 23:45:14.626356: Yayy! New best EMA pseudo Dice: 0.6723 
+2026-07-23 23:45:14.626440: No checkpoint written, checkpointing is disabled 
+2026-07-23 23:45:15.657560:  
+2026-07-23 23:45:15.657773: Epoch 1 
+2026-07-23 23:45:15.657894: Current learning rate: 0.00094 
+2026-07-23 23:45:43.120447: train_loss -0.5984 
+2026-07-23 23:45:43.120721: val_loss -0.6276 
+2026-07-23 23:45:43.120834: Pseudo dice [0.7212] 
+2026-07-23 23:45:43.120936: Epoch time: 27.46 s 
+2026-07-23 23:45:43.121019: Yayy! New best EMA pseudo Dice: 0.6772 
+2026-07-23 23:45:43.121103: No checkpoint written, checkpointing is disabled 
+2026-07-23 23:45:44.306604:  
+2026-07-23 23:45:44.306790: Epoch 2 
+2026-07-23 23:45:44.307602: Current learning rate: 0.00088 
+2026-07-23 23:46:11.567985: train_loss -0.6287 
+2026-07-23 23:46:11.568236: val_loss -0.6484 
+2026-07-23 23:46:11.568330: Pseudo dice [0.7322] 
+2026-07-23 23:46:11.568426: Epoch time: 27.26 s 
+2026-07-23 23:46:11.568510: Yayy! New best EMA pseudo Dice: 0.6827 
+2026-07-23 23:46:11.568592: No checkpoint written, checkpointing is disabled 
+2026-07-23 23:46:12.962844:  
+2026-07-23 23:46:12.963012: Epoch 3 
+2026-07-23 23:46:12.963123: Current learning rate: 0.00082 
+2026-07-23 23:46:40.255485: train_loss -0.6522 
+2026-07-23 23:46:40.255759: val_loss -0.6697 
+2026-07-23 23:46:40.255865: Pseudo dice [0.7529] 
+2026-07-23 23:46:40.255964: Epoch time: 27.29 s 
+2026-07-23 23:46:40.256055: Yayy! New best EMA pseudo Dice: 0.6897 
+2026-07-23 23:46:40.256138: No checkpoint written, checkpointing is disabled 
+2026-07-23 23:46:41.446742:  
+2026-07-23 23:46:41.446945: Epoch 4 
+2026-07-23 23:46:41.447062: Current learning rate: 0.00076 
+2026-07-23 23:47:08.932971: train_loss -0.6741 
+2026-07-23 23:47:08.933183: val_loss -0.6749 
+2026-07-23 23:47:08.933277: Pseudo dice [0.7555] 
+2026-07-23 23:47:08.933366: Epoch time: 27.49 s 
+2026-07-23 23:47:08.933441: Yayy! New best EMA pseudo Dice: 0.6963 
+2026-07-23 23:47:08.933505: No checkpoint written, checkpointing is disabled 
+2026-07-23 23:47:10.098239:  
+2026-07-23 23:47:10.098433: Epoch 5 
+2026-07-23 23:47:10.098544: Current learning rate: 0.00069 
+2026-07-23 23:47:37.382750: train_loss -0.6818 
+2026-07-23 23:47:37.382977: val_loss -0.6725 
+2026-07-23 23:47:37.383068: Pseudo dice [0.7527] 
+2026-07-23 23:47:37.383160: Epoch time: 27.29 s 
+2026-07-23 23:47:37.383236: Yayy! New best EMA pseudo Dice: 0.7019 
+2026-07-23 23:47:37.383299: No checkpoint written, checkpointing is disabled 
+2026-07-23 23:47:38.534262:  
+2026-07-23 23:47:38.534414: Epoch 6 
+2026-07-23 23:47:38.534523: Current learning rate: 0.00063 
+2026-07-23 23:48:05.940665: train_loss -0.6944 
+2026-07-23 23:48:05.940872: val_loss -0.6795 
+2026-07-23 23:48:05.940963: Pseudo dice [0.76] 
+2026-07-23 23:48:05.941051: Epoch time: 27.41 s 
+2026-07-23 23:48:05.941126: Yayy! New best EMA pseudo Dice: 0.7077 
+2026-07-23 23:48:05.941189: No checkpoint written, checkpointing is disabled 
+2026-07-23 23:48:07.135312:  
+2026-07-23 23:48:07.135482: Epoch 7 
+2026-07-23 23:48:07.135595: Current learning rate: 0.00057 
+2026-07-23 23:48:34.415152: train_loss -0.7039 
+2026-07-23 23:48:34.415370: val_loss -0.7022 
+2026-07-23 23:48:34.415468: Pseudo dice [0.7764] 
+2026-07-23 23:48:34.415555: Epoch time: 27.28 s 
+2026-07-23 23:48:34.415625: Yayy! New best EMA pseudo Dice: 0.7146 
+2026-07-23 23:48:34.415685: No checkpoint written, checkpointing is disabled 
+2026-07-23 23:48:35.730407:  
+2026-07-23 23:48:35.730585: Epoch 8 
+2026-07-23 23:48:35.730696: Current learning rate: 0.0005 
+2026-07-23 23:49:03.005815: train_loss -0.7077 
+2026-07-23 23:49:03.006050: val_loss -0.7145 
+2026-07-23 23:49:03.006141: Pseudo dice [0.7858] 
+2026-07-23 23:49:03.006230: Epoch time: 27.28 s 
+2026-07-23 23:49:03.006301: Yayy! New best EMA pseudo Dice: 0.7217 
+2026-07-23 23:49:03.006361: No checkpoint written, checkpointing is disabled 
+2026-07-23 23:49:04.186554:  
+2026-07-23 23:49:04.186712: Epoch 9 
+2026-07-23 23:49:04.186837: Current learning rate: 0.00044 
+2026-07-23 23:49:31.635809: train_loss -0.7065 
+2026-07-23 23:49:31.636013: val_loss -0.7212 
+2026-07-23 23:49:31.636101: Pseudo dice [0.7902] 
+2026-07-23 23:49:31.636186: Epoch time: 27.45 s 
+2026-07-23 23:49:31.636260: Yayy! New best EMA pseudo Dice: 0.7286 
+2026-07-23 23:49:31.636322: No checkpoint written, checkpointing is disabled 
+2026-07-23 23:49:32.774048:  
+2026-07-23 23:49:32.774204: Epoch 10 
+2026-07-23 23:49:32.774315: Current learning rate: 0.00037 
+2026-07-23 23:50:00.071748: train_loss -0.714 
+2026-07-23 23:50:00.071955: val_loss -0.7209 
+2026-07-23 23:50:00.072042: Pseudo dice [0.7907] 
+2026-07-23 23:50:00.072130: Epoch time: 27.3 s 
+2026-07-23 23:50:00.072202: Yayy! New best EMA pseudo Dice: 0.7348 
+2026-07-23 23:50:00.072263: No checkpoint written, checkpointing is disabled 
+2026-07-23 23:50:01.216776:  
+2026-07-23 23:50:01.216957: Epoch 11 
+2026-07-23 23:50:01.217072: Current learning rate: 0.0003 
+2026-07-23 23:50:28.612509: train_loss -0.7334 
+2026-07-23 23:50:28.612703: val_loss -0.7363 
+2026-07-23 23:50:28.613461: Pseudo dice [0.801] 
+2026-07-23 23:50:28.613559: Epoch time: 27.4 s 
+2026-07-23 23:50:28.613634: Yayy! New best EMA pseudo Dice: 0.7414 
+2026-07-23 23:50:28.613693: No checkpoint written, checkpointing is disabled 
+2026-07-23 23:50:29.743891:  
+2026-07-23 23:50:29.744055: Epoch 12 
+2026-07-23 23:50:29.744179: Current learning rate: 0.00023 
+2026-07-23 23:50:56.827461: train_loss -0.7271 
+2026-07-23 23:50:56.827649: val_loss -0.7426 
+2026-07-23 23:50:56.827736: Pseudo dice [0.8074] 
+2026-07-23 23:50:56.827834: Epoch time: 27.09 s 
+2026-07-23 23:50:56.827907: Yayy! New best EMA pseudo Dice: 0.748 
+2026-07-23 23:50:56.827967: No checkpoint written, checkpointing is disabled 
+2026-07-23 23:50:58.123672:  
+2026-07-23 23:50:58.123844: Epoch 13 
+2026-07-23 23:50:58.123957: Current learning rate: 0.00016 
+2026-07-23 23:51:25.258770: train_loss -0.7289 
+2026-07-23 23:51:25.258970: val_loss -0.717 
+2026-07-23 23:51:25.259059: Pseudo dice [0.788] 
+2026-07-23 23:51:25.259146: Epoch time: 27.14 s 
+2026-07-23 23:51:25.259219: Yayy! New best EMA pseudo Dice: 0.752 
+2026-07-23 23:51:25.259281: No checkpoint written, checkpointing is disabled 
+2026-07-23 23:51:26.392253:  
+2026-07-23 23:51:26.392399: Epoch 14 
+2026-07-23 23:51:26.392509: Current learning rate: 9e-05 
+2026-07-23 23:51:53.667771: train_loss -0.7396 
+2026-07-23 23:51:53.667961: val_loss -0.74 
+2026-07-23 23:51:53.668048: Pseudo dice [0.804] 
+2026-07-23 23:51:53.668131: Epoch time: 27.28 s 
+2026-07-23 23:51:53.668199: Yayy! New best EMA pseudo Dice: 0.7572 
+2026-07-23 23:51:53.668257: No checkpoint written, checkpointing is disabled 
+2026-07-23 23:51:54.891180: No checkpoint written, checkpointing is disabled 
+2026-07-23 23:51:54.946813: Training done. 
+2026-07-23 23:51:54.947700: Skipping final full validation because ENET_SKIP_FINAL_VALIDATION=1 
