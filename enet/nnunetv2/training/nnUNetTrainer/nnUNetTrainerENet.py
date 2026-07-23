@@ -1,5 +1,7 @@
 import os
+import random
 
+import numpy as np
 import torch
 from torch import nn
 from torch.optim import AdamW
@@ -12,9 +14,32 @@ from nnunetv2.utilities.plans_handling.plans_handler import ConfigurationManager
 
 def _parse_channels(value: str) -> tuple[int, ...]:
     channels = tuple(int(item.strip()) for item in value.split(",") if item.strip())
-    if len(channels) != 5:
-        raise ValueError("ENET_CHANNELS must contain five comma-separated integers.")
+    if len(channels) not in (5, 6):
+        raise ValueError(
+            "ENET_CHANNELS must contain five comma-separated integers (initial, stage1, "
+            "stage2/3, stage4, stage5), or six if stage2/stage3 widths are split (initial, "
+            "stage1, stage2, stage3, stage4, stage5) -- see ENet.py's 6-tuple channels form."
+        )
     return channels
+
+
+def _parse_bottlenecks(value: str) -> tuple[int, ...]:
+    bottlenecks = tuple(int(item.strip()) for item in value.split(",") if item.strip())
+    if len(bottlenecks) != 5:
+        raise ValueError(
+            "ENET_BOTTLENECKS must contain five comma-separated integers "
+            "(stage1, stage2, stage3, regular4, regular5)."
+        )
+    return bottlenecks
+
+
+def _parse_bool_env(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    if value not in ("0", "1"):
+        raise ValueError(f"{name} must be '0' or '1', got {value!r}.")
+    return value == "1"
 
 
 class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
@@ -28,6 +53,22 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
         device: torch.device = torch.device("cuda"),
     ):
         super().__init__(plans, configuration, fold, dataset_json, unpack_dataset, device)
+        if os.environ.get("ENET_SEED"):
+            # nnU-Net's base trainer only seeds the train/val SPLIT
+            # (np.random.RandomState(12345+fold), see do_split) -- weight
+            # init, augmentation, and dataloader-worker randomness are never
+            # explicitly seeded anywhere upstream. Set as early as possible
+            # (before .initialize() builds the network) so it's
+            # reproducible, not just "whatever the ambient RNG state was" --
+            # needed for a real seed-variance experiment (1a).
+            enet_seed = int(os.environ["ENET_SEED"])
+            random.seed(enet_seed)
+            np.random.seed(enet_seed)
+            torch.manual_seed(enet_seed)
+            torch.cuda.manual_seed_all(enet_seed)
+            self.enet_seed = enet_seed
+        else:
+            self.enet_seed = None
         self.initial_lr = float(os.environ.get("ENET_LR", "1e-3"))
         self.weight_decay = float(os.environ.get("ENET_WEIGHT_DECAY", "1e-2"))
         if os.environ.get("ENET_EPOCHS"):
@@ -58,10 +99,18 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
             raise ValueError("ENet is a 2D architecture. Use the nnU-Net 2d configuration.")
         label_manager = plans_manager.get_label_manager(dataset_json)
         channels = _parse_channels(os.environ.get("ENET_CHANNELS", "20,72,144,72,20"))
+        bottlenecks_per_stage = _parse_bottlenecks(os.environ.get("ENET_BOTTLENECKS", "4,8,8,2,1"))
+        decoder_type = os.environ.get("ENET_DECODER_TYPE", "max_unpool")
         return ENet(
             in_channels=num_input_channels,
             out_channels=label_manager.num_segmentation_heads,
             channels=channels,
+            bottlenecks_per_stage=bottlenecks_per_stage,
+            decoder_type=decoder_type,
+            use_dilated=_parse_bool_env("ENET_USE_DILATED", True),
+            use_asymmetric=_parse_bool_env("ENET_USE_ASYMMETRIC", True),
+            use_strided=_parse_bool_env("ENET_USE_STRIDED", True),
+            use_dsc=_parse_bool_env("ENET_USE_DSC", False),
         )
 
     def configure_optimizers(self):

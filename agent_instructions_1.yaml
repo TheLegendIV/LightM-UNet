@@ -1,9 +1,12 @@
 # Instructions for Claude-in-VSCode: ENet→FINN compression pipeline
 # Repo structure and framework assumed known.
 # STAGED, NOT UNATTENDED: halt at each checkpoint and report.
-# Do NOT start 150-epoch runs until Stage 0 passes.
+# No single upfront Stage 0 gate: each stage runs its own pre-flight smoke
+# test before its full sweep (see smoke_test_policy). Do NOT start a stage's
+# 150-epoch runs until that stage's own smoke test passes.
 
 # Convert the .md into a jupyter notebook and run the cells to generate the tables and plot the graphs. This will be the single reporting point. Prepare for visualization of the results. The notebook should be able to read the results.csv and generate the plots and tables for each stage covering all parameters (e.g. dice, params, flop, clDice, quantization ...etc). The CSVs should explicitly contain parameter counts, FLOP, channel numbers, bottleneck, quantization (Even if known FP32).
+# You can reuse /analysis notebooks if it helps
 # Start by filling in the analyical results for the stages that contain them, e.g parameter/FLOP cost tables.
 # Each stage results live in nnUNet_results/enet_compression_stage_x
 # Estimate the training time of a small network (UF1) using a local docker smoket test. Use that to estimate the total time for the entire sweep. This will help in planning the compute resources and scheduling the runs. Start without chanigng batch size first to see if training it on PC works at all. Calculate the total number of runs and provide me the number. 
@@ -76,12 +79,20 @@ foundation_tasks:
   - run_sweep.py: YAML config list -> one run each (supports parallel batch)
   - utils: count_params(), count_flops(), count_bops(model, bits)
 
-stage_0_validation:
-  steps:
-    - smoke_test: full pipeline, ~20 images, 3 epochs, end-to-end
-    - metric_sanity: Dice + clDice on synthetic connected mask vs. same mask
-        with induced gap; assert expected behaviour
-  gate: do not proceed until both pass
+smoke_test_policy:            # replaces the old single stage_0 gate
+  action: full pipeline smoke test, ~20 images, 3 epochs, end-to-end
+  when: PRE-FLIGHT, immediately before each stage's full sweep — not one
+        upfront gate. Applies to stage_1b (both decoder_runs and
+        op_ablation_runs), stage_2 (and its 2_4/2_5/2_6 sub-runs), stage_2b,
+        stage_4. (stage_3 merged into stage_1b; stage_5 skipped for now.)
+  gate: do not launch a given stage's full sweep until that stage's own
+        pre-flight smoke test passes
+  metric_sanity: DROPPED as a separate synthetic-mask unit test. Dice/clDice
+        are not reimplemented from scratch in metrics.py — reuse the existing
+        analysis/501_ARCADE implementation (segmentation_topology.py,
+        compute_topology_metrics.py) adapted for binary (C=1) masks. Data
+        loading/preprocessing follows nnU-Net conventions (this repo's
+        enet/nnunetv2 fork), not a bespoke data/dataset.py loader.
 
 stage_1_baselines:
   status: ALREADY RUN (max-unpool retained)
@@ -100,13 +111,28 @@ stage_1_baselines:
   checkpoint: confirm e1 dominates before Stage 1b
 
 stage_1b_decoder_topology:      # STRUCTURAL — before any capacity tuning
-  runs:
+  # MERGED with the former stage_3_within_block_ops: decoder topology AND
+  # op-type choices (dilated/asymmetric/strided) are both structural, both
+  # get locked in before the Stage 2 filter x bottleneck grid, not after —
+  # fix the architecture before the capacity/pruning-style sweep, per user
+  # decision this session. Two independent batches, both built off the
+  # Stage-1 E1 baseline (not chained to each other).
+  decoder_runs:
     - {name: e1_unpool,   base: e1, decoder_type: max_unpool}   # may reuse S1
     - {name: e1_upsample, base: e1, decoder_type: upsample_conv}
   decision_rule: choose upsample_conv unless max_unpool wins by a margin
                  justifying (a) adding FINN support and (b) the param delta
   note: upsample_conv ADDS params — record delta, it shifts the Stage-2 budget
-  checkpoint: decoder fixed for all downstream stages
+  op_ablation_runs:        # was stage_3_within_block_ops; note: all FINN-native (RTL SWG)
+    on: Stage-1 E1 baseline (not the decoder-pick winner — two independent
+        batches). 3 runs, no redundant "all-ops-on" rerun (E1's own Stage-1
+        row is the baseline for comparison).
+    ablate_one_per_run:
+      - {disable: dilated,    replace: 3x3}
+      - {disable: asymmetric, replace: 3x3}
+      - {disable: strided,    replace: "maxpool+conv (downsampling mechanism, not a kernel-shape swap — see ENet.py/foundation_log.md)"}
+    keep_op_if: earns its params/FLOP cost given goals
+  checkpoint: decoder_type + op flags fixed (-> Cfinal_ops) for all downstream stages
 
 early_probes:              # run in PARALLEL with stage_2; not on critical path
   p1_finn_resource_probe:
@@ -117,6 +143,14 @@ early_probes:              # run in PARALLEL with stage_2; not on critical path
     report: [est_lut, est_bram, est_dsp, est_latency_ms, fits_bool]
     outcome: if it does not fit, revise Stage-1 goals BEFORE interpreting the grid
     cost: ~1 day, no training
+    status: HALF DONE. compression/finn_resource_probe.py + QuantENet.py built
+            and verified — Brevitas U8@INT8 QuantENet constructs, forward-passes,
+            passes a topology-parity check against ENet.py, and exports to QONNX
+            (passes onnx.checker). The FINN estimate step itself (no Vivado/Vitis
+            needed — DataflowOutputType.ESTIMATE_REPORTS) is NOT yet run: FINN
+            only officially runs inside its own dedicated Docker container
+            (separate from Vivado/Vitis AND from this repo's training container),
+            not set up yet. Re-run finn_resource_probe.py once that's available.
   p2_quantization_probe:
     purpose: characterise quantization early — near-orthogonal to structure, and
              it determines how much param budget is actually needed
@@ -163,24 +197,24 @@ stage_2_architecture_grid:      # FILTERS x BOTTLENECKS, JOINT
 
 stage_2b_seed_variance:
   priority: DEFERRED, budget permitting. Wait for use cue to run.
-  purpose: grid cells are single-seed point estimates across ~15 configs;
-           without variance, small differences are uninterpretable and the
-           winner is partly selection luck
-  action: 3 seeds each on 2-3 configs (E1, Cfinal_arch, one adjacent cell)
+  purpose: NOT an ENet sensitivity study (out of scope — goal is the best
+           deployable model, not general analysis of ENet). Narrow purpose:
+           confirm the one selected Cfinal_arch isn't a single-seed lucky
+           outlier before committing to it for Stage 4.
+  action: 2 ADDITIONAL seeds on Cfinal_arch ONLY (3 total incl. its original
+          grid run) — not E1, not an adjacent cell. Cut from the original
+          3-configs-x-3-seeds (6-9 runs) plan: excessive for a full-size net
+          given the actual goal.
   report: [per_seed_dice, mean, std]
-  use: state noise floor ("differences below ±X Dice not interpreted");
-       re-read the grid against it; if margin is within noise, break tie on cost
-  checkpoint: report noise floor before stage_3
+  use: if std is small relative to the Stage-1 goal margins, proceed with
+       confidence; if not, that's itself useful signal before Stage 4 QAT
+       locks in this architecture
+  checkpoint: report before stage_4
 
 stage_3_within_block_ops:
-  on: Cfinal_arch
-  note: all FINN-native (RTL SWG).
-  ablate_one_per_run:
-    - {disable: dilated,    replace: 3x3}
-    - {disable: asymmetric, replace: 3x3}
-    - {disable: strided,    replace: 3x3}
-  keep_op_if: earns its params/FLOP cost given goals
-  checkpoint: -> Cfinal_ops
+  status: REMOVED — merged into stage_1b_decoder_topology above (see its
+          op_ablation_runs). Kept as a placeholder heading only, for
+          traceability against the original .md/yaml numbering.
 
 stage_4_quantization:
   framework: Brevitas QAT
@@ -191,19 +225,32 @@ stage_4_quantization:
                 stage_2 rather than freezing Cfinal_ops
 
 stage_5_finn_folding:
+  status: SKIPPED for now — needs Vivado/Vitis (not on this PC yet) and
+          FINN's own Docker container (also not set up). Revisit once both
+          are available; see early_probes.p1_finn_resource_probe for the
+          analytical-estimate-only slice of this that IS being pursued now.
   action: QONNX -> FINN; per-layer PE×SIMD for latency<10ms and ZU7EV fit
   report: [LUT, FF, DSP, BRAM, latency_ms, fits_bool]
   note: include per-image z-norm frame buffer in latency budget
 
-execution_order: [foundation_tasks, stage_0_validation, stage_1_baselines,
+execution_order: [foundation_tasks, stage_1_baselines,
                   stage_1b_decoder_topology, stage_2_architecture_grid,
-                  stage_2b_seed_variance, stage_3_within_block_ops,
-                  stage_4_quantization, stage_5_finn_folding]
+                  stage_2b_seed_variance, stage_4_quantization]
+                  # stage_3 merged into stage_1b_decoder_topology (see above).
+                  # stage_5_finn_folding: SKIPPED for now (no Vivado/Vitis;
+                  # FINN's own Docker container not set up either) — full
+                  # synthesis/folding stays out of scope, but its analytical
+                  # resource-estimate half is being pursued early via
+                  # early_probes.p1_finn_resource_probe instead.
+                  # smoke_test_policy is not a discrete stage; it runs
+                  # pre-flight before each of the stages above (see policy)
 
 parallel_track: [early_probes]    # P1/P2 run alongside stage_2, do not block it
 
 reminders:
   - HALT at each stage checkpoint and report; do not auto-continue
+  - run a pre-flight smoke test before each stage's full sweep, per
+    smoke_test_policy — no single upfront Stage 0 gate
   - stage_2 grid cells are independent — run as ONE parallel batch
   - Dice gates; clDice and nr. components logged but not gating
   - round channel counts UP to multiples of 4

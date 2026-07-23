@@ -1,0 +1,3 @@
+config_name,stage,f_i,f1,f2,f3,f4,f5,bottlenecks_per_stage,decoder_type,ops_flags,quant_bits,params,flops,bops,dice,cldice,n_components,epochs,converged_flag,seed
+nnUNetTrainerENet_E1,stage1,20,72,144,144,72,20,"4,8,8,2,1",max_unpool,"dilated=1,asymmetric=1,strided=1,dsc=0",32,466294,12156731392.0,,0.7745741007385877,0.7781628972430422,4.293333333333333,130,True,0
+nnUNetTrainerENet_Original,stage1,16,64,128,128,64,16,"4,8,8,2,1",max_unpool,"dilated=1,asymmetric=1,strided=1,dsc=0",32,369497,9605349376.0,,0.7800019869577919,0.7859552680941504,4.006666666666667,148,False,0

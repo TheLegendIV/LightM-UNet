@@ -1,0 +1,77 @@
+#!/bin/bash
+#SBATCH --job-name=upscale_pareto
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=01:30:00
+#SBATCH --array=0-44
+#SBATCH --output=logs/%x_%a_%j.out
+#SBATCH --error=logs/%x_%a_%j.err
+
+set -e
+
+# Upscale pareto sweep -- 15-epoch pareto-front search over ENet.py's own
+# channels/bottlenecks_per_stage, pushed UP from Original, run BEFORE the
+# 37-run compression pipeline (see upscale/README.md). One task per
+# experiment: 15 max_unpool channel combos (MU01..MU15) + 15 upsample_conv
+# channel combos (UC01..UC15) + 15 bottleneck-depth combos (BD01..BD15),
+# see upscale/run_upscale_pareto.py's EXPERIMENTS table -- all 45 tasks are
+# independent, dedicated nnUNet_results roots per task so they don't
+# collide. IDs are read from the script itself (not hardcoded here) so
+# there's one source of truth for the experiment table.
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+cd "$HOME/LightM-UNet/upscale"
+mapfile -t CONFIG_IDS < <(python -c "from run_upscale_pareto import EXPERIMENTS; print('\n'.join(e['id'] for e in EXPERIMENTS))")
+TASK_ID=${SLURM_ARRAY_TASK_ID}
+CONFIG_ID="${CONFIG_IDS[$TASK_ID]}"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Array task: ${TASK_ID} -> ${CONFIG_ID}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$HOME/LightM-UNet/data/nnUNet_preprocessed/Dataset501_ARCADE/nnUNetPlans.json" ]; then
+    export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+    export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+    export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+    nnUNetv2_plan_and_preprocess -d 501 --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$HOME/LightM-UNet/data/nnUNet_raw/Dataset501_ARCADE/splits_final.json" ]; then
+    cp "$HOME/LightM-UNet/data/nnUNet_raw/Dataset501_ARCADE/splits_final.json" \
+       "$HOME/LightM-UNet/data/nnUNet_preprocessed/Dataset501_ARCADE/splits_final.json"
+fi
+
+echo "=== Running upscale pareto sweep task: ${CONFIG_ID} ==="
+python run_upscale_pareto.py --configs "${CONFIG_ID}" --epochs 15
+
+echo "Done: ${CONFIG_ID}."

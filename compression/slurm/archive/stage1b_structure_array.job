@@ -1,0 +1,139 @@
+#!/bin/bash
+#SBATCH --job-name=stage1b_structure
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+#SBATCH --array=0-4
+#SBATCH --output=logs/%x_%a_%j.out
+#SBATCH --error=logs/%x_%a_%j.err
+
+set -e
+
+# Stage 1b -- structure lock (decoder topology + op-type ablation, merged
+# with the former Stage 3; see agent_instructions_1.yaml's
+# stage_1b_decoder_topology). Assumes Stage 1 (enet_paper, E1, both
+# max_unpool) already trained. 5 independent tasks, all built directly off
+# the Stage-1 E1 baseline (20,72,144,72,20 / bottlenecks 4,8,8,2,1) -- not
+# chained to each other:
+#   0: e1_unpool    -- decoder pick, arm 1 (matches Stage-1 E1's own decoder)
+#   1: e1_upsample  -- decoder pick, arm 2
+#   2: no_dilated   -- op ablation, on max_unpool (E1's trained decoder)
+#   3: no_asymmetric
+#   4: no_strided
+#
+# Run compression/smoke_test.sh once BEFORE submitting this array (per
+# smoke_test_policy) -- not embedded per-task here, that would repeat the
+# same pipeline check 5x for no benefit once the pipeline is already known
+# to run on this cluster/dataset.
+#
+# Skips training if a final/best checkpoint already exists for that task's
+# RUN_NAME (array job re-submitted after a partial failure, or this
+# particular config happens to already exist) -- goes straight to
+# collect_results.py instead of re-training, per agent_instructions_1.yaml's
+# "don't re-run existing runs" note.
+
+DATASET_ID=501
+DATASET_NAME="Dataset501_ARCADE"
+
+# -- Per-task config, indexed by SLURM_ARRAY_TASK_ID --------------------------
+RUN_NAMES=(stage1b_e1_unpool stage1b_e1_upsample stage1b_no_dilated stage1b_no_asymmetric stage1b_no_strided)
+DECODER_TYPES=(max_unpool upsample_conv max_unpool max_unpool max_unpool)
+USE_DILATED=(1 1 0 1 1)
+USE_ASYMMETRIC=(1 1 1 0 1)
+USE_STRIDED=(1 1 1 1 0)
+
+TASK_ID=${SLURM_ARRAY_TASK_ID}
+RUN_NAME=${RUN_NAMES[$TASK_ID]}
+TRAINER_CLASS="nnUNetTrainerENet"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- ENet trainer knobs, all 5 tasks share E1's channels/bottlenecks ---------
+export ENET_CHANNELS="20,72,144,72,20"
+export ENET_BOTTLENECKS="4,8,8,2,1"
+export ENET_DECODER_TYPE="${DECODER_TYPES[$TASK_ID]}"
+export ENET_USE_DILATED="${USE_DILATED[$TASK_ID]}"
+export ENET_USE_ASYMMETRIC="${USE_ASYMMETRIC[$TASK_ID]}"
+export ENET_USE_STRIDED="${USE_STRIDED[$TASK_ID]}"
+export ENET_EPOCHS=150
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Array task: ${TASK_ID} -> ${RUN_NAME}"
+echo "ENET_CHANNELS=${ENET_CHANNELS} ENET_BOTTLENECKS=${ENET_BOTTLENECKS}"
+echo "ENET_DECODER_TYPE=${ENET_DECODER_TYPE}"
+echo "ENET_USE_DILATED=${ENET_USE_DILATED} ENET_USE_ASYMMETRIC=${ENET_USE_ASYMMETRIC} ENET_USE_STRIDED=${ENET_USE_STRIDED}"
+echo "Output folder: ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Checking for an existing checkpoint for ${RUN_NAME} ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ] || [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_best.pth" ]; then
+    echo "Checkpoint already exists at ${ENET_OUTPUT_FOLDER} -- skipping training, going straight to collect_results.py."
+else
+    echo "=== Start training: ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+    echo "Training finished for ${RUN_NAME}."
+
+    echo "=== Archiving checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+fi
+
+echo "=== Collecting results into compression/results.csv ==="
+cd "$HOME/LightM-UNet"
+python compression/collect_results.py \
+    --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+    --stage stage1b \
+    --channels "${ENET_CHANNELS}" \
+    --bottlenecks "${ENET_BOTTLENECKS}" \
+    --decoder-type "${ENET_DECODER_TYPE}" \
+    --use-dilated "${ENET_USE_DILATED}" \
+    --use-asymmetric "${ENET_USE_ASYMMETRIC}" \
+    --use-strided "${ENET_USE_STRIDED}" \
+    --trainer-class "${TRAINER_CLASS}"
+
+echo "Done: ${RUN_NAME}."

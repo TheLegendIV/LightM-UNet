@@ -1,8 +1,29 @@
 from __future__ import annotations
 
+from typing import Literal
+
 import torch
 from torch import nn
 import torch.nn.functional as F
+
+DecoderType = Literal["max_unpool", "upsample_conv"]
+
+# The ENet-native context-stage pattern (Paszke et al.): regular, dilated x2,
+# asymmetric 5x5, dilated x4, regular, dilated x8, asymmetric 5x5, dilated x16.
+# bottlenecks_per_stage truncates this to its first n entries; use_dilated /
+# use_asymmetric downgrade the matching slots to a plain regular bottleneck
+# instead of removing them, so stage depth (n) and op composition are
+# independent knobs.
+CONTEXT_STAGE_PATTERN: tuple[dict, ...] = (
+    {},
+    {"padding": 2, "dilation": 2},
+    {"kernel_size": 5, "padding": 2, "asymmetric": True},
+    {"padding": 4, "dilation": 4},
+    {},
+    {"padding": 8, "dilation": 8},
+    {"kernel_size": 5, "padding": 2, "asymmetric": True},
+    {"padding": 16, "dilation": 16},
+)
 
 
 class InitialBlock(nn.Module):
@@ -30,9 +51,10 @@ class RegularBottleneck(nn.Module):
         asymmetric: bool = False,
         dropout_p: float = 0.1,
         relu: bool = False,
+        use_dsc: bool = False,
     ):
         super().__init__()
-        internal_channels = channels // internal_ratio
+        internal_channels = max(1, channels // internal_ratio)
         activation = nn.ReLU if relu else nn.PReLU
 
         self.reduce = nn.Sequential(
@@ -42,6 +64,12 @@ class RegularBottleneck(nn.Module):
         )
 
         if asymmetric:
+            if use_dsc:
+                raise ValueError(
+                    "use_dsc is not defined for asymmetric bottlenecks -- asymmetric is "
+                    "itself a factorization of the inner conv, not exercised in combination "
+                    "with DSC by any planned experiment. Disable use_asymmetric to use DSC."
+                )
             self.conv = nn.Sequential(
                 nn.Conv2d(
                     internal_channels,
@@ -59,6 +87,20 @@ class RegularBottleneck(nn.Module):
                     padding=(0, padding),
                     bias=False,
                 ),
+            )
+        elif use_dsc:
+            # Depthwise separable: depthwise k x k (groups=internal_channels,
+            # one filter per channel, no cross-channel mixing) + pointwise
+            # 1x1 (mixes channels back). Standard MobileNet-style
+            # factorization of the plain/dilated regular conv -- dilation
+            # still applies to the depthwise stage, pointwise is unaffected
+            # by it.
+            self.conv = nn.Sequential(
+                nn.Conv2d(
+                    internal_channels, internal_channels, kernel_size=kernel_size,
+                    padding=padding, dilation=dilation, groups=internal_channels, bias=False,
+                ),
+                nn.Conv2d(internal_channels, internal_channels, kernel_size=1, bias=False),
             )
         else:
             self.conv = nn.Conv2d(
@@ -90,15 +132,34 @@ class RegularBottleneck(nn.Module):
 
 
 class DownsamplingBottleneck(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, internal_ratio: int = 4, dropout_p: float = 0.01):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        internal_ratio: int = 4,
+        dropout_p: float = 0.01,
+        use_strided: bool = True,
+    ):
         super().__init__()
-        internal_channels = out_channels // internal_ratio
+        internal_channels = max(1, out_channels // internal_ratio)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2, return_indices=True)
-        self.reduce = nn.Sequential(
-            nn.Conv2d(in_channels, internal_channels, kernel_size=2, stride=2, bias=False),
-            nn.BatchNorm2d(internal_channels),
-            nn.PReLU(internal_channels),
-        )
+        if use_strided:
+            # Spatial downsampling folded into the reduce conv itself (single
+            # stride-2 2x2 conv) -- the ENet-native / FINN-favoured path.
+            self.reduce = nn.Sequential(
+                nn.Conv2d(in_channels, internal_channels, kernel_size=2, stride=2, bias=False),
+                nn.BatchNorm2d(internal_channels),
+                nn.PReLU(internal_channels),
+            )
+        else:
+            # Stage-1b ablation: separate maxpool (no learned downsampling)
+            # followed by a stride-1 1x1 conv, instead of a strided conv.
+            self.reduce = nn.Sequential(
+                nn.MaxPool2d(kernel_size=2, stride=2),
+                nn.Conv2d(in_channels, internal_channels, kernel_size=1, bias=False),
+                nn.BatchNorm2d(internal_channels),
+                nn.PReLU(internal_channels),
+            )
         self.conv = nn.Sequential(
             nn.Conv2d(internal_channels, internal_channels, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(internal_channels),
@@ -125,6 +186,15 @@ class DownsamplingBottleneck(nn.Module):
                 device=main.device,
             )
             main = torch.cat([main, padding], dim=1)
+        elif main.shape[1] > self.out_channels:
+            # Several compression-sweep filter configs (U8/U16/UF) have
+            # stage1_channels < initial_channels, i.e. this block's main
+            # branch must shrink rather than grow -- the paper's ENet never
+            # does this (channels only ever expand downsampling in from 16),
+            # so this case didn't exist before the sweep. Truncating keeps
+            # the main branch parameter-free, matching the zero-pad case's
+            # "no learned params on the identity path" design.
+            main = main[:, : self.out_channels]
 
         out = self.reduce(x)
         out = self.conv(out)
@@ -135,7 +205,7 @@ class DownsamplingBottleneck(nn.Module):
 class UpsamplingBottleneck(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, internal_ratio: int = 4, relu: bool = True):
         super().__init__()
-        internal_channels = in_channels // internal_ratio
+        internal_channels = max(1, in_channels // internal_ratio)
         self.main_proj = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False),
             nn.BatchNorm2d(out_channels),
@@ -178,7 +248,7 @@ class UpsamplingBottleneck(nn.Module):
                 main = self.unpool(main, indices, output_size=output_size)
             except RuntimeError as error:
                 raise RuntimeError(
-                    "ENet max-unpool failed. The paper-faithful decoder requires the nnU-Net "
+                    "ENet max-unpool failed. The max_unpool decoder requires the nnU-Net "
                     "patch size to align with ENet's pooling/unpooling path. For this architecture, use "
                     "2D patch sizes whose spatial dimensions stay compatible after the initial stride-2 "
                     "block and two bottleneck downsamplings, such as 512x512. "
@@ -190,8 +260,8 @@ class UpsamplingBottleneck(nn.Module):
         out = self.dropout(self.expand(out))
         if out.shape[2:] != main.shape[2:]:
             raise RuntimeError(
-                "ENet upsampling branch shape mismatch. The paper-faithful decoder produced "
-                f"conv-transpose shape {tuple(out.shape)} but max-unpool main branch shape "
+                "ENet upsampling branch shape mismatch. The decoder produced "
+                f"conv-transpose shape {tuple(out.shape)} but main branch shape "
                 f"{tuple(main.shape)}. This usually means the nnU-Net patch size is not compatible "
                 "with ENet's fixed downsampling/upsampling stages."
             )
@@ -203,46 +273,129 @@ class ENet(nn.Module):
         self,
         in_channels: int = 1,
         out_channels: int = 4,
-        channels: tuple[int, int, int, int, int] = (20, 72, 144, 72, 20),
+        channels: tuple[int, ...] = (20, 72, 144, 72, 20),
+        bottlenecks_per_stage: tuple[int, int, int, int, int] = (4, 8, 8, 2, 1),
+        decoder_type: DecoderType = "max_unpool",
+        use_dilated: bool = True,
+        use_asymmetric: bool = True,
+        use_strided: bool = True,
+        use_dsc: bool = False,
     ):
         super().__init__()
-        if len(channels) != 5:
-            raise ValueError("ENet expects five channel values: initial, stage1, stage2/3, stage4, stage5.")
-        initial_channels, stage1_channels, stage23_channels, stage4_channels, stage5_channels = channels
-        if stage1_channels % 4 != 0 or stage23_channels % 4 != 0 or stage4_channels % 4 != 0 or stage5_channels % 4 != 0:
+        if len(channels) == 5:
+            # stage2 and stage3 share one width (the historical/default
+            # convention throughout this project's compression sweep).
+            initial_channels, stage1_channels, stage2_channels, stage4_channels, stage5_channels = channels
+            stage3_channels = stage2_channels
+        elif len(channels) == 6:
+            # Split stage2/stage3 widths -- (initial, stage1, stage2, stage3,
+            # stage4, stage5). Only used by upscale/'s combinatorial sweep so
+            # far; unrelated to max_unpool's f_i==f5/f1==f4 constraint (that
+            # constraint comes from down1/down2's pooling INPUT widths --
+            # initial_channels and stage1_channels -- matching up5/up4's
+            # projected OUTPUT widths, never stage2/stage3, which sit
+            # entirely between down2 and up4 with no pooling of their own).
+            initial_channels, stage1_channels, stage2_channels, stage3_channels, stage4_channels, stage5_channels = channels
+        else:
+            raise ValueError(
+                "ENet expects five channel values (initial, stage1, stage2/3, stage4, stage5), or six if "
+                "stage2/stage3 widths are split (initial, stage1, stage2, stage3, stage4, stage5)."
+            )
+        if len(bottlenecks_per_stage) != 5:
+            raise ValueError(
+                "ENet expects five bottleneck-count values: stage1, stage2, stage3, stage4(regular4), "
+                "stage5(regular5)."
+            )
+        if (stage1_channels % 4 != 0 or stage2_channels % 4 != 0 or stage3_channels % 4 != 0
+                or stage4_channels % 4 != 0 or stage5_channels % 4 != 0):
             raise ValueError("ENet stage channels must be divisible by 4 for bottleneck reduction.")
         if initial_channels <= in_channels:
             raise ValueError("ENet initial channels must exceed input channels.")
+        if decoder_type not in ("max_unpool", "upsample_conv"):
+            raise ValueError(f"decoder_type must be 'max_unpool' or 'upsample_conv', got {decoder_type!r}.")
 
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.channels = tuple(int(channel) for channel in channels)
+        self.bottlenecks_per_stage = tuple(int(n) for n in bottlenecks_per_stage)
+        self.decoder_type: DecoderType = decoder_type
+        self.use_dilated = use_dilated
+        self.use_asymmetric = use_asymmetric
+        self.use_strided = use_strided
+        self.use_dsc = use_dsc
+
+        n_stage1, n_stage2, n_stage3, n_regular4, n_regular5 = self.bottlenecks_per_stage
 
         self.initial = self._build_initial_block(in_channels, initial_channels)
-        self.down1 = DownsamplingBottleneck(initial_channels, stage1_channels, dropout_p=0.01)
-        self.regular1 = nn.Sequential(*[RegularBottleneck(stage1_channels, dropout_p=0.01) for _ in range(4)])
+        self.down1 = DownsamplingBottleneck(
+            initial_channels, stage1_channels, dropout_p=0.01, use_strided=use_strided,
+        )
+        self.regular1 = nn.Sequential(
+            *[RegularBottleneck(stage1_channels, dropout_p=0.01, use_dsc=use_dsc) for _ in range(n_stage1)]
+        )
 
-        self.down2 = DownsamplingBottleneck(stage1_channels, stage23_channels, dropout_p=0.1)
-        def make_context_stage() -> nn.Sequential:
-            return nn.Sequential(
-                RegularBottleneck(stage23_channels, dropout_p=0.1),
-                RegularBottleneck(stage23_channels, padding=2, dilation=2, dropout_p=0.1),
-                RegularBottleneck(stage23_channels, kernel_size=5, padding=2, asymmetric=True, dropout_p=0.1),
-                RegularBottleneck(stage23_channels, padding=4, dilation=4, dropout_p=0.1),
-                RegularBottleneck(stage23_channels, dropout_p=0.1),
-                RegularBottleneck(stage23_channels, padding=8, dilation=8, dropout_p=0.1),
-                RegularBottleneck(stage23_channels, kernel_size=5, padding=2, asymmetric=True, dropout_p=0.1),
-                RegularBottleneck(stage23_channels, padding=16, dilation=16, dropout_p=0.1),
+        self.down2 = DownsamplingBottleneck(
+            stage1_channels, stage2_channels, dropout_p=0.1, use_strided=use_strided,
+        )
+        self.stage2 = self._make_context_stage(stage2_channels, n_stage2)
+        self.proj2_to_3 = (
+            nn.Identity()
+            if stage2_channels == stage3_channels
+            else nn.Sequential(
+                nn.Conv2d(stage2_channels, stage3_channels, kernel_size=1, bias=False),
+                nn.BatchNorm2d(stage3_channels),
+                nn.PReLU(stage3_channels),
             )
+        )
+        self.stage3 = self._make_context_stage(stage3_channels, n_stage3)
 
-        self.stage2 = make_context_stage()
-        self.stage3 = make_context_stage()
-        self.up4 = UpsamplingBottleneck(stage23_channels, stage4_channels)
-        self.regular4 = nn.Sequential(RegularBottleneck(stage4_channels, dropout_p=0.1, relu=True),
-                                      RegularBottleneck(stage4_channels, dropout_p=0.1, relu=True))
+        self.up4 = UpsamplingBottleneck(stage3_channels, stage4_channels)
+        self.regular4 = nn.Sequential(
+            *[RegularBottleneck(stage4_channels, dropout_p=0.1, relu=True, use_dsc=use_dsc) for _ in range(n_regular4)]
+        )
         self.up5 = UpsamplingBottleneck(stage4_channels, stage5_channels)
-        self.regular5 = RegularBottleneck(stage5_channels, dropout_p=0.1, relu=True)
+        self.regular5 = nn.Sequential(
+            *[RegularBottleneck(stage5_channels, dropout_p=0.1, relu=True, use_dsc=use_dsc) for _ in range(n_regular5)]
+        )
         self.final = nn.ConvTranspose2d(stage5_channels, out_channels, kernel_size=2, stride=2)
+
+    def load_state_dict(self, state_dict, strict: bool = True):
+        """Migrates checkpoints trained before regular5 became parametric
+        (bottlenecks_per_stage) -- it used to be a single bare
+        RegularBottleneck ("regular5.reduce...."), not an
+        nn.Sequential ("regular5.0.reduce...."). Stage 1's baselines
+        (E1/enet_paper) predate that change. Pure rename, not an
+        architecture change (identical computation when regular5 has
+        exactly 1 rep, which both do) -- migrate rather than refuse to
+        load real completed training runs. regular1/regular4 were already
+        Sequential-wrapped before this session's changes, so they need no
+        migration.
+        """
+        migrated = {}
+        for key, value in state_dict.items():
+            parts = key.split(".")
+            if len(parts) > 1 and parts[0] == "regular5" and not parts[1].isdigit():
+                key = "regular5.0." + ".".join(parts[1:])
+            migrated[key] = value
+        return super().load_state_dict(migrated, strict=strict)
+
+    def _make_context_stage(self, channels: int, n_ops: int) -> nn.Sequential:
+        """Builds an n_ops-long context stage from the first n_ops entries of
+        CONTEXT_STAGE_PATTERN. use_dilated/use_asymmetric downgrade the
+        matching slots to a plain regular bottleneck rather than dropping
+        them, so stage depth and op composition stay independent knobs
+        (Stage 2 sweeps depth; Stage 1b's op ablation sweeps composition).
+        use_dsc factorizes whatever inner conv results (plain or dilated --
+        not asymmetric, RegularBottleneck rejects that combination)."""
+        ops = []
+        for i in range(n_ops):
+            kwargs = dict(CONTEXT_STAGE_PATTERN[i % len(CONTEXT_STAGE_PATTERN)])
+            if kwargs.get("dilation", 1) != 1 and not self.use_dilated:
+                kwargs = {}
+            if kwargs.get("asymmetric", False) and not self.use_asymmetric:
+                kwargs = {}
+            ops.append(RegularBottleneck(channels, dropout_p=0.1, use_dsc=self.use_dsc, **kwargs))
+        return nn.Sequential(*ops)
 
     def _build_initial_block(self, in_channels: int, initial_channels: int) -> nn.Module:
         """Overridable hook so subclasses can swap in a different first stage
@@ -259,12 +412,111 @@ class ENet(nn.Module):
         x = self.regular1(x)
         x, indices2, size2 = self.down2(x)
         x = self.stage2(x)
+        x = self.proj2_to_3(x)
         x = self.stage3(x)
-        x = self.up4(x, size2, indices2)
+        use_indices = self.decoder_type == "max_unpool"
+        x = self.up4(x, size2, indices2 if use_indices else None)
         x = self.regular4(x)
-        x = self.up5(x, size1, indices1)
+        x = self.up5(x, size1, indices1 if use_indices else None)
         x = self.regular5(x)
         x = self.final(x)
         if x.shape[2:] != input_size:
             x = F.interpolate(x, size=input_size, mode="bilinear", align_corners=False)
         return x
+
+
+if __name__ == "__main__":
+    # Foundation self-test: every filter config x bottleneck-depth x decoder
+    # type x op-flag combination that the compression sweep plans to build
+    # must at least construct and do one forward pass without shape errors.
+    # Covers the max(1,.) clamp at the UF floor (4-channel stages) and the
+    # decoder_type/use_strided wiring added for Stage 1b.
+    torch.manual_seed(0)
+
+    filter_configs = {
+        "E1": (20, 72, 144, 72, 20),
+        "U2": (20, 36, 72, 36, 12),
+        "U4": (20, 20, 36, 20, 8),
+        "U8": (20, 12, 20, 12, 4),
+        "U16": (20, 8, 12, 8, 4),
+        "UF": (20, 4, 4, 4, 4),
+    }
+    bottleneck_configs = {
+        "enet_native": (4, 8, 8, 2, 1),
+        "5": (4, 5, 5, 2, 1),
+        "3": (4, 3, 3, 2, 1),
+        "2": (4, 2, 2, 2, 1),
+    }
+    op_flag_combos = [
+        (True, True, True),
+        (False, True, True),
+        (True, False, True),
+        (True, True, False),
+    ]
+
+    def symmetric(channels: tuple[int, int, int, int, int]) -> bool:
+        # max_unpool needs MaxUnpool2d's indices channel count to match the
+        # decoder stage they're applied at: initial==stage5, stage1==stage4.
+        # Only E1/enet_paper-style symmetric configs satisfy this; the
+        # Stage-2 filter axis (U2..UF) intentionally does not (f5 != f_i for
+        # every row past E1) -- that axis is only valid under
+        # upsample_conv, which is exactly why Stage 1b fixes the decoder
+        # before Stage 2's grid runs.
+        return channels[0] == channels[4] and channels[1] == channels[3]
+
+    dummy = torch.zeros(1, 1, 512, 512)
+    n_tested = 0
+    n_skipped_asymmetric_max_unpool = 0
+    for filter_name, channels in filter_configs.items():
+        for bneck_name, bnecks in bottleneck_configs.items():
+            for decoder_type in ("max_unpool", "upsample_conv"):
+                if decoder_type == "max_unpool" and not symmetric(channels):
+                    n_skipped_asymmetric_max_unpool += 1
+                    continue
+                for use_dilated, use_asymmetric, use_strided in op_flag_combos:
+                    model = ENet(
+                        in_channels=1,
+                        out_channels=2,
+                        channels=channels,
+                        bottlenecks_per_stage=bnecks,
+                        decoder_type=decoder_type,
+                        use_dilated=use_dilated,
+                        use_asymmetric=use_asymmetric,
+                        use_strided=use_strided,
+                    ).eval()
+                    with torch.no_grad():
+                        out = model(dummy)
+                    assert out.shape == (1, 2, 512, 512), (
+                        f"{filter_name}/{bneck_name}/{decoder_type}/"
+                        f"d{use_dilated}a{use_asymmetric}s{use_strided}: got {tuple(out.shape)}"
+                    )
+                    n_tested += 1
+    print(f"ENet self-test PASSED: {n_tested} configs built and forward-passed at 512x512.")
+    print(
+        f"({n_skipped_asymmetric_max_unpool} max_unpool combos skipped: asymmetric "
+        "filter config, only valid under upsample_conv.)"
+    )
+
+    # 6-tuple split-stage2/stage3 self-test (upscale/'s combinatorial sweep):
+    # confirms proj2_to_3 handles both directions (grow and shrink between
+    # stage2 and stage3), and that the split is orthogonal to max_unpool's
+    # f_i==f5/f1==f4 constraint -- only stage1/initial widths matter there,
+    # never stage2/stage3 (see __init__'s comment on the 6-tuple branch).
+    split_configs = {
+        "split_grow_max_unpool": (20, 72, 96, 144, 72, 20),   # f_i=f5, f1=f4, f2<f3
+        "split_shrink_max_unpool": (20, 72, 144, 96, 72, 20),  # f_i=f5, f1=f4, f2>f3
+        "split_asymmetric_upsample_conv": (20, 36, 72, 144, 96, 12),  # fully asymmetric
+    }
+    n_split_tested = 0
+    for name, channels6 in split_configs.items():
+        decoder_type = "max_unpool" if "max_unpool" in name else "upsample_conv"
+        model = ENet(
+            in_channels=1, out_channels=2, channels=channels6,
+            bottlenecks_per_stage=(4, 8, 8, 2, 1), decoder_type=decoder_type,
+        ).eval()
+        with torch.no_grad():
+            out = model(dummy)
+        assert out.shape == (1, 2, 512, 512), f"{name}: got {tuple(out.shape)}"
+        assert not isinstance(model.proj2_to_3, torch.nn.Identity), f"{name}: expected a real projection, got Identity"
+        n_split_tested += 1
+    print(f"ENet 6-tuple split-stage2/3 self-test PASSED: {n_split_tested} configs.")

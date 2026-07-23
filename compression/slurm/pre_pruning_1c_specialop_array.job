@@ -1,0 +1,128 @@
+#!/bin/bash
+#SBATCH --job-name=pre_pruning_1c_specialop
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+#SBATCH --array=0-4
+#SBATCH --output=logs/%x_%a_%j.out
+#SBATCH --error=logs/%x_%a_%j.err
+
+set -e
+
+# Section 1c -- special-op ablation on O4 (Original-derived reference pick,
+# see foundation_log.md's "Plan revision 2"; native bottlenecks,
+# upsample_conv, per cfinal_ops.env). Q: how impactful is each special op
+# on Dice, and does
+# DSC provide savings while maintaining accuracy?
+#   0: no_dilated    (use_dilated=0, others on)
+#   1: no_asymmetric (use_asymmetric=0, others on)
+#   2: no_strided    (use_strided=0, others on)
+#   3: none          (all three off)
+#   4: none_dsc      (all three off, use_dsc=1 -- DSC on every inner conv)
+# Baseline ("all on") is 1a's seed=0 run -- not retrained here.
+
+DATASET_ID=501
+DATASET_NAME="Dataset501_ARCADE"
+
+# name, use_dilated, use_asymmetric, use_strided, use_dsc
+NAMES=(no_dilated no_asymmetric no_strided none none_dsc)
+USE_DILATED=(0 1 1 0 0)
+USE_ASYMMETRIC=(1 0 1 0 0)
+USE_STRIDED=(1 1 0 0 0)
+USE_DSC=(0 0 0 0 1)
+
+TASK_ID=${SLURM_ARRAY_TASK_ID}
+RUN_NAME="1c_${NAMES[$TASK_ID]}"
+TRAINER_CLASS="nnUNetTrainerENet"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- ENet trainer knobs -- O4, native, upsample_conv, op flags vary --------
+export ENET_CHANNELS="16,16,32,16,4"
+export ENET_BOTTLENECKS="4,8,8,2,1"
+export ENET_DECODER_TYPE="upsample_conv"
+export ENET_USE_DILATED="${USE_DILATED[$TASK_ID]}"
+export ENET_USE_ASYMMETRIC="${USE_ASYMMETRIC[$TASK_ID]}"
+export ENET_USE_STRIDED="${USE_STRIDED[$TASK_ID]}"
+export ENET_USE_DSC="${USE_DSC[$TASK_ID]}"
+export ENET_EPOCHS=150
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Array task: ${TASK_ID} -> ${RUN_NAME}"
+echo "ENET_USE_DILATED=${ENET_USE_DILATED} ENET_USE_ASYMMETRIC=${ENET_USE_ASYMMETRIC} ENET_USE_STRIDED=${ENET_USE_STRIDED} ENET_USE_DSC=${ENET_USE_DSC}"
+echo "Output folder: ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Checking for an existing checkpoint for ${RUN_NAME} ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ] || [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_best.pth" ]; then
+    echo "Checkpoint already exists at ${ENET_OUTPUT_FOLDER} -- skipping training, going straight to collect_results.py."
+else
+    echo "=== Start training: ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+    echo "Training finished for ${RUN_NAME}."
+
+    echo "=== Archiving checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+fi
+
+echo "=== Collecting results into compression/results.csv ==="
+cd "$HOME/LightM-UNet"
+python compression/collect_results.py \
+    --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+    --stage 1c_specialop \
+    --channels "${ENET_CHANNELS}" \
+    --bottlenecks "${ENET_BOTTLENECKS}" \
+    --decoder-type "${ENET_DECODER_TYPE}" \
+    --use-dilated "${ENET_USE_DILATED}" \
+    --use-asymmetric "${ENET_USE_ASYMMETRIC}" \
+    --use-strided "${ENET_USE_STRIDED}" \
+    --use-dsc "${ENET_USE_DSC}" \
+    --trainer-class "${TRAINER_CLASS}"
+
+echo "Done: ${RUN_NAME}."

@@ -1,0 +1,6 @@
+stage,resolution,elements_per_channel,note
+f_i,256x256,65536,channels-independent -- total activation memory for this stage = elements_per_channel x channel_width x bytes/element (bytes/element depends on Stage 4's quant_bits; 4 for FP32).
+f1,128x128,16384,channels-independent -- total activation memory for this stage = elements_per_channel x channel_width x bytes/element (bytes/element depends on Stage 4's quant_bits; 4 for FP32).
+f2=f3 (stage23),64x64,4096,channels-independent -- total activation memory for this stage = elements_per_channel x channel_width x bytes/element (bytes/element depends on Stage 4's quant_bits; 4 for FP32).
+f4,128x128,16384,channels-independent -- total activation memory for this stage = elements_per_channel x channel_width x bytes/element (bytes/element depends on Stage 4's quant_bits; 4 for FP32).
+f5,256x256,65536,channels-independent -- total activation memory for this stage = elements_per_channel x channel_width x bytes/element (bytes/element depends on Stage 4's quant_bits; 4 for FP32).

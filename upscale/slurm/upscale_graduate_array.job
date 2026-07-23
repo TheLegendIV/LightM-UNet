@@ -1,0 +1,62 @@
+#!/bin/bash
+#SBATCH --job-name=upscale_graduate
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+#SBATCH --array=0-1
+#SBATCH --output=logs/%x_%a_%j.out
+#SBATCH --error=logs/%x_%a_%j.err
+
+set -e
+
+# Graduate winners picked off upscale/results/pareto_e15/summary.csv +
+# pareto_final_dice.png (manual inspection, per this study's "dirty" pareto
+# methodology -- see upscale/README.md) to full-length (150-epoch) training.
+#
+# EDIT WINNER_IDS below to match what you picked from the pareto front
+# before submitting -- default array size (0-1) assumes 2 winners; adjust
+# both WINNER_IDS and --array to match how many you're graduating.
+
+WINNER_IDS=(MU05 UC03)
+TASK_ID=${SLURM_ARRAY_TASK_ID}
+CONFIG_ID="${WINNER_IDS[$TASK_ID]}"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Array task: ${TASK_ID} -> graduating ${CONFIG_ID}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet"
+
+echo "=== Graduating ${CONFIG_ID} to 150 epochs ==="
+python upscale/graduate.py --configs "${CONFIG_ID}" --epochs 150
+
+echo "Done: ${CONFIG_ID}."

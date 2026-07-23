@@ -1,0 +1,120 @@
+#!/bin/bash
+#SBATCH --job-name=pre_pruning_1b_maxunpool
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+#SBATCH --array=0-1
+#SBATCH --output=logs/%x_%a_%j.out
+#SBATCH --error=logs/%x_%a_%j.err
+
+set -e
+
+# Section 1b -- verify the max-unpool removal choice. Q: how impactful is
+# max-unpool on Dice? O4 (Original-derived reference pick, see
+# foundation_log.md's "Plan revision 2") with f5 raised to match f_i
+# (16,16,32,16,16) -- the ONLY way to make O4 satisfy max_unpool's f_i==f5
+# (and f1==f4, already true) symmetry requirement (see foundation_log.md
+# finding #2), so the comparison is a clean paired ablation: same
+# channels/bottlenecks, only decoder_type differs between the two tasks.
+#   0: max_unpool
+#   1: upsample_conv
+
+DATASET_ID=501
+DATASET_NAME="Dataset501_ARCADE"
+
+DECODER_TYPES=(max_unpool upsample_conv)
+TASK_ID=${SLURM_ARRAY_TASK_ID}
+DECODER_TYPE="${DECODER_TYPES[$TASK_ID]}"
+RUN_NAME="1b_O4sym_${DECODER_TYPE}"
+TRAINER_CLASS="nnUNetTrainerENet"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- ENet trainer knobs -- O4_sym (f5 raised to match f_i), all ops on ------
+export ENET_CHANNELS="16,16,32,16,16"
+export ENET_BOTTLENECKS="4,8,8,2,1"
+export ENET_DECODER_TYPE="${DECODER_TYPE}"
+export ENET_USE_DILATED=1
+export ENET_USE_ASYMMETRIC=1
+export ENET_USE_STRIDED=1
+export ENET_USE_DSC=0
+export ENET_EPOCHS=150
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Array task: ${TASK_ID} -> ${RUN_NAME}"
+echo "Output folder: ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Checking for an existing checkpoint for ${RUN_NAME} ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ] || [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_best.pth" ]; then
+    echo "Checkpoint already exists at ${ENET_OUTPUT_FOLDER} -- skipping training, going straight to collect_results.py."
+else
+    echo "=== Start training: ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+    echo "Training finished for ${RUN_NAME}."
+
+    echo "=== Archiving checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+fi
+
+echo "=== Collecting results into compression/results.csv ==="
+cd "$HOME/LightM-UNet"
+python compression/collect_results.py \
+    --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+    --stage 1b_maxunpool \
+    --channels "${ENET_CHANNELS}" \
+    --bottlenecks "${ENET_BOTTLENECKS}" \
+    --decoder-type "${ENET_DECODER_TYPE}" \
+    --use-dilated "${ENET_USE_DILATED}" \
+    --use-asymmetric "${ENET_USE_ASYMMETRIC}" \
+    --use-strided "${ENET_USE_STRIDED}" \
+    --use-dsc "${ENET_USE_DSC}" \
+    --trainer-class "${TRAINER_CLASS}"
+
+echo "Done: ${RUN_NAME}."

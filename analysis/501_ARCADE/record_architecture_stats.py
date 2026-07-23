@@ -33,12 +33,13 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-import torch
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_ROOT = REPO_ROOT / "enet"
 sys.path.insert(0, str(PACKAGE_ROOT))
+sys.path.insert(0, str(REPO_ROOT / "compression"))
 from nnunetv2.nets.ENet import ENet  # noqa: E402
+from utils import count_flops, count_params  # noqa: E402
 
 METRICS_DIR = Path(__file__).resolve().parent / "results"
 DATASET_NAME = "Dataset501_ARCADE"
@@ -63,39 +64,18 @@ def parse_channels(value: str) -> tuple[int, ...]:
     return channels
 
 
-def count_params(model: torch.nn.Module) -> tuple[int, int]:
-    total = sum(p.numel() for p in model.parameters())
-    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    return total, trainable
-
-
 def bottleneck_counts(model: ENet) -> dict[str, int]:
     """Number of bottleneck blocks per stage, read directly off the built
     module tree (not hardcoded), so this stays correct if ENet.py's stage
-    depths ever change."""
+    depths ever change. regular5 became parametric (nn.Sequential) alongside
+    bottlenecks_per_stage -- no longer assumed to always be exactly 1."""
     return {
         "n_bottlenecks_stage1": len(model.regular1),
         "n_bottlenecks_stage2": len(model.stage2),
         "n_bottlenecks_stage3": len(model.stage3),
         "n_bottlenecks_stage4": len(model.regular4),
-        "n_bottlenecks_stage5": 1,  # single RegularBottleneck, not a Sequential
+        "n_bottlenecks_stage5": len(model.regular5),
     }
-
-
-def compute_flops(model: torch.nn.Module, in_channels: int, input_hw: tuple[int, int]):
-    """Returns (macs, flops) or (None, None) if thop isn't installed.
-    thop reports MACs (multiply-accumulates); FLOPs = 2*MACs is the usual
-    convention for reporting a comparable "FLOPs" number."""
-    try:
-        from thop import profile
-    except ImportError:
-        print("thop not installed -- skipping FLOPs (pip install thop, or see requirements-enet-base.txt)")
-        return None, None
-    model = model.eval()
-    dummy = torch.zeros(1, in_channels, *input_hw)
-    with torch.no_grad():
-        macs, _ = profile(model, inputs=(dummy,), verbose=False)
-    return float(macs), float(macs * 2)
 
 
 def read_debug_json(fold_dir: Path) -> dict:
@@ -145,7 +125,7 @@ def main() -> None:
 
     model = ENet(in_channels=args.in_channels, out_channels=args.out_channels, channels=args.channels)
     total_params, trainable_params = count_params(model)
-    macs, flops = compute_flops(model, args.in_channels, tuple(args.input_hw))
+    macs, flops = count_flops(model, args.in_channels, tuple(args.input_hw))
 
     initial_channels, stage1, stage23, stage4, stage5 = args.channels
     stats = {

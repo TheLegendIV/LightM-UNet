@@ -1,0 +1,6 @@
+stage,params_per_bottleneck_at_width4,flops_per_bottleneck_at_width4,note
+s1,35,2424832.0,"exact + linear at width=4 -- N blocks costs exactly N x this, at width=4. Rescale for other widths using the quadratic width relationship below, not linearly."
+s2,35,606208.0,"exact + linear at width=4 -- N blocks costs exactly N x this, at width=4. Rescale for other widths using the quadratic width relationship below, not linearly."
+s3,35,606208.0,"exact + linear at width=4 -- N blocks costs exactly N x this, at width=4. Rescale for other widths using the quadratic width relationship below, not linearly."
+s4,29,2228224.0,"exact + linear at width=4 -- N blocks costs exactly N x this, at width=4. Rescale for other widths using the quadratic width relationship below, not linearly."
+s5,29,8912896.0,"exact + linear at width=4 -- N blocks costs exactly N x this, at width=4. Rescale for other widths using the quadratic width relationship below, not linearly."

@@ -1,0 +1,155 @@
+#!/bin/bash
+#SBATCH --job-name=pruning_2a_grid
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+#SBATCH --array=0-18
+#SBATCH --output=logs/%x_%a_%j.out
+#SBATCH --error=logs/%x_%a_%j.err
+
+set -e
+
+# Section 2a -- pruning grid search: filters x bottleneck-depth patterns,
+# find the smallest model that still keeps the Stage-1 goals.
+#   Filters: O2, O4, O8, O16, OF -- re-derived from ENet ORIGINAL
+#            (16,64,128,64,16), NOT E1. Real test-set results showed
+#            Original beats E1 on Dice (0.780 vs 0.775) while already being
+#            smaller (369k vs 466k params) -- see foundation_log.md's "Plan
+#            revision 2" section for the full derivation. f_i=16 fixed
+#            (Original NOT included as a grid row -- section 1 already
+#            covers it, same as E1 was excluded from the old U-axis).
+#   Bottleneck patterns (stage1,stage2,stage3,regular4,regular5):
+#     native:     (4,8,8,2,1)  -- ENet-native
+#     variant2:   (2,4,4,1,0)  -- encoder /2, decoder -1 each (regular5 empty
+#                                  -- up5 still runs, just no bottleneck reps after it)
+#     variant3:   (1,2,2,0,0)  -- encoder /4, decoder -2 each, clamped at 0
+#                                  (regular4 AND regular5 both empty)
+#     ghielmetti: (3,3,3,3,3)  -- uniform 3 bottlenecks per stage (Ghielmetti
+#                                  et al. methodology)
+#   5 filters x 4 patterns = 20 cells, MINUS (O4, native) -- identical to
+#   section 1a's seed=0 run (same channels/bottlenecks/decoder/ops), reused
+#   rather than retrained. 19 tasks total.
+#
+# decoder_type + op flags (dilated/asymmetric/strided/dsc) come from
+# compression/configs/cfinal_ops.env (section 1b/1c's output) -- edit that
+# file, not this job, once those complete.
+
+DATASET_ID=501
+DATASET_NAME="Dataset501_ARCADE"
+
+source "$HOME/LightM-UNet/compression/configs/cfinal_ops.env"
+
+# -- 19 (filter, bottleneck-pattern) pairs, (O4,native) omitted --------------
+FILTER_NAMES=(O2 O2 O2 O2   O4 O4 O4   O8 O8 O8 O8   O16 O16 O16 O16   OF OF OF OF)
+BNECK_NAMES=(native var2 var3 ghiel   var2 var3 ghiel   native var2 var3 ghiel   native var2 var3 ghiel   native var2 var3 ghiel)
+
+TASK_ID=${SLURM_ARRAY_TASK_ID}
+FILTER_NAME="${FILTER_NAMES[$TASK_ID]}"
+BNECK_NAME="${BNECK_NAMES[$TASK_ID]}"
+
+case "$FILTER_NAME" in
+  O2)  CHANNELS="16,32,64,32,8" ;;
+  O4)  CHANNELS="16,16,32,16,4" ;;
+  O8)  CHANNELS="16,8,16,8,4" ;;
+  O16) CHANNELS="16,4,8,4,4" ;;
+  OF)  CHANNELS="16,4,4,4,4" ;;
+esac
+case "$BNECK_NAME" in
+  native) BNECK_VAL="4,8,8,2,1" ;;
+  var2)   BNECK_VAL="2,4,4,1,0" ;;
+  var3)   BNECK_VAL="1,2,2,0,0" ;;
+  ghiel)  BNECK_VAL="3,3,3,3,3" ;;
+esac
+
+RUN_NAME="2a_${FILTER_NAME}_${BNECK_NAME}"
+TRAINER_CLASS="nnUNetTrainerENet"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- ENet trainer knobs -------------------------------------------------------
+export ENET_CHANNELS="${CHANNELS}"
+export ENET_BOTTLENECKS="${BNECK_VAL}"
+# ENET_DECODER_TYPE / ENET_USE_DILATED / ENET_USE_ASYMMETRIC / ENET_USE_STRIDED
+# / ENET_USE_DSC come from cfinal_ops.env, sourced above.
+export ENET_EPOCHS=150
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Array task: ${TASK_ID} -> ${RUN_NAME}"
+echo "ENET_CHANNELS=${ENET_CHANNELS} ENET_BOTTLENECKS=${ENET_BOTTLENECKS}"
+echo "ENET_DECODER_TYPE=${ENET_DECODER_TYPE}"
+echo "Output folder: ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Checking for an existing checkpoint for ${RUN_NAME} ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ] || [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_best.pth" ]; then
+    echo "Checkpoint already exists at ${ENET_OUTPUT_FOLDER} -- skipping training, going straight to collect_results.py."
+else
+    echo "=== Start training: ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+    echo "Training finished for ${RUN_NAME}."
+
+    echo "=== Archiving checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+fi
+
+echo "=== Collecting results into compression/results.csv ==="
+cd "$HOME/LightM-UNet"
+python compression/collect_results.py \
+    --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+    --stage 2a_pruning_grid \
+    --channels "${ENET_CHANNELS}" \
+    --bottlenecks "${ENET_BOTTLENECKS}" \
+    --decoder-type "${ENET_DECODER_TYPE}" \
+    --use-dilated "${ENET_USE_DILATED}" \
+    --use-asymmetric "${ENET_USE_ASYMMETRIC}" \
+    --use-strided "${ENET_USE_STRIDED}" \
+    --use-dsc "${ENET_USE_DSC}" \
+    --trainer-class "${TRAINER_CLASS}"
+
+echo "Done: ${RUN_NAME}."

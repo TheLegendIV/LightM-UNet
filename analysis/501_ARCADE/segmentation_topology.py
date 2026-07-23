@@ -82,6 +82,30 @@ def dice_score(gt_bool: np.ndarray, pred_bool: np.ndarray) -> float:
     return (2 * tp) / (2 * tp + fp + fn + EPS)
 
 
+def cldice_score(gt_bool: np.ndarray, pred_bool: np.ndarray) -> float:
+    """Centerline Dice (Shit et al. 2021, CVPR): harmonic mean of skeleton
+    precision (predicted skeleton against GT mask) and skeleton sensitivity
+    (GT skeleton against predicted mask). Reuses `skeletonize` (see
+    skeleton_connectivity_stats above) -- the same primitive, not a second
+    implementation of skeletonization. 1.0 when both masks are empty, 0.0 if
+    exactly one is. tracked_not_gated per agent_instructions_1.yaml -- ARCADE
+    annotates SYNTAX-scoreable segments, so absolute connectivity values are
+    soft; this is for *relative* comparison across configs, not a gate."""
+    gt_bool = gt_bool.astype(bool)
+    pred_bool = pred_bool.astype(bool)
+    if skeletonize is None:
+        return float("nan")
+    if not gt_bool.any() and not pred_bool.any():
+        return 1.0
+    if not gt_bool.any() or not pred_bool.any():
+        return 0.0
+    gt_skel = skeletonize(gt_bool)
+    pred_skel = skeletonize(pred_bool)
+    tprec = (pred_skel & gt_bool).sum() / (pred_skel.sum() + EPS)
+    tsens = (gt_skel & pred_bool).sum() / (gt_skel.sum() + EPS)
+    return float((2 * tprec * tsens) / (tprec + tsens + EPS))
+
+
 # ---------------------------------------------------------------------------
 # 1. Component-level TP/FP structure: is each predicted blob a real vessel
 #    match or a pure hallucination? Replaces the multi-class "component

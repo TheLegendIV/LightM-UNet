@@ -39,7 +39,12 @@ python -m pip install \
     hiddenlayer \
     thop \
     importlib_metadata \
-    importlib_resources
+    importlib_resources \
+    brevitas==0.12.1 \
+    qonnx \
+    onnx \
+    onnxscript \
+    onnxoptimizer
 
 echo "=== Installing OpenCV headless ==="
 python -m pip uninstall -y opencv-python opencv-python-headless || true
@@ -95,6 +100,7 @@ import transformers
 import cv2
 import mamba_ssm
 import nnunetv2
+import brevitas
 
 print("torch:", torch.__version__)
 print("torch CUDA:", torch.version.cuda)
@@ -104,6 +110,7 @@ print("transformers:", transformers.__version__)
 print("cv2:", cv2.__version__)
 print("mamba_ssm OK")
 print("nnunetv2 OK")
+print("brevitas:", brevitas.__version__)
 PY
 
 echo "Done."

@@ -1,0 +1,127 @@
+#!/bin/bash
+#SBATCH --job-name=early_probe_p2
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+#SBATCH --array=0-2
+#SBATCH --output=logs/%x_%a_%j.out
+#SBATCH --error=logs/%x_%a_%j.err
+
+set -e
+
+# Early probe P2 -- quantization scouting (agent_instructions_1.yaml
+# early_probes.p2_quantization_probe). Fully DECOUPLED from the main path:
+# doesn't need Cfinal_ops or Cfinal_arch, can run any time after Foundation
+# is done -- this array can be submitted independently of Stage 1b/2's
+# status. On E1 (already trained, symmetric channels -- decoder choice is
+# free either way, matches Stage 1's own trained decoder). bits in [8,4,2]
+# -- bits=32 (FP32) is NOT a task here, it's Stage 1's existing E1 row
+# (nnUNetTrainerENetQuant rejects ENET_QUANT_BITS>=32 as not a meaningful
+# QAT config; reuse the FP32 baseline instead of retraining it).
+#
+# Uses nnUNetTrainerENetQuant (homogeneous weight+activation bit-width),
+# verified end-to-end (build+forward+backward, then a real truncated
+# nnUNetv2_train run) -- see compression/foundation_log.md's QAT trainer
+# section. Scouting run only -- Stage 4 still runs the proper sweep
+# (homogeneous + heterogeneous) on the final architecture once Stage 2
+# picks Cfinal_arch.
+
+DATASET_ID=501
+DATASET_NAME="Dataset501_ARCADE"
+
+BITS_VALUES=(8 4 2)
+TASK_ID=${SLURM_ARRAY_TASK_ID}
+QUANT_BITS="${BITS_VALUES[$TASK_ID]}"
+RUN_NAME="early_probe_p2_E1_int${QUANT_BITS}"
+TRAINER_CLASS="nnUNetTrainerENetQuant"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- ENet trainer knobs -- E1, max_unpool, all ops on, only bits varies -------
+export ENET_CHANNELS="20,72,144,72,20"
+export ENET_BOTTLENECKS="4,8,8,2,1"
+export ENET_DECODER_TYPE="max_unpool"
+export ENET_USE_DILATED=1
+export ENET_USE_ASYMMETRIC=1
+export ENET_USE_STRIDED=1
+export ENET_QUANT_BITS="${QUANT_BITS}"
+export ENET_EPOCHS=150
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Array task: ${TASK_ID} -> ${RUN_NAME} (ENET_QUANT_BITS=${QUANT_BITS})"
+echo "Output folder: ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Checking for an existing checkpoint for ${RUN_NAME} ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ] || [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_best.pth" ]; then
+    echo "Checkpoint already exists at ${ENET_OUTPUT_FOLDER} -- skipping training, going straight to collect_results.py."
+else
+    echo "=== Start training (QAT): ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+    echo "Training finished for ${RUN_NAME}."
+
+    echo "=== Archiving checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+fi
+
+echo "=== Collecting results into compression/results.csv ==="
+cd "$HOME/LightM-UNet"
+python compression/collect_results.py \
+    --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+    --stage early_probe_p2 \
+    --channels "${ENET_CHANNELS}" \
+    --bottlenecks "${ENET_BOTTLENECKS}" \
+    --decoder-type "${ENET_DECODER_TYPE}" \
+    --use-dilated "${ENET_USE_DILATED}" \
+    --use-asymmetric "${ENET_USE_ASYMMETRIC}" \
+    --use-strided "${ENET_USE_STRIDED}" \
+    --quant-bits "${QUANT_BITS}" \
+    --trainer-class "${TRAINER_CLASS}"
+
+echo "Done: ${RUN_NAME}."

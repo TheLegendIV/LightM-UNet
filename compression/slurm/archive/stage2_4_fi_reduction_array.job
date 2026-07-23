@@ -1,0 +1,143 @@
+#!/bin/bash
+#SBATCH --job-name=stage2_4_fi
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+#SBATCH --array=0-7
+#SBATCH --output=logs/%x_%a_%j.out
+#SBATCH --error=logs/%x_%a_%j.err
+
+set -e
+
+# Stage 2.4 -- f_i reduction (marked RUN in agent_instructions_1.yaml, not
+# optional). On U2 and U16 (fixed a priori by the yaml, not dependent on
+# which Stage 2 grid cell actually wins), sweep f_i in [20,12,8,4] -- 2
+# configs x 4 values = 8 tasks. Bottleneck depth held at native for all of
+# these (not specified by the yaml beyond "on U2, U16") -- reconsider once
+# Stage 2's grid winner is known; if the winning cell isn't native-depth,
+# f_i reduction may be more informative run on that depth instead.
+#
+# f_i=20 rows are EXACT duplicates of Stage 2's grid U2 x native / U16 x
+# native cells (same channels, same bottlenecks) -- named identically here
+# (stage2_U2_bnnative / stage2_U16_bnnative) so the existing-checkpoint skip
+# below transparently reuses them instead of retraining, per
+# agent_instructions_1.yaml's dedup note. Only f_i in [12,8,4] are new runs
+# (6 of the 8 tasks).
+#
+# decoder_type/op flags come from compression/configs/cfinal_ops.env, same
+# as stage2_grid_array.job -- run that stage's array first (or at least
+# have Cfinal_ops finalized) before this one.
+
+DATASET_ID=501
+DATASET_NAME="Dataset501_ARCADE"
+
+source "$HOME/LightM-UNet/compression/configs/cfinal_ops.env"
+
+# -- 2 filter bases (U2, U16) x 4 f_i values = 8 tasks -------------------------
+BASE_NAMES=(U2 U16)
+BASE_REST_CHANNELS=("36,72,36,12" "8,12,8,4")  # f1,f2,f3,f4,f5 -- f_i prepended below
+FI_VALUES=(20 12 8 4)
+
+TASK_ID=${SLURM_ARRAY_TASK_ID}
+BASE_IDX=$(( TASK_ID / 4 ))
+FI_IDX=$(( TASK_ID % 4 ))
+BASE_NAME="${BASE_NAMES[$BASE_IDX]}"
+FI_VALUE="${FI_VALUES[$FI_IDX]}"
+ENET_BOTTLENECKS_VAL="4,8,8,2,1"  # native, see header note
+
+if [ "${FI_VALUE}" -eq 20 ]; then
+    RUN_NAME="stage2_${BASE_NAME}_bnnative"   # reuses Stage 2 grid's naming -- see header
+    RESULTS_STAGE="stage2"
+else
+    RUN_NAME="stage2_4_${BASE_NAME}_fi${FI_VALUE}"
+    RESULTS_STAGE="stage2_4"
+fi
+TRAINER_CLASS="nnUNetTrainerENet"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- ENet trainer knobs ---------------------------------------------------------
+export ENET_CHANNELS="${FI_VALUE},${BASE_REST_CHANNELS[$BASE_IDX]}"
+export ENET_BOTTLENECKS="${ENET_BOTTLENECKS_VAL}"
+export ENET_EPOCHS=150
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Array task: ${TASK_ID} -> ${RUN_NAME} (base=${BASE_NAME}, f_i=${FI_VALUE})"
+echo "ENET_CHANNELS=${ENET_CHANNELS} ENET_BOTTLENECKS=${ENET_BOTTLENECKS}"
+echo "ENET_DECODER_TYPE=${ENET_DECODER_TYPE}"
+echo "ENET_USE_DILATED=${ENET_USE_DILATED} ENET_USE_ASYMMETRIC=${ENET_USE_ASYMMETRIC} ENET_USE_STRIDED=${ENET_USE_STRIDED}"
+echo "Output folder: ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Checking for an existing checkpoint for ${RUN_NAME} ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ] || [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_best.pth" ]; then
+    echo "Checkpoint already exists at ${ENET_OUTPUT_FOLDER} -- skipping training, going straight to collect_results.py."
+else
+    echo "=== Start training: ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+    echo "Training finished for ${RUN_NAME}."
+
+    echo "=== Archiving checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+fi
+
+echo "=== Collecting results into compression/results.csv ==="
+cd "$HOME/LightM-UNet"
+python compression/collect_results.py \
+    --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+    --stage "${RESULTS_STAGE}" \
+    --channels "${ENET_CHANNELS}" \
+    --bottlenecks "${ENET_BOTTLENECKS}" \
+    --decoder-type "${ENET_DECODER_TYPE}" \
+    --use-dilated "${ENET_USE_DILATED}" \
+    --use-asymmetric "${ENET_USE_ASYMMETRIC}" \
+    --use-strided "${ENET_USE_STRIDED}" \
+    --trainer-class "${TRAINER_CLASS}"
+
+echo "Done: ${RUN_NAME}."

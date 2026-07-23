@@ -1,0 +1,6 @@
+stage,delta_bottlenecks,delta_params,delta_flops,notes
+s1,1,4640,384827392.0,"regular1, 1/4 resolution"
+s2,1,17984,376963072.0,"stage2 context, 1/8 resolution"
+s3,1,17984,376963072.0,"stage3 context, 1/8 resolution -- same resolution as s2, so same marginal cost"
+s4,1,4544,381681664.0,"regular4, 1/4 resolution"
+s5,1,320,104857600.0,"regular5, 1/2 resolution"
