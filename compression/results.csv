@@ -15,3 +15,4 @@ nnUNetTrainerENet_1c_no_asymmetric,1c_specialop,16,16,32,32,16,4,"4,8,8,2,1",ups
 nnUNetTrainerENet_1c_no_strided,1c_specialop,16,16,32,32,16,4,"4,8,8,2,1",upsample_conv,"dilated=1,asymmetric=1,strided=0,dsc=0",32,25262,693895168.0,,0.750900058634638,0.7551283654433208,5.266666666666667,150,False,0
 nnUNetTrainerENet_1c_none,1c_specialop,16,16,32,32,16,4,"4,8,8,2,1",upsample_conv,"dilated=0,asymmetric=0,strided=0,dsc=0",32,24910,680263680.0,,0.7184970497144451,0.7144040524020717,4.78,134,False,0
 nnUNetTrainerENet_1c_none_dsc,1c_specialop,16,16,32,32,16,4,"4,8,8,2,1",upsample_conv,"dilated=0,asymmetric=0,strided=0,dsc=1",32,17319,377749504.0,,0.7072899536686907,0.6979730880270277,5.573333333333333,147,False,0
+nnUNetTrainerENet_1c_dilated_only,1c_specialop,16,16,32,32,16,4,"4,8,8,2,1",upsample_conv,"dilated=1,asymmetric=0,strided=0,dsc=0",32,24910,680263680.0,,0.745283769676764,0.7564587436752402,4.723333333333334,147,False,0

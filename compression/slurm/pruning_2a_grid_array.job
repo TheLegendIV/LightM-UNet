@@ -7,7 +7,7 @@
 #SBATCH --gpus=1
 #SBATCH --mem=32G
 #SBATCH --time=04:00:00
-#SBATCH --array=0-18
+#SBATCH --array=0-13
 #SBATCH --output=logs/%x_%a_%j.out
 #SBATCH --error=logs/%x_%a_%j.err
 
@@ -16,36 +16,53 @@ set -e
 # Section 2a -- pruning grid search: filters x bottleneck-depth patterns,
 # find the smallest model that still keeps the Stage-1 goals.
 #   Filters: O2, O4, O8, O16, OF -- re-derived from ENet ORIGINAL
-#            (16,64,128,64,16), NOT E1. Real test-set results showed
-#            Original beats E1 on Dice (0.780 vs 0.775) while already being
-#            smaller (369k vs 466k params) -- see foundation_log.md's "Plan
-#            revision 2" section for the full derivation. f_i=16 fixed
-#            (Original NOT included as a grid row -- section 1 already
-#            covers it, same as E1 was excluded from the old U-axis).
-#   Bottleneck patterns (stage1,stage2,stage3,regular4,regular5):
-#     native:     (4,8,8,2,1)  -- ENet-native
-#     variant2:   (2,4,4,1,0)  -- encoder /2, decoder -1 each (regular5 empty
-#                                  -- up5 still runs, just no bottleneck reps after it)
-#     variant3:   (1,2,2,0,0)  -- encoder /4, decoder -2 each, clamped at 0
-#                                  (regular4 AND regular5 both empty)
-#     ghielmetti: (3,3,3,3,3)  -- uniform 3 bottlenecks per stage (Ghielmetti
-#                                  et al. methodology)
-#   5 filters x 4 patterns = 20 cells, MINUS (O4, native) -- identical to
-#   section 1a's seed=0 run (same channels/bottlenecks/decoder/ops), reused
-#   rather than retrained. 19 tasks total.
+#            (16,64,128,64,16), NOT E1. f_i=16 fixed (Original NOT included
+#            as a grid row -- section 1 already covers it).
+#   Bottleneck patterns (stage1,stage2,stage3,regular4,regular5) -- ONLY
+#   stage2/stage3 vary between these three; stage1/regular4/regular5 stay
+#   at native (4,2,1) throughout:
+#     native: (4,8,8,2,1) -- ENet-native, CONTEXT_STAGE_PATTERN's default
+#             regular/dilated2/asym/dilated4/regular/dilated8/asym/dilated16
+#             sequence (asymmetric slots downgraded to regular below, since
+#             this grid runs with ENET_USE_ASYMMETRIC=0 -- see that below).
+#     div2:   (4,4,4,2,1) -- stage2 AND stage3 both at depth 4, using
+#             ENet.py's "sparse" context_pattern: regular, dilated x4,
+#             regular, dilated x16 (skips the 2/8 rungs, never emits an
+#             asymmetric slot regardless of the flag). Real 1c results
+#             showed dilated is the op that matters most (no_dilated cost
+#             -0.024 Dice vs baseline; no_asymmetric/no_strided cost ~0);
+#             this axis leans into that by keeping only the two widest
+#             dilation rates.
+#     div4:   (4,4,0,2,1) -- stage3 REMOVED ENTIRELY (not just shortened);
+#             stage2 alone carries the same 4-op sparse-dilation pattern as
+#             div2. A qualitatively more aggressive cut than shrinking both
+#             stages proportionally -- drops a whole stage's worth of
+#             latency/params, not just its depth.
+#   ENET_USE_ASYMMETRIC=0 for this ENTIRE grid (every bottleneck pattern,
+#   not just div2/div4) -- overridden below, after sourcing cfinal_ops.env
+#   (which still has it at 1, "the safe/unexamined starting point" per its
+#   own docstring -- real 1c data now justifies flipping it off for this
+#   stage specifically; NOT changed in cfinal_ops.env itself since that
+#   file is also shared by 2b/3a, which haven't made this call yet).
+#   5 filters x 3 bottleneck patterns = 15 cells, MINUS (O4, native) --
+#   with asymmetric now off, (O4, native, upsample_conv, dilated=1,
+#   strided=1, dsc=0) is IDENTICAL to section 1c's "no_asymmetric" cell
+#   (already trained), reused rather than retrained. 14 tasks total.
 #
-# decoder_type + op flags (dilated/asymmetric/strided/dsc) come from
+# decoder_type + dilated/strided/dsc flags come from
 # compression/configs/cfinal_ops.env (section 1b/1c's output) -- edit that
-# file, not this job, once those complete.
+# file, not this job, once those change.
 
 DATASET_ID=501
 DATASET_NAME="Dataset501_ARCADE"
 
 source "$HOME/LightM-UNet/compression/configs/cfinal_ops.env"
+export ENET_USE_ASYMMETRIC=0
 
-# -- 19 (filter, bottleneck-pattern) pairs, (O4,native) omitted --------------
-FILTER_NAMES=(O2 O2 O2 O2   O4 O4 O4   O8 O8 O8 O8   O16 O16 O16 O16   OF OF OF OF)
-BNECK_NAMES=(native var2 var3 ghiel   var2 var3 ghiel   native var2 var3 ghiel   native var2 var3 ghiel   native var2 var3 ghiel)
+# -- 14 (filter, bottleneck-pattern) pairs, (O4,native) omitted (dedups
+# with 1c_no_asymmetric) --------------------------------------------------
+FILTER_NAMES=(O2 O2 O2   O4 O4   O8 O8 O8   O16 O16 O16   OF OF OF)
+BNECK_NAMES=(native div2 div4   div2 div4   native div2 div4   native div2 div4   native div2 div4)
 
 TASK_ID=${SLURM_ARRAY_TASK_ID}
 FILTER_NAME="${FILTER_NAMES[$TASK_ID]}"
@@ -59,10 +76,9 @@ case "$FILTER_NAME" in
   OF)  CHANNELS="16,4,4,4,4" ;;
 esac
 case "$BNECK_NAME" in
-  native) BNECK_VAL="4,8,8,2,1" ;;
-  var2)   BNECK_VAL="2,4,4,1,0" ;;
-  var3)   BNECK_VAL="1,2,2,0,0" ;;
-  ghiel)  BNECK_VAL="3,3,3,3,3" ;;
+  native) BNECK_VAL="4,8,8,2,1"; CONTEXT_PATTERN="default" ;;
+  div2)   BNECK_VAL="4,4,4,2,1"; CONTEXT_PATTERN="sparse" ;;
+  div4)   BNECK_VAL="4,4,0,2,1"; CONTEXT_PATTERN="sparse" ;;
 esac
 
 RUN_NAME="2a_${FILTER_NAME}_${BNECK_NAME}"
@@ -97,8 +113,10 @@ export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
 # -- ENet trainer knobs -------------------------------------------------------
 export ENET_CHANNELS="${CHANNELS}"
 export ENET_BOTTLENECKS="${BNECK_VAL}"
-# ENET_DECODER_TYPE / ENET_USE_DILATED / ENET_USE_ASYMMETRIC / ENET_USE_STRIDED
-# / ENET_USE_DSC come from cfinal_ops.env, sourced above.
+export ENET_CONTEXT_PATTERN="${CONTEXT_PATTERN}"
+# ENET_DECODER_TYPE / ENET_USE_DILATED / ENET_USE_STRIDED / ENET_USE_DSC
+# come from cfinal_ops.env, sourced above. ENET_USE_ASYMMETRIC=0 is this
+# grid's own override (see header comment).
 export ENET_EPOCHS=150
 export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
 
@@ -106,8 +124,8 @@ echo "=== Job info ==="
 echo "Host: $(hostname)"
 echo "Date: $(date)"
 echo "Array task: ${TASK_ID} -> ${RUN_NAME}"
-echo "ENET_CHANNELS=${ENET_CHANNELS} ENET_BOTTLENECKS=${ENET_BOTTLENECKS}"
-echo "ENET_DECODER_TYPE=${ENET_DECODER_TYPE}"
+echo "ENET_CHANNELS=${ENET_CHANNELS} ENET_BOTTLENECKS=${ENET_BOTTLENECKS} ENET_CONTEXT_PATTERN=${ENET_CONTEXT_PATTERN}"
+echo "ENET_DECODER_TYPE=${ENET_DECODER_TYPE} ENET_USE_ASYMMETRIC=${ENET_USE_ASYMMETRIC}"
 echo "Output folder: ${ENET_OUTPUT_FOLDER}"
 
 echo "=== GPU info ==="
@@ -150,6 +168,7 @@ python compression/collect_results.py \
     --use-asymmetric "${ENET_USE_ASYMMETRIC}" \
     --use-strided "${ENET_USE_STRIDED}" \
     --use-dsc "${ENET_USE_DSC}" \
+    --context-pattern "${ENET_CONTEXT_PATTERN}" \
     --trainer-class "${TRAINER_CLASS}"
 
 echo "Done: ${RUN_NAME}."

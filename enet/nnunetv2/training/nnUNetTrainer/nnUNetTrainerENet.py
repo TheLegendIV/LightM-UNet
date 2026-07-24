@@ -101,6 +101,9 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
         channels = _parse_channels(os.environ.get("ENET_CHANNELS", "20,72,144,72,20"))
         bottlenecks_per_stage = _parse_bottlenecks(os.environ.get("ENET_BOTTLENECKS", "4,8,8,2,1"))
         decoder_type = os.environ.get("ENET_DECODER_TYPE", "max_unpool")
+        context_pattern = os.environ.get("ENET_CONTEXT_PATTERN", "default")
+        if context_pattern not in ("default", "sparse"):
+            raise ValueError(f"ENET_CONTEXT_PATTERN must be 'default' or 'sparse', got {context_pattern!r}.")
         return ENet(
             in_channels=num_input_channels,
             out_channels=label_manager.num_segmentation_heads,
@@ -111,6 +114,7 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
             use_asymmetric=_parse_bool_env("ENET_USE_ASYMMETRIC", True),
             use_strided=_parse_bool_env("ENET_USE_STRIDED", True),
             use_dsc=_parse_bool_env("ENET_USE_DSC", False),
+            context_pattern=context_pattern,
         )
 
     def configure_optimizers(self):

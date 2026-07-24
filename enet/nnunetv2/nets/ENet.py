@@ -7,6 +7,7 @@ from torch import nn
 import torch.nn.functional as F
 
 DecoderType = Literal["max_unpool", "upsample_conv"]
+ContextPattern = Literal["default", "sparse"]
 
 # The ENet-native context-stage pattern (Paszke et al.): regular, dilated x2,
 # asymmetric 5x5, dilated x4, regular, dilated x8, asymmetric 5x5, dilated x16.
@@ -22,6 +23,20 @@ CONTEXT_STAGE_PATTERN: tuple[dict, ...] = (
     {},
     {"padding": 8, "dilation": 8},
     {"kernel_size": 5, "padding": 2, "asymmetric": True},
+    {"padding": 16, "dilation": 16},
+)
+
+# Sparse dilation-only context pattern (section 2a's reduced-depth
+# bottleneck axis, div2/div4): regular, dilated x4, regular, dilated x16 --
+# skips the 2/8 rungs and never uses asymmetric convs at all (the grid runs
+# with use_asymmetric=0 anyway, but this pattern doesn't rely on that flag
+# to get there -- it simply never emits an asymmetric slot). 4 entries,
+# repeats via i % len(pattern) if n_ops > 4 (not exercised by 2a's grid,
+# which caps at 4, but kept general like CONTEXT_STAGE_PATTERN).
+SPARSE_DILATION_PATTERN: tuple[dict, ...] = (
+    {},
+    {"padding": 4, "dilation": 4},
+    {},
     {"padding": 16, "dilation": 16},
 )
 
@@ -280,8 +295,11 @@ class ENet(nn.Module):
         use_asymmetric: bool = True,
         use_strided: bool = True,
         use_dsc: bool = False,
+        context_pattern: ContextPattern = "default",
     ):
         super().__init__()
+        if context_pattern not in ("default", "sparse"):
+            raise ValueError(f"context_pattern must be 'default' or 'sparse', got {context_pattern!r}.")
         if len(channels) == 5:
             # stage2 and stage3 share one width (the historical/default
             # convention throughout this project's compression sweep).
@@ -323,6 +341,7 @@ class ENet(nn.Module):
         self.use_asymmetric = use_asymmetric
         self.use_strided = use_strided
         self.use_dsc = use_dsc
+        self.context_pattern: ContextPattern = context_pattern
 
         n_stage1, n_stage2, n_stage3, n_regular4, n_regular5 = self.bottlenecks_per_stage
 
@@ -381,15 +400,19 @@ class ENet(nn.Module):
 
     def _make_context_stage(self, channels: int, n_ops: int) -> nn.Sequential:
         """Builds an n_ops-long context stage from the first n_ops entries of
-        CONTEXT_STAGE_PATTERN. use_dilated/use_asymmetric downgrade the
-        matching slots to a plain regular bottleneck rather than dropping
-        them, so stage depth and op composition stay independent knobs
-        (Stage 2 sweeps depth; Stage 1b's op ablation sweeps composition).
-        use_dsc factorizes whatever inner conv results (plain or dilated --
-        not asymmetric, RegularBottleneck rejects that combination)."""
+        CONTEXT_STAGE_PATTERN (or SPARSE_DILATION_PATTERN when
+        context_pattern="sparse" -- section 2a's reduced-depth bottleneck
+        axis, div2/div4: regular/dilated4/regular/dilated16, no 2/8 rungs,
+        never asymmetric). use_dilated/use_asymmetric downgrade the matching
+        slots to a plain regular bottleneck rather than dropping them, so
+        stage depth and op composition stay independent knobs (Stage 2
+        sweeps depth; Stage 1b's op ablation sweeps composition). use_dsc
+        factorizes whatever inner conv results (plain or dilated -- not
+        asymmetric, RegularBottleneck rejects that combination)."""
+        pattern = SPARSE_DILATION_PATTERN if self.context_pattern == "sparse" else CONTEXT_STAGE_PATTERN
         ops = []
         for i in range(n_ops):
-            kwargs = dict(CONTEXT_STAGE_PATTERN[i % len(CONTEXT_STAGE_PATTERN)])
+            kwargs = dict(pattern[i % len(pattern)])
             if kwargs.get("dilation", 1) != 1 and not self.use_dilated:
                 kwargs = {}
             if kwargs.get("asymmetric", False) and not self.use_asymmetric:
@@ -520,3 +543,36 @@ if __name__ == "__main__":
         assert not isinstance(model.proj2_to_3, torch.nn.Identity), f"{name}: expected a real projection, got Identity"
         n_split_tested += 1
     print(f"ENet 6-tuple split-stage2/3 self-test PASSED: {n_split_tested} configs.")
+
+    # Sparse dilation pattern self-test (section 2a's div2/div4 bottleneck
+    # axis): div2 = stage2 AND stage3 both at depth 4 (regular/dilated4/
+    # regular/dilated16 each); div4 = stage3 REMOVED entirely (depth 0),
+    # stage2 alone carries the same 4-op pattern. use_asymmetric=0 for both
+    # (the grid's global op-flag choice), but the sparse pattern never emits
+    # an asymmetric slot regardless, so this also checks that path is inert.
+    sparse_configs = {
+        "div2": (4, 4, 4, 2, 1),
+        "div4": (4, 4, 0, 2, 1),
+    }
+    n_sparse_tested = 0
+    for name, bnecks in sparse_configs.items():
+        model = ENet(
+            in_channels=1, out_channels=2, channels=(16, 16, 32, 16, 4),
+            bottlenecks_per_stage=bnecks, decoder_type="upsample_conv",
+            use_dilated=True, use_asymmetric=False, use_strided=True,
+            context_pattern="sparse",
+        ).eval()
+        with torch.no_grad():
+            out = model(dummy)
+        assert out.shape == (1, 2, 512, 512), f"{name}: got {tuple(out.shape)}"
+        assert len(model.stage2) == bnecks[1], f"{name}: stage2 depth {len(model.stage2)} != {bnecks[1]}"
+        assert len(model.stage3) == bnecks[2], f"{name}: stage3 depth {len(model.stage3)} != {bnecks[2]}"
+        for stage in (model.stage2, model.stage3):
+            for i, block in enumerate(stage):
+                expected_dilation = (1, 4, 1, 16)[i % 4]
+                actual_dilation = block.conv_bn_act[0].dilation[0]
+                assert actual_dilation == expected_dilation, (
+                    f"{name}: block {i} dilation {actual_dilation} != expected {expected_dilation}"
+                )
+        n_sparse_tested += 1
+    print(f"ENet sparse-dilation-pattern self-test PASSED: {n_sparse_tested} configs (div2/div4).")
