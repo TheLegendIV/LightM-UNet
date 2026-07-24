@@ -248,53 +248,21 @@ def run_experiment(exp: dict, args: argparse.Namespace, package_root: Path, outp
     }
 
 
+RESULT_FIELDNAMES = [
+    "id", "name", "track", "channels", "bottlenecks", "decoder_type", "params", "params_m",
+    "final_dice", "best_dice", "momentum", "acceleration", "num_dice_epochs",
+    "mean_epoch_time_s", "duration_s", "returncode", "hypothesis",
+    "pseudo_dice_by_epoch", "results_root",
+]
+
+
 def write_csv(rows: list[dict], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = [
-        "id", "name", "track", "channels", "bottlenecks", "decoder_type", "params", "params_m",
-        "final_dice", "best_dice", "momentum", "acceleration", "num_dice_epochs",
-        "mean_epoch_time_s", "duration_s", "returncode", "hypothesis",
-        "pseudo_dice_by_epoch", "results_root",
-    ]
     with path.open("w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=RESULT_FIELDNAMES)
         writer.writeheader()
         for row in rows:
             writer.writerow(row)
-
-
-def plot_results(rows: list[dict], output_root: Path) -> None:
-    try:
-        import matplotlib.pyplot as plt
-    except Exception as exc:
-        print(f"Skipping plots: {exc}")
-        return
-
-    plotted = [r for r in rows if r["final_dice"] is not None]
-    if not plotted:
-        return
-
-    track_colors = {"max_unpool": "#2a78d6", "upsample_conv": "#eb6834", "bottleneck_depth": "#1baf7a"}
-    track_markers = {"max_unpool": "o", "upsample_conv": "s", "bottleneck_depth": "^"}
-
-    plt.figure(figsize=(9.5, 6))
-    for track in ("max_unpool", "upsample_conv", "bottleneck_depth"):
-        subset = [r for r in plotted if r["track"] == track]
-        if not subset:
-            continue
-        plt.scatter([r["params_m"] for r in subset], [r["final_dice"] for r in subset],
-                    c=track_colors[track], marker=track_markers[track], s=70, zorder=3, label=track)
-        for r in subset:
-            plt.annotate(r["id"], (r["params_m"], r["final_dice"]), textcoords="offset points",
-                         xytext=(4, 4), fontsize=7)
-    plt.xlabel("Parameters (M)")
-    plt.ylabel("Final mean pseudo Dice (15 epochs)")
-    plt.title("Upscale pareto sweep -- max_unpool vs upsample_conv tracks")
-    plt.legend()
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(output_root / "pareto_final_dice.png", dpi=160)
-    plt.close()
 
 
 def parse_args() -> argparse.Namespace:
@@ -348,8 +316,15 @@ def main() -> int:
     for cid in args.configs:
         row = run_experiment(by_id[cid], args, package_root, args.output_root)
         rows.append(row)
-        write_csv(rows, args.output_root / "summary.csv")
-        plot_results(rows, args.output_root)
+        # Per-config CSV only (own subfolder, e.g. results_root/result.csv) --
+        # NOT a shared summary.csv here. When this runs as one Slurm array
+        # task per config (the normal HPC path), every task's process only
+        # ever holds ITS OWN row in `rows`; a shared summary.csv path
+        # written with multiple concurrent tasks in flight means whichever
+        # task finishes last clobbers everyone else's result (write_csv
+        # truncates the file). Run plot_results.py afterward to aggregate
+        # every config's result.csv into one combined CSV + plot.
+        write_csv([row], Path(row["results_root"]) / "result.csv")
         if row["returncode"] != 0:
             print(f"Experiment {cid} failed (rc={row['returncode']}). Stopping.")
             return row["returncode"]
@@ -357,8 +332,8 @@ def main() -> int:
     print("\n=== Summary ===")
     for row in rows:
         print(f"  {row['id']:>5}  params={row['params_m']:.3f}M  final_dice={row['final_dice']}  duration_s={row['duration_s']:.0f}")
-    print("CSV:", args.output_root / "summary.csv")
-    print("Plot:", args.output_root / "pareto_final_dice.png")
+    print(f"\nRun `python upscale/plot_results.py --results-dir {args.output_root}` "
+          "to aggregate every config's result.csv into one summary.csv + pareto plot.")
     return 0
 
 

@@ -7,7 +7,7 @@
 #SBATCH --gpus=1
 #SBATCH --mem=32G
 #SBATCH --time=04:00:00
-#SBATCH --array=0-1
+#SBATCH --array=0-2
 #SBATCH --output=logs/%x_%a_%j.out
 #SBATCH --error=logs/%x_%a_%j.err
 
@@ -18,10 +18,17 @@ set -e
 # methodology -- see upscale/README.md) to full-length (150-epoch) training.
 #
 # EDIT WINNER_IDS below to match what you picked from the pareto front
-# before submitting -- default array size (0-1) assumes 2 winners; adjust
+# before submitting -- default array size (0-2) assumes 3 winners; adjust
 # both WINNER_IDS and --array to match how many you're graduating.
+#
+# MU15 (stem+flank+f2+f3, max_unpool, 1.115M params) -- highest 15-epoch
+#   Dice overall (0.818).
+# BD15 (regular4+regular5 depth, upsample_conv, 0.389M params) -- cheapest
+#   of the top cluster, 0.815 Dice at ~1/3 the params of MU15.
+# UC05 (f5 width, upsample_conv, 0.371M params) -- near-baseline params,
+#   0.812 Dice.
 
-WINNER_IDS=(MU05 UC03)
+WINNER_IDS=(MU15 BD15 UC05)
 TASK_ID=${SLURM_ARRAY_TASK_ID}
 CONFIG_ID="${WINNER_IDS[$TASK_ID]}"
 

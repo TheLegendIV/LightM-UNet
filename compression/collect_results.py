@@ -26,6 +26,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+try:
+    import fcntl  # POSIX only (HPC/Linux) -- guarded for local Windows dev
+except ImportError:
+    fcntl = None
+
 import pandas as pd
 import torch
 
@@ -212,15 +217,32 @@ def read_training_info(fold_dir: Path, checkpoint_name: str, trailing_window: in
 
 
 def upsert_row(row: dict) -> None:
+    """Read-modify-write on the shared results.csv -- multiple Slurm array
+    tasks (e.g. upscale/graduate.py's graduation array, or any of
+    compression/slurm/*_array.job's cells) can call this within seconds of
+    each other. Without a lock, two tasks reading the same pre-update state
+    both add their own new row and the later write clobbers the earlier
+    one's -- silently losing a whole run's result. flock serializes the
+    whole read+merge+write critical section so every writer's read reflects
+    every prior writer's completed write."""
     row = {col: row.get(col) for col in RESULTS_COLUMNS}
-    if RESULTS_CSV.exists():
-        existing = pd.read_csv(RESULTS_CSV)
-        existing = existing[existing["config_name"] != row["config_name"]]
-        combined = pd.concat([existing, pd.DataFrame([row])], ignore_index=True)
-    else:
-        combined = pd.DataFrame([row], columns=RESULTS_COLUMNS)
-    combined.to_csv(RESULTS_CSV, index=False)
-    print(f"Wrote {RESULTS_CSV} ({len(combined)} rows).")
+    lock_path = RESULTS_CSV.parent / ".results.csv.lock"
+    lock_path.touch(exist_ok=True)
+    with open(lock_path, "r+") as lock_file:
+        if fcntl is not None:
+            fcntl.flock(lock_file, fcntl.LOCK_EX)
+        try:
+            if RESULTS_CSV.exists():
+                existing = pd.read_csv(RESULTS_CSV)
+                existing = existing[existing["config_name"] != row["config_name"]]
+                combined = pd.concat([existing, pd.DataFrame([row])], ignore_index=True)
+            else:
+                combined = pd.DataFrame([row], columns=RESULTS_COLUMNS)
+            combined.to_csv(RESULTS_CSV, index=False)
+            print(f"Wrote {RESULTS_CSV} ({len(combined)} rows).")
+        finally:
+            if fcntl is not None:
+                fcntl.flock(lock_file, fcntl.LOCK_UN)
 
 
 def main() -> None:

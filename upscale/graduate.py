@@ -61,6 +61,12 @@ def graduate_one(exp: dict, args: argparse.Namespace) -> int:
     env["nnUNet_raw"] = str(args.nnunet_raw)
     env["nnUNet_preprocessed"] = str(args.nnunet_preprocessed)
     env["nnUNet_results"] = str(args.nnunet_results)
+    # CRITICAL: without this, nnUNetTrainerENet falls back to its default
+    # path (no run_name suffix), which is IDENTICAL across every graduated
+    # config -- three array tasks would all write checkpoints into the same
+    # folder concurrently. This is what actually makes each config's
+    # checkpoint its own.
+    env["ENET_OUTPUT_FOLDER"] = str(output_folder)
     env["ENET_CHANNELS"] = ",".join(str(c) for c in exp["channels"])
     env["ENET_BOTTLENECKS"] = ",".join(str(c) for c in exp["bottlenecks"])
     env["ENET_DECODER_TYPE"] = exp["decoder_type"]
@@ -71,9 +77,15 @@ def graduate_one(exp: dict, args: argparse.Namespace) -> int:
     env["ENET_EPOCHS"] = str(args.epochs)
     env["ENET_SEED"] = str(args.seed)
     env["PYTHONHASHSEED"] = str(args.seed)
-    # Checkpointing + final validation stay ON (unlike the 15-epoch sweep) --
-    # this is a real run whose checkpoint feeds collect_results.py / the
-    # rest of compression/.
+    # Checkpointing + final validation explicitly ON (not just "unset" --
+    # os.environ.copy() inherits whatever's ambient in the submitting shell,
+    # so if a prior sweep run in the same session left
+    # ENET_DISABLE_CHECKPOINTING=1 exported, relying on absence would
+    # silently leak it through). This is a real run whose checkpoint feeds
+    # collect_results.py / the rest of compression/ -- checkpointing must
+    # never be disabled here, unlike the 15-epoch sweep.
+    env["ENET_DISABLE_CHECKPOINTING"] = "0"
+    env["ENET_SKIP_FINAL_VALIDATION"] = "0"
 
     command = ["nnUNetv2_train", DATASET_ID, "2d", str(args.fold), "-tr", TRAINER_CLASS]
     print(f"\n=== Graduating {exp['id']} ({exp['name']}) -> {run_name} ===")
