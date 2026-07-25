@@ -17,6 +17,8 @@ import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BASELINE_STAGE = "stage1"
+COMPRESSED_BASELINE_STAGE = "1a_seed"
+COMPRESSED_BASELINE_CONFIG = "nnUNetTrainerENet_1a_seed_O4_s0"
 
 # Muted, consistent palette (matches the rest of compression/'s plots).
 INK, SECONDARY_INK, MUTED, GRID, BASELINE_COLOR, SURFACE = (
@@ -24,6 +26,27 @@ INK, SECONDARY_INK, MUTED, GRID, BASELINE_COLOR, SURFACE = (
 )
 STAGE_COLOR = "#2a78d6"
 BASELINE_MARKER_COLOR = "#eb6834"
+COMPRESSED_BASELINE_MARKER_COLOR = "#8e5fd4"
+
+# Fixed per-config marker/color for every baseline overlay point -- keyed by
+# config_name (not "is it ENet") so a third reference (Compressed Baseline)
+# slots in without the ENet-vs-everything-else split breaking. Every stage
+# past 1a_seed is O4-derived, so 1a_seed_O4_s0 ("Compressed Baseline") is
+# the reference every 1b/1c/2a/2b/1d ablation/sweep is actually judged
+# against -- ENet/E1 stay in the same overlay as the uncompressed anchor.
+BASELINE_STYLES = {
+    "nnUNetTrainerENet_Original": dict(
+        marker="D", color=BASELINE_MARKER_COLOR, s=90, label="ENet (baseline)",
+        edgecolors="black", linewidths=0.5,
+    ),
+    "nnUNetTrainerENet_E1": dict(
+        marker="x", color=MUTED, s=70, label="E1 (deprecated)", linewidths=1.5,
+    ),
+    COMPRESSED_BASELINE_CONFIG: dict(
+        marker="^", color=COMPRESSED_BASELINE_MARKER_COLOR, s=100, label="Compressed Baseline (O4)",
+        edgecolors="black", linewidths=0.5,
+    ),
+}
 
 # 2a's grid crosses 5 filter widths x 3 bottleneck patterns -- filter width
 # already separates points along the x-axis (params/FLOPs), so bottleneck
@@ -72,18 +95,14 @@ def _scatter(ax, df: pd.DataFrame, x_col: str, x_label: str, baseline_df: pd.Dat
     ax.tick_params(colors=MUTED, labelsize=9)
 
     if not baseline_df.empty:
-        # ENet is THE baseline (real, current reference everything else is
-        # pruned from) -- E1 is a deprecated/superseded reference, kept only
-        # as a sanity check that new configs aren't regressing toward it.
-        # Visually distinct so they don't read as co-equal.
-        enet_df = baseline_df[baseline_df["config_name"] == "nnUNetTrainerENet_Original"]
-        e1_df = baseline_df[baseline_df["config_name"] != "nnUNetTrainerENet_Original"]
-        if not enet_df.empty:
-            ax.scatter(enet_df[x_col], enet_df["dice"], color=BASELINE_MARKER_COLOR, marker="D",
-                       s=90, zorder=4, label="ENet (baseline)", edgecolors="black", linewidths=0.5)
-        if not e1_df.empty:
-            ax.scatter(e1_df[x_col], e1_df["dice"], color=MUTED, marker="x",
-                       s=70, zorder=4, label="E1 (deprecated)", linewidths=1.5)
+        # Each reference config gets its own fixed marker/color (never
+        # cycled) so ENet/E1/Compressed Baseline stay visually distinct and
+        # don't read as co-equal -- see BASELINE_STYLES.
+        for config_name, style in BASELINE_STYLES.items():
+            subset = baseline_df[baseline_df["config_name"] == config_name]
+            if subset.empty:
+                continue
+            ax.scatter(subset[x_col], subset["dice"], zorder=4, **style)
         for _, row in baseline_df.iterrows():
             ax.annotate(display_name(row["config_name"]), (row[x_col], row["dice"]),
                        fontsize=7, color=SECONDARY_INK, textcoords="offset points", xytext=(5, 5))
@@ -170,13 +189,23 @@ def main() -> int:
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
     baseline_df = df[df["stage"] == BASELINE_STAGE]
+    compressed_baseline_df = df[df["config_name"] == COMPRESSED_BASELINE_CONFIG]
     stages = [s for s in df["stage"].unique() if s != BASELINE_STAGE]
     # stage1 itself also gets its own plot (Original vs E1), with no
     # separate baseline overlay (it IS the baseline).
     plot_stage(BASELINE_STAGE, baseline_df, pd.DataFrame(columns=df.columns), args.out_dir)
     for stage in sorted(stages):
         stage_df = df[df["stage"] == stage]
-        plot_stage(stage, stage_df, baseline_df, args.out_dir)
+        # 1a_seed's own stage_df already contains the Compressed Baseline
+        # row (1a_seed_O4_s0 is one of its three seeds) -- overlaying it
+        # again would just duplicate that exact point. Every other O4-
+        # derived stage (1b/1c/2a/2b/1d/...) gets it added to the stage1
+        # (ENet/E1) overlay, per BASELINE_STYLES.
+        if stage == COMPRESSED_BASELINE_STAGE:
+            overlay_df = baseline_df
+        else:
+            overlay_df = pd.concat([baseline_df, compressed_baseline_df], ignore_index=True)
+        plot_stage(stage, stage_df, overlay_df, args.out_dir)
 
     return 0
 
