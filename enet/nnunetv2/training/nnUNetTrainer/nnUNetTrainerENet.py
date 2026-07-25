@@ -115,6 +115,7 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
             use_strided=_parse_bool_env("ENET_USE_STRIDED", True),
             use_dsc=_parse_bool_env("ENET_USE_DSC", False),
             context_pattern=context_pattern,
+            use_prelu=_parse_bool_env("ENET_USE_PRELU", True),
         )
 
     def configure_optimizers(self):

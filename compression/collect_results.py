@@ -96,6 +96,7 @@ def run_inference(
     quant_bits: int = 32,
     use_dsc: bool = False,
     context_pattern: str = "default",
+    use_prelu: bool = True,
 ) -> Path:
     """Uses `nnUNetv2_predict_from_modelfolder` (-m <exact folder>), NOT
     plain `nnUNetv2_predict` (-tr/-p/-c/-d): the latter's folder resolution
@@ -129,6 +130,7 @@ def run_inference(
     env["ENET_USE_STRIDED"] = "1" if use_strided else "0"
     env["ENET_USE_DSC"] = "1" if use_dsc else "0"
     env["ENET_CONTEXT_PATTERN"] = context_pattern
+    env["ENET_USE_PRELU"] = "1" if use_prelu else "0"
     if quant_bits != 32:
         # Picked up by nnUNetTrainerENetQuant.build_network_architecture,
         # dynamically imported via the checkpoint's own stored trainer_name
@@ -261,6 +263,7 @@ def main() -> None:
     parser.add_argument("--use-dsc", type=int, default=0, choices=[0, 1], help="Depthwise-separable inner conv (rejects combination with --use-asymmetric 1).")
     parser.add_argument("--context-pattern", default="default", choices=["default", "sparse"],
                          help="'sparse' = regular/dilated4/regular/dilated16 (section 2a's div2/div4 bottleneck axis), no 2/8 rungs, never asymmetric.")
+    parser.add_argument("--use-prelu", type=int, default=1, choices=[0, 1], help="0 = collapse the encoder's PReLU to plain ReLU too (section 1d's ablation) -- decoder is always ReLU regardless, see ENet.py.")
     parser.add_argument("--quant-bits", type=int, default=32)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--in-channels", type=int, default=1)
@@ -290,6 +293,7 @@ def main() -> None:
         use_strided=bool(args.use_strided),
         use_dsc=bool(args.use_dsc),
         context_pattern=args.context_pattern,
+        use_prelu=bool(args.use_prelu),
     )
     macs, flops = count_flops(fp32_model, args.in_channels, tuple(args.input_hw))
 
@@ -334,6 +338,7 @@ def main() -> None:
             quant_bits=args.quant_bits,
             use_dsc=bool(args.use_dsc),
             context_pattern=args.context_pattern,
+            use_prelu=bool(args.use_prelu),
         )
     eval_metrics = compute_eval_metrics(prediction_dir)
 
@@ -359,7 +364,7 @@ def main() -> None:
         "f_i": f_i, "f1": f1, "f2": f2, "f3": f3, "f4": f4, "f5": f5,
         "bottlenecks_per_stage": ",".join(str(n) for n in args.bottlenecks),
         "decoder_type": args.decoder_type,
-        "ops_flags": f"dilated={args.use_dilated},asymmetric={args.use_asymmetric},strided={args.use_strided},dsc={args.use_dsc},context_pattern={args.context_pattern}",
+        "ops_flags": f"dilated={args.use_dilated},asymmetric={args.use_asymmetric},strided={args.use_strided},dsc={args.use_dsc},context_pattern={args.context_pattern},prelu={args.use_prelu}",
         "quant_bits": args.quant_bits,
         "params": total_params,
         "flops": flops,

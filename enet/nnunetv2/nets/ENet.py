@@ -41,15 +41,19 @@ SPARSE_DILATION_PATTERN: tuple[dict, ...] = (
 )
 
 
+def _activation(channels: int, relu: bool) -> nn.Module:
+    return nn.ReLU(inplace=True) if relu else nn.PReLU(channels)
+
+
 class InitialBlock(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int):
+    def __init__(self, in_channels: int, out_channels: int, relu: bool = False):
         super().__init__()
         if out_channels <= in_channels:
             raise ValueError("InitialBlock out_channels must exceed in_channels.")
         self.conv = nn.Conv2d(in_channels, out_channels - in_channels, kernel_size=3, stride=2, padding=1, bias=False)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
         self.bn = nn.BatchNorm2d(out_channels)
-        self.act = nn.PReLU(out_channels)
+        self.act = _activation(out_channels, relu)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.act(self.bn(torch.cat([self.conv(x), self.pool(x)], dim=1)))
@@ -154,6 +158,7 @@ class DownsamplingBottleneck(nn.Module):
         internal_ratio: int = 4,
         dropout_p: float = 0.01,
         use_strided: bool = True,
+        relu: bool = False,
     ):
         super().__init__()
         internal_channels = max(1, out_channels // internal_ratio)
@@ -164,7 +169,7 @@ class DownsamplingBottleneck(nn.Module):
             self.reduce = nn.Sequential(
                 nn.Conv2d(in_channels, internal_channels, kernel_size=2, stride=2, bias=False),
                 nn.BatchNorm2d(internal_channels),
-                nn.PReLU(internal_channels),
+                _activation(internal_channels, relu),
             )
         else:
             # Stage-1b ablation: separate maxpool (no learned downsampling)
@@ -173,19 +178,19 @@ class DownsamplingBottleneck(nn.Module):
                 nn.MaxPool2d(kernel_size=2, stride=2),
                 nn.Conv2d(in_channels, internal_channels, kernel_size=1, bias=False),
                 nn.BatchNorm2d(internal_channels),
-                nn.PReLU(internal_channels),
+                _activation(internal_channels, relu),
             )
         self.conv = nn.Sequential(
             nn.Conv2d(internal_channels, internal_channels, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(internal_channels),
-            nn.PReLU(internal_channels),
+            _activation(internal_channels, relu),
         )
         self.expand = nn.Sequential(
             nn.Conv2d(internal_channels, out_channels, kernel_size=1, bias=False),
             nn.BatchNorm2d(out_channels),
         )
         self.dropout = nn.Dropout2d(p=dropout_p)
-        self.out_act = nn.PReLU(out_channels)
+        self.out_act = _activation(out_channels, relu)
         self.out_channels = out_channels
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Size]:
@@ -296,6 +301,7 @@ class ENet(nn.Module):
         use_strided: bool = True,
         use_dsc: bool = False,
         context_pattern: ContextPattern = "default",
+        use_prelu: bool = True,
     ):
         super().__init__()
         if context_pattern not in ("default", "sparse"):
@@ -342,19 +348,30 @@ class ENet(nn.Module):
         self.use_strided = use_strided
         self.use_dsc = use_dsc
         self.context_pattern: ContextPattern = context_pattern
+        # Encoder activation: PReLU by default (paper-faithful, see
+        # RegularBottleneck/UpsamplingBottleneck's own `relu` flags, which
+        # already hardcode the decoder half -- regular4/regular5/up4/up5 --
+        # to plain ReLU regardless of this flag, matching the ENet paper's
+        # empirical PReLU-encoder/ReLU-decoder split). use_prelu=False
+        # switches the encoder to ReLU too, collapsing the whole network to
+        # a single activation, for section 1d's ablation of that split.
+        self.use_prelu = use_prelu
 
         n_stage1, n_stage2, n_stage3, n_regular4, n_regular5 = self.bottlenecks_per_stage
 
         self.initial = self._build_initial_block(in_channels, initial_channels)
         self.down1 = DownsamplingBottleneck(
             initial_channels, stage1_channels, dropout_p=0.01, use_strided=use_strided,
+            relu=not use_prelu,
         )
         self.regular1 = nn.Sequential(
-            *[RegularBottleneck(stage1_channels, dropout_p=0.01, use_dsc=use_dsc) for _ in range(n_stage1)]
+            *[RegularBottleneck(stage1_channels, dropout_p=0.01, use_dsc=use_dsc, relu=not use_prelu)
+              for _ in range(n_stage1)]
         )
 
         self.down2 = DownsamplingBottleneck(
             stage1_channels, stage2_channels, dropout_p=0.1, use_strided=use_strided,
+            relu=not use_prelu,
         )
         self.stage2 = self._make_context_stage(stage2_channels, n_stage2)
         self.proj2_to_3 = (
@@ -363,7 +380,7 @@ class ENet(nn.Module):
             else nn.Sequential(
                 nn.Conv2d(stage2_channels, stage3_channels, kernel_size=1, bias=False),
                 nn.BatchNorm2d(stage3_channels),
-                nn.PReLU(stage3_channels),
+                _activation(stage3_channels, not use_prelu),
             )
         )
         self.stage3 = self._make_context_stage(stage3_channels, n_stage3)
@@ -417,7 +434,7 @@ class ENet(nn.Module):
                 kwargs = {}
             if kwargs.get("asymmetric", False) and not self.use_asymmetric:
                 kwargs = {}
-            ops.append(RegularBottleneck(channels, dropout_p=0.1, use_dsc=self.use_dsc, **kwargs))
+            ops.append(RegularBottleneck(channels, dropout_p=0.1, use_dsc=self.use_dsc, relu=not self.use_prelu, **kwargs))
         return nn.Sequential(*ops)
 
     def _build_initial_block(self, in_channels: int, initial_channels: int) -> nn.Module:
@@ -426,7 +443,7 @@ class ENet(nn.Module):
         the rest of __init__ -- everything downstream of self.initial is
         architecture-agnostic to how it got built, it just needs to receive
         (in_channels, H/2, W/2) and emit (initial_channels, H/2, W/2)."""
-        return InitialBlock(in_channels, initial_channels)
+        return InitialBlock(in_channels, initial_channels, relu=not self.use_prelu)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         input_size = x.shape[2:]
