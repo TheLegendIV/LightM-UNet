@@ -40,7 +40,7 @@ STAGE_ELEMENTS_PER_CHANNEL = {"f_i": 65536, "f1": 16384, "stage23": 4096, "f4": 
 
 STAGE_COLORS = {
     "stage1": "#2a78d6", "1a_seed": "#eb6834", "1b_maxunpool": "#1baf7a",
-    "1c_specialop": "#eda100", "upscale_graduate": "#e87ba4",
+    "1c_specialop": "#eda100", "2a_pruning_grid": "#8659c9", "upscale_graduate": "#e87ba4",
 }
 
 # Display-only renames (results.csv's config_name is untouched). "Original"

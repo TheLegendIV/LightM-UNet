@@ -7,19 +7,22 @@
 #SBATCH --gpus=1
 #SBATCH --mem=32G
 #SBATCH --time=04:00:00
-#SBATCH --array=0-2
+#SBATCH --array=0-3
 #SBATCH --output=logs/%x_%a_%j.out
 #SBATCH --error=logs/%x_%a_%j.err
 
 set -e
 
-# Section 2b -- fine-tune f_i on the best model from 2a, to remove excess
-# feature extraction that can't be absorbed downstream. f_i in [12,8,4] --
-# f_i=16 is reused from 2a's winning cell (best_model.env), not retrained
-# here, hence only 3 tasks (the new Original-derived baseline's f_i=16 is
-# already closer to the floor than E1's f_i=20 was, so the analogous -4-
-# per-step sweep terminates one step sooner -- see foundation_log.md's
-# "Plan revision 2" section).
+# Section 2b -- fine-tune f_i on the best model from 2a (2a_O8_native), to
+# remove excess feature extraction that can't be absorbed downstream, or add
+# it back if f_i=16 is already a bottleneck. f_i in [36,12,8,4] -- f_i=16 is
+# reused from 2a's winning cell (best_model.env), not retrained here, hence
+# only 4 tasks (the new Original-derived baseline's f_i=16 is already closer
+# to the floor than E1's f_i=20 was, so the analogous -4-per-step down-sweep
+# terminates one step sooner -- see foundation_log.md's "Plan revision 2"
+# section). 36 is a slight upscale probe above the f_i=16 baseline, checking
+# whether the initial stage is itself under-provisioned before committing to
+# the down-sweep's floor.
 #
 # f1..f5/bottlenecks come from compression/configs/best_model.env (2a's
 # winner) -- UPDATE THAT FILE after 2a completes, before submitting this.
@@ -37,7 +40,7 @@ source "$HOME/LightM-UNet/compression/configs/best_model.env"
 # ONE shared slot, not two (see ENet.py) -- 5 read variables, not 6.
 IFS=',' read -r _BEST_FI BEST_F1 BEST_F23 BEST_F4 BEST_F5 <<< "${ENET_CHANNELS}"
 
-FI_VALUES=(12 8 4)
+FI_VALUES=(36 12 8 4)
 TASK_ID=${SLURM_ARRAY_TASK_ID}
 FI_VALUE="${FI_VALUES[$TASK_ID]}"
 RUN_NAME="2b_fi${FI_VALUE}"

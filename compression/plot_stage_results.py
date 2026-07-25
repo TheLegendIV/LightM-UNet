@@ -25,6 +25,20 @@ INK, SECONDARY_INK, MUTED, GRID, BASELINE_COLOR, SURFACE = (
 STAGE_COLOR = "#2a78d6"
 BASELINE_MARKER_COLOR = "#eb6834"
 
+# 2a's grid crosses 5 filter widths x 3 bottleneck patterns -- filter width
+# already separates points along the x-axis (params/FLOPs), so bottleneck
+# pattern (the axis this session just redesigned: native vs the new sparse
+# dilation-4/16 div2/div4 patterns) gets categorical color instead, fixed
+# order, never cycled.
+BNECK_PATTERN_COLORS = {"native": "#2a78d6", "div2": "#eb6834", "div4": "#1baf7a"}
+
+
+def bneck_pattern_from_config_name(config_name: str) -> str | None:
+    for pattern in BNECK_PATTERN_COLORS:
+        if config_name.endswith(f"_{pattern}"):
+            return pattern
+    return None
+
 # Display-only renames for plot labels (results.csv's config_name / the
 # underlying checkpoints are untouched). "Original" is ENet exactly as
 # specified in the ENet paper -- the uncompressed baseline everything else
@@ -74,8 +88,20 @@ def _scatter(ax, df: pd.DataFrame, x_col: str, x_label: str, baseline_df: pd.Dat
             ax.annotate(display_name(row["config_name"]), (row[x_col], row["dice"]),
                        fontsize=7, color=SECONDARY_INK, textcoords="offset points", xytext=(5, 5))
 
-    ax.scatter(df[x_col], df["dice"], color=STAGE_COLOR, s=80, zorder=3,
-               edgecolors="black", linewidths=0.5)
+    patterns = df["config_name"].map(bneck_pattern_from_config_name)
+    has_pattern_groups = patterns.notna().any()
+    if has_pattern_groups:
+        # Color follows the entity (bottleneck pattern), not plot order --
+        # fixed BNECK_PATTERN_COLORS assignment, legend below.
+        for pattern, color in BNECK_PATTERN_COLORS.items():
+            subset = df[patterns == pattern]
+            if subset.empty:
+                continue
+            ax.scatter(subset[x_col], subset["dice"], color=color, s=80, zorder=3,
+                       edgecolors="black", linewidths=0.5, label=pattern)
+    else:
+        ax.scatter(df[x_col], df["dice"], color=STAGE_COLOR, s=80, zorder=3,
+                   edgecolors="black", linewidths=0.5)
     for _, row in df.iterrows():
         label = display_name(row["config_name"])
         ax.annotate(label, (row[x_col], row["dice"]), fontsize=7, color=SECONDARY_INK,
@@ -91,6 +117,13 @@ def _scatter(ax, df: pd.DataFrame, x_col: str, x_label: str, baseline_df: pd.Dat
         # scale keeps both clusters legible at once.
         ax.set_xscale("log")
         ax.grid(True, which="minor", color=GRID, linewidth=0.4, zorder=0)
+    if has_pattern_groups or not baseline_df.empty:
+        # One legend call covering everything labeled so far (baseline
+        # overlay + bottleneck-pattern groups, whichever are present) --
+        # calling legend() more than once just replaces it with a fresh one
+        # built from the same labeled artists, so consolidating avoids
+        # redundant work and an inaccurate "bottleneck pattern" title when
+        # ENet/E1 entries are mixed in too.
         ax.legend(frameon=False, fontsize=8, labelcolor=SECONDARY_INK, loc="best")
 
 
