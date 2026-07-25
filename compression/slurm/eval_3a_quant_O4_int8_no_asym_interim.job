@@ -1,0 +1,88 @@
+#!/bin/bash
+#SBATCH --job-name=eval_3a_quant_O4_int8_no_asym_interim
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=00:45:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# Interim results.csv snapshot for 3a_quant_O4_int8_no_asym while
+# resume_3a_quant_O4_int8_no_asym.job finishes the remaining epochs (that
+# run got cut off around epoch 117/150 on walltime -- see that job's header
+# comment). Runs test-set inference + dice/clDice/params/flops/bops purely
+# off whatever checkpoint_best.pth already exists right now; does NOT touch
+# training. collect_results.py reads the checkpoint's own stored
+# current_epoch into the "epochs" column, so this row will visibly show
+# ~110-117/150 (not converged yet) until resume_3a_quant_O4_int8_no_asym.job
+# reruns collect_results.py on the same --net-name and overwrites this same
+# results.csv row (keyed on config_name) with the final 150-epoch numbers.
+
+DATASET_NAME="Dataset501_ARCADE"
+RUN_NAME="3a_quant_O4_int8_no_asym"
+TRAINER_CLASS="nnUNetTrainerENetQuant"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+
+# -- nnU-Net paths (only needed so the subprocess launched by
+#    collect_results.py's run_inference() can find the data; the script's
+#    own paths are resolved relative to the repo root) -----------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Run: ${RUN_NAME} (interim eval, no training)"
+echo "Checkpoint folder: ${ENET_OUTPUT_FOLDER}"
+
+if [ ! -f "${ENET_OUTPUT_FOLDER}/checkpoint_best.pth" ]; then
+    echo "ERROR: no checkpoint_best.pth at ${ENET_OUTPUT_FOLDER} -- nothing to evaluate yet." >&2
+    exit 1
+fi
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet"
+
+echo "=== Collecting interim results into compression/results.csv ==="
+python compression/collect_results.py \
+    --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+    --stage 3a_quant \
+    --channels "4,16,32,16,4" \
+    --bottlenecks "4,8,8,2,1" \
+    --decoder-type "upsample_conv" \
+    --use-dilated 1 \
+    --use-asymmetric 0 \
+    --use-strided 1 \
+    --use-dsc 0 \
+    --quant-bits 8 \
+    --trainer-class "${TRAINER_CLASS}"
+
+echo "Done: ${RUN_NAME} (interim)."
