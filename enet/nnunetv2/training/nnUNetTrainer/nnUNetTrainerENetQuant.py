@@ -40,6 +40,20 @@ class nnUNetTrainerENetQuant(nnUNetTrainerENet):
                 "for the FP32 reference point."
             )
 
+    def load_checkpoint(self, filename_or_checkpoint) -> None:
+        """Brevitas's parameter-scaling modules (e.g. StatsFromParameterScaling)
+        override nn.Module._load_from_state_dict and re-materialize their
+        `scaling_impl.value` parameter from scratch while loading, which drops
+        it back onto CPU regardless of the checkpoint tensor's own device --
+        confirmed directly (548 stray CPU params after a plain load_state_dict
+        on a freshly-built, already-.to(cuda)'d QuantENet, 0 before) while
+        resuming 3a_quant_O4_int8_no_asym via --c. A fresh (non-resumed) run
+        never calls load_state_dict on this model at all, so it never hits
+        this path -- only continuation runs need this re-placement.
+        """
+        super().load_checkpoint(filename_or_checkpoint)
+        self.network = self.network.to(self.device)
+
     @staticmethod
     def build_network_architecture(
         plans_manager: PlansManager,

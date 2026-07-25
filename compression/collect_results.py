@@ -364,7 +364,17 @@ def main() -> None:
         "f_i": f_i, "f1": f1, "f2": f2, "f3": f3, "f4": f4, "f5": f5,
         "bottlenecks_per_stage": ",".join(str(n) for n in args.bottlenecks),
         "decoder_type": args.decoder_type,
-        "ops_flags": f"dilated={args.use_dilated},asymmetric={args.use_asymmetric},strided={args.use_strided},dsc={args.use_dsc},context_pattern={args.context_pattern},prelu={args.use_prelu}",
+        # prelu is n/a for quant rows: QuantENet (unlike ENet) takes no
+        # use_prelu param at all -- it hardcodes QuantReLU everywhere since
+        # Brevitas/FINN has no quantized PReLU op (see QuantENet.py's module
+        # docstring). --use-prelu's default only ever describes the FP32
+        # reference model built above for FLOPs counting, not the actual
+        # trained network, so stamping it here for quant rows would silently
+        # misrepresent the real architecture.
+        "ops_flags": (
+            f"dilated={args.use_dilated},asymmetric={args.use_asymmetric},strided={args.use_strided},dsc={args.use_dsc},context_pattern={args.context_pattern},prelu="
+            + ("n/a(quant-forces-relu)" if args.quant_bits != 32 else str(args.use_prelu))
+        ),
         "quant_bits": args.quant_bits,
         "params": total_params,
         "flops": flops,
