@@ -36,6 +36,10 @@ logs/*
 
 */validation/*
 
+# Regenerable from a checkpoint + compression/export_quant_checkpoint.py at
+# any time -- never worth committing.
+# compression/configs/qonnx_exports/
+
 # Runtime mutex for collect_results.py's results.csv flock -- never has
 # content worth tracking, just a lock target.
 *.lock
