@@ -34,7 +34,7 @@ import torch.nn.functional as F
 from torch import nn
 
 import brevitas.nn as qnn
-from brevitas.quant import Int8ActPerTensorFloat, Int8WeightPerTensorFloat
+from brevitas.quant import Int8ActPerTensorFloat, Int8WeightPerTensorFloat, Uint8ActPerTensorFloat
 
 from nnunetv2.nets.ENet import CONTEXT_STAGE_PATTERN
 
@@ -50,8 +50,19 @@ def _quant_conv2d(in_ch: int, out_ch: int, bit_width: int, **kwargs) -> qnn.Quan
 
 
 def _quant_act(bit_width: int) -> qnn.QuantReLU:
+    # Uint8ActPerTensorFloat (signed=False, narrow_range=False), NOT
+    # Int8ActPerTensorFloat: FINN's dataflow backend rejects a QONNX-exported
+    # ReLU activation quantizer unless it's unsigned and non-narrow
+    # ("FINN only supports unsigned and non-narrow quant noted for ReLU
+    # activations") -- confirmed against Brevitas's own base.py, where
+    # Uint8ActPerTensorFloat is exactly signed=False/narrow_range=False and
+    # is the quantizer its own docstring pairs with QuantReLU, vs
+    # Int8ActPerTensorFloat's docstring pairing with QuantIdentity. Since
+    # ReLU output is never negative, this also uses the full 0-255 codebook
+    # at the same bit-width instead of wasting the sign half on values that
+    # never occur.
     return qnn.QuantReLU(
-        bit_width=bit_width, act_quant=Int8ActPerTensorFloat,
+        bit_width=bit_width, act_quant=Uint8ActPerTensorFloat,
         return_quant_tensor=True,
     )
 
