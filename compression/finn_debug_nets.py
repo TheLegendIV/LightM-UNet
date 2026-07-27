@@ -5,37 +5,62 @@ weights only.
 Motivation: the FINN streamlining transform sequence has been failing on
 the full-size QuantENet export, and the full graph is too large to debug
 transform-by-transform. These nets keep every *unique* op type QuantENet's
-streamlining needs to handle (initial block's concat, downsampling
-bottleneck's strided conv, a context-stage regular bottleneck, upsampling
-bottleneck's interpolate + residual add, the final transposed conv) while
-cutting every dimension that's just repetition of an op FINN already has
-to handle elsewhere:
+streamlining needs to handle (initial block's downsampling conv, a
+downsampling bottleneck, a context-stage regular bottleneck, an upsampling
+bottleneck, the final transposed conv) while cutting every dimension
+that's just repetition of an op FINN already has to handle elsewhere, AND
+while cutting every parallel branch: the whole network is a SINGLE STREAM,
+no concat/residual-add/skip-connection anywhere, since a linear op chain
+is far easier to bisect when FINN's streamlining breaks than a graph with
+branch-and-merge points.
   - 1 bottleneck per stage (bottlenecks_per_stage patterns only vary
     *which* bottleneck runs, not whether streamlining handles it).
-  - Uniform smallest channel width (4) at every stage, including the
-    initial block (4 > in_channels=1, the only constraint QuantInitialBlock
-    enforces).
+  - Uniform smallest channel width (4) at every stage.
   - stage3 dropped entirely: stage2 and stage3 are both
     `_make_context_stage` calls over the exact same CONTEXT_STAGE_PATTERN,
     i.e. structurally identical from FINN's perspective -- keeping one
     covers the op, keeping both would just double the transform's runtime
     on identical nodes.
-  - decoder_type='upsample_conv' (bilinear interpolate), not max_unpool --
-    see QuantENetDebugFull's docstring: max_unpool doesn't even reach QONNX,
-    PyTorch's ONNX exporter has no symbolic for aten::max_unpool2d at all.
-  - The identity/pooling shortcut branch is dropped from QuantRegularBottleneck
-    and QuantDownsamplingBottleneck (QuantRegularBottleneckNoResidual /
-    QuantDownsamplingBottleneckNoResidual below): in both, that branch does
-    zero conv work (a raw passthrough of the block's input for the regular
-    bottleneck; a plain maxpool + trivial channel-adjust for the
-    downsampling bottleneck), so it's pure residual-add plumbing rather
-    than a distinct op FINN's streamlining needs coverage for. Not applied
-    to QuantUpsamplingBottleneck: its main_proj shortcut has a real 1x1
-    conv in it, not just a passthrough.
+  - Every parallel branch in QuantENet's original blocks is dropped,
+    keeping only the branch that does the block's real conv work (see each
+    NoResidual/ConvOnly class's docstring below for which branch that is
+    and why):
+      - QuantInitialBlockConvOnly: drops the maxpool branch that's
+        concatenated onto the conv branch in the original.
+      - QuantRegularBottleneckNoResidual: drops the identity shortcut
+        (raw `x`, added back via `residual_add`).
+      - QuantDownsamplingBottleneckNoResidual: drops the maxpool +
+        zero-pad/truncate shortcut (added back via `residual_add`).
+      - QuantUpsamplingBottleneckNoResidual: drops the main_proj-then-
+        unpool/interpolate shortcut (added back via `residual_add`).
+    No block needs to track or pass around indices/output-size bookkeeping
+    anymore either (the original blocks needed that specifically to line
+    up their now-removed unpool/interpolate shortcut branch) -- the
+    downsampling bottlenecks' maxpool and the final upsampling
+    QuantConvTranspose2d (kernel=2, stride=2) are exact inverses of each
+    other on even input sizes, so the whole net's spatial size returns to
+    the input's HxW by construction.
+  - use_strided=False on every downsampling bottleneck: reduces via its
+    plain maxpool + 1x1-conv path (sequential, not a parallel branch --
+    see QuantDownsamplingBottleneckNoResidual) rather than a strided 2x2
+    conv. Combined with never introducing a dilated/asymmetric/DSC regular
+    bottleneck variant (stage2 etc. only ever use plain default kwargs --
+    kernel=3, dilation=1, no asymmetric), this matches this project's own
+    "none" special-op-ablation config (see foundation_log.md's Section
+    1c: dilated/asymmetric/strided/none/DSC) -- the plainest op set
+    QuantENet's architecture supports, on top of the single-stream cut
+    above.
+  - decoder_type='upsample_conv' (bilinear interpolate) is itself now moot
+    -- QuantUpsamplingBottleneckNoResidual never interpolates or unpools,
+    it upsamples purely via QuantConvTranspose2d. (Kept as a design note:
+    max_unpool wasn't an option here regardless, since PyTorch's ONNX
+    exporter has no symbolic function for aten::max_unpool2d at all --
+    confirmed directly, torch.onnx.export raises UnsupportedOperatorError
+    for it regardless of Brevitas/QONNX.)
 
 Two variants, matching the two things worth isolating in FINN debugging --
 does streamlining break in the encoder alone, or only once the decoder's
-interpolate/transposed-conv ops are added:
+transposed-conv ops are added:
   - QuantENetDebugEncoder: initial -> down1 -> regular1 -> down2 -> stage2.
   - QuantENetDebugFull: the above -> up4 -> regular4 -> up5 -> regular5 ->
     final transposed conv.
@@ -47,10 +72,10 @@ Int8ActPerTensorFloat activation quantizers used elsewhere in QuantENet --
 with random weights and no calibration data, a stats-derived scale would
 be arbitrary, whereas HardTanh(-1, 1) gives a fixed, known scale
 regardless of what the random weights produce. This is IN ADDITION to
-QuantInitialBlock's own internal input quantizer (a second, redundant
-quant node FINN's streamlining has to fold) -- deliberately realistic
-rather than special-cased away, since real QONNX exports have the same
-redundancy.
+QuantInitialBlockConvOnly's own internal input quantizer (a second,
+redundant quant node FINN's streamlining has to fold) -- deliberately
+realistic rather than special-cased away, since real QONNX exports have
+the same redundancy.
 
 Every Brevitas layer (including both input_bound/output_bound quantizers)
 uses return_quant_tensor=True throughout, so int8/uint8 scale/zero_point/
@@ -103,7 +128,8 @@ from brevitas.quant import Int8ActPerTensorFloat, Int8WeightPerTensorFloat
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
 from nnunetv2.nets.QuantENet import (  # noqa: E402
-    QuantInitialBlock,
+    _quant_conv2d,
+    _quant_act,
     QuantDownsamplingBottleneck,
     QuantRegularBottleneck,
     QuantUpsamplingBottleneck,
@@ -125,6 +151,30 @@ def _bounded_quant(bit_width: int = BIT_WIDTH) -> qnn.QuantHardTanh:
         bit_width=bit_width, min_val=-1.0, max_val=1.0,
         act_quant=Int8ActPerTensorFloat, return_quant_tensor=True,
     )
+
+
+class QuantInitialBlockConvOnly(nn.Module):
+    """Single-stream replacement for QuantENet.py's QuantInitialBlock --
+    drops the parallel maxpool branch (concatenated onto the conv branch
+    in the original, to cheaply reach out_channels without a full-width
+    conv). Not a subclass-and-delete like the *NoResidual classes below:
+    the original conv only produces out_channels - in_channels channels
+    (sized to concat with the pool branch's in_channels channels), so
+    dropping that branch means conv itself must be resized to the full
+    out_channels -- reuses QuantENet.py's _quant_conv2d/_quant_act helpers
+    directly (same as every other class here), so it can't drift from
+    QuantENet's quantization scheme; only the topology differs."""
+
+    def __init__(self, in_channels: int, out_channels: int, bit_width: int):
+        super().__init__()
+        self.input_quant = qnn.QuantIdentity(bit_width=bit_width, act_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
+        self.conv = _quant_conv2d(in_channels, out_channels, bit_width, kernel_size=3, stride=2, padding=1)
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.act = _quant_act(bit_width)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.input_quant(x)
+        return self.act(self.bn(self.conv(x)))
 
 
 class QuantRegularBottleneckNoResidual(QuantRegularBottleneck):
@@ -150,22 +200,44 @@ class QuantDownsamplingBottleneckNoResidual(QuantDownsamplingBottleneck):
     = maxpool + zero-pad/truncate to match channels, added back via
     `residual_add`) -- see module docstring. reduce/conv/expand/dropout/
     out_act are inherited unmodified; only `forward` and the now-dead
-    `pool`/`residual_add` submodules differ. Still returns the
-    pre-downsample spatial size (needed by the decoder's bilinear-
-    interpolate upsampling path in QuantENetDebugFull), just not pooling
-    indices (nothing in these debug nets uses max_unpool)."""
+    `pool`/`residual_add` submodules differ. No longer returns pooling
+    indices or the pre-downsample size -- single stream, nothing downstream
+    needs either (see QuantUpsamplingBottleneckNoResidual)."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         del self.pool
         del self.residual_add
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Size]:
-        input_size = x.size()
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.reduce(x)
         out = self.conv(out)
         out = self.dropout(self.expand(out))
-        return self.out_act(out), input_size
+        return self.out_act(out)
+
+
+class QuantUpsamplingBottleneckNoResidual(QuantUpsamplingBottleneck):
+    """QuantUpsamplingBottleneck minus its main_proj-then-unpool/interpolate
+    shortcut branch (added back via `residual_add`) -- see module
+    docstring. reduce/up/expand/dropout/out_act are inherited unmodified;
+    only `forward` and the now-dead `main_proj`/`unpool`/`residual_add`
+    submodules differ. `up` (QuantConvTranspose2d, kernel=2, stride=2)
+    exactly doubles spatial size on its own -- the exact inverse of the
+    downsampling bottlenecks' maxpool (use_strided=False, kernel=2,
+    stride=2) on even input sizes -- so unlike the original block, this
+    needs no output_size/indices argument at all."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        del self.main_proj
+        del self.unpool
+        del self.residual_add
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out = self.reduce(x)
+        out = self.up(out)
+        out = self.dropout(self.expand(out))
+        return self.out_act(out)
 
 
 class QuantENetDebugEncoder(nn.Module):
@@ -174,50 +246,44 @@ class QuantENetDebugEncoder(nn.Module):
     def __init__(self, in_channels: int = 1, channels: int = DEBUG_CHANNELS, bit_width: int = BIT_WIDTH):
         super().__init__()
         self.input_bound = _bounded_quant(bit_width)
-        self.initial = QuantInitialBlock(in_channels, channels, bit_width)
-        self.down1 = QuantDownsamplingBottleneckNoResidual(channels, channels, bit_width, dropout_p=0.0)
+        self.initial = QuantInitialBlockConvOnly(in_channels, channels, bit_width)
+        self.down1 = QuantDownsamplingBottleneckNoResidual(channels, channels, bit_width, dropout_p=0.0, use_strided=False)
         self.regular1 = QuantRegularBottleneckNoResidual(channels, bit_width, dropout_p=0.0)
-        self.down2 = QuantDownsamplingBottleneckNoResidual(channels, channels, bit_width, dropout_p=0.0)
+        self.down2 = QuantDownsamplingBottleneckNoResidual(channels, channels, bit_width, dropout_p=0.0, use_strided=False)
         self.stage2 = QuantRegularBottleneckNoResidual(channels, bit_width, dropout_p=0.0)
         self.output_bound = _bounded_quant(bit_width)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.input_bound(x)
         x = self.initial(x)
-        x, _size1 = self.down1(x)
+        x = self.down1(x)
         x = self.regular1(x)
-        x, _size2 = self.down2(x)
+        x = self.down2(x)
         x = self.stage2(x)
         x = self.output_bound(x)
         return x.value if hasattr(x, "value") else x
 
 
 class QuantENetDebugFull(nn.Module):
-    """Encoder + decoder debug net -- see module docstring. Uses
-    upsample_conv (bilinear interpolate), not max_unpool: PyTorch's ONNX
-    exporter has no symbolic function for aten::max_unpool2d at all
-    (confirmed directly -- torch.onnx.export raises UnsupportedOperatorError
-    for it regardless of Brevitas/QONNX), so max_unpool was never actually
-    exportable in the first place. QuantENet.py's own __main__ self-test
-    export only ever used decoder_type='upsample_conv' for exactly this
-    reason, never max_unpool -- this net follows the same only-verified
-    path rather than the (uniform-channel-width-enabled but unexportable)
-    max_unpool one. QuantUpsamplingBottleneck itself is unchanged (kept
-    with its residual add) -- unlike the regular/downsampling bottlenecks,
-    its shortcut branch (main_proj) does real conv work, not a passthrough,
-    so it doesn't fit the "non-conv branch" simplification."""
+    """Encoder + decoder debug net -- see module docstring. Every block is
+    single-stream (no concat/residual-add/skip-connection anywhere):
+    downsampling is done by plain maxpool (use_strided=False, kernel=2,
+    stride=2), upsampling by QuantConvTranspose2d (kernel=2, stride=2) --
+    exact inverses of each other on even input sizes, so the whole net's
+    spatial size returns to the input's HxW by construction, no
+    indices/output-size bookkeeping needed."""
 
     def __init__(self, in_channels: int = 1, out_channels: int = 2, channels: int = DEBUG_CHANNELS, bit_width: int = BIT_WIDTH):
         super().__init__()
         self.input_bound = _bounded_quant(bit_width)
-        self.initial = QuantInitialBlock(in_channels, channels, bit_width)
-        self.down1 = QuantDownsamplingBottleneckNoResidual(channels, channels, bit_width, dropout_p=0.0)
+        self.initial = QuantInitialBlockConvOnly(in_channels, channels, bit_width)
+        self.down1 = QuantDownsamplingBottleneckNoResidual(channels, channels, bit_width, dropout_p=0.0, use_strided=False)
         self.regular1 = QuantRegularBottleneckNoResidual(channels, bit_width, dropout_p=0.0)
-        self.down2 = QuantDownsamplingBottleneckNoResidual(channels, channels, bit_width, dropout_p=0.0)
+        self.down2 = QuantDownsamplingBottleneckNoResidual(channels, channels, bit_width, dropout_p=0.0, use_strided=False)
         self.stage2 = QuantRegularBottleneckNoResidual(channels, bit_width, dropout_p=0.0)
-        self.up4 = QuantUpsamplingBottleneck(channels, channels, bit_width)
+        self.up4 = QuantUpsamplingBottleneckNoResidual(channels, channels, bit_width)
         self.regular4 = QuantRegularBottleneckNoResidual(channels, bit_width, dropout_p=0.0)
-        self.up5 = QuantUpsamplingBottleneck(channels, channels, bit_width)
+        self.up5 = QuantUpsamplingBottleneckNoResidual(channels, channels, bit_width)
         self.regular5 = QuantRegularBottleneckNoResidual(channels, bit_width, dropout_p=0.0)
         self.final = qnn.QuantConvTranspose2d(
             channels, out_channels, kernel_size=2, stride=2, bias=True,
@@ -228,13 +294,13 @@ class QuantENetDebugFull(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.input_bound(x)
         x = self.initial(x)
-        x, size1 = self.down1(x)
+        x = self.down1(x)
         x = self.regular1(x)
-        x, size2 = self.down2(x)
+        x = self.down2(x)
         x = self.stage2(x)
-        x = self.up4(x, size2, indices=None)
+        x = self.up4(x)
         x = self.regular4(x)
-        x = self.up5(x, size1, indices=None)
+        x = self.up5(x)
         x = self.regular5(x)
         x = self.final(x)
         x = self.output_bound(x)
