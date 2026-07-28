@@ -1,4 +1,7 @@
-# Instructions for Claude-in-VSCode: ENet→FINN compression pipeline
+docker run --rm -it  --gpus all  --ipc=host  --ulimit memlock=-1  --ulimit stack=67108864  -v "C:\Users\win32\Desktop\University\Thesis\repos\LightM-UNet:/workspace/LightM-UNet"  -w /workspace/LightM-UNet/lightm-unet  pytorch/pytorch:2.0.1-cuda11.7-cudnn8-devel
+
+
+# structions for Claude-in-VSCode: ENet→FINN compression pipeline
 # Repo structure and framework assumed known.
 # STAGED, NOT UNATTENDED: halt at each checkpoint and report.
 # No single upfront Stage 0 gate: each stage runs its own pre-flight smoke
