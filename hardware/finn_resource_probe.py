@@ -13,7 +13,7 @@ separate from this repo's training container; not set up yet). If `finn` /
 and stops after the QONNX export -- it does not fail silently.
 
 Usage:
-    python compression/finn_resource_probe.py \
+    python hardware/finn_resource_probe.py \
         --config-name U8_int8 --channels 20,12,20,12,4 --bits 8 \
         --fpga-part xczu7ev-ffvc1156-2-e --clk-ns 5.0
 
@@ -34,7 +34,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
 from nnunetv2.nets.QuantENet import QuantENet  # noqa: E402
 
-OUT_DIR = Path(__file__).resolve().parent / "configs" / "early_probes"
+OUT_DIR = Path(__file__).resolve().parent / "outputs" / "early_probes"
 
 # ZU7EV on-chip resources (see Xilinx DS926) -- fits_bool checks the FINN
 # estimate against these, independent of whatever fpga_part string FINN's

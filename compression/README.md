@@ -26,9 +26,12 @@ bugs caught, and timing measurements.
   rows exist so far for that stage -> `sweep_progress/`.
 - `smoke_test.sh` -- pre-flight smoke test (per `smoke_test_policy` in the
   yaml), run before each stage's full sweep, not a one-time gate.
-- `finn_resource_probe.py` + `enet/nnunetv2/nets/QuantENet.py` -- P1's
-  QONNX export + FINN analytical resource estimate (needs FINN's own Docker
-  container, being set up).
+- FINN/QONNX export + hardware resource estimation has moved to
+  `../hardware/` (see its own README) -- `finn_resource_probe.py` (P1's
+  early analytical probe), `finn_enet_prod_export.py` /
+  `export_quant_checkpoint.py` (FINN-compatible model + QONNX export), and
+  `finn_enet_build.py` (the working FINN estimate-only build pipeline) all
+  live there now, along with the `finn_enet_deploy_xczu7ev.ipynb` notebook.
 - `configs/cfinal_ops.env` -- Stage 1b's output (decoder_type + op flags),
   sourced by every downstream Slurm job so it's edited in one place.
 - `slurm/` -- job arrays, one per sweep, named `<stage>_array.job`.

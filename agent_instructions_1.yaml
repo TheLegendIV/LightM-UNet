@@ -146,14 +146,17 @@ early_probes:              # run in PARALLEL with stage_2; not on critical path
     report: [est_lut, est_bram, est_dsp, est_latency_ms, fits_bool]
     outcome: if it does not fit, revise Stage-1 goals BEFORE interpreting the grid
     cost: ~1 day, no training
-    status: HALF DONE. compression/finn_resource_probe.py + QuantENet.py built
-            and verified — Brevitas U8@INT8 QuantENet constructs, forward-passes,
-            passes a topology-parity check against ENet.py, and exports to QONNX
-            (passes onnx.checker). The FINN estimate step itself (no Vivado/Vitis
-            needed — DataflowOutputType.ESTIMATE_REPORTS) is NOT yet run: FINN
-            only officially runs inside its own dedicated Docker container
-            (separate from Vivado/Vitis AND from this repo's training container),
-            not set up yet. Re-run finn_resource_probe.py once that's available.
+    status: DONE (superseded by hardware/finn_enet_build.py). The original
+            compression/finn_resource_probe.py + QuantENet.py probe (now
+            hardware/finn_resource_probe.py) verified the QONNX export path;
+            the full FINN estimate-only build (no Vivado/Vitis — just
+            DataflowOutputType.ESTIMATE_REPORTS) has since been run
+            end-to-end inside FINN's own Docker container against a
+            FINN-compatible ENet variant (hardware/finn_enet_prod_export.py).
+            See hardware/README.md for the full writeup, the FINN-specific
+            architecture deviations, and the resulting resource estimate
+            (currently far over the ZU7EV budget — folding/parallelism
+            reduction is the next open item).
   p2_quantization_probe:
     purpose: characterise quantization early — near-orthogonal to structure, and
              it determines how much param budget is actually needed
@@ -228,10 +231,14 @@ stage_4_quantization:
                 stage_2 rather than freezing Cfinal_ops
 
 stage_5_finn_folding:
-  status: SKIPPED for now — needs Vivado/Vitis (not on this PC yet) and
-          FINN's own Docker container (also not set up). Revisit once both
-          are available; see early_probes.p1_finn_resource_probe for the
-          analytical-estimate-only slice of this that IS being pursued now.
+  status: PARTIALLY UNBLOCKED — FINN's own Docker container is now set up
+          and the analytical estimate-only build (hardware/finn_enet_build.py)
+          runs end-to-end (see hardware/README.md). Full folding/synthesis
+          (Vivado/Vitis, PE×SIMD tuning for a real bitstream) is still not
+          done — the estimate-only run at default folding is currently ~21x
+          over LUT budget and ~12x over DSP budget on ZU7EV, so per-layer
+          folding reduction is the next open item before this stage can be
+          considered complete.
   action: QONNX -> FINN; per-layer PE×SIMD for latency<10ms and ZU7EV fit
   report: [LUT, FF, DSP, BRAM, latency_ms, fits_bool]
   note: include per-image z-norm frame buffer in latency budget
@@ -240,11 +247,10 @@ execution_order: [foundation_tasks, stage_1_baselines,
                   stage_1b_decoder_topology, stage_2_architecture_grid,
                   stage_2b_seed_variance, stage_4_quantization]
                   # stage_3 merged into stage_1b_decoder_topology (see above).
-                  # stage_5_finn_folding: SKIPPED for now (no Vivado/Vitis;
-                  # FINN's own Docker container not set up either) — full
-                  # synthesis/folding stays out of scope, but its analytical
-                  # resource-estimate half is being pursued early via
-                  # early_probes.p1_finn_resource_probe instead.
+                  # stage_5_finn_folding: full synthesis/folding (Vivado/Vitis)
+                  # still out of scope, but its analytical resource-estimate
+                  # half now runs end-to-end — see hardware/README.md and
+                  # hardware/finn_enet_build.py.
                   # smoke_test_policy is not a discrete stage; it runs
                   # pre-flight before each of the stages above (see policy)
 

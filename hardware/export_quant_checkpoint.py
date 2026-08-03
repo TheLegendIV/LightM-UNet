@@ -41,8 +41,8 @@ from nnunetv2.nets.QuantENet import QuantENet  # noqa: E402
 
 DATASET_NAME = "Dataset501_ARCADE"
 NNUNET_RESULTS = REPO_ROOT / "data" / "nnUNet_results"
-OUT_DIR = Path(__file__).resolve().parent / "configs" / "qonnx_exports"
-RESULTS_CSV = Path(__file__).resolve().parent / "results.csv"
+OUT_DIR = Path(__file__).resolve().parent / "outputs" / "qonnx_exports"
+RESULTS_CSV = REPO_ROOT / "compression" / "results.csv"
 
 
 def parse_tuple5(value: str, name: str) -> tuple[int, ...]:
@@ -116,7 +116,7 @@ def main() -> None:
     parser.add_argument("--configuration", default="2d")
     parser.add_argument("--fold", type=int, default=0)
     parser.add_argument("--checkpoint-name", default="checkpoint_best.pth")
-    parser.add_argument("--output", default=None, help="Defaults to compression/configs/qonnx_exports/<net-name>.onnx")
+    parser.add_argument("--output", default=None, help="Defaults to hardware/outputs/qonnx_exports/<net-name>.onnx")
     args = parser.parse_args()
 
     if args.channels is not None:
