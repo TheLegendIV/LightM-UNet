@@ -1,0 +1,182 @@
+#!/bin/bash
+#SBATCH --job-name=stage_4_arch_probes
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+#SBATCH --array=0-7
+#SBATCH --output=logs/%x_%a_%j.out
+#SBATCH --error=logs/%x_%a_%j.err
+
+set -e
+
+# Stage 4 -- architecture probes, all off the U4 reference cell (same
+# baseline stage_2_special_ops_array.job used: CHANNELS=4,16,32,16,4,
+# BOTTLENECKS=4,8,8,2,1 native, DECODER_TYPE=upsample_conv, USE_PRELU=0,
+# dilated/asymmetric/strided=1, dsc=0). Each task changes exactly ONE thing
+# off that reference -- channels for 4.1/4.2, one new ENet.py flag for
+# 4.4.1-4.4.4/4.5/4.6. 4.2.1 (conditional on 4.2) and 4.7 (gated on 4.4.4)
+# are NOT included here -- both need their gating probe's result first, see
+# compression/foundation_log.md when that's written up.
+#
+#   0: 4_1_e1_shape           -- CHANNELS=4,16,28,16,4 (E1-shape non-uniform
+#      candidate at ~U4's budget -- see session notes: a truly param-matched
+#      E1 ratio rounds to U4's own shape at this budget, so this is the
+#      nearest distinguishable non-uniform candidate, picked by the user)
+#   1: 4_2_extra_initial       -- CHANNELS=8,16,32,16,4 (f_i doubled, rest at
+#      U4's values)
+#   2: 4_4_1_shallow_dilation  -- ENET_SHALLOW_DILATION=1 (stage1+regular4
+#      get alternating regular/dilated(16); regular5 untouched)
+#   3: 4_4_2_separable_dilated -- ENET_SEPARABLE_DILATED=1 (every dilated
+#      context-pattern slot factored into (3,1)+(1,3), same dilation both
+#      passes)
+#   4: 4_4_3_merge_dilated_pairs -- ENET_MERGE_DILATED_PAIRS=1 (fuses each
+#      (regular-or-asymmetric, dilated) pattern PAIR into one block sharing
+#      one reduce/expand -- halves stage2/3's block count, 8->4 at native
+#      depth)
+#   5: 4_4_4_dsc_dilated_only  -- ENET_DSC_DILATED_ONLY=1 (DSC only on the
+#      context pattern's 4 dilated slots, everything else full-rank)
+#   6: 4_5_double_projections  -- ENET_DOUBLE_PROJECTIONS=1 (extra 1x1
+#      conv+BN+act stacked in every bottleneck's reduce AND expand,
+#      network-wide)
+#   7: 4_6_two_block_skip      -- ENET_TWO_BLOCK_SKIP=1 (extra short residual
+#      spanning every 2 consecutive blocks in stage2 AND stage3, on top of
+#      each block's own internal residual)
+#
+# All 8 architectures confirmed via local docker smoke test (nnUNetv2_train,
+# 1 epoch/2 iterations against Dataset509_ARCADE_1x1_4c) to build and train
+# without error, and (for the 6 new-flag probes) to produce distinctly
+# different param counts from the U4 baseline in the expected direction
+# (shallow_dilation/two_block_skip: unchanged, dilation/skip add no new
+# weights; separable_dilated/merge_dilated_pairs/dsc_dilated_only: fewer
+# params; double_projections: more params).
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+
+CONFIG_NAMES=(4_1_e1_shape 4_2_extra_initial 4_4_1_shallow_dilation 4_4_2_separable_dilated
+              4_4_3_merge_dilated_pairs 4_4_4_dsc_dilated_only 4_5_double_projections 4_6_two_block_skip)
+CHANNELS_ARR=("4,16,28,16,4" "8,16,32,16,4" "4,16,32,16,4" "4,16,32,16,4"
+              "4,16,32,16,4" "4,16,32,16,4" "4,16,32,16,4" "4,16,32,16,4")
+SHALLOW_DILATION_ARR=(0 0 1 0 0 0 0 0)
+SEPARABLE_DILATED_ARR=(0 0 0 1 0 0 0 0)
+MERGE_DILATED_PAIRS_ARR=(0 0 0 0 1 0 0 0)
+DSC_DILATED_ONLY_ARR=(0 0 0 0 0 1 0 0)
+DOUBLE_PROJECTIONS_ARR=(0 0 0 0 0 0 1 0)
+TWO_BLOCK_SKIP_ARR=(0 0 0 0 0 0 0 1)
+
+TASK_ID=${SLURM_ARRAY_TASK_ID}
+CONFIG_NAME="${CONFIG_NAMES[$TASK_ID]}"
+RUN_NAME="${CONFIG_NAME}"
+TRAINER_CLASS="nnUNetTrainerENet"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- ENet trainer knobs -- U4 reference, one thing changed per task ---------
+export ENET_CHANNELS="${CHANNELS_ARR[$TASK_ID]}"
+export ENET_BOTTLENECKS="4,8,8,2,1"
+export ENET_CONTEXT_PATTERN="default"
+export ENET_DECODER_TYPE="upsample_conv"
+export ENET_USE_PRELU=0
+export ENET_USE_DILATED=1
+export ENET_USE_ASYMMETRIC=1
+export ENET_USE_STRIDED=1
+export ENET_USE_DSC=0
+export ENET_SHALLOW_DILATION="${SHALLOW_DILATION_ARR[$TASK_ID]}"
+export ENET_SEPARABLE_DILATED="${SEPARABLE_DILATED_ARR[$TASK_ID]}"
+export ENET_MERGE_DILATED_PAIRS="${MERGE_DILATED_PAIRS_ARR[$TASK_ID]}"
+export ENET_DSC_DILATED_ONLY="${DSC_DILATED_ONLY_ARR[$TASK_ID]}"
+export ENET_DOUBLE_PROJECTIONS="${DOUBLE_PROJECTIONS_ARR[$TASK_ID]}"
+export ENET_TWO_BLOCK_SKIP="${TWO_BLOCK_SKIP_ARR[$TASK_ID]}"
+export ENET_EPOCHS=150
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Array task: ${TASK_ID} -> ${RUN_NAME}"
+echo "ENET_CHANNELS=${ENET_CHANNELS}"
+echo "ENET_SHALLOW_DILATION=${ENET_SHALLOW_DILATION} ENET_SEPARABLE_DILATED=${ENET_SEPARABLE_DILATED} ENET_MERGE_DILATED_PAIRS=${ENET_MERGE_DILATED_PAIRS}"
+echo "ENET_DSC_DILATED_ONLY=${ENET_DSC_DILATED_ONLY} ENET_DOUBLE_PROJECTIONS=${ENET_DOUBLE_PROJECTIONS} ENET_TWO_BLOCK_SKIP=${ENET_TWO_BLOCK_SKIP}"
+echo "Output folder: ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Checking for an existing checkpoint for ${RUN_NAME} ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ] || [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_best.pth" ]; then
+    echo "Checkpoint already exists at ${ENET_OUTPUT_FOLDER} -- skipping training, going straight to collect_results.py."
+else
+    echo "=== Start training: ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+    echo "Training finished for ${RUN_NAME}."
+
+    echo "=== Archiving checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+fi
+
+echo "=== Collecting results into compression/results.csv ==="
+cd "$HOME/LightM-UNet"
+python compression/collect_results.py \
+    --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+    --stage 4_arch_probes \
+    --dataset-name "${DATASET_NAME}" \
+    --dataset-id "${DATASET_ID}" \
+    --channels "${ENET_CHANNELS}" \
+    --bottlenecks "${ENET_BOTTLENECKS}" \
+    --decoder-type "${ENET_DECODER_TYPE}" \
+    --use-dilated "${ENET_USE_DILATED}" \
+    --use-asymmetric "${ENET_USE_ASYMMETRIC}" \
+    --use-strided "${ENET_USE_STRIDED}" \
+    --use-dsc "${ENET_USE_DSC}" \
+    --context-pattern "${ENET_CONTEXT_PATTERN}" \
+    --use-prelu "${ENET_USE_PRELU}" \
+    --shallow-dilation "${ENET_SHALLOW_DILATION}" \
+    --separable-dilated "${ENET_SEPARABLE_DILATED}" \
+    --merge-dilated-pairs "${ENET_MERGE_DILATED_PAIRS}" \
+    --dsc-dilated-only "${ENET_DSC_DILATED_ONLY}" \
+    --double-projections "${ENET_DOUBLE_PROJECTIONS}" \
+    --two-block-skip "${ENET_TWO_BLOCK_SKIP}" \
+    --trainer-class "${TRAINER_CLASS}"
+
+echo "Done: ${RUN_NAME}."

@@ -116,6 +116,14 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
             use_dsc=_parse_bool_env("ENET_USE_DSC", False),
             context_pattern=context_pattern,
             use_prelu=_parse_bool_env("ENET_USE_PRELU", True),
+            # Stage 4 architecture probes (all default False -- see
+            # ENet.py's own constructor docstring for what each does):
+            shallow_dilation=_parse_bool_env("ENET_SHALLOW_DILATION", False),
+            separable_dilated=_parse_bool_env("ENET_SEPARABLE_DILATED", False),
+            merge_dilated_pairs=_parse_bool_env("ENET_MERGE_DILATED_PAIRS", False),
+            dsc_dilated_only=_parse_bool_env("ENET_DSC_DILATED_ONLY", False),
+            double_projections=_parse_bool_env("ENET_DOUBLE_PROJECTIONS", False),
+            two_block_skip=_parse_bool_env("ENET_TWO_BLOCK_SKIP", False),
         )
 
     def configure_optimizers(self):

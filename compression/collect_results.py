@@ -1,5 +1,6 @@
-"""Run inference if needed, compute dice/clDice/n_components + params/FLOPs
-for one trained ENet checkpoint, and write/update its row in results.csv.
+"""Run inference if needed, compute per-class dice/clDice/n_components +
+params/FLOPs for one trained ENet checkpoint, and write/update its row in
+results.csv.
 
 The general-purpose successor to analysis/501_ARCADE/record_architecture_stats.py
 (architecture stats only, two-baseline scope) -- this covers every stage's
@@ -7,14 +8,20 @@ sweep configs, reusing the same counting (compression/utils.py) and the same
 topology/dice primitives (analysis/501_ARCADE/segmentation_topology.py), not
 reimplementing either.
 
+Defaults to the current 4-class objective (Dataset509_ARCADE_1x1_4c:
+background/LAD/RCA/LCX/LM) -- pass --dataset-name/--dataset-id/--out-channels
+to point at a different dataset (e.g. the retired binary Dataset501_ARCADE,
+see compression/slurm/archive/README.md).
+
 Usage:
     python compression/collect_results.py \
-        --net-name nnUNetTrainerENet_E1 --stage stage1 \
-        --channels 20,72,144,72,20
+        --net-name nnUNetTrainerENet_1_naive_baseline_Baseline --stage 1_naive_baseline \
+        --channels 16,64,128,64,16 --decoder-type upsample_conv --use-prelu 0
 
     python compression/collect_results.py \
-        --net-name stage1b_no_dilated --stage stage1b \
-        --channels 20,72,144,72,20 --use-dilated 0
+        --net-name nnUNetTrainerENet_E1 --stage stage1 \
+        --dataset-name Dataset501_ARCADE --dataset-id 501 --out-channels 2 \
+        --channels 20,72,144,72,20
 """
 from __future__ import annotations
 
@@ -45,19 +52,22 @@ from nnunetv2.nets.QuantENet import QuantENet  # noqa: E402
 import segmentation_topology as topo  # noqa: E402
 from utils import count_bops, count_flops, count_params  # noqa: E402
 
-DATASET_NAME = "Dataset501_ARCADE"
-DATASET_ID = "501"
 NNUNET_RAW = REPO_ROOT / "data" / "nnUNet_raw"
 NNUNET_PREPROCESSED = REPO_ROOT / "data" / "nnUNet_preprocessed"
 NNUNET_RESULTS = REPO_ROOT / "data" / "nnUNet_results"
-IMAGES_TS_DIR = NNUNET_RAW / DATASET_NAME / "imagesTs"
-LABELS_TS_DIR = NNUNET_RAW / DATASET_NAME / "labelsTs"
 RESULTS_CSV = Path(__file__).resolve().parent / "results.csv"
 
+# Per-class dice/cldice columns match Dataset509_ARCADE_1x1_4c's dataset.json
+# labels (background=0, LAD=1, RCA=2, LCX=3, LM=4) -- hardcoded here rather
+# than derived, same pragmatic single-dataset-scope choice as the rest of
+# this file; update if a differently-labeled dataset is ever swept.
 RESULTS_COLUMNS = [
     "config_name", "stage", "f_i", "f1", "f2", "f3", "f4", "f5",
     "bottlenecks_per_stage", "decoder_type", "ops_flags", "quant_bits",
-    "params", "flops", "bops", "dice", "cldice", "n_components",
+    "params", "flops", "bops",
+    "dice", "dice_LAD", "dice_RCA", "dice_LCX", "dice_LM",
+    "cldice", "cldice_LAD", "cldice_RCA", "cldice_LCX", "cldice_LM",
+    "n_components",
     "epochs", "converged_flag", "seed",
 ]
 
@@ -80,7 +90,26 @@ def parse_channels(value: str) -> tuple[int, ...]:
     return parts
 
 
+def read_dataset_labels(dataset_name: str) -> dict[str, int]:
+    """name -> id, straight from dataset.json's 'labels' dict (nnU-Net's own
+    schema, the same source LabelManager uses to derive
+    num_segmentation_heads) -- so out-channels and per-class dice columns
+    both stay in sync with whatever --dataset-name a job points at, instead
+    of being hardcoded per dataset."""
+    dataset_json_path = NNUNET_RAW / dataset_name / "dataset.json"
+    with open(dataset_json_path) as f:
+        return json.load(f)["labels"]
+
+
+def foreground_class_ids_and_names(labels: dict[str, int]) -> list[tuple[int, str]]:
+    """[(1, 'LAD'), (2, 'RCA'), (3, 'LCX'), (4, 'LM')] for Dataset509 -- id 0
+    is always background by nnU-Net convention, excluded regardless of its
+    literal name key."""
+    return sorted((class_id, name) for name, class_id in labels.items() if class_id != 0)
+
+
 def run_inference(
+    dataset_name: str,
     net_name: str,
     channels: tuple[int, ...],
     bottlenecks_per_stage: tuple[int, ...],
@@ -97,6 +126,12 @@ def run_inference(
     use_dsc: bool = False,
     context_pattern: str = "default",
     use_prelu: bool = True,
+    shallow_dilation: bool = False,
+    separable_dilated: bool = False,
+    merge_dilated_pairs: bool = False,
+    dsc_dilated_only: bool = False,
+    double_projections: bool = False,
+    two_block_skip: bool = False,
 ) -> Path:
     """Uses `nnUNetv2_predict_from_modelfolder` (-m <exact folder>), NOT
     plain `nnUNetv2_predict` (-tr/-p/-c/-d): the latter's folder resolution
@@ -108,13 +143,14 @@ def run_inference(
     train_enet_e1.job / record_architecture_stats.py's convention, which
     DOES use net_name for the folder path). -m sidesteps that ambiguity by
     pointing at the fold-containing folder directly."""
-    prediction_dir = NNUNET_RAW / DATASET_NAME / f"labelsPr_{net_name}"
-    model_folder = NNUNET_RESULTS / DATASET_NAME / f"{net_name}__{plans_name}__{configuration}"
+    images_ts_dir = NNUNET_RAW / dataset_name / "imagesTs"
+    prediction_dir = NNUNET_RAW / dataset_name / f"labelsPr_{net_name}"
+    model_folder = NNUNET_RESULTS / dataset_name / f"{net_name}__{plans_name}__{configuration}"
     checkpoint_path = model_folder / f"fold_{fold}" / checkpoint_name
     if not checkpoint_path.exists():
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
-    if not IMAGES_TS_DIR.exists():
-        raise FileNotFoundError(f"imagesTs not found: {IMAGES_TS_DIR}")
+    if not images_ts_dir.exists():
+        raise FileNotFoundError(f"imagesTs not found: {images_ts_dir}")
 
     prediction_dir.mkdir(parents=True, exist_ok=True)
 
@@ -131,6 +167,12 @@ def run_inference(
     env["ENET_USE_DSC"] = "1" if use_dsc else "0"
     env["ENET_CONTEXT_PATTERN"] = context_pattern
     env["ENET_USE_PRELU"] = "1" if use_prelu else "0"
+    env["ENET_SHALLOW_DILATION"] = "1" if shallow_dilation else "0"
+    env["ENET_SEPARABLE_DILATED"] = "1" if separable_dilated else "0"
+    env["ENET_MERGE_DILATED_PAIRS"] = "1" if merge_dilated_pairs else "0"
+    env["ENET_DSC_DILATED_ONLY"] = "1" if dsc_dilated_only else "0"
+    env["ENET_DOUBLE_PROJECTIONS"] = "1" if double_projections else "0"
+    env["ENET_TWO_BLOCK_SKIP"] = "1" if two_block_skip else "0"
     if quant_bits != 32:
         # Picked up by nnUNetTrainerENetQuant.build_network_architecture,
         # dynamically imported via the checkpoint's own stored trainer_name
@@ -140,7 +182,7 @@ def run_inference(
 
     command = [
         shutil.which("nnUNetv2_predict_from_modelfolder") or "nnUNetv2_predict_from_modelfolder",
-        "-i", str(IMAGES_TS_DIR),
+        "-i", str(images_ts_dir),
         "-o", str(prediction_dir),
         "-m", str(model_folder),
         "-f", str(fold),
@@ -158,27 +200,51 @@ def run_inference(
     return prediction_dir
 
 
-def compute_eval_metrics(prediction_dir: Path) -> dict:
-    """Mean dice / clDice / predicted-component-count across every matched
-    labelsTs/labelsPr_{net_name} case pair -- reuses
-    segmentation_topology.dice_score / cldice_score / fragmentation_stats,
-    not a separate reimplementation."""
-    dices, cldices, n_components_list = [], [], []
-    for _, gt, pred in topo.iter_matched_cases(LABELS_TS_DIR, prediction_dir):
-        gt_fg = gt > topo.BACKGROUND
-        pred_fg = pred > topo.BACKGROUND
-        dices.append(topo.dice_score(gt_fg, pred_fg))
-        cldices.append(topo.cldice_score(gt_fg, pred_fg))
+def compute_eval_metrics(labels_ts_dir: Path, prediction_dir: Path, dataset_name: str) -> dict:
+    """Per-class dice/clDice (mean over each class's per-case scores, one
+    class label = 1..K from dataset.json) + a single mean-across-classes
+    'dice'/'cldice' gate column, plus pooled (all-foreground-classes-
+    together) n_components. Reuses segmentation_topology.dice_score/
+    cldice_score/fragmentation_stats unchanged -- this only supplies
+    per-class boolean masks (gt == class_id) via the binarize=False
+    iter_matched_cases, instead of a single gt > BACKGROUND call.
+    n_components stays pooled rather than per-class: fragmentation counts on
+    4 sparse, often-empty-per-image anatomical branches (esp. LM) would be
+    dominated by small-sample noise -- open call, revisit if per-class
+    fragmentation turns out to matter."""
+    labels = read_dataset_labels(dataset_name)
+    class_ids_names = foreground_class_ids_and_names(labels)
+
+    per_class_dice = {name: [] for _, name in class_ids_names}
+    per_class_cldice = {name: [] for _, name in class_ids_names}
+    n_components_list = []
+    n_cases = 0
+    for _, gt, pred in topo.iter_matched_cases(labels_ts_dir, prediction_dir, binarize=False):
+        n_cases += 1
+        for class_id, name in class_ids_names:
+            gt_mask = gt == class_id
+            pred_mask = pred == class_id
+            per_class_dice[name].append(topo.dice_score(gt_mask, pred_mask))
+            per_class_cldice[name].append(topo.cldice_score(gt_mask, pred_mask))
         n_components_list.append(topo.fragmentation_stats(gt, pred)["pred_components"])
-    if not dices:
+    if n_cases == 0:
         raise FileNotFoundError(
             f"No matched labelsTs/{prediction_dir.name} case pairs -- check predictions exist."
         )
-    return {
-        "dice": sum(dices) / len(dices),
-        "cldice": sum(cldices) / len(cldices),
-        "n_components": sum(n_components_list) / len(n_components_list),
-    }
+
+    result = {}
+    class_dice_means, class_cldice_means = [], []
+    for _, name in class_ids_names:
+        dice_mean = sum(per_class_dice[name]) / len(per_class_dice[name])
+        cldice_mean = sum(per_class_cldice[name]) / len(per_class_cldice[name])
+        result[f"dice_{name}"] = dice_mean
+        result[f"cldice_{name}"] = cldice_mean
+        class_dice_means.append(dice_mean)
+        class_cldice_means.append(cldice_mean)
+    result["dice"] = sum(class_dice_means) / len(class_dice_means)
+    result["cldice"] = sum(class_cldice_means) / len(class_cldice_means)
+    result["n_components"] = sum(n_components_list) / len(n_components_list)
+    return result
 
 
 def read_training_info(fold_dir: Path, checkpoint_name: str, trailing_window: int = 15) -> dict:
@@ -252,6 +318,13 @@ def upsert_row(row: dict) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--net-name", required=True, help="config_name, and the labelsPr_<net-name> prediction folder.")
+    parser.add_argument("--dataset-name", default="Dataset509_ARCADE_1x1_4c",
+                         help="nnUNet_raw/<name> and nnUNet_results/<name> subfolder. Any future "
+                              "Dataset509-derived sweep stage passes this (or relies on the default) -- "
+                              "not narrowly bolted onto just one job.")
+    parser.add_argument("--dataset-id", default="509",
+                         help="Informational only (not consumed by this script -- kept for parity with "
+                              "the training job's own DATASET_ID, same convention as --trainer-class).")
     parser.add_argument("--trainer-class", default="nnUNetTrainerENet", help="Informational only (not used for inference -- see run_inference's docstring). Kept for parity with the training job's -tr flag.")
     parser.add_argument("--stage", required=True, help="e.g. stage1, stage1b, stage2, early_probe.")
     parser.add_argument("--channels", required=True, type=parse_channels)
@@ -264,10 +337,19 @@ def main() -> None:
     parser.add_argument("--context-pattern", default="default", choices=["default", "sparse"],
                          help="'sparse' = regular/dilated4/regular/dilated16 (section 2a's div2/div4 bottleneck axis), no 2/8 rungs, never asymmetric.")
     parser.add_argument("--use-prelu", type=int, default=1, choices=[0, 1], help="0 = collapse the encoder's PReLU to plain ReLU too (section 1d's ablation) -- decoder is always ReLU regardless, see ENet.py.")
+    parser.add_argument("--shallow-dilation", type=int, default=0, choices=[0, 1], help="Stage 4.4.1: alternating regular/dilated(16) in stage1 and regular4 (regular5 unchanged). See ENet.py.")
+    parser.add_argument("--separable-dilated", type=int, default=0, choices=[0, 1], help="Stage 4.4.2: factor every dilated 3x3 in the context pattern into a (3,1)+(1,3) pair, same dilation on both passes.")
+    parser.add_argument("--merge-dilated-pairs", type=int, default=0, choices=[0, 1], help="Stage 4.4.3: fuse each (regular-or-asymmetric, dilated) context-pattern PAIR into one block with a shared reduce/expand -- halves stage2/3's block count.")
+    parser.add_argument("--dsc-dilated-only", type=int, default=0, choices=[0, 1], help="Stage 4.4.4: depthwise-separable ONLY on the context pattern's dilated slots, independent of --use-dsc.")
+    parser.add_argument("--double-projections", type=int, default=0, choices=[0, 1], help="Stage 4.5: stack an extra 1x1 conv+BN+act in every bottleneck's reduce AND expand projection, network-wide.")
+    parser.add_argument("--two-block-skip", type=int, default=0, choices=[0, 1], help="Stage 4.6: extra short residual spanning every 2 consecutive context-stage blocks, on top of each block's own internal residual, in stage2 and stage3.")
     parser.add_argument("--quant-bits", type=int, default=32)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--in-channels", type=int, default=1)
-    parser.add_argument("--out-channels", type=int, default=2)
+    parser.add_argument("--out-channels", type=int, default=None,
+                         help="Defaults to len(dataset.json['labels']) for --dataset-name (5 for "
+                              "Dataset509_ARCADE_1x1_4c: background+LAD+RCA+LCX+LM) -- matches "
+                              "nnU-Net's own LabelManager.num_segmentation_heads derivation.")
     parser.add_argument("--input-hw", type=int, nargs=2, default=(512, 512), metavar=("H", "W"))
     parser.add_argument("--plans-name", default="nnUNetPlans")
     parser.add_argument("--configuration", default="2d")
@@ -276,6 +358,10 @@ def main() -> None:
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--skip-inference", action="store_true", help="Assume labelsPr_<net-name> already exists.")
     args = parser.parse_args()
+
+    dataset_name = args.dataset_name
+    if args.out_channels is None:
+        args.out_channels = len(read_dataset_labels(dataset_name))
 
     # FLOPs/MACs always come from the plain FP32 ENet: thop silently
     # undercounts a QuantENet by ~40x (doesn't recognize Brevitas's quant
@@ -294,6 +380,12 @@ def main() -> None:
         use_dsc=bool(args.use_dsc),
         context_pattern=args.context_pattern,
         use_prelu=bool(args.use_prelu),
+        shallow_dilation=bool(args.shallow_dilation),
+        separable_dilated=bool(args.separable_dilated),
+        merge_dilated_pairs=bool(args.merge_dilated_pairs),
+        dsc_dilated_only=bool(args.dsc_dilated_only),
+        double_projections=bool(args.double_projections),
+        two_block_skip=bool(args.two_block_skip),
     )
     macs, flops = count_flops(fp32_model, args.in_channels, tuple(args.input_hw))
 
@@ -320,9 +412,10 @@ def main() -> None:
         total_params, _ = count_params(quant_model)
         bops = count_bops(macs, args.quant_bits)
 
-    prediction_dir = NNUNET_RAW / DATASET_NAME / f"labelsPr_{args.net_name}"
+    prediction_dir = NNUNET_RAW / dataset_name / f"labelsPr_{args.net_name}"
     if not args.skip_inference and not prediction_dir.exists():
         prediction_dir = run_inference(
+            dataset_name=dataset_name,
             net_name=args.net_name,
             channels=args.channels,
             bottlenecks_per_stage=args.bottlenecks,
@@ -339,11 +432,18 @@ def main() -> None:
             use_dsc=bool(args.use_dsc),
             context_pattern=args.context_pattern,
             use_prelu=bool(args.use_prelu),
+            shallow_dilation=bool(args.shallow_dilation),
+            separable_dilated=bool(args.separable_dilated),
+            merge_dilated_pairs=bool(args.merge_dilated_pairs),
+            dsc_dilated_only=bool(args.dsc_dilated_only),
+            double_projections=bool(args.double_projections),
+            two_block_skip=bool(args.two_block_skip),
         )
-    eval_metrics = compute_eval_metrics(prediction_dir)
+    labels_ts_dir = NNUNET_RAW / dataset_name / "labelsTs"
+    eval_metrics = compute_eval_metrics(labels_ts_dir, prediction_dir, dataset_name)
 
     fold_dir = (
-        NNUNET_RESULTS / DATASET_NAME / f"{args.net_name}__{args.plans_name}__{args.configuration}"
+        NNUNET_RESULTS / dataset_name / f"{args.net_name}__{args.plans_name}__{args.configuration}"
         / f"fold_{args.fold}"
     )
     training_info = read_training_info(fold_dir, args.checkpoint_name)
@@ -374,6 +474,9 @@ def main() -> None:
         "ops_flags": (
             f"dilated={args.use_dilated},asymmetric={args.use_asymmetric},strided={args.use_strided},dsc={args.use_dsc},context_pattern={args.context_pattern},prelu="
             + ("n/a(quant-forces-relu)" if args.quant_bits != 32 else str(args.use_prelu))
+            + f",shallow_dilation={args.shallow_dilation},separable_dilated={args.separable_dilated}"
+            + f",merge_dilated_pairs={args.merge_dilated_pairs},dsc_dilated_only={args.dsc_dilated_only}"
+            + f",double_projections={args.double_projections},two_block_skip={args.two_block_skip}"
         ),
         "quant_bits": args.quant_bits,
         "params": total_params,

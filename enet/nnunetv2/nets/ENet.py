@@ -40,9 +40,60 @@ SPARSE_DILATION_PATTERN: tuple[dict, ...] = (
     {"padding": 16, "dilation": 16},
 )
 
+# Stage 4.4.1's shallow-stage pattern: alternating regular/dilated(16), for
+# stage1 and regular4 -- both stages currently have NO dilation mechanism at
+# all (only stage2/3's context pattern does). Same max dilation rate (16) as
+# CONTEXT_STAGE_PATTERN's own highest rung, per the probe's own spec.
+SHALLOW_DILATION_PATTERN: tuple[dict, ...] = (
+    {},
+    {"padding": 16, "dilation": 16},
+)
+
 
 def _activation(channels: int, relu: bool) -> nn.Module:
     return nn.ReLU(inplace=True) if relu else nn.PReLU(channels)
+
+
+def _reduce_proj(in_channels: int, internal_channels: int, relu: bool, double: bool) -> nn.Sequential:
+    """1x1 squeeze projection, in_channels -> internal_channels, ending in an
+    activation. Stage 4.5's double=True inserts a second internal_channels
+    -> internal_channels (1x1 conv, BN, activation) unit after the first --
+    twice the ops in the same projection for zero extra spatial buffering
+    (1x1 convs need no SWG line buffer in FINN, unlike the 3x3/5x5 spatial
+    convs this leaves untouched)."""
+    layers = [
+        nn.Conv2d(in_channels, internal_channels, kernel_size=1, bias=False),
+        nn.BatchNorm2d(internal_channels),
+        _activation(internal_channels, relu),
+    ]
+    if double:
+        layers += [
+            nn.Conv2d(internal_channels, internal_channels, kernel_size=1, bias=False),
+            nn.BatchNorm2d(internal_channels),
+            _activation(internal_channels, relu),
+        ]
+    return nn.Sequential(*layers)
+
+
+def _expand_proj(internal_channels: int, out_channels: int, relu: bool, double: bool) -> nn.Sequential:
+    """1x1 expand projection, internal_channels -> out_channels, ending in a
+    bare BN (no activation -- every caller applies its own out_act AFTER
+    adding the residual, not here). Stage 4.5's double=True inserts a
+    leading internal_channels -> internal_channels (1x1 conv, BN,
+    activation) unit before the final projection, same rationale as
+    _reduce_proj."""
+    layers = []
+    if double:
+        layers += [
+            nn.Conv2d(internal_channels, internal_channels, kernel_size=1, bias=False),
+            nn.BatchNorm2d(internal_channels),
+            _activation(internal_channels, relu),
+        ]
+    layers += [
+        nn.Conv2d(internal_channels, out_channels, kernel_size=1, bias=False),
+        nn.BatchNorm2d(out_channels),
+    ]
+    return nn.Sequential(*layers)
 
 
 class InitialBlock(nn.Module):
@@ -71,16 +122,14 @@ class RegularBottleneck(nn.Module):
         dropout_p: float = 0.1,
         relu: bool = False,
         use_dsc: bool = False,
+        separable_dilated: bool = False,
+        double_projections: bool = False,
     ):
         super().__init__()
         internal_channels = max(1, channels // internal_ratio)
         activation = nn.ReLU if relu else nn.PReLU
 
-        self.reduce = nn.Sequential(
-            nn.Conv2d(channels, internal_channels, kernel_size=1, bias=False),
-            nn.BatchNorm2d(internal_channels),
-            activation(internal_channels) if not relu else activation(inplace=True),
-        )
+        self.reduce = _reduce_proj(channels, internal_channels, relu, double_projections)
 
         if asymmetric:
             if use_dsc:
@@ -88,6 +137,20 @@ class RegularBottleneck(nn.Module):
                     "use_dsc is not defined for asymmetric bottlenecks -- asymmetric is "
                     "itself a factorization of the inner conv, not exercised in combination "
                     "with DSC by any planned experiment. Disable use_asymmetric to use DSC."
+                )
+            if separable_dilated and dilation != 1:
+                # Only an actual conflict when this slot is ALSO dilated --
+                # separable_dilated is a no-op (never reached below) for a
+                # plain asymmetric slot at dilation=1, which is what every
+                # CONTEXT_STAGE_PATTERN asymmetric entry actually is. Callers
+                # (e.g. _make_context_stage) pass separable_dilated=True
+                # uniformly across a whole stage without needing to know
+                # per-slot whether it's asymmetric.
+                raise ValueError(
+                    "separable_dilated is not defined for asymmetric bottlenecks -- both are "
+                    "factorizations of the inner conv into a (k,1)+(1,k) pair; asymmetric already "
+                    "IS that factorization (at dilation=1). Disable use_asymmetric to use "
+                    "separable_dilated."
                 )
             self.conv = nn.Sequential(
                 nn.Conv2d(
@@ -121,6 +184,26 @@ class RegularBottleneck(nn.Module):
                 ),
                 nn.Conv2d(internal_channels, internal_channels, kernel_size=1, bias=False),
             )
+        elif separable_dilated and dilation != 1:
+            # Probe 4.4.2: factor the dilated k x k conv into a (k,1) + (1,k)
+            # pair, same dilation rate on both passes -- same K^2 -> 2K MAC
+            # reduction the asymmetric branch already gets at dilation=1,
+            # applied here to the dilated slots instead. Padding on each pass
+            # is dilation*(k-1)/2 = dilation for a 3-tap kernel, matching how
+            # `padding` is already derived for the monolithic dilated conv
+            # elsewhere in this module (CONTEXT_STAGE_PATTERN's own entries).
+            self.conv = nn.Sequential(
+                nn.Conv2d(
+                    internal_channels, internal_channels, kernel_size=(kernel_size, 1),
+                    padding=(padding, 0), dilation=dilation, bias=False,
+                ),
+                nn.BatchNorm2d(internal_channels),
+                activation(internal_channels) if not relu else activation(inplace=True),
+                nn.Conv2d(
+                    internal_channels, internal_channels, kernel_size=(1, kernel_size),
+                    padding=(0, padding), dilation=dilation, bias=False,
+                ),
+            )
         else:
             self.conv = nn.Conv2d(
                 internal_channels,
@@ -136,10 +219,7 @@ class RegularBottleneck(nn.Module):
             nn.BatchNorm2d(internal_channels),
             activation(internal_channels) if not relu else activation(inplace=True),
         )
-        self.expand = nn.Sequential(
-            nn.Conv2d(internal_channels, channels, kernel_size=1, bias=False),
-            nn.BatchNorm2d(channels),
-        )
+        self.expand = _expand_proj(internal_channels, channels, relu, double_projections)
         self.dropout = nn.Dropout2d(p=dropout_p)
         self.out_act = activation(channels) if not relu else activation(inplace=True)
 
@@ -159,6 +239,7 @@ class DownsamplingBottleneck(nn.Module):
         dropout_p: float = 0.01,
         use_strided: bool = True,
         relu: bool = False,
+        double_projections: bool = False,
     ):
         super().__init__()
         internal_channels = max(1, out_channels // internal_ratio)
@@ -166,6 +247,11 @@ class DownsamplingBottleneck(nn.Module):
         if use_strided:
             # Spatial downsampling folded into the reduce conv itself (single
             # stride-2 2x2 conv) -- the ENet-native / FINN-favoured path.
+            # This one stays single even when double_projections=True (it's
+            # doing the spatial stride, not a plain 1x1 projection -- doubling
+            # it would duplicate the downsampling itself, not just add cheap
+            # 1x1 capacity); the extra unit goes on the (always-1x1) `expand`
+            # side instead.
             self.reduce = nn.Sequential(
                 nn.Conv2d(in_channels, internal_channels, kernel_size=2, stride=2, bias=False),
                 nn.BatchNorm2d(internal_channels),
@@ -176,19 +262,14 @@ class DownsamplingBottleneck(nn.Module):
             # followed by a stride-1 1x1 conv, instead of a strided conv.
             self.reduce = nn.Sequential(
                 nn.MaxPool2d(kernel_size=2, stride=2),
-                nn.Conv2d(in_channels, internal_channels, kernel_size=1, bias=False),
-                nn.BatchNorm2d(internal_channels),
-                _activation(internal_channels, relu),
+                *_reduce_proj(in_channels, internal_channels, relu, double_projections),
             )
         self.conv = nn.Sequential(
             nn.Conv2d(internal_channels, internal_channels, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(internal_channels),
             _activation(internal_channels, relu),
         )
-        self.expand = nn.Sequential(
-            nn.Conv2d(internal_channels, out_channels, kernel_size=1, bias=False),
-            nn.BatchNorm2d(out_channels),
-        )
+        self.expand = _expand_proj(internal_channels, out_channels, relu, double_projections)
         self.dropout = nn.Dropout2d(p=dropout_p)
         self.out_act = _activation(out_channels, relu)
         self.out_channels = out_channels
@@ -223,28 +304,31 @@ class DownsamplingBottleneck(nn.Module):
 
 
 class UpsamplingBottleneck(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, internal_ratio: int = 4, relu: bool = True):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        internal_ratio: int = 4,
+        relu: bool = True,
+        double_projections: bool = False,
+    ):
         super().__init__()
         internal_channels = max(1, in_channels // internal_ratio)
+        # main_proj is NOT doubled by double_projections -- probe 4.5 scoped
+        # this to the reduce/expand pair specifically (confirmed), not the
+        # skip-path projection.
         self.main_proj = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False),
             nn.BatchNorm2d(out_channels),
         )
         self.unpool = nn.MaxUnpool2d(kernel_size=2, stride=2)
-        self.reduce = nn.Sequential(
-            nn.Conv2d(in_channels, internal_channels, kernel_size=1, bias=False),
-            nn.BatchNorm2d(internal_channels),
-            nn.ReLU(inplace=True) if relu else nn.PReLU(internal_channels),
-        )
+        self.reduce = _reduce_proj(in_channels, internal_channels, relu, double_projections)
         self.up = nn.Sequential(
             nn.ConvTranspose2d(internal_channels, internal_channels, kernel_size=2, stride=2, bias=False),
             nn.BatchNorm2d(internal_channels),
             nn.ReLU(inplace=True) if relu else nn.PReLU(internal_channels),
         )
-        self.expand = nn.Sequential(
-            nn.Conv2d(internal_channels, out_channels, kernel_size=1, bias=False),
-            nn.BatchNorm2d(out_channels),
-        )
+        self.expand = _expand_proj(internal_channels, out_channels, relu, double_projections)
         self.dropout = nn.Dropout2d(p=0.1)
         self.out_act = nn.ReLU(inplace=True) if relu else nn.PReLU(out_channels)
 
@@ -288,6 +372,113 @@ class UpsamplingBottleneck(nn.Module):
         return self.out_act(main + out)
 
 
+class MergedContextBottleneck(nn.Module):
+    """Probe 4.4.3: fuses a (regular-or-asymmetric, dilated) PAIR of
+    CONTEXT_STAGE_PATTERN slots into ONE block sharing a single
+    reduce/expand projection pair -- reduce -> first_op(regular 3x3 or
+    asymmetric 5x5) -> dilated 3x3 -> expand -- instead of two separate
+    blocks each with their own reduce/expand. Halves the block count in
+    stage2/3 for the same op coverage. `first_kwargs` is one of
+    CONTEXT_STAGE_PATTERN's own {} / {"kernel_size":5,"padding":2,
+    "asymmetric":True} entries (the non-dilated half of the pair)."""
+
+    def __init__(
+        self,
+        channels: int,
+        first_kwargs: dict,
+        dilation: int,
+        internal_ratio: int = 4,
+        dropout_p: float = 0.1,
+        relu: bool = False,
+        use_dsc: bool = False,
+    ):
+        super().__init__()
+        internal_channels = max(1, channels // internal_ratio)
+        self.reduce = _reduce_proj(channels, internal_channels, relu, double=False)
+
+        kernel_size = first_kwargs.get("kernel_size", 3)
+        padding = first_kwargs.get("padding", 1)
+        if first_kwargs.get("asymmetric", False):
+            self.op1 = nn.Sequential(
+                nn.Conv2d(internal_channels, internal_channels, kernel_size=(kernel_size, 1),
+                          padding=(padding, 0), bias=False),
+                nn.BatchNorm2d(internal_channels),
+                _activation(internal_channels, relu),
+                nn.Conv2d(internal_channels, internal_channels, kernel_size=(1, kernel_size),
+                          padding=(0, padding), bias=False),
+                nn.BatchNorm2d(internal_channels),
+                _activation(internal_channels, relu),
+            )
+        else:
+            self.op1 = nn.Sequential(
+                nn.Conv2d(internal_channels, internal_channels, kernel_size=kernel_size, padding=padding, bias=False),
+                nn.BatchNorm2d(internal_channels),
+                _activation(internal_channels, relu),
+            )
+
+        # Second op: the dilated 3x3, optionally depthwise-separable (probe
+        # 4.4.4's "DSC only where dilation is used" -- this class only ever
+        # represents a dilated slot, so use_dsc here always means "on the
+        # dilated conv specifically", consistent with that probe's scope).
+        if use_dsc:
+            self.op2 = nn.Sequential(
+                nn.Conv2d(internal_channels, internal_channels, kernel_size=3, padding=dilation,
+                          dilation=dilation, groups=internal_channels, bias=False),
+                nn.Conv2d(internal_channels, internal_channels, kernel_size=1, bias=False),
+                nn.BatchNorm2d(internal_channels),
+                _activation(internal_channels, relu),
+            )
+        else:
+            self.op2 = nn.Sequential(
+                nn.Conv2d(internal_channels, internal_channels, kernel_size=3, padding=dilation,
+                          dilation=dilation, bias=False),
+                nn.BatchNorm2d(internal_channels),
+                _activation(internal_channels, relu),
+            )
+
+        self.expand = _expand_proj(internal_channels, channels, relu, double=False)
+        self.dropout = nn.Dropout2d(p=dropout_p)
+        self.out_act = _activation(channels, relu)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out = self.reduce(x)
+        out = self.op1(out)
+        out = self.op2(out)
+        out = self.dropout(self.expand(out))
+        return self.out_act(x + out)
+
+
+class TwoBlockSkipStage(nn.Module):
+    """Probe 4.6: wraps a list of same-width bottleneck ops (a context
+    stage's op list) with an ADDITIONAL short residual on top of each op's
+    own internal residual -- every 2 consecutive ops form a group, and the
+    group's input is added to the group's output. Confined to one context
+    stage (stage2 or stage3 individually; channels are constant throughout
+    each, so no projection is needed for the shortcut). A trailing odd op
+    (only possible if a stage's depth is odd) is left un-grouped."""
+
+    def __init__(self, ops: list[nn.Module]):
+        super().__init__()
+        self.ops = nn.ModuleList(ops)
+
+    def __len__(self) -> int:
+        return len(self.ops)
+
+    def __iter__(self):
+        return iter(self.ops)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        i, n = 0, len(self.ops)
+        while i < n:
+            group_input = x
+            x = self.ops[i](x)
+            if i + 1 < n:
+                x = self.ops[i + 1](x)
+                x = x + group_input
+            i += 2
+        return x
+
+
 class ENet(nn.Module):
     def __init__(
         self,
@@ -302,6 +493,12 @@ class ENet(nn.Module):
         use_dsc: bool = False,
         context_pattern: ContextPattern = "default",
         use_prelu: bool = True,
+        shallow_dilation: bool = False,
+        separable_dilated: bool = False,
+        merge_dilated_pairs: bool = False,
+        dsc_dilated_only: bool = False,
+        double_projections: bool = False,
+        two_block_skip: bool = False,
     ):
         super().__init__()
         if context_pattern not in ("default", "sparse"):
@@ -356,22 +553,28 @@ class ENet(nn.Module):
         # switches the encoder to ReLU too, collapsing the whole network to
         # a single activation, for section 1d's ablation of that split.
         self.use_prelu = use_prelu
+        # Stage 4 architecture probes (all default False/off -- every prior
+        # config, including every Stage 1/1b/1c/2/2a/2b/3 sweep cell, builds
+        # byte-identical to before these were added):
+        self.shallow_dilation = shallow_dilation          # 4.4.1
+        self.separable_dilated = separable_dilated        # 4.4.2
+        self.merge_dilated_pairs = merge_dilated_pairs    # 4.4.3
+        self.dsc_dilated_only = dsc_dilated_only          # 4.4.4
+        self.double_projections = double_projections      # 4.5
+        self.two_block_skip = two_block_skip              # 4.6
 
         n_stage1, n_stage2, n_stage3, n_regular4, n_regular5 = self.bottlenecks_per_stage
 
         self.initial = self._build_initial_block(in_channels, initial_channels)
         self.down1 = DownsamplingBottleneck(
             initial_channels, stage1_channels, dropout_p=0.01, use_strided=use_strided,
-            relu=not use_prelu,
+            relu=not use_prelu, double_projections=double_projections,
         )
-        self.regular1 = nn.Sequential(
-            *[RegularBottleneck(stage1_channels, dropout_p=0.01, use_dsc=use_dsc, relu=not use_prelu)
-              for _ in range(n_stage1)]
-        )
+        self.regular1 = self._make_shallow_stage(stage1_channels, n_stage1, dropout_p=0.01, relu=not use_prelu)
 
         self.down2 = DownsamplingBottleneck(
             stage1_channels, stage2_channels, dropout_p=0.1, use_strided=use_strided,
-            relu=not use_prelu,
+            relu=not use_prelu, double_projections=double_projections,
         )
         self.stage2 = self._make_context_stage(stage2_channels, n_stage2)
         self.proj2_to_3 = (
@@ -385,13 +588,13 @@ class ENet(nn.Module):
         )
         self.stage3 = self._make_context_stage(stage3_channels, n_stage3)
 
-        self.up4 = UpsamplingBottleneck(stage3_channels, stage4_channels)
-        self.regular4 = nn.Sequential(
-            *[RegularBottleneck(stage4_channels, dropout_p=0.1, relu=True, use_dsc=use_dsc) for _ in range(n_regular4)]
-        )
-        self.up5 = UpsamplingBottleneck(stage4_channels, stage5_channels)
+        self.up4 = UpsamplingBottleneck(stage3_channels, stage4_channels, double_projections=double_projections)
+        self.regular4 = self._make_shallow_stage(stage4_channels, n_regular4, dropout_p=0.1, relu=True)
+        self.up5 = UpsamplingBottleneck(stage4_channels, stage5_channels, double_projections=double_projections)
         self.regular5 = nn.Sequential(
-            *[RegularBottleneck(stage5_channels, dropout_p=0.1, relu=True, use_dsc=use_dsc) for _ in range(n_regular5)]
+            *[RegularBottleneck(stage5_channels, dropout_p=0.1, relu=True, use_dsc=use_dsc,
+                                 double_projections=double_projections)
+              for _ in range(n_regular5)]
         )
         self.final = nn.ConvTranspose2d(stage5_channels, out_channels, kernel_size=2, stride=2)
 
@@ -415,7 +618,7 @@ class ENet(nn.Module):
             migrated[key] = value
         return super().load_state_dict(migrated, strict=strict)
 
-    def _make_context_stage(self, channels: int, n_ops: int) -> nn.Sequential:
+    def _make_context_stage(self, channels: int, n_ops: int) -> nn.Module:
         """Builds an n_ops-long context stage from the first n_ops entries of
         CONTEXT_STAGE_PATTERN (or SPARSE_DILATION_PATTERN when
         context_pattern="sparse" -- section 2a's reduced-depth bottleneck
@@ -425,16 +628,80 @@ class ENet(nn.Module):
         stage depth and op composition stay independent knobs (Stage 2
         sweeps depth; Stage 1b's op ablation sweeps composition). use_dsc
         factorizes whatever inner conv results (plain or dilated -- not
-        asymmetric, RegularBottleneck rejects that combination)."""
+        asymmetric, RegularBottleneck rejects that combination).
+
+        Stage 4 probes layer on top of this same pattern:
+        merge_dilated_pairs (4.4.3) pairs up (non-dilated, dilated) slots
+        into one MergedContextBottleneck each, halving the block count;
+        separable_dilated (4.4.2) and dsc_dilated_only (4.4.4) modify how a
+        dilated slot's inner conv is built; two_block_skip (4.6) wraps the
+        finished op list in an extra short residual."""
         pattern = SPARSE_DILATION_PATTERN if self.context_pattern == "sparse" else CONTEXT_STAGE_PATTERN
+
+        if self.merge_dilated_pairs:
+            ops = []
+            i = 0
+            while i < n_ops:
+                first_kwargs = dict(pattern[i % len(pattern)])
+                if first_kwargs.get("asymmetric", False) and not self.use_asymmetric:
+                    first_kwargs = {}
+                if i + 1 < n_ops:
+                    dilation = dict(pattern[(i + 1) % len(pattern)]).get("dilation", 1)
+                    if dilation != 1 and not self.use_dilated:
+                        dilation = 1
+                    ops.append(MergedContextBottleneck(
+                        channels, first_kwargs, dilation, dropout_p=0.1,
+                        relu=not self.use_prelu, use_dsc=self.use_dsc,
+                    ))
+                    i += 2
+                else:
+                    # Odd leftover slot (only possible if n_ops is odd) --
+                    # falls back to one plain RegularBottleneck for it.
+                    ops.append(RegularBottleneck(channels, dropout_p=0.1, use_dsc=self.use_dsc,
+                                                  relu=not self.use_prelu,
+                                                  double_projections=self.double_projections, **first_kwargs))
+                    i += 1
+            return TwoBlockSkipStage(ops) if self.two_block_skip else nn.Sequential(*ops)
+
         ops = []
         for i in range(n_ops):
             kwargs = dict(pattern[i % len(pattern)])
-            if kwargs.get("dilation", 1) != 1 and not self.use_dilated:
+            is_dilated = kwargs.get("dilation", 1) != 1
+            if is_dilated and not self.use_dilated:
                 kwargs = {}
+                is_dilated = False
             if kwargs.get("asymmetric", False) and not self.use_asymmetric:
                 kwargs = {}
-            ops.append(RegularBottleneck(channels, dropout_p=0.1, use_dsc=self.use_dsc, relu=not self.use_prelu, **kwargs))
+            use_dsc_here = self.use_dsc or (self.dsc_dilated_only and is_dilated)
+            ops.append(RegularBottleneck(
+                channels, dropout_p=0.1, use_dsc=use_dsc_here, relu=not self.use_prelu,
+                separable_dilated=self.separable_dilated, double_projections=self.double_projections,
+                **kwargs,
+            ))
+        return TwoBlockSkipStage(ops) if self.two_block_skip else nn.Sequential(*ops)
+
+    def _make_shallow_stage(self, channels: int, n_ops: int, dropout_p: float, relu: bool) -> nn.Sequential:
+        """Builds stage1 (regular1) or regular4 -- both plain (undilated)
+        RegularBottleneck repeats by default, same as before Stage 4.
+        shallow_dilation=True (probe 4.4.1) instead alternates
+        [regular, dilated(16)] via SHALLOW_DILATION_PATTERN, respecting
+        use_dilated the same way _make_context_stage's pattern slots do
+        (downgrades to plain regular if use_dilated is off). regular5 never
+        calls this -- probe 4.4.1 explicitly excludes it (built directly in
+        __init__, unchanged)."""
+        if not self.shallow_dilation:
+            return nn.Sequential(
+                *[RegularBottleneck(channels, dropout_p=dropout_p, use_dsc=self.use_dsc, relu=relu,
+                                     double_projections=self.double_projections)
+                  for _ in range(n_ops)]
+            )
+        ops = []
+        for i in range(n_ops):
+            kwargs = dict(SHALLOW_DILATION_PATTERN[i % len(SHALLOW_DILATION_PATTERN)])
+            if kwargs.get("dilation", 1) != 1 and not self.use_dilated:
+                kwargs = {}
+            ops.append(RegularBottleneck(channels, dropout_p=dropout_p, use_dsc=self.use_dsc, relu=relu,
+                                          double_projections=self.double_projections, **kwargs))
         return nn.Sequential(*ops)
 
     def _build_initial_block(self, in_channels: int, initial_channels: int) -> nn.Module:
@@ -593,3 +860,45 @@ if __name__ == "__main__":
                 )
         n_sparse_tested += 1
     print(f"ENet sparse-dilation-pattern self-test PASSED: {n_sparse_tested} configs (div2/div4).")
+
+    # Stage 4 architecture-probe self-test: each of the 6 new flags,
+    # individually, at U4 (4,16,32,16,4) / native bottlenecks (4,8,8,2,1) --
+    # the shared reference every stage_4_*.job probe is built on.
+    U4_CHANNELS = (4, 16, 32, 16, 4)
+    U4_BOTTLENECKS = (4, 8, 8, 2, 1)
+    stage4_configs = {
+        "4.4.1_shallow_dilation": dict(shallow_dilation=True),
+        "4.4.2_separable_dilated": dict(separable_dilated=True),
+        "4.4.3_merge_dilated_pairs": dict(merge_dilated_pairs=True),
+        "4.4.4_dsc_dilated_only": dict(dsc_dilated_only=True),
+        "4.5_double_projections": dict(double_projections=True),
+        "4.6_two_block_skip": dict(two_block_skip=True),
+    }
+    n_stage4_tested = 0
+    for name, kwargs in stage4_configs.items():
+        model = ENet(
+            in_channels=1, out_channels=5, channels=U4_CHANNELS,
+            bottlenecks_per_stage=U4_BOTTLENECKS, decoder_type="upsample_conv",
+            use_prelu=False, **kwargs,
+        ).eval()
+        with torch.no_grad():
+            out = model(dummy)
+        assert out.shape == (1, 5, 512, 512), f"{name}: got {tuple(out.shape)}"
+        n_stage4_tested += 1
+    # merge_dilated_pairs halves stage2/3's block count (8 -> 4 at native depth).
+    merged = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS,
+        bottlenecks_per_stage=U4_BOTTLENECKS, decoder_type="upsample_conv",
+        use_prelu=False, merge_dilated_pairs=True,
+    )
+    assert len(merged.stage2) == 4, f"merge_dilated_pairs: stage2 has {len(merged.stage2)} blocks, expected 4"
+    assert len(merged.stage3) == 4, f"merge_dilated_pairs: stage3 has {len(merged.stage3)} blocks, expected 4"
+    # two_block_skip wraps stage2/3 in TwoBlockSkipStage but preserves depth.
+    skipped = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS,
+        bottlenecks_per_stage=U4_BOTTLENECKS, decoder_type="upsample_conv",
+        use_prelu=False, two_block_skip=True,
+    )
+    assert isinstance(skipped.stage2, TwoBlockSkipStage), "two_block_skip: stage2 not wrapped"
+    assert len(skipped.stage2) == 8 and len(skipped.stage3) == 8, "two_block_skip: unexpected depth"
+    print(f"ENet Stage-4 architecture-probe self-test PASSED: {n_stage4_tested} flags, individually, at U4.")
