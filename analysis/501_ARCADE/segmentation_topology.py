@@ -42,12 +42,19 @@ def image_files(folder: Path) -> list[Path]:
     return sorted(p for p in folder.iterdir() if p.suffix.lower() in IMG_EXTS)
 
 
-def load_class_id_mask(path: Path) -> np.ndarray:
+def load_class_id_mask(path: Path, binarize: bool = True) -> np.ndarray:
+    """binarize=True (default -- unchanged for every existing Dataset501-scoped
+    caller in this folder) collapses to {0,1} foreground-vs-background.
+    binarize=False returns the raw per-pixel class-ID array (0..K) -- used by
+    compression/collect_results.py's multi-class Dataset509 per-class dice,
+    which needs actual class identity, not just foreground/background."""
     arr = np.asarray(Image.open(path))
     if arr.ndim == 3:
         # Defensive fallback only: this framework should write class-ID masks, not RGB masks.
         arr = arr[..., 0]
-    return (arr > BACKGROUND).astype(np.uint8)  # binary: anything nonzero is vessel
+    if binarize:
+        return (arr > BACKGROUND).astype(np.uint8)  # binary: anything nonzero is vessel
+    return arr.astype(np.uint8)
 
 
 def resize_mask_to(mask: np.ndarray, shape_hw: tuple[int, int]) -> np.ndarray:
@@ -57,16 +64,19 @@ def resize_mask_to(mask: np.ndarray, shape_hw: tuple[int, int]) -> np.ndarray:
     return np.asarray(Image.fromarray(mask).resize((target_w, target_h), Image.NEAREST), dtype=np.uint8)
 
 
-def iter_matched_cases(gt_dir: Path, pred_dir: Path) -> Iterator[tuple[str, np.ndarray, np.ndarray]]:
+def iter_matched_cases(
+    gt_dir: Path, pred_dir: Path, binarize: bool = True
+) -> Iterator[tuple[str, np.ndarray, np.ndarray]]:
     """Yield (case_id, gt, pred) for every case present in both gt_dir and
-    pred_dir, with pred resized to gt's shape when they disagree."""
+    pred_dir, with pred resized to gt's shape when they disagree.
+    binarize is forwarded to load_class_id_mask -- see its docstring."""
     pred_files = {p.stem: p for p in image_files(pred_dir)} if pred_dir.exists() else {}
     for gt_path in image_files(gt_dir):
         pred_path = pred_files.get(gt_path.stem)
         if pred_path is None:
             continue
-        gt = load_class_id_mask(gt_path)
-        pred = resize_mask_to(load_class_id_mask(pred_path), gt.shape)
+        gt = load_class_id_mask(gt_path, binarize=binarize)
+        pred = resize_mask_to(load_class_id_mask(pred_path, binarize=binarize), gt.shape)
         yield gt_path.stem, gt, pred
 
 
