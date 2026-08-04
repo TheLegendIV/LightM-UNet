@@ -5,9 +5,18 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 
 def load_pretrained_weights(network, fname, verbose=False):
     """
-    Transfers all weights between matching keys in state_dicts. matching is done by name and we only transfer if the
-    shape is also the same. Segmentation layers (the 1x1(x1) layers that produce the segmentation maps)
-    identified by keys ending with '.seg_layers') are not transferred!
+    Transfers all weights between matching keys in state_dicts. Matching is done by name, and a key is only
+    transferred if the shape is also the same. Segmentation layers (the 1x1(x1) layers that produce the
+    segmentation maps, identified by keys containing '.seg_layers.') are never transferred, since they're
+    dataset/class-count specific by design.
+
+    Beyond that, any key present in the pretrained checkpoint but shape-mismatched against the current network
+    (e.g. a custom architecture's own output layer -- not named 'seg_layers', so not covered by the skip list
+    above -- when the number of segmentation classes differs between the pretrained checkpoint's dataset and the
+    current one) is skipped with a warning instead of raising, so cross-dataset transfer with a different class
+    count doesn't hard-crash on an otherwise-compatible architecture. Keys present in the current network but
+    entirely absent from the pretrained checkpoint are likewise skipped (left at their freshly-initialized
+    value) with a warning, rather than asserted on.
 
     If the pretrained weights were obtained with a training outside nnU-Net and DDP or torch.optimize was used,
     you need to change the keys of the pretrained state_dict. DDP adds a 'module.' prefix and torch.optim adds
@@ -30,37 +39,38 @@ def load_pretrained_weights(network, fname, verbose=False):
         mod = mod._orig_mod
 
     model_dict = mod.state_dict()
-    # verify that all but the segmentation layers have the same shape
-    for key, _ in model_dict.items():
-        if all([i not in key for i in skip_strings_in_pretrained]):
-            assert key in pretrained_dict, \
-                f"Key {key} is missing in the pretrained model weights. The pretrained weights do not seem to be " \
-                f"compatible with your network."
-            assert model_dict[key].shape == pretrained_dict[key].shape, \
-                f"The shape of the parameters of key {key} is not the same. Pretrained model: " \
-                f"{pretrained_dict[key].shape}; your network: {model_dict[key]}. The pretrained model " \
-                f"does not seem to be compatible with your network."
 
-    # fun fact: in principle this allows loading from parameters that do not cover the entire network. For example pretrained
-    # encoders. Not supported by this function though (see assertions above)
+    # Sort every key in the current network into: transferable (name not skipped, present in the
+    # pretrained checkpoint, matching shape) vs. skipped (for one of the three reasons below) -- skipped keys
+    # keep their freshly-initialized value rather than crashing the load.
+    transferable = {}
+    skipped_by_name, skipped_missing, skipped_shape = [], [], []
+    for key, value in model_dict.items():
+        if any(i in key for i in skip_strings_in_pretrained):
+            skipped_by_name.append(key)
+        elif key not in pretrained_dict:
+            skipped_missing.append(key)
+        elif pretrained_dict[key].shape != value.shape:
+            skipped_shape.append((key, pretrained_dict[key].shape, value.shape))
+        else:
+            transferable[key] = pretrained_dict[key]
 
-    # commenting out this abomination of a dict comprehension for preservation in the archives of 'what not to do'
-    # pretrained_dict = {'module.' + k if is_ddp else k: v
-    #                    for k, v in pretrained_dict.items()
-    #                    if (('module.' + k if is_ddp else k) in model_dict) and
-    #                    all([i not in k for i in skip_strings_in_pretrained])}
-
-    pretrained_dict = {k: v for k, v in pretrained_dict.items()
-                       if k in model_dict.keys() and all([i not in k for i in skip_strings_in_pretrained])}
-
-    model_dict.update(pretrained_dict)
+    model_dict.update(transferable)
 
     print("################### Loading pretrained weights from file ", fname, '###################')
+    if skipped_shape:
+        print(f"Skipped {len(skipped_shape)} key(s) with a shape mismatch (kept freshly-initialized):")
+        for key, pretrained_shape, current_shape in skipped_shape:
+            print(f"  {key}: pretrained {pretrained_shape} vs current {current_shape}")
+    if skipped_missing:
+        print(f"Skipped {len(skipped_missing)} key(s) absent from the pretrained checkpoint (kept freshly-initialized):")
+        for key in skipped_missing:
+            print(f"  {key}")
     if verbose:
         print("Below is the list of overlapping blocks in pretrained model and nnUNet architecture:")
-        for key, value in pretrained_dict.items():
+        for key, value in transferable.items():
             print(key, 'shape', value.shape)
-        print("################### Done ###################")
+    print("################### Done ###################")
     mod.load_state_dict(model_dict)
 
 
