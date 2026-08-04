@@ -18,6 +18,16 @@ docker run --rm -it  --gpus all  --ipc=host  --ulimit memlock=-1  --ulimit stack
 # Ensure one thing across all runs. Sometimes sweeps will cover already existing runs. In that case, do not re-run the existing runs. Instead skip them, or simply assume they exist and copy them into the dir. Choose the easiest option.
 # Ensure you keep the logs + checkpoints for all runs. Keep the best, you can skip the latest except at ep 50,100 and 150 (overwrite).
 
+# ---------------------------------------------------------------------------
+# Update: this plan's objective (binary, C=1, Dataset501_ARCADE) is
+# ARCHIVED/superseded -- the project pivoted to 4-class segmentation
+# (LAD/RCA/LCX/LM) on Dataset509_ARCADE_1x1_4c. Kept below unchanged as the
+# historical record of the binary compression study (see
+# compression/foundation_log.md for what was actually found/run). The new
+# objective's sweeps live under compression/slurm/, starting from
+# stage_1_naive_baseline_array.job -- see compression/README.md.
+# ---------------------------------------------------------------------------
+
 project:
   task: binary coronary vessel segmentation (C=1)
   goal: ENet config meeting Stage-1 goals, exported to QONNX for FINN

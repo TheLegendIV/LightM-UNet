@@ -43,6 +43,7 @@ FLOOR_BOTTLENECKS = (1, 1, 1, 1, 1)
 C_RANGE = list(range(4, 164, 4))  # covers below-UF up to beyond E1's widest (144)
 FILTER_DELTA = 4
 INPUT_HW = (512, 512)
+OUT_CHANNELS = 5  # background + LAD/RCA/LCX/LM, matches Dataset509_ARCADE_1x1_4c's dataset.json
 
 # Palette: dataviz skill's validated categorical order (fixed order, not cycled).
 # channel_idx indexes ENet's `channels` tuple (initial, stage1, stage23, stage4, stage5);
@@ -72,7 +73,7 @@ def metrics_at(channel_idx: int, width: int, bottleneck_idx: int | None, bottlen
     bottlenecks = list(FLOOR_BOTTLENECKS)
     if bottleneck_idx is not None:
         bottlenecks[bottleneck_idx] = bottleneck_count
-    model = ENet(in_channels=1, out_channels=2, channels=tuple(channels),
+    model = ENet(in_channels=1, out_channels=OUT_CHANNELS, channels=tuple(channels),
                  bottlenecks_per_stage=tuple(bottlenecks), decoder_type="upsample_conv")
     params, _ = count_params(model)
     _, flops = count_flops(model, 1, INPUT_HW)

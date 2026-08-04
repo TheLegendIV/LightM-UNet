@@ -1,5 +1,14 @@
 # compression/
 
+> **Update:** the binary (single foreground class) coronary-vessel objective
+> this document originally described (`Dataset501_ARCADE`,
+> `agent_instructions_1.yaml`) is retired. The project now targets 4-class
+> segmentation (LAD/RCA/LCX/LM) on `Dataset509_ARCADE_1x1_4c`. The sweep jobs
+> built for the binary objective moved to `slurm/archive/` (kept for
+> history -- see its README). New sweeps restart their own stage numbering
+> from `stage_1_naive_baseline_array.job`. The rest of this document
+> (layout, naming convention, generic tooling) still applies as-is.
+
 Sweep orchestration, analysis, and reporting for the ENet compression
 experiment (`agent_instructions_1.yaml` / `enet_finn_compression_plan_1.md`).
 Everything *new* this experiment needs lives here; core model/trainer code

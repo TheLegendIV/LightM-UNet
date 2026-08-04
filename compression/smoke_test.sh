@@ -2,31 +2,30 @@
 # Pre-flight smoke test (smoke_test_policy in agent_instructions_1.yaml):
 # a fast end-to-end pipeline check before a stage's full 150-epoch sweep,
 # not a single upfront Stage-0 gate. Also doubles as the training-time
-# estimator: run once on the UF (floor) config with no batch-size override
+# estimator: run once on the U16 (floor) config with no batch-size override
 # (see below) to get a per-epoch wall-clock number, then use
 # report_run_estimate.sh-style arithmetic (n_runs * epoch_time * 150) before
 # submitting any Slurm array.
 #
-# Run from the repo root, inside the training environment (container
-# d9de81f869cc locally, or the HPC conda env): bash compression/smoke_test.sh
+# Run from the repo root, inside the training environment (a local docker
+# container per setup-enet.sh, or the HPC conda env): bash compression/smoke_test.sh
 set -e
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-RUN_NAME="${1:-smoke_test_UF}"
-ENET_CHANNELS_VAL="${2:-20,4,4,4,4}"          # UF (floor) config by default
+RUN_NAME="${1:-smoke_test_U16}"
+ENET_CHANNELS_VAL="${2:-4,4,8,4,4}"           # U16 (floored) config by default -- see stage_4_arch_probes_array.job's header
 ENET_BOTTLENECKS_VAL="${3:-4,8,8,2,1}"        # ENet-native depth
-# UF's channels are asymmetric (f5=4 != f_i=20), which only max_unpool
-# structurally rejects (MaxUnpool2d needs indices' channel count to match --
-# see ENet.py's self-test / symmetric() check). upsample_conv has no such
-# constraint, so it's the correct default here, not max_unpool.
+# upsample_conv has no channel-symmetry constraint (unlike max_unpool's
+# MaxUnpool2d, which needs indices' channel count to match -- see ENet.py's
+# self-test / symmetric() check), so it's the correct default here.
 ENET_DECODER_TYPE_VAL="${4:-upsample_conv}"
 ENET_USE_DILATED_VAL="${5:-1}"
 ENET_USE_ASYMMETRIC_VAL="${6:-1}"
 ENET_USE_STRIDED_VAL="${7:-1}"
 
-DATASET_NAME="Dataset501_ARCADE"
-DATASET_ID=501
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+DATASET_ID=509
 
 export nnUNet_raw="$REPO_ROOT/data/nnUNet_raw"
 export nnUNet_preprocessed="$REPO_ROOT/data/nnUNet_preprocessed"

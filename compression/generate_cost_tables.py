@@ -1,21 +1,21 @@
-"""Stage 2.2 cost tables (agent_instructions_1.yaml stage_2_architecture_grid.
-2_2_cost_tables): architecture-only marginal cost of +delta filters / +1
-bottleneck per stage, no training. Run once, upfront -- informs the grid
-(2.3), the optional fine-tune (2.6), and the write-up.
+"""Architecture-only marginal cost of +delta filters / +1 bottleneck per
+stage, no training -- informs stage_1_naive_baseline's grid and any further
+architecture probes, for the current 4-class objective (LAD/RCA/LCX/LM on
+Dataset509_ARCADE_1x1_4c).
 
-Baseline = Original (16,64,128,64,16) -- re-baselined from E1 (20,72,144,72,20)
-after real test-set results showed Original beats E1 on Dice (0.780 vs
-0.775) while already being smaller (369k vs 466k params); see
-foundation_log.md's "Plan revision 2" section. ENet-native bottleneck depth
-(4,8,8,2,1), upsample_conv decoder (avoids the max_unpool channel-symmetry
-constraint when perturbing a single channel slot in isolation -- see
-ENet.py's self-test / foundation_log.md finding #2).
+Baseline = ENet-paper channels (16,64,128,64,16) -- same as stage_1's own
+"Baseline" config. ENet-native bottleneck depth (4,8,8,2,1), upsample_conv
+decoder (avoids the max_unpool channel-symmetry constraint when perturbing a
+single channel slot in isolation).
 
 Note: ENet.py's `channels` tuple has 5 slots (initial, stage1, stage23,
 stage4, stage5) -- stage2 and stage3 always share one width (no resolution
-change between them, matching every row of the .md/yaml's f_i..f5 tables,
-where f2 always equals f3). The filter-cost table below has 5 rows, not 6,
-for that reason -- f2/f3 is one knob, not two.
+change between them). The filter-cost table below has 5 rows, not 6, for
+that reason -- f2/f3 is one knob, not two.
+
+Only parameter count and MACs/FLOPs are reported (this session dropped the
+activation-memory axis this file used to also produce -- see rank_results.py
+for the current cost-vs-accuracy scoring, which only uses params/MACs/Dice).
 
 Usage: python compression/generate_cost_tables.py
 """
@@ -33,9 +33,10 @@ from nnunetv2.nets.ENet import ENet  # noqa: E402
 from utils import count_flops, count_params  # noqa: E402
 
 OUT_DIR = Path(__file__).resolve().parent / "cost_tables"
-BASELINE_CHANNELS = (16, 64, 128, 64, 16)  # Original -- re-baselined from E1, see foundation_log.md's "Plan revision 2" (real test-set Dice: Original 0.780 > E1 0.775, while already smaller)
+BASELINE_CHANNELS = (16, 64, 128, 64, 16)  # ENet-paper channels -- same as stage_1_naive_baseline's "Baseline" config
 BASELINE_BOTTLENECKS = (4, 8, 8, 2, 1)  # ENet-native
 DECODER_TYPE = "upsample_conv"
+OUT_CHANNELS = 5  # background + LAD/RCA/LCX/LM, matches Dataset509_ARCADE_1x1_4c's dataset.json
 INPUT_HW = (512, 512)
 FILTER_DELTA = 4  # smallest valid step (stage channels must stay divisible by 4)
 
@@ -131,7 +132,7 @@ def main_normalized() -> None:
 
 def build(channels: tuple[int, ...], bottlenecks: tuple[int, ...]) -> tuple[int, float]:
     model = ENet(
-        in_channels=1, out_channels=2, channels=channels,
+        in_channels=1, out_channels=OUT_CHANNELS, channels=channels,
         bottlenecks_per_stage=bottlenecks, decoder_type=DECODER_TYPE,
     )
     params, _ = count_params(model)
@@ -175,85 +176,6 @@ def main() -> None:
     print(bottleneck_cost.to_string(index=False))
 
 
-# --- Activation / feature-map memory axis -----------------------------------
-# A third axis distinct from params and FLOPs: how big is each stage's output
-# feature map (elements/channel = H x W at that stage's resolution)? This
-# doesn't depend on channel width (linear, not quadratic like params/flops --
-# doubling channels exactly doubles memory, no block-count dependence either,
-# since it's the OUTPUT size, not cumulative compute). Matters for on-chip
-# buffering (BRAM) on the ZU7EV target, where activation memory is often the
-# real constraint, not weight storage. Verified via forward hooks (real
-# tensor shapes), not stride arithmetic, so it can't drift from the actual
-# downsampling schedule if that ever changes.
-ACTIVATION_HOOK_TARGETS = [
-    ("f_i", "initial", "#2a78d6"),
-    ("f1", "regular1", "#eb6834"),
-    ("f2=f3 (stage23)", "stage3", "#1baf7a"),
-    ("f4", "regular4", "#eda100"),
-    ("f5", "regular5", "#e87ba4"),
-]
-
-
-def main_activation_memory() -> None:
-    import torch
-
-    OUT_DIR.mkdir(exist_ok=True)
-    model = ENet(in_channels=1, out_channels=2, channels=BASELINE_CHANNELS,
-                 bottlenecks_per_stage=BASELINE_BOTTLENECKS, decoder_type=DECODER_TYPE)
-    shapes: dict[str, tuple[int, ...]] = {}
-
-    def make_hook(name: str):
-        def hook(module, inp, out):
-            tensor = out[0] if isinstance(out, tuple) else out
-            shapes[name] = tuple(tensor.shape)
-        return hook
-
-    handles = [getattr(model, attr).register_forward_hook(make_hook(name))
-               for name, attr, _ in ACTIVATION_HOOK_TARGETS]
-    with torch.no_grad():
-        model(torch.zeros(1, 1, *INPUT_HW))
-    for handle in handles:
-        handle.remove()
-
-    rows = []
-    for name, attr, color in ACTIVATION_HOOK_TARGETS:
-        _, channels_at_baseline, h, w = shapes[name]
-        rows.append({
-            "stage": name,
-            "resolution": f"{h}x{w}",
-            "elements_per_channel": h * w,
-            "note": f"channels-independent -- total activation memory for this stage = "
-                    f"elements_per_channel x channel_width x bytes/element (bytes/element "
-                    f"depends on Stage 4's quant_bits; 4 for FP32).",
-        })
-    activation_df = pd.DataFrame(rows)
-    activation_df.to_csv(OUT_DIR / "activation_memory.csv", index=False)
-    print(f"\nWrote {OUT_DIR / 'activation_memory.csv'}")
-    print(activation_df.to_string(index=False))
-
-    import matplotlib.pyplot as plt
-    ink, secondary_ink, muted, grid, baseline, surface = "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7", "#fcfcfb"
-    fig, ax = plt.subplots(figsize=(7, 5), facecolor=surface)
-    ax.set_facecolor(surface)
-    ax.grid(True, axis="y", color=grid, linewidth=0.8, zorder=0)
-    for spine in ax.spines.values():
-        spine.set_color(baseline)
-    ax.tick_params(colors=muted, labelsize=9)
-    names = [name for name, _, _ in ACTIVATION_HOOK_TARGETS]
-    colors = [color for _, _, color in ACTIVATION_HOOK_TARGETS]
-    values = [activation_df.loc[activation_df["stage"] == name, "elements_per_channel"].iloc[0] for name in names]
-    ax.bar(names, values, color=colors, zorder=3, width=0.6)
-    ax.set_ylabel("elements per channel (H x W at that stage)", color=secondary_ink, fontsize=10)
-    ax.set_title(f"Feature-map size per channel by stage (input {INPUT_HW[0]}x{INPUT_HW[1]})", color=ink, fontsize=12)
-    for i, v in enumerate(values):
-        ax.annotate(f"{v:,}", (i, v), ha="center", va="bottom", fontsize=9, color=secondary_ink, xytext=(0, 4), textcoords="offset points")
-    fig.tight_layout()
-    out_path = OUT_DIR / "activation_memory.png"
-    fig.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=surface)
-    print(f"Wrote {out_path}")
-
-
 if __name__ == "__main__":
     main()
     main_normalized()
-    main_activation_memory()

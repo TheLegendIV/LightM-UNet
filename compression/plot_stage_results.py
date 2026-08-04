@@ -1,8 +1,14 @@
 """Per-stage comparison plots from compression/results.csv: Dice vs Params
 and Dice vs FLOPs, one pair of figures per distinct `stage` value. Every
-stage's plot also shows the stage1 baselines (Original, E1) as reference
-points, so each ablation/sweep stage is visually anchored against the
+stage's plot also shows stage_1_naive_baseline's Baseline/U4 reference
+points, so each ablation/probe stage is visually anchored against the
 config it's actually being compared to.
+
+For the 4-class objective, "dice" is the mean across LAD/RCA/LCX/LM (see
+compression/collect_results.py) -- per-class dice_LAD/dice_RCA/dice_LCX/
+dice_LM columns also exist in results.csv but aren't plotted here by
+default; this script's job is the same top-line Dice-vs-cost view the
+binary run used, not a per-class breakdown.
 
 Usage:
     python compression/plot_stage_results.py
@@ -16,9 +22,8 @@ from pathlib import Path
 import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-BASELINE_STAGE = "stage1"
-COMPRESSED_BASELINE_STAGE = "1a_seed"
-COMPRESSED_BASELINE_CONFIG = "nnUNetTrainerENet_1a_seed_O4_s0"
+BASELINE_STAGE = "1_naive_baseline"
+COMPRESSED_BASELINE_CONFIG = "nnUNetTrainerENet_1_naive_baseline_U4"
 
 # Muted, consistent palette (matches the rest of compression/'s plots).
 INK, SECONDARY_INK, MUTED, GRID, BASELINE_COLOR, SURFACE = (
@@ -29,48 +34,28 @@ BASELINE_MARKER_COLOR = "#eb6834"
 COMPRESSED_BASELINE_MARKER_COLOR = "#8e5fd4"
 
 # Fixed per-config marker/color for every baseline overlay point -- keyed by
-# config_name (not "is it ENet") so a third reference (Compressed Baseline)
-# slots in without the ENet-vs-everything-else split breaking. Every stage
-# past 1a_seed is O4-derived, so 1a_seed_O4_s0 ("Compressed Baseline") is
-# the reference every 1b/1c/2a/2b/1d ablation/sweep is actually judged
-# against -- ENet/E1 stay in the same overlay as the uncompressed anchor.
+# config_name so both references slot in without an ENet-vs-everything-else
+# split. Every stage past 1_naive_baseline is U4-derived, so
+# nnUNetTrainerENet_1_naive_baseline_U4 ("compressed baseline") is the
+# reference every 2_special_ops/3_transfer_original/4_arch_probes probe is
+# actually judged against -- the full-width Baseline stays in the same
+# overlay as the uncompressed anchor.
 BASELINE_STYLES = {
-    "nnUNetTrainerENet_Original": dict(
-        marker="D", color=BASELINE_MARKER_COLOR, s=90, label="ENet (baseline)",
+    "nnUNetTrainerENet_1_naive_baseline_Baseline": dict(
+        marker="D", color=BASELINE_MARKER_COLOR, s=90, label="Baseline (full width)",
         edgecolors="black", linewidths=0.5,
     ),
-    "nnUNetTrainerENet_E1": dict(
-        marker="x", color=MUTED, s=70, label="E1 (deprecated)", linewidths=1.5,
-    ),
     COMPRESSED_BASELINE_CONFIG: dict(
-        marker="^", color=COMPRESSED_BASELINE_MARKER_COLOR, s=100, label="Compressed Baseline (O4)",
+        marker="^", color=COMPRESSED_BASELINE_MARKER_COLOR, s=100, label="U4 (compressed baseline)",
         edgecolors="black", linewidths=0.5,
     ),
 }
 
-# 2a's grid crosses 5 filter widths x 3 bottleneck patterns -- filter width
-# already separates points along the x-axis (params/FLOPs), so bottleneck
-# pattern (the axis this session just redesigned: native vs the new sparse
-# dilation-4/16 div2/div4 patterns) gets categorical color instead, fixed
-# order, never cycled.
-BNECK_PATTERN_COLORS = {"native": "#2a78d6", "div2": "#eb6834", "div4": "#1baf7a"}
-
-
-def bneck_pattern_from_config_name(config_name: str) -> str | None:
-    for pattern in BNECK_PATTERN_COLORS:
-        if config_name.endswith(f"_{pattern}"):
-            return pattern
-    return None
-
 # Display-only renames for plot labels (results.csv's config_name / the
-# underlying checkpoints are untouched). "Original" is ENet exactly as
-# specified in the ENet paper -- the uncompressed baseline everything else
-# is pruned from. 1a_seed_O4_s0 is O4 at native ops/no ablation applied --
-# the reference point section 2a's pruning grid and every 1a/1b/1c ablation
-# in this stage is compared against -- i.e. the "Compressed Baseline".
+# underlying checkpoints are untouched).
 DISPLAY_NAME_OVERRIDES = {
-    "nnUNetTrainerENet_Original": "ENet",
-    "nnUNetTrainerENet_1a_seed_O4_s0": "Compressed Baseline",
+    "nnUNetTrainerENet_1_naive_baseline_Baseline": "Baseline",
+    COMPRESSED_BASELINE_CONFIG: "U4 (compressed baseline)",
 }
 
 
@@ -96,8 +81,8 @@ def _scatter(ax, df: pd.DataFrame, x_col: str, x_label: str, baseline_df: pd.Dat
 
     if not baseline_df.empty:
         # Each reference config gets its own fixed marker/color (never
-        # cycled) so ENet/E1/Compressed Baseline stay visually distinct and
-        # don't read as co-equal -- see BASELINE_STYLES.
+        # cycled) so Baseline/U4 stay visually distinct and don't read as
+        # co-equal -- see BASELINE_STYLES.
         for config_name, style in BASELINE_STYLES.items():
             subset = baseline_df[baseline_df["config_name"] == config_name]
             if subset.empty:
@@ -107,20 +92,8 @@ def _scatter(ax, df: pd.DataFrame, x_col: str, x_label: str, baseline_df: pd.Dat
             ax.annotate(display_name(row["config_name"]), (row[x_col], row["dice"]),
                        fontsize=7, color=SECONDARY_INK, textcoords="offset points", xytext=(5, 5))
 
-    patterns = df["config_name"].map(bneck_pattern_from_config_name)
-    has_pattern_groups = patterns.notna().any()
-    if has_pattern_groups:
-        # Color follows the entity (bottleneck pattern), not plot order --
-        # fixed BNECK_PATTERN_COLORS assignment, legend below.
-        for pattern, color in BNECK_PATTERN_COLORS.items():
-            subset = df[patterns == pattern]
-            if subset.empty:
-                continue
-            ax.scatter(subset[x_col], subset["dice"], color=color, s=80, zorder=3,
-                       edgecolors="black", linewidths=0.5, label=pattern)
-    else:
-        ax.scatter(df[x_col], df["dice"], color=STAGE_COLOR, s=80, zorder=3,
-                   edgecolors="black", linewidths=0.5)
+    ax.scatter(df[x_col], df["dice"], color=STAGE_COLOR, s=80, zorder=3,
+               edgecolors="black", linewidths=0.5)
     for _, row in df.iterrows():
         label = display_name(row["config_name"])
         ax.annotate(label, (row[x_col], row["dice"]), fontsize=7, color=SECONDARY_INK,
@@ -129,20 +102,13 @@ def _scatter(ax, df: pd.DataFrame, x_col: str, x_label: str, baseline_df: pd.Dat
     ax.set_xlabel(x_label, color=SECONDARY_INK, fontsize=10)
     ax.set_ylabel("Dice", color=SECONDARY_INK, fontsize=10)
     if not baseline_df.empty:
-        # These stages' own configs (O4-derived, ~25-27K params) sit at
-        # ~1/15th of Original/E1's scale (~370-470K) -- on a linear axis
+        # stage_2/3/4's own U4-derived configs (~20-30K params) sit at a
+        # small fraction of Baseline's scale (~370K+) -- on a linear axis
         # they visually collapse onto the y-axis, indistinguishable from
         # each other, even though their Dice differs meaningfully. Log
         # scale keeps both clusters legible at once.
         ax.set_xscale("log")
         ax.grid(True, which="minor", color=GRID, linewidth=0.4, zorder=0)
-    if has_pattern_groups or not baseline_df.empty:
-        # One legend call covering everything labeled so far (baseline
-        # overlay + bottleneck-pattern groups, whichever are present) --
-        # calling legend() more than once just replaces it with a fresh one
-        # built from the same labeled artists, so consolidating avoids
-        # redundant work and an inaccurate "bottleneck pattern" title when
-        # ENet/E1 entries are mixed in too.
         ax.legend(frameon=False, fontsize=8, labelcolor=SECONDARY_INK, loc="best")
 
 
@@ -189,23 +155,18 @@ def main() -> int:
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
     baseline_df = df[df["stage"] == BASELINE_STAGE]
-    compressed_baseline_df = df[df["config_name"] == COMPRESSED_BASELINE_CONFIG]
     stages = [s for s in df["stage"].unique() if s != BASELINE_STAGE]
-    # stage1 itself also gets its own plot (Original vs E1), with no
-    # separate baseline overlay (it IS the baseline).
+    # 1_naive_baseline itself also gets its own plot (Baseline/U2/U4/U8/U16),
+    # with no separate overlay (it IS the baseline -- Baseline and U4 are
+    # already plain data points within it).
     plot_stage(BASELINE_STAGE, baseline_df, pd.DataFrame(columns=df.columns), args.out_dir)
     for stage in sorted(stages):
         stage_df = df[df["stage"] == stage]
-        # 1a_seed's own stage_df already contains the Compressed Baseline
-        # row (1a_seed_O4_s0 is one of its three seeds) -- overlaying it
-        # again would just duplicate that exact point. Every other O4-
-        # derived stage (1b/1c/2a/2b/1d/...) gets it added to the stage1
-        # (ENet/E1) overlay, per BASELINE_STYLES.
-        if stage == COMPRESSED_BASELINE_STAGE:
-            overlay_df = baseline_df
-        else:
-            overlay_df = pd.concat([baseline_df, compressed_baseline_df], ignore_index=True)
-        plot_stage(stage, stage_df, overlay_df, args.out_dir)
+        # Every stage past 1_naive_baseline is U4-derived -- overlay the
+        # full 1_naive_baseline set (which already contains both Baseline
+        # and U4, per BASELINE_STYLES) so each probe is visually anchored
+        # against both references.
+        plot_stage(stage, stage_df, baseline_df, args.out_dir)
 
     return 0
 
