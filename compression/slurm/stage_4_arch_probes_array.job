@@ -7,7 +7,7 @@
 #SBATCH --gpus=1
 #SBATCH --mem=32G
 #SBATCH --time=04:00:00
-#SBATCH --array=0-8
+#SBATCH --array=0-10
 #SBATCH --output=logs/%x_%a_%j.out
 #SBATCH --error=logs/%x_%a_%j.err
 
@@ -26,10 +26,18 @@ set -e
 # array was retrofitted to the new policy before ever training (no
 # checkpoints existed yet), so nothing was invalidated by the change. Each
 # task changes exactly ONE thing off that reference -- channels for
-# 4.1/4.2, one new ENet.py flag for 4.4.1-4.4.4/4.5/4.6/4.7. 4.2.1
+# 4.1/4.2, one new ENet.py flag for 4.4.1-4.4.4/4.5/4.6/4.7/4.8/4.9. 4.2.1
 # (conditional on 4.2) and the blanket-DSC-everywhere-plus-concat probe
 # (gated on 4.4.4) are NOT included here -- both need their gating probe's
 # result first, see compression/foundation_log.md when that's written up.
+#
+# 4.8/4.9 (tasks 9-10) added after real stage_2_special_ops results came
+# in: no_dilated collapsed from U4's 0.747 dice to 0.399, confirming
+# dilated context matters far more here than in the retired binary run
+# (there it only cost -0.024). These two probes push further in that
+# direction instead of just ablating it away -- see ENet.py's
+# DENSE_DILATION_PATTERN / SHALLOW_DILATION_WIDE_PATTERN module comments
+# for the receptive-field-vs-feature-map-size math behind each choice.
 #
 #   0: 4_1_e1_shape           -- CHANNELS=4,16,28,16,4 (E1-shape non-uniform
 #      candidate at ~U4's budget -- see session notes: a truly param-matched
@@ -71,31 +79,53 @@ set -e
 #      instead of the squeezed internal_channels width, so expect this run
 #      to take noticeably longer wall-clock than its peers despite similar
 #      epoch count.)
+#   9: 4_8_dense_dilation        -- ENET_CONTEXT_PATTERN=dense_dilation
+#      (every stage2/3 slot dilated -- no plain, no asymmetric slots left at
+#      all -- 2/4/8/16 repeated twice over 8 slots. Max rate stays 16,
+#      unchanged from the default pattern: at stage2/3's 1/8 resolution
+#      (64x64 for 512x512 input), a 3x3 kernel at dilation=16 already spans
+#      33px, ~52% of the map -- going higher starts hitting mostly zero-
+#      padding, so this tests COVERAGE DENSITY at the existing safe
+#      ceiling, not reach beyond it.)
+#  10: 4_9_shallow_dilation_wide -- ENET_SHALLOW_DILATION_WIDE=1 (same
+#      alternating regular/dilated structure as 4.4.1's shallow_dilation in
+#      stage1+regular4, but at dilation=32 instead of 16 -- those stages run
+#      at 1/4 resolution (128x128), roughly double stage2/3's 64x64, so a
+#      3x3 kernel at dilation=32 (span 65px) covers ~51% of THAT map -- the
+#      same relative aggressiveness dilation=16 already has at stage2/3's
+#      finer resolution. This is the "push reach further" probe, exercised
+#      where there's actually spatial headroom for it, as opposed to 4.8's
+#      density-focused approach.)
 #
-# All 9 architectures confirmed via local docker smoke test (nnUNetv2_train,
+# All 11 architectures confirmed via local docker smoke test (nnUNetv2_train,
 # 1 epoch/2 iterations against Dataset509_ARCADE_1x1_4c) to build and train
-# without error, and (for the 7 new-flag probes) to produce distinctly
+# without error, and (for the 9 new-flag probes) to produce distinctly
 # different param counts from the U4 baseline in the expected direction
-# (shallow_dilation/two_block_skip: unchanged, dilation/skip add no new
-# weights; separable_dilated/merge_dilated_pairs/dsc_dilated_only: fewer
-# params; double_projections/dsc_no_projection: more params).
+# (shallow_dilation/two_block_skip/dense_dilation/shallow_dilation_wide:
+# unchanged -- dilation adds no new weights; separable_dilated/
+# merge_dilated_pairs/dsc_dilated_only: fewer params; double_projections/
+# dsc_no_projection: more params). dense_dilation and shallow_dilation_wide
+# additionally verified structurally in ENet.py's own self-test (exact
+# per-block dilation rates checked, not just "it built").
 
 DATASET_ID=509
 DATASET_NAME="Dataset509_ARCADE_1x1_4c"
 
 CONFIG_NAMES=(4_1_e1_shape 4_2_extra_initial 4_4_1_shallow_dilation 4_4_2_separable_dilated
               4_4_3_merge_dilated_pairs 4_4_4_dsc_dilated_only 4_5_double_projections 4_6_two_block_skip
-              4_7_dsc_no_projection)
+              4_7_dsc_no_projection 4_8_dense_dilation 4_9_shallow_dilation_wide)
 CHANNELS_ARR=("4,16,28,16,4" "8,16,32,16,4" "4,16,32,16,4" "4,16,32,16,4"
               "4,16,32,16,4" "4,16,32,16,4" "4,16,32,16,4" "4,16,32,16,4"
-              "4,16,32,16,4")
-SHALLOW_DILATION_ARR=(0 0 1 0 0 0 0 0 0)
-SEPARABLE_DILATED_ARR=(0 0 0 1 0 0 0 0 0)
-MERGE_DILATED_PAIRS_ARR=(0 0 0 0 1 0 0 0 0)
-DSC_DILATED_ONLY_ARR=(0 0 0 0 0 1 0 0 0)
-DOUBLE_PROJECTIONS_ARR=(0 0 0 0 0 0 1 0 0)
-TWO_BLOCK_SKIP_ARR=(0 0 0 0 0 0 0 1 0)
-DSC_NO_PROJECTION_ARR=(0 0 0 0 0 0 0 0 1)
+              "4,16,32,16,4" "4,16,32,16,4" "4,16,32,16,4")
+SHALLOW_DILATION_ARR=(0 0 1 0 0 0 0 0 0 0 0)
+SEPARABLE_DILATED_ARR=(0 0 0 1 0 0 0 0 0 0 0)
+MERGE_DILATED_PAIRS_ARR=(0 0 0 0 1 0 0 0 0 0 0)
+DSC_DILATED_ONLY_ARR=(0 0 0 0 0 1 0 0 0 0 0)
+DOUBLE_PROJECTIONS_ARR=(0 0 0 0 0 0 1 0 0 0 0)
+TWO_BLOCK_SKIP_ARR=(0 0 0 0 0 0 0 1 0 0 0)
+DSC_NO_PROJECTION_ARR=(0 0 0 0 0 0 0 0 1 0 0)
+CONTEXT_PATTERN_ARR=(default default default default default default default default default dense_dilation default)
+SHALLOW_DILATION_WIDE_ARR=(0 0 0 0 0 0 0 0 0 0 1)
 
 TASK_ID=${SLURM_ARRAY_TASK_ID}
 CONFIG_NAME="${CONFIG_NAMES[$TASK_ID]}"
@@ -131,7 +161,7 @@ export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
 # -- ENet trainer knobs -- U4 reference, one thing changed per task ---------
 export ENET_CHANNELS="${CHANNELS_ARR[$TASK_ID]}"
 export ENET_BOTTLENECKS="4,8,8,2,1"
-export ENET_CONTEXT_PATTERN="default"
+export ENET_CONTEXT_PATTERN="${CONTEXT_PATTERN_ARR[$TASK_ID]}"
 export ENET_DECODER_TYPE="upsample_conv"
 export ENET_USE_PRELU=0
 export ENET_USE_DILATED=1
@@ -145,6 +175,7 @@ export ENET_DSC_DILATED_ONLY="${DSC_DILATED_ONLY_ARR[$TASK_ID]}"
 export ENET_DOUBLE_PROJECTIONS="${DOUBLE_PROJECTIONS_ARR[$TASK_ID]}"
 export ENET_TWO_BLOCK_SKIP="${TWO_BLOCK_SKIP_ARR[$TASK_ID]}"
 export ENET_DSC_NO_PROJECTION="${DSC_NO_PROJECTION_ARR[$TASK_ID]}"
+export ENET_SHALLOW_DILATION_WIDE="${SHALLOW_DILATION_WIDE_ARR[$TASK_ID]}"
 export ENET_EPOCHS=150
 export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
 
@@ -155,6 +186,7 @@ echo "Array task: ${TASK_ID} -> ${RUN_NAME}"
 echo "ENET_CHANNELS=${ENET_CHANNELS} ENET_USE_ASYMMETRIC=${ENET_USE_ASYMMETRIC}"
 echo "ENET_SHALLOW_DILATION=${ENET_SHALLOW_DILATION} ENET_SEPARABLE_DILATED=${ENET_SEPARABLE_DILATED} ENET_MERGE_DILATED_PAIRS=${ENET_MERGE_DILATED_PAIRS}"
 echo "ENET_DSC_DILATED_ONLY=${ENET_DSC_DILATED_ONLY} ENET_DOUBLE_PROJECTIONS=${ENET_DOUBLE_PROJECTIONS} ENET_TWO_BLOCK_SKIP=${ENET_TWO_BLOCK_SKIP} ENET_DSC_NO_PROJECTION=${ENET_DSC_NO_PROJECTION}"
+echo "ENET_CONTEXT_PATTERN=${ENET_CONTEXT_PATTERN} ENET_SHALLOW_DILATION_WIDE=${ENET_SHALLOW_DILATION_WIDE}"
 echo "Output folder: ${ENET_OUTPUT_FOLDER}"
 
 echo "=== GPU info ==="
@@ -208,6 +240,7 @@ python compression/collect_results.py \
     --double-projections "${ENET_DOUBLE_PROJECTIONS}" \
     --two-block-skip "${ENET_TWO_BLOCK_SKIP}" \
     --dsc-no-projection "${ENET_DSC_NO_PROJECTION}" \
+    --shallow-dilation-wide "${ENET_SHALLOW_DILATION_WIDE}" \
     --trainer-class "${TRAINER_CLASS}"
 
 echo "Done: ${RUN_NAME}."

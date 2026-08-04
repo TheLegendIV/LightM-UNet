@@ -133,6 +133,7 @@ def run_inference(
     double_projections: bool = False,
     two_block_skip: bool = False,
     dsc_no_projection: bool = False,
+    shallow_dilation_wide: bool = False,
 ) -> Path:
     """Uses `nnUNetv2_predict_from_modelfolder` (-m <exact folder>), NOT
     plain `nnUNetv2_predict` (-tr/-p/-c/-d): the latter's folder resolution
@@ -175,6 +176,7 @@ def run_inference(
     env["ENET_DOUBLE_PROJECTIONS"] = "1" if double_projections else "0"
     env["ENET_TWO_BLOCK_SKIP"] = "1" if two_block_skip else "0"
     env["ENET_DSC_NO_PROJECTION"] = "1" if dsc_no_projection else "0"
+    env["ENET_SHALLOW_DILATION_WIDE"] = "1" if shallow_dilation_wide else "0"
     if quant_bits != 32:
         # Picked up by nnUNetTrainerENetQuant.build_network_architecture,
         # dynamically imported via the checkpoint's own stored trainer_name
@@ -336,10 +338,11 @@ def main() -> None:
     parser.add_argument("--use-asymmetric", type=int, default=1, choices=[0, 1])
     parser.add_argument("--use-strided", type=int, default=1, choices=[0, 1])
     parser.add_argument("--use-dsc", type=int, default=0, choices=[0, 1], help="Depthwise-separable inner conv (rejects combination with --use-asymmetric 1).")
-    parser.add_argument("--context-pattern", default="default", choices=["default", "sparse"],
-                         help="'sparse' = regular/dilated4/regular/dilated16 (section 2a's div2/div4 bottleneck axis), no 2/8 rungs, never asymmetric.")
+    parser.add_argument("--context-pattern", default="default", choices=["default", "sparse", "dense_dilation"],
+                         help="'sparse' = regular/dilated4/regular/dilated16 (section 2a's div2/div4 bottleneck axis), no 2/8 rungs, never asymmetric. 'dense_dilation' = every context-stage slot dilated (2/4/8/16 repeated twice over 8 slots), no plain/asymmetric slots at all.")
     parser.add_argument("--use-prelu", type=int, default=1, choices=[0, 1], help="0 = collapse the encoder's PReLU to plain ReLU too (section 1d's ablation) -- decoder is always ReLU regardless, see ENet.py.")
     parser.add_argument("--shallow-dilation", type=int, default=0, choices=[0, 1], help="Stage 4.4.1: alternating regular/dilated(16) in stage1 and regular4 (regular5 unchanged). See ENet.py.")
+    parser.add_argument("--shallow-dilation-wide", type=int, default=0, choices=[0, 1], help="Like --shallow-dilation but at dilation=32 instead of 16 -- stage1/regular4 run at 1/4 resolution, coarser than stage2/3, so there's headroom for a wider rate there. See ENet.py's SHALLOW_DILATION_WIDE_PATTERN.")
     parser.add_argument("--separable-dilated", type=int, default=0, choices=[0, 1], help="Stage 4.4.2: factor every dilated 3x3 in the context pattern into a (3,1)+(1,3) pair, same dilation on both passes.")
     parser.add_argument("--merge-dilated-pairs", type=int, default=0, choices=[0, 1], help="Stage 4.4.3: fuse each (regular-or-asymmetric, dilated) context-pattern PAIR into one block with a shared reduce/expand -- halves stage2/3's block count.")
     parser.add_argument("--dsc-dilated-only", type=int, default=0, choices=[0, 1], help="Stage 4.4.4: depthwise-separable ONLY on the context pattern's dilated slots, independent of --use-dsc.")
@@ -390,6 +393,7 @@ def main() -> None:
         double_projections=bool(args.double_projections),
         two_block_skip=bool(args.two_block_skip),
         dsc_no_projection=bool(args.dsc_no_projection),
+        shallow_dilation_wide=bool(args.shallow_dilation_wide),
     )
     macs, flops = count_flops(fp32_model, args.in_channels, tuple(args.input_hw))
 
@@ -443,6 +447,7 @@ def main() -> None:
             double_projections=bool(args.double_projections),
             two_block_skip=bool(args.two_block_skip),
             dsc_no_projection=bool(args.dsc_no_projection),
+            shallow_dilation_wide=bool(args.shallow_dilation_wide),
         )
     labels_ts_dir = NNUNET_RAW / dataset_name / "labelsTs"
     eval_metrics = compute_eval_metrics(labels_ts_dir, prediction_dir, dataset_name)
@@ -482,7 +487,7 @@ def main() -> None:
             + f",shallow_dilation={args.shallow_dilation},separable_dilated={args.separable_dilated}"
             + f",merge_dilated_pairs={args.merge_dilated_pairs},dsc_dilated_only={args.dsc_dilated_only}"
             + f",double_projections={args.double_projections},two_block_skip={args.two_block_skip}"
-            + f",dsc_no_projection={args.dsc_no_projection}"
+            + f",dsc_no_projection={args.dsc_no_projection},shallow_dilation_wide={args.shallow_dilation_wide}"
         ),
         "quant_bits": args.quant_bits,
         "params": total_params,

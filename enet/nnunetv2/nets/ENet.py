@@ -7,7 +7,7 @@ from torch import nn
 import torch.nn.functional as F
 
 DecoderType = Literal["max_unpool", "upsample_conv"]
-ContextPattern = Literal["default", "sparse"]
+ContextPattern = Literal["default", "sparse", "dense_dilation"]
 
 # The ENet-native context-stage pattern (Paszke et al.): regular, dilated x2,
 # asymmetric 5x5, dilated x4, regular, dilated x8, asymmetric 5x5, dilated x16.
@@ -40,6 +40,28 @@ SPARSE_DILATION_PATTERN: tuple[dict, ...] = (
     {"padding": 16, "dilation": 16},
 )
 
+# "Denser dilation" probe: every context-stage slot dilated (the 2/4/8/16
+# schedule repeated twice over 8 slots), replacing CONTEXT_STAGE_PATTERN's
+# remaining plain/asymmetric slots with dilation too -- no plain, no
+# asymmetric, at all. Max rate stays 16 (unchanged from CONTEXT_STAGE_
+# PATTERN) -- at stage2/3's 1/8 resolution (64x64 for a 512x512 input), a
+# 3x3 kernel at dilation=16 already spans 2*16+1=33px, ~52% of the feature
+# map; going higher starts hitting mostly zero-padding for a typical
+# interior pixel (diminishing to negative returns), so this probe tests
+# COVERAGE DENSITY at the existing safe ceiling, not reach beyond it (see
+# SHALLOW_DILATION_WIDE_PATTERN below for the reach-focused probe instead,
+# at a coarser resolution where there's still headroom).
+DENSE_DILATION_PATTERN: tuple[dict, ...] = (
+    {"padding": 2, "dilation": 2},
+    {"padding": 4, "dilation": 4},
+    {"padding": 8, "dilation": 8},
+    {"padding": 16, "dilation": 16},
+    {"padding": 2, "dilation": 2},
+    {"padding": 4, "dilation": 4},
+    {"padding": 8, "dilation": 8},
+    {"padding": 16, "dilation": 16},
+)
+
 # Stage 4.4.1's shallow-stage pattern: alternating regular/dilated(16), for
 # stage1 and regular4 -- both stages currently have NO dilation mechanism at
 # all (only stage2/3's context pattern does). Same max dilation rate (16) as
@@ -47,6 +69,20 @@ SPARSE_DILATION_PATTERN: tuple[dict, ...] = (
 SHALLOW_DILATION_PATTERN: tuple[dict, ...] = (
     {},
     {"padding": 16, "dilation": 16},
+)
+
+# "Push reach further" probe: same alternating regular/dilated structure as
+# SHALLOW_DILATION_PATTERN, but at dilation=32 instead of 16. stage1 and
+# regular4 both run at 1/4 resolution (128x128 for a 512x512 input) --
+# roughly double stage2/3's 64x64, so a 3x3 kernel at dilation=32 (span
+# 2*32+1=65px) covers ~51% of THAT map, the same relative aggressiveness
+# dilation=16 already has at stage2/3's finer resolution -- i.e. this
+# stays inside the same safe ceiling SHALLOW_DILATION_PATTERN's dilation=16
+# already respects, just exercised at a coarser stage that has the spatial
+# headroom for it.
+SHALLOW_DILATION_WIDE_PATTERN: tuple[dict, ...] = (
+    {},
+    {"padding": 32, "dilation": 32},
 )
 
 
@@ -542,10 +578,13 @@ class ENet(nn.Module):
         double_projections: bool = False,
         two_block_skip: bool = False,
         dsc_no_projection: bool = False,
+        shallow_dilation_wide: bool = False,
     ):
         super().__init__()
-        if context_pattern not in ("default", "sparse"):
-            raise ValueError(f"context_pattern must be 'default' or 'sparse', got {context_pattern!r}.")
+        if context_pattern not in ("default", "sparse", "dense_dilation"):
+            raise ValueError(
+                f"context_pattern must be 'default', 'sparse', or 'dense_dilation', got {context_pattern!r}."
+            )
         if len(channels) == 5:
             # stage2 and stage3 share one width (the historical/default
             # convention throughout this project's compression sweep).
@@ -606,6 +645,7 @@ class ENet(nn.Module):
         self.double_projections = double_projections      # 4.5
         self.two_block_skip = two_block_skip              # 4.6
         self.dsc_no_projection = dsc_no_projection         # DSC everywhere, no reduce/expand
+        self.shallow_dilation_wide = shallow_dilation_wide  # push shallow-stage dilation reach to 32
 
         n_stage1, n_stage2, n_stage3, n_regular4, n_regular5 = self.bottlenecks_per_stage
 
@@ -672,12 +712,15 @@ class ENet(nn.Module):
         CONTEXT_STAGE_PATTERN (or SPARSE_DILATION_PATTERN when
         context_pattern="sparse" -- section 2a's reduced-depth bottleneck
         axis, div2/div4: regular/dilated4/regular/dilated16, no 2/8 rungs,
-        never asymmetric). use_dilated/use_asymmetric downgrade the matching
-        slots to a plain regular bottleneck rather than dropping them, so
-        stage depth and op composition stay independent knobs (Stage 2
-        sweeps depth; Stage 1b's op ablation sweeps composition). use_dsc
-        factorizes whatever inner conv results (plain or dilated -- not
-        asymmetric, RegularBottleneck rejects that combination).
+        never asymmetric; or DENSE_DILATION_PATTERN when
+        context_pattern="dense_dilation" -- every slot dilated, no plain/
+        asymmetric slots at all, same 2/4/8/16 max-rate ceiling repeated
+        twice over 8 slots). use_dilated/use_asymmetric downgrade the
+        matching slots to a plain regular bottleneck rather than dropping
+        them, so stage depth and op composition stay independent knobs
+        (Stage 2 sweeps depth; Stage 1b's op ablation sweeps composition).
+        use_dsc factorizes whatever inner conv results (plain or dilated --
+        not asymmetric, RegularBottleneck rejects that combination).
 
         Stage 4 probes layer on top of this same pattern:
         merge_dilated_pairs (4.4.3) pairs up (non-dilated, dilated) slots
@@ -688,7 +731,12 @@ class ENet(nn.Module):
         (DSC everywhere, no reduce/expand) takes priority over all of the
         above -- every slot becomes a DSCNoProjectionBottleneck instead,
         keeping only the pattern's dilation schedule."""
-        pattern = SPARSE_DILATION_PATTERN if self.context_pattern == "sparse" else CONTEXT_STAGE_PATTERN
+        if self.context_pattern == "sparse":
+            pattern = SPARSE_DILATION_PATTERN
+        elif self.context_pattern == "dense_dilation":
+            pattern = DENSE_DILATION_PATTERN
+        else:
+            pattern = CONTEXT_STAGE_PATTERN
 
         if self.dsc_no_projection:
             ops = []
@@ -756,19 +804,28 @@ class ENet(nn.Module):
         """Builds stage1 (regular1) or regular4 -- both plain (undilated)
         RegularBottleneck repeats by default, same as before Stage 4.
         shallow_dilation=True (probe 4.4.1) instead alternates
-        [regular, dilated(16)] via SHALLOW_DILATION_PATTERN, respecting
-        use_dilated the same way _make_context_stage's pattern slots do
-        (downgrades to plain regular if use_dilated is off). regular5 never
-        calls this -- probe 4.4.1 explicitly excludes it (built directly in
-        __init__, unchanged). dsc_no_projection (DSC everywhere, no reduce/
-        expand) takes priority over shallow_dilation here too -- plain
-        (undilated) DSCNoProjectionBottleneck repeats, matching regular5's
-        own dsc_no_projection handling in __init__."""
+        [regular, dilated(16)] via SHALLOW_DILATION_PATTERN;
+        shallow_dilation_wide=True does the same but at dilation=32 via
+        SHALLOW_DILATION_WIDE_PATTERN (stage1/regular4 run at 1/4
+        resolution, coarser than stage2/3's 1/8, so there's headroom for a
+        wider rate there -- see that pattern's own module-level comment for
+        the receptive-field math). Both respect use_dilated the same way
+        _make_context_stage's pattern slots do (downgrade to plain regular
+        if use_dilated is off). regular5 never calls this -- probe 4.4.1
+        explicitly excludes it (built directly in __init__, unchanged).
+        dsc_no_projection (DSC everywhere, no reduce/expand) takes priority
+        over both dilation variants here -- plain (undilated)
+        DSCNoProjectionBottleneck repeats, matching regular5's own
+        dsc_no_projection handling in __init__."""
         if self.dsc_no_projection:
             return nn.Sequential(
                 *[DSCNoProjectionBottleneck(channels, dropout_p=dropout_p, relu=relu) for _ in range(n_ops)]
             )
-        if not self.shallow_dilation:
+        if self.shallow_dilation_wide:
+            pattern = SHALLOW_DILATION_WIDE_PATTERN
+        elif self.shallow_dilation:
+            pattern = SHALLOW_DILATION_PATTERN
+        else:
             return nn.Sequential(
                 *[RegularBottleneck(channels, dropout_p=dropout_p, use_dsc=self.use_dsc, relu=relu,
                                      double_projections=self.double_projections)
@@ -776,7 +833,7 @@ class ENet(nn.Module):
             )
         ops = []
         for i in range(n_ops):
-            kwargs = dict(SHALLOW_DILATION_PATTERN[i % len(SHALLOW_DILATION_PATTERN)])
+            kwargs = dict(pattern[i % len(pattern)])
             if kwargs.get("dilation", 1) != 1 and not self.use_dilated:
                 kwargs = {}
             ops.append(RegularBottleneck(channels, dropout_p=dropout_p, use_dsc=self.use_dsc, relu=relu,
@@ -952,6 +1009,8 @@ if __name__ == "__main__":
         "4.4.4_dsc_dilated_only": dict(dsc_dilated_only=True),
         "4.5_double_projections": dict(double_projections=True),
         "4.6_two_block_skip": dict(two_block_skip=True),
+        "4.8_dense_dilation": dict(context_pattern="dense_dilation"),
+        "4.9_shallow_dilation_wide": dict(shallow_dilation_wide=True),
     }
     n_stage4_tested = 0
     for name, kwargs in stage4_configs.items():
@@ -1003,5 +1062,33 @@ if __name__ == "__main__":
     except ValueError:
         pass
     n_stage4_tested += 1
+
+    # dense_dilation: every stage2/3 slot dilated (no plain, no asymmetric),
+    # 2/4/8/16 repeated twice -- confirms DENSE_DILATION_PATTERN's schedule
+    # actually reached every block, not just that it built without error.
+    dense = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS,
+        bottlenecks_per_stage=U4_BOTTLENECKS, decoder_type="upsample_conv",
+        use_prelu=False, context_pattern="dense_dilation",
+    )
+    expected_dilations = (2, 4, 8, 16, 2, 4, 8, 16)
+    for stage in (dense.stage2, dense.stage3):
+        for i, block in enumerate(stage):
+            actual = block.conv_bn_act[0].dilation[0]
+            assert actual == expected_dilations[i], (
+                f"dense_dilation: block {i} dilation {actual} != {expected_dilations[i]}"
+            )
+
+    # shallow_dilation_wide: stage1/regular4 alternate regular/dilated(32).
+    wide = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS,
+        bottlenecks_per_stage=U4_BOTTLENECKS, decoder_type="upsample_conv",
+        use_prelu=False, shallow_dilation_wide=True,
+    )
+    for stage_name, stage in (("regular1", wide.regular1), ("regular4", wide.regular4)):
+        for i, block in enumerate(stage):
+            expected = 32 if i % 2 == 1 else 1
+            actual = block.conv_bn_act[0].dilation[0]
+            assert actual == expected, f"shallow_dilation_wide: {stage_name}[{i}] dilation {actual} != {expected}"
 
     print(f"ENet Stage-4 architecture-probe self-test PASSED: {n_stage4_tested} flags, individually, at U4.")
