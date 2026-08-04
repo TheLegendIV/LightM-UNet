@@ -124,6 +124,7 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
             dsc_dilated_only=_parse_bool_env("ENET_DSC_DILATED_ONLY", False),
             double_projections=_parse_bool_env("ENET_DOUBLE_PROJECTIONS", False),
             two_block_skip=_parse_bool_env("ENET_TWO_BLOCK_SKIP", False),
+            dsc_no_projection=_parse_bool_env("ENET_DSC_NO_PROJECTION", False),
         )
 
     def configure_optimizers(self):

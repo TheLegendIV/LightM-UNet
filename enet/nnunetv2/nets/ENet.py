@@ -372,6 +372,48 @@ class UpsamplingBottleneck(nn.Module):
         return self.out_act(main + out)
 
 
+class DSCNoProjectionBottleneck(nn.Module):
+    """DSC everywhere, without the bottleneck's own 1x1 reduce/expand
+    projection pair: depthwise KxK (groups=channels, one filter per
+    channel, dilation-aware) + pointwise 1x1 (channels -> channels, the
+    ONLY channel-mixing step in the block) applied directly at full
+    `channels` width, no squeeze down to internal_channels/expand back up
+    at all. RegularBottleneck's use_dsc=True only swaps the INNER conv for
+    this same depthwise+pointwise pair while keeping its own reduce/expand
+    around it (see RegularBottleneck's `elif use_dsc:` branch); this class
+    removes that surrounding structure entirely -- used network-wide
+    (stage1/regular1, stage2, stage3, regular4, regular5) when
+    ENet(dsc_no_projection=True). Not combinable with asymmetric slots
+    (same constraint RegularBottleneck's own use_dsc already has -- callers
+    must set use_asymmetric=0)."""
+
+    def __init__(
+        self,
+        channels: int,
+        kernel_size: int = 3,
+        padding: int = 1,
+        dilation: int = 1,
+        dropout_p: float = 0.1,
+        relu: bool = False,
+    ):
+        super().__init__()
+        activation = nn.ReLU if relu else nn.PReLU
+        self.conv = nn.Sequential(
+            nn.Conv2d(channels, channels, kernel_size=kernel_size, padding=padding,
+                      dilation=dilation, groups=channels, bias=False),
+            nn.BatchNorm2d(channels),
+            activation(channels) if not relu else activation(inplace=True),
+            nn.Conv2d(channels, channels, kernel_size=1, bias=False),
+            nn.BatchNorm2d(channels),
+        )
+        self.dropout = nn.Dropout2d(p=dropout_p)
+        self.out_act = activation(channels) if not relu else activation(inplace=True)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out = self.dropout(self.conv(x))
+        return self.out_act(x + out)
+
+
 class MergedContextBottleneck(nn.Module):
     """Probe 4.4.3: fuses a (regular-or-asymmetric, dilated) PAIR of
     CONTEXT_STAGE_PATTERN slots into ONE block sharing a single
@@ -499,6 +541,7 @@ class ENet(nn.Module):
         dsc_dilated_only: bool = False,
         double_projections: bool = False,
         two_block_skip: bool = False,
+        dsc_no_projection: bool = False,
     ):
         super().__init__()
         if context_pattern not in ("default", "sparse"):
@@ -562,6 +605,7 @@ class ENet(nn.Module):
         self.dsc_dilated_only = dsc_dilated_only          # 4.4.4
         self.double_projections = double_projections      # 4.5
         self.two_block_skip = two_block_skip              # 4.6
+        self.dsc_no_projection = dsc_no_projection         # DSC everywhere, no reduce/expand
 
         n_stage1, n_stage2, n_stage3, n_regular4, n_regular5 = self.bottlenecks_per_stage
 
@@ -591,11 +635,16 @@ class ENet(nn.Module):
         self.up4 = UpsamplingBottleneck(stage3_channels, stage4_channels, double_projections=double_projections)
         self.regular4 = self._make_shallow_stage(stage4_channels, n_regular4, dropout_p=0.1, relu=True)
         self.up5 = UpsamplingBottleneck(stage4_channels, stage5_channels, double_projections=double_projections)
-        self.regular5 = nn.Sequential(
-            *[RegularBottleneck(stage5_channels, dropout_p=0.1, relu=True, use_dsc=use_dsc,
-                                 double_projections=double_projections)
-              for _ in range(n_regular5)]
-        )
+        if dsc_no_projection:
+            self.regular5 = nn.Sequential(
+                *[DSCNoProjectionBottleneck(stage5_channels, dropout_p=0.1, relu=True) for _ in range(n_regular5)]
+            )
+        else:
+            self.regular5 = nn.Sequential(
+                *[RegularBottleneck(stage5_channels, dropout_p=0.1, relu=True, use_dsc=use_dsc,
+                                     double_projections=double_projections)
+                  for _ in range(n_regular5)]
+            )
         self.final = nn.ConvTranspose2d(stage5_channels, out_channels, kernel_size=2, stride=2)
 
     def load_state_dict(self, state_dict, strict: bool = True):
@@ -635,8 +684,31 @@ class ENet(nn.Module):
         into one MergedContextBottleneck each, halving the block count;
         separable_dilated (4.4.2) and dsc_dilated_only (4.4.4) modify how a
         dilated slot's inner conv is built; two_block_skip (4.6) wraps the
-        finished op list in an extra short residual."""
+        finished op list in an extra short residual. dsc_no_projection
+        (DSC everywhere, no reduce/expand) takes priority over all of the
+        above -- every slot becomes a DSCNoProjectionBottleneck instead,
+        keeping only the pattern's dilation schedule."""
         pattern = SPARSE_DILATION_PATTERN if self.context_pattern == "sparse" else CONTEXT_STAGE_PATTERN
+
+        if self.dsc_no_projection:
+            ops = []
+            for i in range(n_ops):
+                kwargs = dict(pattern[i % len(pattern)])
+                if kwargs.get("asymmetric", False):
+                    if self.use_asymmetric:
+                        raise ValueError(
+                            "dsc_no_projection is not defined for asymmetric bottlenecks -- set "
+                            "use_asymmetric=0 (same constraint RegularBottleneck's own use_dsc already has)."
+                        )
+                    kwargs = {}
+                dilation = kwargs.get("dilation", 1)
+                if dilation != 1 and not self.use_dilated:
+                    dilation = 1
+                ops.append(DSCNoProjectionBottleneck(
+                    channels, kernel_size=3, padding=dilation, dilation=dilation,
+                    dropout_p=0.1, relu=not self.use_prelu,
+                ))
+            return TwoBlockSkipStage(ops) if self.two_block_skip else nn.Sequential(*ops)
 
         if self.merge_dilated_pairs:
             ops = []
@@ -688,7 +760,14 @@ class ENet(nn.Module):
         use_dilated the same way _make_context_stage's pattern slots do
         (downgrades to plain regular if use_dilated is off). regular5 never
         calls this -- probe 4.4.1 explicitly excludes it (built directly in
-        __init__, unchanged)."""
+        __init__, unchanged). dsc_no_projection (DSC everywhere, no reduce/
+        expand) takes priority over shallow_dilation here too -- plain
+        (undilated) DSCNoProjectionBottleneck repeats, matching regular5's
+        own dsc_no_projection handling in __init__."""
+        if self.dsc_no_projection:
+            return nn.Sequential(
+                *[DSCNoProjectionBottleneck(channels, dropout_p=dropout_p, relu=relu) for _ in range(n_ops)]
+            )
         if not self.shallow_dilation:
             return nn.Sequential(
                 *[RegularBottleneck(channels, dropout_p=dropout_p, use_dsc=self.use_dsc, relu=relu,
@@ -901,4 +980,28 @@ if __name__ == "__main__":
     )
     assert isinstance(skipped.stage2, TwoBlockSkipStage), "two_block_skip: stage2 not wrapped"
     assert len(skipped.stage2) == 8 and len(skipped.stage3) == 8, "two_block_skip: unexpected depth"
+
+    # dsc_no_projection: DSC everywhere, no reduce/expand -- needs
+    # use_asymmetric=0 (asymmetric slots are undefined for it, same
+    # constraint use_dsc already has), unlike the shared loop above.
+    no_proj = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS,
+        bottlenecks_per_stage=U4_BOTTLENECKS, decoder_type="upsample_conv",
+        use_prelu=False, use_asymmetric=False, dsc_no_projection=True,
+    ).eval()
+    with torch.no_grad():
+        out = no_proj(dummy)
+    assert out.shape == (1, 5, 512, 512), f"dsc_no_projection: got {tuple(out.shape)}"
+    for stage in (no_proj.regular1, no_proj.stage2, no_proj.stage3, no_proj.regular4, no_proj.regular5):
+        for block in stage:
+            assert isinstance(block, DSCNoProjectionBottleneck), f"dsc_no_projection: found {type(block).__name__}"
+    # Asymmetric slots must be rejected outright, not silently downgraded.
+    try:
+        ENet(in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=U4_BOTTLENECKS,
+             decoder_type="upsample_conv", use_prelu=False, dsc_no_projection=True)
+        raise AssertionError("dsc_no_projection: expected ValueError with use_asymmetric=1 (default), got none")
+    except ValueError:
+        pass
+    n_stage4_tested += 1
+
     print(f"ENet Stage-4 architecture-probe self-test PASSED: {n_stage4_tested} flags, individually, at U4.")

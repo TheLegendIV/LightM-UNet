@@ -132,6 +132,7 @@ def run_inference(
     dsc_dilated_only: bool = False,
     double_projections: bool = False,
     two_block_skip: bool = False,
+    dsc_no_projection: bool = False,
 ) -> Path:
     """Uses `nnUNetv2_predict_from_modelfolder` (-m <exact folder>), NOT
     plain `nnUNetv2_predict` (-tr/-p/-c/-d): the latter's folder resolution
@@ -173,6 +174,7 @@ def run_inference(
     env["ENET_DSC_DILATED_ONLY"] = "1" if dsc_dilated_only else "0"
     env["ENET_DOUBLE_PROJECTIONS"] = "1" if double_projections else "0"
     env["ENET_TWO_BLOCK_SKIP"] = "1" if two_block_skip else "0"
+    env["ENET_DSC_NO_PROJECTION"] = "1" if dsc_no_projection else "0"
     if quant_bits != 32:
         # Picked up by nnUNetTrainerENetQuant.build_network_architecture,
         # dynamically imported via the checkpoint's own stored trainer_name
@@ -343,6 +345,7 @@ def main() -> None:
     parser.add_argument("--dsc-dilated-only", type=int, default=0, choices=[0, 1], help="Stage 4.4.4: depthwise-separable ONLY on the context pattern's dilated slots, independent of --use-dsc.")
     parser.add_argument("--double-projections", type=int, default=0, choices=[0, 1], help="Stage 4.5: stack an extra 1x1 conv+BN+act in every bottleneck's reduce AND expand projection, network-wide.")
     parser.add_argument("--two-block-skip", type=int, default=0, choices=[0, 1], help="Stage 4.6: extra short residual spanning every 2 consecutive context-stage blocks, on top of each block's own internal residual, in stage2 and stage3.")
+    parser.add_argument("--dsc-no-projection", type=int, default=0, choices=[0, 1], help="DSC everywhere (stage1/regular1, stage2, stage3, regular4, regular5), with NO reduce/expand 1x1 projection pair -- depthwise+pointwise applied directly at full channel width. Requires --use-asymmetric 0.")
     parser.add_argument("--quant-bits", type=int, default=32)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--in-channels", type=int, default=1)
@@ -386,6 +389,7 @@ def main() -> None:
         dsc_dilated_only=bool(args.dsc_dilated_only),
         double_projections=bool(args.double_projections),
         two_block_skip=bool(args.two_block_skip),
+        dsc_no_projection=bool(args.dsc_no_projection),
     )
     macs, flops = count_flops(fp32_model, args.in_channels, tuple(args.input_hw))
 
@@ -438,6 +442,7 @@ def main() -> None:
             dsc_dilated_only=bool(args.dsc_dilated_only),
             double_projections=bool(args.double_projections),
             two_block_skip=bool(args.two_block_skip),
+            dsc_no_projection=bool(args.dsc_no_projection),
         )
     labels_ts_dir = NNUNET_RAW / dataset_name / "labelsTs"
     eval_metrics = compute_eval_metrics(labels_ts_dir, prediction_dir, dataset_name)
@@ -477,6 +482,7 @@ def main() -> None:
             + f",shallow_dilation={args.shallow_dilation},separable_dilated={args.separable_dilated}"
             + f",merge_dilated_pairs={args.merge_dilated_pairs},dsc_dilated_only={args.dsc_dilated_only}"
             + f",double_projections={args.double_projections},two_block_skip={args.two_block_skip}"
+            + f",dsc_no_projection={args.dsc_no_projection}"
         ),
         "quant_bits": args.quant_bits,
         "params": total_params,

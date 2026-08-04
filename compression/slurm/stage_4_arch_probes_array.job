@@ -7,7 +7,7 @@
 #SBATCH --gpus=1
 #SBATCH --mem=32G
 #SBATCH --time=04:00:00
-#SBATCH --array=0-7
+#SBATCH --array=0-8
 #SBATCH --output=logs/%x_%a_%j.out
 #SBATCH --error=logs/%x_%a_%j.err
 
@@ -45,28 +45,50 @@ set -e
 #   7: 4_6_two_block_skip      -- ENET_TWO_BLOCK_SKIP=1 (extra short residual
 #      spanning every 2 consecutive blocks in stage2 AND stage3, on top of
 #      each block's own internal residual)
+#   8: 4_7_dsc_no_projection   -- ENET_DSC_NO_PROJECTION=1 (DSC applied
+#      network-wide -- stage1/regular1, stage2, stage3, regular4, regular5 --
+#      with NO reduce/expand 1x1 projection pair at all: depthwise+pointwise
+#      run directly at full channel width instead of squeezing down to
+#      internal_channels first. Requires ENET_USE_ASYMMETRIC=0 -- this is
+#      the ONLY task in this array that overrides that shared default, since
+#      dsc_no_projection rejects asymmetric slots outright. Measured 29260
+#      params vs U4's 24581 (+19%) -- BIGGER than U4, not smaller: removing
+#      the squeeze means the pointwise 1x1 mixes channels at full width
+#      everywhere, which costs more than the squeeze/expand pair it replaces.
+#      Also markedly SLOWER per iteration in the smoke test (~102s for 2
+#      iterations vs. 6-30s for every other config this session) -- the
+#      depthwise conv now runs at full channel width across every block
+#      instead of the squeezed internal_channels width, so expect this run
+#      to take noticeably longer wall-clock than its peers despite similar
+#      epoch count.)
 #
-# All 8 architectures confirmed via local docker smoke test (nnUNetv2_train,
+# All 9 architectures confirmed via local docker smoke test (nnUNetv2_train,
 # 1 epoch/2 iterations against Dataset509_ARCADE_1x1_4c) to build and train
-# without error, and (for the 6 new-flag probes) to produce distinctly
+# without error, and (for the 7 new-flag probes) to produce distinctly
 # different param counts from the U4 baseline in the expected direction
 # (shallow_dilation/two_block_skip: unchanged, dilation/skip add no new
 # weights; separable_dilated/merge_dilated_pairs/dsc_dilated_only: fewer
-# params; double_projections: more params).
+# params; double_projections/dsc_no_projection: more params).
 
 DATASET_ID=509
 DATASET_NAME="Dataset509_ARCADE_1x1_4c"
 
 CONFIG_NAMES=(4_1_e1_shape 4_2_extra_initial 4_4_1_shallow_dilation 4_4_2_separable_dilated
-              4_4_3_merge_dilated_pairs 4_4_4_dsc_dilated_only 4_5_double_projections 4_6_two_block_skip)
+              4_4_3_merge_dilated_pairs 4_4_4_dsc_dilated_only 4_5_double_projections 4_6_two_block_skip
+              4_7_dsc_no_projection)
 CHANNELS_ARR=("4,16,28,16,4" "8,16,32,16,4" "4,16,32,16,4" "4,16,32,16,4"
-              "4,16,32,16,4" "4,16,32,16,4" "4,16,32,16,4" "4,16,32,16,4")
-SHALLOW_DILATION_ARR=(0 0 1 0 0 0 0 0)
-SEPARABLE_DILATED_ARR=(0 0 0 1 0 0 0 0)
-MERGE_DILATED_PAIRS_ARR=(0 0 0 0 1 0 0 0)
-DSC_DILATED_ONLY_ARR=(0 0 0 0 0 1 0 0)
-DOUBLE_PROJECTIONS_ARR=(0 0 0 0 0 0 1 0)
-TWO_BLOCK_SKIP_ARR=(0 0 0 0 0 0 0 1)
+              "4,16,32,16,4" "4,16,32,16,4" "4,16,32,16,4" "4,16,32,16,4"
+              "4,16,32,16,4")
+SHALLOW_DILATION_ARR=(0 0 1 0 0 0 0 0 0)
+SEPARABLE_DILATED_ARR=(0 0 0 1 0 0 0 0 0)
+MERGE_DILATED_PAIRS_ARR=(0 0 0 0 1 0 0 0 0)
+DSC_DILATED_ONLY_ARR=(0 0 0 0 0 1 0 0 0)
+DOUBLE_PROJECTIONS_ARR=(0 0 0 0 0 0 1 0 0)
+TWO_BLOCK_SKIP_ARR=(0 0 0 0 0 0 0 1 0)
+DSC_NO_PROJECTION_ARR=(0 0 0 0 0 0 0 0 1)
+# Every task uses the shared ENET_USE_ASYMMETRIC=1 default EXCEPT task 8
+# (dsc_no_projection), which requires 0 -- see its header note above.
+USE_ASYMMETRIC_ARR=(1 1 1 1 1 1 1 1 0)
 
 TASK_ID=${SLURM_ARRAY_TASK_ID}
 CONFIG_NAME="${CONFIG_NAMES[$TASK_ID]}"
@@ -106,7 +128,7 @@ export ENET_CONTEXT_PATTERN="default"
 export ENET_DECODER_TYPE="upsample_conv"
 export ENET_USE_PRELU=0
 export ENET_USE_DILATED=1
-export ENET_USE_ASYMMETRIC=1
+export ENET_USE_ASYMMETRIC="${USE_ASYMMETRIC_ARR[$TASK_ID]}"
 export ENET_USE_STRIDED=1
 export ENET_USE_DSC=0
 export ENET_SHALLOW_DILATION="${SHALLOW_DILATION_ARR[$TASK_ID]}"
@@ -115,6 +137,7 @@ export ENET_MERGE_DILATED_PAIRS="${MERGE_DILATED_PAIRS_ARR[$TASK_ID]}"
 export ENET_DSC_DILATED_ONLY="${DSC_DILATED_ONLY_ARR[$TASK_ID]}"
 export ENET_DOUBLE_PROJECTIONS="${DOUBLE_PROJECTIONS_ARR[$TASK_ID]}"
 export ENET_TWO_BLOCK_SKIP="${TWO_BLOCK_SKIP_ARR[$TASK_ID]}"
+export ENET_DSC_NO_PROJECTION="${DSC_NO_PROJECTION_ARR[$TASK_ID]}"
 export ENET_EPOCHS=150
 export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
 
@@ -122,9 +145,9 @@ echo "=== Job info ==="
 echo "Host: $(hostname)"
 echo "Date: $(date)"
 echo "Array task: ${TASK_ID} -> ${RUN_NAME}"
-echo "ENET_CHANNELS=${ENET_CHANNELS}"
+echo "ENET_CHANNELS=${ENET_CHANNELS} ENET_USE_ASYMMETRIC=${ENET_USE_ASYMMETRIC}"
 echo "ENET_SHALLOW_DILATION=${ENET_SHALLOW_DILATION} ENET_SEPARABLE_DILATED=${ENET_SEPARABLE_DILATED} ENET_MERGE_DILATED_PAIRS=${ENET_MERGE_DILATED_PAIRS}"
-echo "ENET_DSC_DILATED_ONLY=${ENET_DSC_DILATED_ONLY} ENET_DOUBLE_PROJECTIONS=${ENET_DOUBLE_PROJECTIONS} ENET_TWO_BLOCK_SKIP=${ENET_TWO_BLOCK_SKIP}"
+echo "ENET_DSC_DILATED_ONLY=${ENET_DSC_DILATED_ONLY} ENET_DOUBLE_PROJECTIONS=${ENET_DOUBLE_PROJECTIONS} ENET_TWO_BLOCK_SKIP=${ENET_TWO_BLOCK_SKIP} ENET_DSC_NO_PROJECTION=${ENET_DSC_NO_PROJECTION}"
 echo "Output folder: ${ENET_OUTPUT_FOLDER}"
 
 echo "=== GPU info ==="
@@ -177,6 +200,7 @@ python compression/collect_results.py \
     --dsc-dilated-only "${ENET_DSC_DILATED_ONLY}" \
     --double-projections "${ENET_DOUBLE_PROJECTIONS}" \
     --two-block-skip "${ENET_TWO_BLOCK_SKIP}" \
+    --dsc-no-projection "${ENET_DSC_NO_PROJECTION}" \
     --trainer-class "${TRAINER_CLASS}"
 
 echo "Done: ${RUN_NAME}."
