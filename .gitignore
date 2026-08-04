@@ -25,12 +25,14 @@ data/nnUNet_preprocessed/*
 # data/*.log
 # *.pth
 
-# Raw datasets: keep only Dataset501 (what this branch trains on) -- and
-# even within it, drop any inference-output labelsPr_* dirs a preview
-# notebook may have written; only the ground-truth raw pngs are pushed.
+# Raw datasets: keep only Dataset509 (the current 4-class objective this
+# branch trains on -- Dataset501 was the retired binary objective, see
+# compression/README.md's top note) -- and even within it, drop any
+# inference-output labelsPr_* dirs a preview notebook may have written;
+# only the ground-truth raw pngs are pushed.
 data/nnUNet_raw/*
-!data/nnUNet_raw/Dataset501_ARCADE/
-data/nnUNet_raw/Dataset501_ARCADE/labelsPr_*/
+!data/nnUNet_raw/Dataset509_ARCADE_1x1_4c/
+data/nnUNet_raw/Dataset509_ARCADE_1x1_4c/labelsPr_*/
 
 logs/*
 
