@@ -30,11 +30,25 @@ set -e
 # stage. This stage intentionally does NOT source
 # compression/configs/cfinal_ops.env (that file encodes the retired binary
 # run's Stage-1b decision) -- every knob below is set explicitly, fresh.
+#
+# U8/U16's raw uniform divisor would push stage widths below 4 (U8's
+# stage5=2, U16's f_i=1/stage5=1) -- ENet.py hard-rejects any of
+# stage1..stage5 not divisible by 4 (the bottleneck's C/4 internal
+# projection; also gives FINN folding freedom later, per
+# agent_instructions_1.yaml's channel_constraint note), and separately
+# requires f_i > in_channels (1, grayscale), which raw U16's f_i=1 also
+# fails. Per the previous binary-run grid's own "UF" floor config (f_i
+# floored at 4, agent_instructions_1.yaml's stage_2_architecture_grid),
+# every value below 4 is floored to 4 here rather than left at its raw
+# divisor -- confirmed via a local docker smoke test (nnUNetv2_train, 1
+# epoch / 2 iterations, both raw and floored variants) that the floored
+# values below actually build and train, where the raw /8 and /16 divisors
+# did not.
 #   0: Baseline -- CHANNELS=16,64,128,64,16 (ENet paper baseline, f_i included)
 #   1: U2       -- CHANNELS=8,32,64,32,8    (uniform /2)
 #   2: U4       -- CHANNELS=4,16,32,16,4    (uniform /4)
-#   3: U8       -- CHANNELS=2,8,16,8,2      (uniform /8)
-#   4: U16      -- CHANNELS=1,4,8,4,1       (uniform /16)
+#   3: U8       -- CHANNELS=4,8,16,8,4      (uniform /8 = 2,8,16,8,2, floored to 4)
+#   4: U16      -- CHANNELS=4,4,8,4,4       (uniform /16 = 1,4,8,4,1, floored to 4)
 
 DATASET_ID=509
 DATASET_NAME="Dataset509_ARCADE_1x1_4c"
@@ -47,8 +61,8 @@ case "$CONFIG_NAME" in
   Baseline) CHANNELS="16,64,128,64,16" ;;
   U2)       CHANNELS="8,32,64,32,8" ;;
   U4)       CHANNELS="4,16,32,16,4" ;;
-  U8)       CHANNELS="2,8,16,8,2" ;;
-  U16)      CHANNELS="1,4,8,4,1" ;;
+  U8)       CHANNELS="4,8,16,8,4" ;;
+  U16)      CHANNELS="4,4,8,4,4" ;;
 esac
 
 RUN_NAME="1_naive_baseline_${CONFIG_NAME}"
