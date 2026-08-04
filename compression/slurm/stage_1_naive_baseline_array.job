@@ -7,7 +7,7 @@
 #SBATCH --gpus=1
 #SBATCH --mem=32G
 #SBATCH --time=04:00:00
-#SBATCH --array=0-4
+#SBATCH --array=0-5
 #SBATCH --output=logs/%x_%a_%j.out
 #SBATCH --error=logs/%x_%a_%j.err
 
@@ -49,11 +49,22 @@ set -e
 #   2: U4       -- CHANNELS=4,16,32,16,4    (uniform /4)
 #   3: U8       -- CHANNELS=4,8,16,8,4      (uniform /8 = 2,8,16,8,2, floored to 4)
 #   4: U16      -- CHANNELS=4,4,8,4,4       (uniform /16 = 1,4,8,4,1, floored to 4)
+#   5: E1       -- CHANNELS=20,72,144,72,20 (paper-tuned E1 shape, added later --
+#      same settings as tasks 0-4, direct 6th point on the same curve, NOT
+#      the "no asymmetric" policy adopted for stage_4_arch_probes onward --
+#      this grid was already established with asymmetric=1, changing it here
+#      would make E1 incomparable to Baseline/U2/U4/U8/U16. Historically
+#      (binary Dataset501 run) E1's wider channels UNDERPERFORMED plain
+#      Original/Baseline despite more params -- this task re-checks whether
+#      that holds for the harder 4-class objective too. Submit with
+#      `sbatch --array=5 stage_1_naive_baseline_array.job` to add just this
+#      task without redundantly re-running collect_results.py's test-set
+#      inference for the already-collected 0-4.
 
 DATASET_ID=509
 DATASET_NAME="Dataset509_ARCADE_1x1_4c"
 
-CONFIG_NAMES=(Baseline U2 U4 U8 U16)
+CONFIG_NAMES=(Baseline U2 U4 U8 U16 E1)
 TASK_ID=${SLURM_ARRAY_TASK_ID}
 CONFIG_NAME="${CONFIG_NAMES[$TASK_ID]}"
 
@@ -63,6 +74,7 @@ case "$CONFIG_NAME" in
   U4)       CHANNELS="4,16,32,16,4" ;;
   U8)       CHANNELS="4,8,16,8,4" ;;
   U16)      CHANNELS="4,4,8,4,4" ;;
+  E1)       CHANNELS="20,72,144,72,20" ;;
 esac
 
 RUN_NAME="1_naive_baseline_${CONFIG_NAME}"

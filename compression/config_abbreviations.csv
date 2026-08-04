@@ -4,6 +4,7 @@ U2,nnUNetTrainerENet_1_naive_baseline_U2,1_naive_baseline,"8,32,64,32,8",upsampl
 U4,nnUNetTrainerENet_1_naive_baseline_U4,1_naive_baseline,"4,16,32,16,4",upsample_conv,0,1,1
 U8,nnUNetTrainerENet_1_naive_baseline_U8,1_naive_baseline,"4,8,16,8,4",upsample_conv,0,1,1
 U16,nnUNetTrainerENet_1_naive_baseline_U16,1_naive_baseline,"4,4,8,4,4",upsample_conv,0,1,1
+E1,nnUNetTrainerENet_1_naive_baseline_E1,1_naive_baseline,"20,72,144,72,20",upsample_conv,0,1,1
 S2-PReLU,nnUNetTrainerENet_2_special_ops_prelu,2_special_ops,"4,16,32,16,4",upsample_conv,1,1,1
 S2-MaxUnpool,nnUNetTrainerENet_2_special_ops_maxunpool,2_special_ops,"4,16,32,16,4",max_unpool,0,1,1
 S2-NoDilated,nnUNetTrainerENet_2_special_ops_no_dilated,2_special_ops,"4,16,32,16,4",upsample_conv,0,0,1

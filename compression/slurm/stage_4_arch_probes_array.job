@@ -13,14 +13,23 @@
 
 set -e
 
-# Stage 4 -- architecture probes, all off the U4 reference cell (same
-# baseline stage_2_special_ops_array.job used: CHANNELS=4,16,32,16,4,
-# BOTTLENECKS=4,8,8,2,1 native, DECODER_TYPE=upsample_conv, USE_PRELU=0,
-# dilated/asymmetric/strided=1, dsc=0). Each task changes exactly ONE thing
-# off that reference -- channels for 4.1/4.2, one new ENet.py flag for
-# 4.4.1-4.4.4/4.5/4.6. 4.2.1 (conditional on 4.2) and 4.7 (gated on 4.4.4)
-# are NOT included here -- both need their gating probe's result first, see
-# compression/foundation_log.md when that's written up.
+# Stage 4 -- architecture probes, all off the U4 reference cell: CHANNELS=
+# 4,16,32,16,4, BOTTLENECKS=4,8,8,2,1 native, DECODER_TYPE=upsample_conv,
+# USE_PRELU=0, dilated/strided=1, dsc=0, and -- per this session's "next
+# phase" policy decision -- ASYMMETRIC=0 UNIFORMLY across all 9 tasks (not
+# just task 8, which needed it structurally). Rationale: stage_2_special_ops'
+# real results showed no_asymmetric is a near-wash vs U4 (0.755 vs 0.747
+# dice) while max_unpool cost -0.154 dice -- neither justifies keeping
+# asymmetric or max_unpool as defaults going forward, and none of these 9
+# probes are specifically ABOUT testing asymmetric on/off (stage_2 already
+# covers that ground), so none need an "explicitly stated" exception. This
+# array was retrofitted to the new policy before ever training (no
+# checkpoints existed yet), so nothing was invalidated by the change. Each
+# task changes exactly ONE thing off that reference -- channels for
+# 4.1/4.2, one new ENet.py flag for 4.4.1-4.4.4/4.5/4.6/4.7. 4.2.1
+# (conditional on 4.2) and the blanket-DSC-everywhere-plus-concat probe
+# (gated on 4.4.4) are NOT included here -- both need their gating probe's
+# result first, see compression/foundation_log.md when that's written up.
 #
 #   0: 4_1_e1_shape           -- CHANNELS=4,16,28,16,4 (E1-shape non-uniform
 #      candidate at ~U4's budget -- see session notes: a truly param-matched
@@ -49,9 +58,10 @@ set -e
 #      network-wide -- stage1/regular1, stage2, stage3, regular4, regular5 --
 #      with NO reduce/expand 1x1 projection pair at all: depthwise+pointwise
 #      run directly at full channel width instead of squeezing down to
-#      internal_channels first. Requires ENET_USE_ASYMMETRIC=0 -- this is
-#      the ONLY task in this array that overrides that shared default, since
-#      dsc_no_projection rejects asymmetric slots outright. Measured 29260
+#      internal_channels first. Requires ENET_USE_ASYMMETRIC=0 (rejects
+#      asymmetric slots outright) -- already true of every task in this
+#      array under the policy above, so no per-task override needed here
+#      anymore. Measured 29260
 #      params vs U4's 24581 (+19%) -- BIGGER than U4, not smaller: removing
 #      the squeeze means the pointwise 1x1 mixes channels at full width
 #      everywhere, which costs more than the squeeze/expand pair it replaces.
@@ -86,9 +96,6 @@ DSC_DILATED_ONLY_ARR=(0 0 0 0 0 1 0 0 0)
 DOUBLE_PROJECTIONS_ARR=(0 0 0 0 0 0 1 0 0)
 TWO_BLOCK_SKIP_ARR=(0 0 0 0 0 0 0 1 0)
 DSC_NO_PROJECTION_ARR=(0 0 0 0 0 0 0 0 1)
-# Every task uses the shared ENET_USE_ASYMMETRIC=1 default EXCEPT task 8
-# (dsc_no_projection), which requires 0 -- see its header note above.
-USE_ASYMMETRIC_ARR=(1 1 1 1 1 1 1 1 0)
 
 TASK_ID=${SLURM_ARRAY_TASK_ID}
 CONFIG_NAME="${CONFIG_NAMES[$TASK_ID]}"
@@ -128,7 +135,7 @@ export ENET_CONTEXT_PATTERN="default"
 export ENET_DECODER_TYPE="upsample_conv"
 export ENET_USE_PRELU=0
 export ENET_USE_DILATED=1
-export ENET_USE_ASYMMETRIC="${USE_ASYMMETRIC_ARR[$TASK_ID]}"
+export ENET_USE_ASYMMETRIC=0
 export ENET_USE_STRIDED=1
 export ENET_USE_DSC=0
 export ENET_SHALLOW_DILATION="${SHALLOW_DILATION_ARR[$TASK_ID]}"
