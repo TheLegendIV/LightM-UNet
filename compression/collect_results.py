@@ -340,8 +340,9 @@ def main() -> None:
     parser.add_argument("--use-asymmetric", type=int, default=1, choices=[0, 1])
     parser.add_argument("--use-strided", type=int, default=1, choices=[0, 1])
     parser.add_argument("--use-dsc", type=int, default=0, choices=[0, 1], help="Depthwise-separable inner conv (rejects combination with --use-asymmetric 1).")
-    parser.add_argument("--context-pattern", default="default", choices=["default", "sparse", "dense_dilation"],
-                         help="'sparse' = regular/dilated4/regular/dilated16 (section 2a's div2/div4 bottleneck axis), no 2/8 rungs, never asymmetric. 'dense_dilation' = every context-stage slot dilated (2/4/8/16 repeated twice over 8 slots), no plain/asymmetric slots at all.")
+    parser.add_argument("--context-pattern", default="default",
+                         choices=["default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_reg_interleaved"],
+                         help="'sparse' = regular/dilated4/regular/dilated16 (section 2a's div2/div4 bottleneck axis), no 2/8 rungs, never asymmetric. 'dense_dilation' = every context-stage slot dilated (2/4/8/16 repeated twice over 8 slots), no plain/asymmetric slots at all. 'dense_dilation_a' = same but with the gridding-investigation's coprime (1,5,7,17) schedule instead of (2,4,8,16). 'dense_dilation_reg_interleaved' = (2,4,8,16) with a full RegularBottleneck bookending each cycle (needs dsc_no_projection=1 and stage2/3 bottleneck depth 11, see ENet.py's DENSE_DILATION_REG_INTERLEAVED_PATTERN).")
     parser.add_argument("--use-prelu", type=int, default=1, choices=[0, 1], help="0 = collapse the encoder's PReLU to plain ReLU too (section 1d's ablation) -- decoder is always ReLU regardless, see ENet.py.")
     parser.add_argument("--shallow-dilation", type=int, default=0, choices=[0, 1], help="Stage 4.4.1: alternating regular/dilated(16) in stage1 and regular4 (regular5 unchanged). See ENet.py.")
     parser.add_argument("--shallow-dilation-wide", type=int, default=0, choices=[0, 1], help="Like --shallow-dilation but at dilation=32 instead of 16 -- stage1/regular4 run at 1/4 resolution, coarser than stage2/3, so there's headroom for a wider rate there. See ENet.py's SHALLOW_DILATION_WIDE_PATTERN.")

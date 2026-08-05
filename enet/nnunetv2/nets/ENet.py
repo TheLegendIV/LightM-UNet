@@ -7,7 +7,9 @@ from torch import nn
 import torch.nn.functional as F
 
 DecoderType = Literal["max_unpool", "upsample_conv"]
-ContextPattern = Literal["default", "sparse", "dense_dilation"]
+ContextPattern = Literal[
+    "default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_reg_interleaved",
+]
 
 # The ENet-native context-stage pattern (Paszke et al.): regular, dilated x2,
 # asymmetric 5x5, dilated x4, regular, dilated x8, asymmetric 5x5, dilated x16.
@@ -60,6 +62,65 @@ DENSE_DILATION_PATTERN: tuple[dict, ...] = (
     {"padding": 4, "dilation": 4},
     {"padding": 8, "dilation": 8},
     {"padding": 16, "dilation": 16},
+)
+
+# "Schedule A" from compression/gridding_investigation/: replaces DENSE_
+# DILATION_PATTERN's (2,4,8,16) -- every consecutive pair of which shares a
+# factor of 2 -- with the fully pairwise-coprime (1,5,7,17). Same sum (30),
+# so identical theoretical receptive field (61x61) and identical params/
+# MACs (dilation rate doesn't change kernel size or channel count, it's
+# free) -- the ONLY thing that changes is which input pixels are actually
+# reachable. The investigation's own impulse-response test found the
+# current schedule reaches just 25.8% of its 61x61 receptive field (a
+# textbook gridding checkerboard -- every layer's sample grid aligns with
+# every other's, from the shared factor of 2), vs. 87.3% for this schedule
+# (near-solid fill, no shared factors anywhere). See
+# compression/gridding_investigation/gridding_investigation_summary.md for
+# the full writeup (task1_structural_results.json has the exact numbers) --
+# structurally confirmed as a real fix, empirically inconclusive on
+# whether it's *this model's* dominant error driver, hence retraining with
+# it directly rather than treating the investigation as final.
+DENSE_DILATION_SCHEDULE_A_PATTERN: tuple[dict, ...] = (
+    {"padding": 1, "dilation": 1},
+    {"padding": 5, "dilation": 5},
+    {"padding": 7, "dilation": 7},
+    {"padding": 17, "dilation": 17},
+    {"padding": 1, "dilation": 1},
+    {"padding": 5, "dilation": 5},
+    {"padding": 7, "dilation": 7},
+    {"padding": 17, "dilation": 17},
+)
+
+# DENSE_DILATION_PATTERN's (2,4,8,16) schedule, but with a full (non-DSC,
+# projected) RegularBottleneck inserted before AND after each 4-rate cycle
+# -- reg, 2, 4, 8, 16, reg, 2, 4, 8, 16, reg (11 slots, the boundary reg
+# between the two cycles shared rather than doubled). Only meaningful
+# under dsc_no_projection=True (see _make_context_stage): that mode
+# otherwise runs the ENTIRE stage as depthwise+pointwise DSCNoProjection-
+# Bottlenecks, which mix channels only through a single 1x1 pointwise conv
+# per block, at full channel width, with no bottleneck squeeze anywhere.
+# A plain RegularBottleneck's reduce -> 3x3 -> expand does the channel
+# mixing and the 3x3 spatial conv AS ONE joint operation (not factored
+# into depthwise-then-pointwise), reintroduced periodically. Callers
+# should widen bottlenecks_per_stage's stage2/stage3 entries to 11 (from
+# the native 8) to fit one full reg-bookended double cycle without
+# truncating the trailing reg -- e.g. ENET_BOTTLENECKS="4,11,11,2,1".
+# {"reg_bottleneck": True} is a sentinel _make_context_stage's dsc_no_
+# projection branch checks BEFORE reading dilation/asymmetric keys, since
+# it selects a different bottleneck CLASS, not just different conv kwargs
+# within DSCNoProjectionBottleneck.
+DENSE_DILATION_REG_INTERLEAVED_PATTERN: tuple[dict, ...] = (
+    {"reg_bottleneck": True},
+    {"padding": 2, "dilation": 2},
+    {"padding": 4, "dilation": 4},
+    {"padding": 8, "dilation": 8},
+    {"padding": 16, "dilation": 16},
+    {"reg_bottleneck": True},
+    {"padding": 2, "dilation": 2},
+    {"padding": 4, "dilation": 4},
+    {"padding": 8, "dilation": 8},
+    {"padding": 16, "dilation": 16},
+    {"reg_bottleneck": True},
 )
 
 # Stage 4.4.1's shallow-stage pattern: alternating regular/dilated(16), for
@@ -626,10 +687,11 @@ class ENet(nn.Module):
         shallow_dilation_dense: bool = False,
     ):
         super().__init__()
-        if context_pattern not in ("default", "sparse", "dense_dilation"):
-            raise ValueError(
-                f"context_pattern must be 'default', 'sparse', or 'dense_dilation', got {context_pattern!r}."
-            )
+        valid_context_patterns = (
+            "default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_reg_interleaved",
+        )
+        if context_pattern not in valid_context_patterns:
+            raise ValueError(f"context_pattern must be one of {valid_context_patterns}, got {context_pattern!r}.")
         if shallow_dilation_dense and not (shallow_dilation or shallow_dilation_wide):
             raise ValueError(
                 "shallow_dilation_dense modifies shallow_dilation/shallow_dilation_wide's alternating "
@@ -773,6 +835,14 @@ class ENet(nn.Module):
         use_dsc factorizes whatever inner conv results (plain or dilated --
         not asymmetric, RegularBottleneck rejects that combination).
 
+        Also: DENSE_DILATION_SCHEDULE_A_PATTERN when context_pattern=
+        "dense_dilation_a" (same shape as dense_dilation but the gridding-
+        investigation's coprime (1,5,7,17) rates instead of (2,4,8,16));
+        DENSE_DILATION_REG_INTERLEAVED_PATTERN when context_pattern=
+        "dense_dilation_reg_interleaved" (11 slots: reg,2,4,8,16,reg,2,4,8,
+        16,reg -- only meaningful under dsc_no_projection, see that
+        pattern's own module comment).
+
         Stage 4 probes layer on top of this same pattern:
         merge_dilated_pairs (4.4.3) pairs up (non-dilated, dilated) slots
         into one MergedContextBottleneck each, halving the block count;
@@ -781,11 +851,16 @@ class ENet(nn.Module):
         finished op list in an extra short residual. dsc_no_projection
         (DSC everywhere, no reduce/expand) takes priority over all of the
         above -- every slot becomes a DSCNoProjectionBottleneck instead,
-        keeping only the pattern's dilation schedule."""
+        keeping only the pattern's dilation schedule (except
+        {"reg_bottleneck": True} slots, which become a full RegularBottleneck)."""
         if self.context_pattern == "sparse":
             pattern = SPARSE_DILATION_PATTERN
         elif self.context_pattern == "dense_dilation":
             pattern = DENSE_DILATION_PATTERN
+        elif self.context_pattern == "dense_dilation_a":
+            pattern = DENSE_DILATION_SCHEDULE_A_PATTERN
+        elif self.context_pattern == "dense_dilation_reg_interleaved":
+            pattern = DENSE_DILATION_REG_INTERLEAVED_PATTERN
         else:
             pattern = CONTEXT_STAGE_PATTERN
 
@@ -793,6 +868,19 @@ class ENet(nn.Module):
             ops = []
             for i in range(n_ops):
                 kwargs = dict(pattern[i % len(pattern)])
+                if kwargs.get("reg_bottleneck", False):
+                    # DENSE_DILATION_REG_INTERLEAVED_PATTERN's bookend slots:
+                    # a full (non-DSC) RegularBottleneck, not a
+                    # DSCNoProjectionBottleneck -- its reduce -> 3x3 -> expand
+                    # mixes channels and space jointly in one op, instead of
+                    # DSC's depthwise-then-pointwise factorization, so this
+                    # is a deliberately DIFFERENT bottleneck class per slot,
+                    # not just different conv kwargs.
+                    ops.append(RegularBottleneck(
+                        channels, dropout_p=0.1, use_dsc=False, relu=not self.use_prelu,
+                        double_projections=self.double_projections,
+                    ))
+                    continue
                 if kwargs.get("asymmetric", False):
                     if self.use_asymmetric:
                         raise ValueError(
@@ -1275,3 +1363,45 @@ if __name__ == "__main__":
             assert actual == expected, f"5.8: {stage_name}[{i}] dilation {actual} != {expected}"
 
     print("ENet Stage-5 architecture-probe-PAIRS self-test PASSED: 8 pairs.")
+
+    # Stage 6 -- DscNoProjDense variants (compression/gridding_investigation/'s
+    # follow-up): dense_dilation_a swaps in the coprime (1,5,7,17) schedule;
+    # dense_dilation_reg_interleaved bookends each (2,4,8,16) cycle with a
+    # full RegularBottleneck, at bumped stage2/3 depth (11, not the native 8).
+    schedule_a = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=U4_BOTTLENECKS,
+        decoder_type="upsample_conv", use_prelu=True, use_asymmetric=False,
+        dsc_no_projection=True, context_pattern="dense_dilation_a",
+    )
+    with torch.no_grad():
+        assert schedule_a(dummy).shape == (1, 5, 512, 512)
+    expected_a_dilations = (1, 5, 7, 17, 1, 5, 7, 17)
+    for stage in (schedule_a.stage2, schedule_a.stage3):
+        for i, block in enumerate(stage):
+            assert isinstance(block, DSCNoProjectionBottleneck), f"6.1: block {i} not DSC'd"
+            actual = _dilation_of(block.conv)
+            assert actual == expected_a_dilations[i], f"6.1: block {i} dilation {actual} != {expected_a_dilations[i]}"
+
+    reg_interleaved = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=(4, 11, 11, 2, 1),
+        decoder_type="upsample_conv", use_prelu=True, use_asymmetric=False,
+        dsc_no_projection=True, context_pattern="dense_dilation_reg_interleaved",
+    )
+    with torch.no_grad():
+        assert reg_interleaved(dummy).shape == (1, 5, 512, 512)
+    expected_types = [RegularBottleneck, DSCNoProjectionBottleneck, DSCNoProjectionBottleneck,
+                       DSCNoProjectionBottleneck, DSCNoProjectionBottleneck, RegularBottleneck,
+                       DSCNoProjectionBottleneck, DSCNoProjectionBottleneck, DSCNoProjectionBottleneck,
+                       DSCNoProjectionBottleneck, RegularBottleneck]
+    for stage_name, stage in (("stage2", reg_interleaved.stage2), ("stage3", reg_interleaved.stage3)):
+        assert len(stage) == 11, f"6.2: {stage_name} has {len(stage)} blocks, expected 11"
+        for i, (block, expected_type) in enumerate(zip(stage, expected_types)):
+            assert type(block) is expected_type, (
+                f"6.2: {stage_name}[{i}] is {type(block).__name__}, expected {expected_type.__name__}"
+            )
+    # reg_bottleneck slots must have a real reduce/expand projection (unlike
+    # their DSC neighbors, which have none at all).
+    assert hasattr(reg_interleaved.stage2[0], "reduce"), "6.2: reg_bottleneck slot missing its projection"
+    assert not hasattr(reg_interleaved.stage2[1], "reduce"), "6.2: DSC slot unexpectedly has a projection"
+
+    print("ENet Stage-6 DscNoProjDense-variant self-test PASSED: 2 configs (schedule_a, reg_interleaved).")
