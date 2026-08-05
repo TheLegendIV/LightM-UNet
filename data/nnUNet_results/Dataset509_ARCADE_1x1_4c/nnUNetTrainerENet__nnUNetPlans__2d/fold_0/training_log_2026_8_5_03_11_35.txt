@@ -12,23 +12,14 @@ Configuration name: 2d
 These are the global plan.json settings:
  {'dataset_name': 'Dataset509_ARCADE_1x1_4c', 'plans_name': 'nnUNetPlans', 'original_median_spacing_after_transp': [999.0, 1.0, 1.0], 'original_median_shape_after_transp': [1, 512, 512], 'image_reader_writer': 'NaturalImage2DIO', 'transpose_forward': [0, 1, 2], 'transpose_backward': [0, 1, 2], 'experiment_planner_used': 'ExperimentPlanner', 'label_manager': 'LabelManager', 'foreground_intensity_properties_per_channel': {'0': {'max': 255.0, 'mean': 97.36139678955078, 'median': 94.0, 'min': 0.0, 'percentile_00_5': 31.0, 'percentile_99_5': 185.0, 'std': 31.739503860473633}}} 
  
-2026-08-05 03:09:43.364040: unpacking dataset... 
-2026-08-05 03:10:07.619470: unpacking done... 
-2026-08-05 03:10:07.635894: do_dummy_2d_data_aug: False 
-2026-08-05 03:10:07.748998: Using splits from existing split file: /workspace/LightM-UNet/data/nnUNet_preprocessed/Dataset509_ARCADE_1x1_4c/splits_final.json 
-2026-08-05 03:10:07.774646: The split file contains 1 splits. 
-2026-08-05 03:10:07.786062: Desired fold for training: 0 
-2026-08-05 03:10:07.810306: This split has 1000 training and 200 validation cases. 
-2026-08-05 03:10:07.983368: Skipping network architecture plot because ENET_SKIP_ARCH_PLOT=1 
-2026-08-05 03:10:08.013709:  
-2026-08-05 03:10:08.027382: Epoch 0 
-2026-08-05 03:10:08.052979: Current learning rate: 0.001 
-2026-08-05 03:10:33.303751: train_loss 1.4776 
-2026-08-05 03:10:33.317412: val_loss 1.4809 
-2026-08-05 03:10:33.342405: Pseudo dice [0.0, nan, 0.0186, 0.0] 
-2026-08-05 03:10:33.367378: Epoch time: 25.29 s 
-2026-08-05 03:10:33.395791: Yayy! New best EMA pseudo Dice: 0.0062 
-2026-08-05 03:10:33.422459: No checkpoint written, checkpointing is disabled 
-2026-08-05 03:10:36.553262: No checkpoint written, checkpointing is disabled 
-2026-08-05 03:10:37.077771: Training done. 
-2026-08-05 03:10:37.088474: Skipping final full validation because ENET_SKIP_FINAL_VALIDATION=1 
+2026-08-05 03:12:27.814788: unpacking dataset... 
+2026-08-05 03:13:47.925250: unpacking done... 
+2026-08-05 03:13:48.155599: do_dummy_2d_data_aug: False 
+2026-08-05 03:13:48.367336: Using splits from existing split file: /workspace/LightM-UNet/data/nnUNet_preprocessed/Dataset509_ARCADE_1x1_4c/splits_final.json 
+2026-08-05 03:13:48.399909: The split file contains 1 splits. 
+2026-08-05 03:13:48.410884: Desired fold for training: 0 
+2026-08-05 03:13:48.436720: This split has 1000 training and 200 validation cases. 
+2026-08-05 03:13:48.810153: Skipping network architecture plot because ENET_SKIP_ARCH_PLOT=1 
+2026-08-05 03:13:49.132515:  
+2026-08-05 03:13:49.144213: Epoch 0 
+2026-08-05 03:13:49.173372: Current learning rate: 0.001 
