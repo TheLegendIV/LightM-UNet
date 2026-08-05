@@ -85,9 +85,62 @@ SHALLOW_DILATION_WIDE_PATTERN: tuple[dict, ...] = (
     {"padding": 32, "dilation": 32},
 )
 
+# "Dense" variants of the two shallow patterns above: every slot dilated
+# (single-entry tuple, so i % len(pattern) always selects it), no
+# alternating plain slots left -- same rationale as DENSE_DILATION_PATTERN
+# but for stage1/regular4 instead of stage2/3. Gated by a separate
+# shallow_dilation_dense flag rather than folded into shallow_dilation/
+# shallow_dilation_wide directly, so "alternating" vs. "dense" stays an
+# independent knob from "which rate" (16 vs. 32), matching how
+# context_pattern="dense_dilation" is independent from use_dilated.
+SHALLOW_DILATION_DENSE_PATTERN: tuple[dict, ...] = (
+    {"padding": 16, "dilation": 16},
+)
+SHALLOW_DILATION_WIDE_DENSE_PATTERN: tuple[dict, ...] = (
+    {"padding": 32, "dilation": 32},
+)
+
 
 def _activation(channels: int, relu: bool) -> nn.Module:
     return nn.ReLU(inplace=True) if relu else nn.PReLU(channels)
+
+
+def _dilatable_conv_block(
+    internal_channels: int, kernel_size: int, padding: int, dilation: int,
+    relu: bool, use_dsc: bool, separable_dilated: bool,
+) -> nn.Sequential:
+    """Shared inner-conv builder for one (possibly dilated, non-asymmetric)
+    context slot: plain k x k, DSC-factored (depthwise + pointwise), or
+    (k,1)+(1,k) separable-dilated -- the same three-way branch
+    RegularBottleneck's own non-asymmetric conv uses. Used by
+    MergedContextBottleneck for BOTH its op1 and op2 halves, so either half
+    can independently be plain, dilated, DSC'd, or separable-dilated,
+    depending on what pattern slot it was built from."""
+    if use_dsc:
+        return nn.Sequential(
+            nn.Conv2d(internal_channels, internal_channels, kernel_size=kernel_size,
+                      padding=padding, dilation=dilation, groups=internal_channels, bias=False),
+            nn.Conv2d(internal_channels, internal_channels, kernel_size=1, bias=False),
+            nn.BatchNorm2d(internal_channels),
+            _activation(internal_channels, relu),
+        )
+    if separable_dilated and dilation != 1:
+        return nn.Sequential(
+            nn.Conv2d(internal_channels, internal_channels, kernel_size=(kernel_size, 1),
+                      padding=(padding, 0), dilation=dilation, bias=False),
+            nn.BatchNorm2d(internal_channels),
+            _activation(internal_channels, relu),
+            nn.Conv2d(internal_channels, internal_channels, kernel_size=(1, kernel_size),
+                      padding=(0, padding), dilation=dilation, bias=False),
+            nn.BatchNorm2d(internal_channels),
+            _activation(internal_channels, relu),
+        )
+    return nn.Sequential(
+        nn.Conv2d(internal_channels, internal_channels, kernel_size=kernel_size,
+                  padding=padding, dilation=dilation, bias=False),
+        nn.BatchNorm2d(internal_channels),
+        _activation(internal_channels, relu),
+    )
 
 
 def _reduce_proj(in_channels: int, internal_channels: int, relu: bool, double: bool) -> nn.Sequential:
@@ -451,14 +504,20 @@ class DSCNoProjectionBottleneck(nn.Module):
 
 
 class MergedContextBottleneck(nn.Module):
-    """Probe 4.4.3: fuses a (regular-or-asymmetric, dilated) PAIR of
-    CONTEXT_STAGE_PATTERN slots into ONE block sharing a single
-    reduce/expand projection pair -- reduce -> first_op(regular 3x3 or
-    asymmetric 5x5) -> dilated 3x3 -> expand -- instead of two separate
+    """Probe 4.4.3: fuses a PAIR of context-stage pattern slots into ONE
+    block sharing a single reduce/expand projection pair -- reduce ->
+    op1(first_kwargs) -> op2(dilation) -> expand -- instead of two separate
     blocks each with their own reduce/expand. Halves the block count in
-    stage2/3 for the same op coverage. `first_kwargs` is one of
+    stage2/3 for the same op coverage. `first_kwargs` is normally one of
     CONTEXT_STAGE_PATTERN's own {} / {"kernel_size":5,"padding":2,
-    "asymmetric":True} entries (the non-dilated half of the pair)."""
+    "asymmetric":True} entries (the non-dilated half of the default
+    regular-or-asymmetric/dilated pairing), but under
+    context_pattern="dense_dilation" every slot is itself dilated, so
+    `first_kwargs` may also carry its own "dilation" key -- op1 respects
+    that the same way op2 always has, giving a (dilated, dilated) pair
+    (probe 5.3) instead of (plain-or-asymmetric, dilated). use_dsc/
+    separable_dilated apply independently to op1 (when non-asymmetric) and
+    op2 via the shared _dilatable_conv_block helper."""
 
     def __init__(
         self,
@@ -469,6 +528,7 @@ class MergedContextBottleneck(nn.Module):
         dropout_p: float = 0.1,
         relu: bool = False,
         use_dsc: bool = False,
+        separable_dilated: bool = False,
     ):
         super().__init__()
         internal_channels = max(1, channels // internal_ratio)
@@ -476,6 +536,7 @@ class MergedContextBottleneck(nn.Module):
 
         kernel_size = first_kwargs.get("kernel_size", 3)
         padding = first_kwargs.get("padding", 1)
+        dilation1 = first_kwargs.get("dilation", 1)
         if first_kwargs.get("asymmetric", False):
             self.op1 = nn.Sequential(
                 nn.Conv2d(internal_channels, internal_channels, kernel_size=(kernel_size, 1),
@@ -488,31 +549,14 @@ class MergedContextBottleneck(nn.Module):
                 _activation(internal_channels, relu),
             )
         else:
-            self.op1 = nn.Sequential(
-                nn.Conv2d(internal_channels, internal_channels, kernel_size=kernel_size, padding=padding, bias=False),
-                nn.BatchNorm2d(internal_channels),
-                _activation(internal_channels, relu),
+            self.op1 = _dilatable_conv_block(
+                internal_channels, kernel_size, padding, dilation1, relu, use_dsc, separable_dilated,
             )
 
-        # Second op: the dilated 3x3, optionally depthwise-separable (probe
-        # 4.4.4's "DSC only where dilation is used" -- this class only ever
-        # represents a dilated slot, so use_dsc here always means "on the
-        # dilated conv specifically", consistent with that probe's scope).
-        if use_dsc:
-            self.op2 = nn.Sequential(
-                nn.Conv2d(internal_channels, internal_channels, kernel_size=3, padding=dilation,
-                          dilation=dilation, groups=internal_channels, bias=False),
-                nn.Conv2d(internal_channels, internal_channels, kernel_size=1, bias=False),
-                nn.BatchNorm2d(internal_channels),
-                _activation(internal_channels, relu),
-            )
-        else:
-            self.op2 = nn.Sequential(
-                nn.Conv2d(internal_channels, internal_channels, kernel_size=3, padding=dilation,
-                          dilation=dilation, bias=False),
-                nn.BatchNorm2d(internal_channels),
-                _activation(internal_channels, relu),
-            )
+        # Second op: normally the dilated 3x3 (the pairing's dilated half).
+        self.op2 = _dilatable_conv_block(
+            internal_channels, 3, dilation, dilation, relu, use_dsc, separable_dilated,
+        )
 
         self.expand = _expand_proj(internal_channels, channels, relu, double=False)
         self.dropout = nn.Dropout2d(p=dropout_p)
@@ -579,11 +623,17 @@ class ENet(nn.Module):
         two_block_skip: bool = False,
         dsc_no_projection: bool = False,
         shallow_dilation_wide: bool = False,
+        shallow_dilation_dense: bool = False,
     ):
         super().__init__()
         if context_pattern not in ("default", "sparse", "dense_dilation"):
             raise ValueError(
                 f"context_pattern must be 'default', 'sparse', or 'dense_dilation', got {context_pattern!r}."
+            )
+        if shallow_dilation_dense and not (shallow_dilation or shallow_dilation_wide):
+            raise ValueError(
+                "shallow_dilation_dense modifies shallow_dilation/shallow_dilation_wide's alternating "
+                "pattern into an every-slot-dilated one -- meaningless without one of them also set."
             )
         if len(channels) == 5:
             # stage2 and stage3 share one width (the historical/default
@@ -646,6 +696,7 @@ class ENet(nn.Module):
         self.two_block_skip = two_block_skip              # 4.6
         self.dsc_no_projection = dsc_no_projection         # DSC everywhere, no reduce/expand
         self.shallow_dilation_wide = shallow_dilation_wide  # push shallow-stage dilation reach to 32
+        self.shallow_dilation_dense = shallow_dilation_dense  # every shallow-stage slot dilated, not alternating
 
         n_stage1, n_stage2, n_stage3, n_regular4, n_regular5 = self.bottlenecks_per_stage
 
@@ -765,6 +816,13 @@ class ENet(nn.Module):
                 first_kwargs = dict(pattern[i % len(pattern)])
                 if first_kwargs.get("asymmetric", False) and not self.use_asymmetric:
                     first_kwargs = {}
+                # Under context_pattern="dense_dilation" (probe 5.3), the
+                # "first" half of the pair is itself dilated (pattern has no
+                # more plain/asymmetric slots) -- downgrade it the same way
+                # a dilated slot is downgraded everywhere else in this
+                # module when use_dilated is off.
+                if first_kwargs.get("dilation", 1) != 1 and not self.use_dilated:
+                    first_kwargs = {}
                 if i + 1 < n_ops:
                     dilation = dict(pattern[(i + 1) % len(pattern)]).get("dilation", 1)
                     if dilation != 1 and not self.use_dilated:
@@ -772,6 +830,7 @@ class ENet(nn.Module):
                     ops.append(MergedContextBottleneck(
                         channels, first_kwargs, dilation, dropout_p=0.1,
                         relu=not self.use_prelu, use_dsc=self.use_dsc,
+                        separable_dilated=self.separable_dilated,
                     ))
                     i += 2
                 else:
@@ -809,22 +868,25 @@ class ENet(nn.Module):
         SHALLOW_DILATION_WIDE_PATTERN (stage1/regular4 run at 1/4
         resolution, coarser than stage2/3's 1/8, so there's headroom for a
         wider rate there -- see that pattern's own module-level comment for
-        the receptive-field math). Both respect use_dilated the same way
-        _make_context_stage's pattern slots do (downgrade to plain regular
-        if use_dilated is off). regular5 never calls this -- probe 4.4.1
-        explicitly excludes it (built directly in __init__, unchanged).
-        dsc_no_projection (DSC everywhere, no reduce/expand) takes priority
-        over both dilation variants here -- plain (undilated)
-        DSCNoProjectionBottleneck repeats, matching regular5's own
-        dsc_no_projection handling in __init__."""
+        the receptive-field math). shallow_dilation_dense=True (probe 5.2)
+        swaps whichever of those two patterns is selected for its "dense"
+        counterpart (every slot dilated, no alternating plain slot) --
+        independent of which rate (16 vs. 32) is in use. All three respect
+        use_dilated the same way _make_context_stage's pattern slots do
+        (downgrade to plain regular if use_dilated is off). regular5 never
+        calls this -- probe 4.4.1 explicitly excludes it (built directly in
+        __init__, unchanged). dsc_no_projection (DSC everywhere, no
+        reduce/expand) takes priority over all dilation variants here --
+        plain (undilated) DSCNoProjectionBottleneck repeats, matching
+        regular5's own dsc_no_projection handling in __init__."""
         if self.dsc_no_projection:
             return nn.Sequential(
                 *[DSCNoProjectionBottleneck(channels, dropout_p=dropout_p, relu=relu) for _ in range(n_ops)]
             )
         if self.shallow_dilation_wide:
-            pattern = SHALLOW_DILATION_WIDE_PATTERN
+            pattern = SHALLOW_DILATION_WIDE_DENSE_PATTERN if self.shallow_dilation_dense else SHALLOW_DILATION_WIDE_PATTERN
         elif self.shallow_dilation:
-            pattern = SHALLOW_DILATION_PATTERN
+            pattern = SHALLOW_DILATION_DENSE_PATTERN if self.shallow_dilation_dense else SHALLOW_DILATION_PATTERN
         else:
             return nn.Sequential(
                 *[RegularBottleneck(channels, dropout_p=dropout_p, use_dsc=self.use_dsc, relu=relu,
@@ -1092,3 +1154,124 @@ if __name__ == "__main__":
             assert actual == expected, f"shallow_dilation_wide: {stage_name}[{i}] dilation {actual} != {expected}"
 
     print(f"ENet Stage-4 architecture-probe self-test PASSED: {n_stage4_tested} flags, individually, at U4.")
+
+    # Stage 5 architecture-probe-PAIRS self-test: combinations of two
+    # stage_4 flags at once, off the same U4 reference. Structural checks
+    # go beyond "it builds" where a pair could plausibly silently degrade
+    # into just one flag's behavior (e.g. dilation not actually reaching
+    # op1 of a merged pair, or "dense" not actually reaching every slot).
+    E1_CHANNELS = (4, 16, 28, 16, 4)
+
+    def _dilation_of(seq: nn.Sequential) -> int:
+        return seq[0].dilation[0]
+
+    # 5.1 dsc_no_projection + dense_dilation: every block DSC'd (no
+    # projection) AND stage2/3's DSC depthwise conv follows the dense
+    # 2/4/8/16 x2 schedule (not just plain dsc_no_projection's dilation=1).
+    pair1 = ENet(in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=U4_BOTTLENECKS,
+                 decoder_type="upsample_conv", use_prelu=False, use_asymmetric=False,
+                 dsc_no_projection=True, context_pattern="dense_dilation")
+    with torch.no_grad():
+        assert pair1(dummy).shape == (1, 5, 512, 512)
+    for stage in (pair1.regular1, pair1.stage2, pair1.stage3, pair1.regular4, pair1.regular5):
+        for block in stage:
+            assert isinstance(block, DSCNoProjectionBottleneck)
+    for i, block in enumerate(pair1.stage2):
+        expected = (2, 4, 8, 16, 2, 4, 8, 16)[i]
+        assert _dilation_of(block.conv) == expected, f"5.1: stage2[{i}] dilation {_dilation_of(block.conv)} != {expected}"
+
+    # 5.2 dense_dilation + shallow_dilation_wide(dense): stage1/regular4
+    # EVERY slot at dilation=32 (not alternating), stage2/3 dense schedule.
+    pair2 = ENet(in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=U4_BOTTLENECKS,
+                 decoder_type="upsample_conv", use_prelu=False, use_asymmetric=False,
+                 context_pattern="dense_dilation", shallow_dilation_wide=True, shallow_dilation_dense=True)
+    with torch.no_grad():
+        assert pair2(dummy).shape == (1, 5, 512, 512)
+    for stage_name, stage in (("regular1", pair2.regular1), ("regular4", pair2.regular4)):
+        for i, block in enumerate(stage):
+            actual = _dilation_of(block.conv_bn_act)
+            assert actual == 32, f"5.2: {stage_name}[{i}] dilation {actual} != 32 (dense -- every slot, not alternating)"
+
+    # 5.3 dense_dilation + merge_dilated_pairs: stage2/3 halved to 4 blocks,
+    # and BOTH op1 and op2 of each merged block carry real (different)
+    # dilation rates -- (2,4), (8,16), (2,4), (8,16) -- not op1 silently
+    # staying plain (the pre-fix behavior first_kwargs' dilation key was
+    # ignored for).
+    pair3 = ENet(in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=U4_BOTTLENECKS,
+                 decoder_type="upsample_conv", use_prelu=False, use_asymmetric=False,
+                 context_pattern="dense_dilation", merge_dilated_pairs=True)
+    with torch.no_grad():
+        assert pair3(dummy).shape == (1, 5, 512, 512)
+    assert len(pair3.stage2) == 4 and len(pair3.stage3) == 4, "5.3: expected 4 merged blocks per stage"
+    expected_pairs = ((2, 4), (8, 16), (2, 4), (8, 16))
+    for stage in (pair3.stage2, pair3.stage3):
+        for i, block in enumerate(stage):
+            d1, d2 = _dilation_of(block.op1), _dilation_of(block.op2)
+            assert (d1, d2) == expected_pairs[i], f"5.3: block {i} dilations {(d1, d2)} != {expected_pairs[i]}"
+
+    # 5.4 dense_dilation + E1Shape: just channels + dense schedule compose.
+    pair4 = ENet(in_channels=1, out_channels=5, channels=E1_CHANNELS, bottlenecks_per_stage=U4_BOTTLENECKS,
+                 decoder_type="upsample_conv", use_prelu=False, use_asymmetric=False,
+                 context_pattern="dense_dilation")
+    with torch.no_grad():
+        assert pair4(dummy).shape == (1, 5, 512, 512)
+    assert pair4.stage2[0].reduce[0].out_channels == 7, "5.4: expected E1Shape's stage2/3 width (28) // 4 internal"
+
+    # 5.5 dsc_no_projection + E1Shape.
+    pair5 = ENet(in_channels=1, out_channels=5, channels=E1_CHANNELS, bottlenecks_per_stage=U4_BOTTLENECKS,
+                 decoder_type="upsample_conv", use_prelu=False, use_asymmetric=False, dsc_no_projection=True)
+    with torch.no_grad():
+        assert pair5(dummy).shape == (1, 5, 512, 512)
+
+    # 5.6 separable_dilated + dense_dilation: every one of stage2/3's 8
+    # slots is now dilated (dense), so separable_dilated's (k,1)+(1,k)
+    # factoring should apply to ALL 8, not just the original pattern's 4.
+    pair6 = ENet(in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=U4_BOTTLENECKS,
+                 decoder_type="upsample_conv", use_prelu=False, use_asymmetric=False,
+                 context_pattern="dense_dilation", separable_dilated=True)
+    with torch.no_grad():
+        assert pair6(dummy).shape == (1, 5, 512, 512)
+    for stage in (pair6.stage2, pair6.stage3):
+        for i, block in enumerate(stage):
+            # RegularBottleneck's own separable_dilated branch: [Conv2d(k,1),
+            # BN, act, Conv2d(1,k)] -- 4 modules; the final BN+act comes from
+            # the block's own outer conv_bn_act wrapper, not duplicated here
+            # (unlike MergedContextBottleneck's op1/op2, which have no such
+            # outer wrapper and so are each fully self-contained -- 6
+            # modules when separable-factored, see the 5.7 check below).
+            assert isinstance(block.conv, nn.Sequential) and len(block.conv) == 4, (
+                f"5.6: block {i} not separable-factored (expected a 4-module (k,1)+(1,k) Sequential, "
+                f"got {type(block.conv).__name__} len={len(block.conv) if hasattr(block.conv, '__len__') else 'n/a'})"
+            )
+
+    # 5.7 merge_dilated_pairs + separable_dilated: halved block count, and
+    # op2 (the dilated half of the default regular-or-asymmetric/dilated
+    # pairing) is separable-factored; op1 (dilation=1 here, default
+    # pattern) stays a plain 3-module block since separable_dilated is a
+    # no-op at dilation=1.
+    pair7 = ENet(in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=U4_BOTTLENECKS,
+                 decoder_type="upsample_conv", use_prelu=False, use_asymmetric=False,
+                 merge_dilated_pairs=True, separable_dilated=True)
+    with torch.no_grad():
+        assert pair7(dummy).shape == (1, 5, 512, 512)
+    assert len(pair7.stage2) == 4 and len(pair7.stage3) == 4, "5.7: expected 4 merged blocks per stage"
+    for stage in (pair7.stage2, pair7.stage3):
+        for block in stage:
+            assert len(block.op2) == 6, "5.7: op2 (dilated half) not separable-factored"
+            assert len(block.op1) == 3, "5.7: op1 (dilation=1 half) unexpectedly factored"
+
+    # 5.8 shallow_dilation_wide + merge_dilated_pairs: orthogonal stages
+    # (stage1/4 vs. stage2/3) -- both effects present simultaneously.
+    pair8 = ENet(in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=U4_BOTTLENECKS,
+                 decoder_type="upsample_conv", use_prelu=False, use_asymmetric=False,
+                 shallow_dilation_wide=True, merge_dilated_pairs=True)
+    with torch.no_grad():
+        assert pair8(dummy).shape == (1, 5, 512, 512)
+    assert len(pair8.stage2) == 4 and len(pair8.stage3) == 4, "5.8: expected 4 merged blocks per stage"
+    for stage_name, stage in (("regular1", pair8.regular1), ("regular4", pair8.regular4)):
+        for i, block in enumerate(stage):
+            expected = 32 if i % 2 == 1 else 1
+            actual = _dilation_of(block.conv_bn_act)
+            assert actual == expected, f"5.8: {stage_name}[{i}] dilation {actual} != {expected}"
+
+    print("ENet Stage-5 architecture-probe-PAIRS self-test PASSED: 8 pairs.")

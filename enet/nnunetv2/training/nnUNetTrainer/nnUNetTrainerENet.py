@@ -128,6 +128,7 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
             two_block_skip=_parse_bool_env("ENET_TWO_BLOCK_SKIP", False),
             dsc_no_projection=_parse_bool_env("ENET_DSC_NO_PROJECTION", False),
             shallow_dilation_wide=_parse_bool_env("ENET_SHALLOW_DILATION_WIDE", False),
+            shallow_dilation_dense=_parse_bool_env("ENET_SHALLOW_DILATION_DENSE", False),
         )
 
     def configure_optimizers(self):
