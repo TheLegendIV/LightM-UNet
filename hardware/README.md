@@ -102,7 +102,10 @@ section) rather than trying to patch the generic ones in place.
   `QuantReLU`**, because Brevitas/FINN has no standard quantized `PReLU`
   op — so Dice numbers from `QuantENet` are not directly comparable to the
   FP32 `ENet` baseline on activation function alone, independent of
-  quantization itself.
+  quantization itself. See "PReLU vs. QuantReLU — FINN compatibility
+  investigation" below: direct `PReLU` is confirmed permanently
+  incompatible, but a drop-in, FINN-native, numerically-equivalent
+  decomposition has been found and proven (not yet integrated here).
 - **FINN-specific variant**: `finn_enet_prod_export.py`'s `FINNQuantENet`
   takes `QuantENet`'s topology one step further, specifically to survive
   FINN's dataflow/streamlining transforms (see next section for exactly
@@ -284,6 +287,86 @@ At the `E1` config and default (unfolded) parallelism:
 | Estimated latency | ~44.8 ms | — | — |
 | Critical path | 4,482,964 cycles | — | — |
 | Bottleneck node | `MVAU_rtl_80` (32,768 cycles) | — | — |
+
+## PReLU vs. QuantReLU — FINN compatibility investigation (2026-08-05)
+
+Investigated whether ENet's real activation (`nn.PReLU`, per-channel) can be
+made FINN-hardware-compatible, instead of the `QuantReLU` substitution
+`QuantENet.py` currently hardcodes everywhere. Used a minimal test harness
+(`hardware/_tmp_prelu_investigation2.py`, kept for reference) that reuses
+ENet's actual `QuantInitialBlock`/`QuantRegularBottleneck` code verbatim
+with a swappable activation factory, so PReLU is the only variable against
+a proven-working `QuantReLU` control.
+
+### Result: direct `PReLU` is permanently incompatible; a decomposition works
+
+1. **Direct/naive `PReLU` is a hard, categorical block — confirmed two ways:**
+   - Source grep across the entire FINN + QONNX codebase finds zero
+     references to `PRelu` anywhere. FINN's complete `fpgadataflow` HW op
+     registry (`finn/src/finn/custom_op/fpgadataflow/__init__.py`) has
+     exactly 20 registered types (`MVAU`, `Thresholding`, `VVAU`,
+     `AddStreams`, `ChannelwiseOp`, `StreamingEltwise`, etc.) — none can
+     represent `PRelu`.
+   - Empirically: a literal ONNX `PRelu` node survives `step_qonnx_to_finn`
+     and the *entire* streamlining + HW-conversion pipeline completely
+     untouched — it is never absorbed, converted, or rewritten by anything,
+     and remains a permanently-stuck non-HW node.
+2. **A decomposition into ops FINN already supports does work.** The
+   naive textbook rewrite `ReLU(x) - alpha*ReLU(-x)` doesn't help — negation
+   always traces to ONNX `Neg` (whether written as `-x` or `x * (-1.0)`),
+   and `Neg` is equally unsupported (also zero grep hits). Instead, the
+   **algebraic identity**
+   `PReLU(x) = alpha_c * x + (1 - alpha_c) * ReLU(x)`
+   (exact, not an approximation — trivially verified by cases: `x>=0` gives
+   `x`, `x<0` gives `alpha_c*x`) uses only: one quantized ReLU (native,
+   `MultiThreshold`→`Thresholding`), a fork of `x` into two branches, two
+   per-channel `Mul` scales (→ `InferChannelwiseLinearLayer`), and one
+   `AddStreams` combine of the two branches — the same fork+recombine shape
+   ENet's own residual connections already use successfully.
+3. **Two real implementation gotchas found along the way:**
+   - **Mul operand order matters for FINN's constant-folding transforms.**
+     Writing `alpha * x` (constant first) traces the constant as ONNX
+     input[0], but `CollapseRepeatedMul` and friends hard-assume the
+     constant is always input[1] — trips
+     `AssertionError: Initializer for parameters for op1 is not set`. Always
+     write `x * alpha` (dynamic first).
+   - A separate, **PReLU-unrelated generic bug** blocked all variants
+     (including the plain-ReLU control!) at `step_enet_convert_to_hw`:
+     `AssertionError: MultiThreshold_0: Signed output requires actval < 0`.
+     Root cause: a degenerate/uncalibrated `out_bias` on the input
+     quantizer's threshold node in this tiny, untrained 2-block test
+     network — not a FINN limitation (the real, full-depth network already
+     completed a genuine 66-hour hardware build with the same op
+     vocabulary). Patched for testing purposes by forcing
+     `out_bias = -(2**(bits-1))` on any signed `MultiThreshold` with a
+     non-negative bias.
+4. **After both fixes, all three variants (control / naive PReLU /
+   decomposed PReLU) were pushed through the same `step_enet_convert_to_hw`.**
+   Control and the decomposition both leave behind only ordinary,
+   already-elsewhere-converted node types as residue (`Transpose`, `Mul`,
+   `Add`, `MaxPool`, `Im2Col`, `MatMul`, `Concat`, `MultiThreshold` — the
+   kind of thing later production steps mop up, not included in this
+   reduced test step list). The naive-PReLU variant's residue explicitly
+   still contains the literal, permanently-stuck `PRelu` node — the one
+   categorical difference, proving the decomposition reaches full
+   op-vocabulary parity with the working baseline.
+5. **Numeric correctness check (separate from the graph-conversion check).**
+   Comparing the actual quantized decomposition module's forward pass
+   against real `nn.PReLU` on properly-scaled random input gave error
+   statistically identical to naive-requantizing real PReLU's own output
+   (max abs err 0.238, mean abs err ~0.002 on a ~1.54 output range —
+   ordinary 8-bit quantization noise, nothing decomposition-specific).
+
+### What this does *not* yet prove
+
+- No full hardware build was attempted (`step_create_dataflow_partition`
+  onward, real HLS/RTL codegen, Vivado synthesis) — only a reduced
+  `step_enet_convert_to_hw` pass on a 2-block slice, not the complete
+  production recipe on the full-depth network.
+- The decomposition has not been wired into the real `QuantENet.py` /
+  `finn_enet_ip_build.py` production pipeline.
+- No trained-checkpoint accuracy comparison (Dice/clDice) between real
+  PReLU and this decomposition has been run.
 
 ## Uncertainty / open items
 
