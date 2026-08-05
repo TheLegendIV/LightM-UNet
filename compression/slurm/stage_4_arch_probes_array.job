@@ -15,8 +15,8 @@ set -e
 
 # Stage 4 -- architecture probes, all off the U4 reference cell: CHANNELS=
 # 4,16,32,16,4, BOTTLENECKS=4,8,8,2,1 native, DECODER_TYPE=upsample_conv,
-# USE_PRELU=0, dilated/strided=1, dsc=0, and -- per this session's "next
-# phase" policy decision -- ASYMMETRIC=0 UNIFORMLY across all 9 tasks (not
+# USE_PRELU=1, dilated/strided=1, dsc=0, and -- per this session's "next
+# phase" policy decision -- ASYMMETRIC=0 UNIFORMLY across all 11 tasks (not
 # just task 8, which needed it structurally). Rationale: stage_2_special_ops'
 # real results showed no_asymmetric is a near-wash vs U4 (0.755 vs 0.747
 # dice) while max_unpool cost -0.154 dice -- neither justifies keeping
@@ -30,6 +30,20 @@ set -e
 # (conditional on 4.2) and the blanket-DSC-everywhere-plus-concat probe
 # (gated on 4.4.4) are NOT included here -- both need their gating probe's
 # result first, see compression/foundation_log.md when that's written up.
+#
+# USE_PRELU flipped 0 -> 1 (2026-08-05): the earlier ban on PReLU was a
+# deployability constraint, not an accuracy call -- see hardware/README.md's
+# "PReLU vs. QuantReLU -- FINN compatibility investigation" section, which
+# proves a numerically-equivalent decomposition
+# (PReLU(x) = alpha*x + (1-alpha)*ReLU(x)) reaches full op-vocabulary parity
+# with FINN's supported hardware ops. Now that PReLU is confirmed
+# deployable, there's no reason to leave it off: stage_2_special_ops' real
+# S2-PReLU run already showed it HELPS at this channel budget (0.7743 vs
+# U4's 0.7471 dice, same everything else), so enabling it network-wide
+# across every stage_4 probe is a free accuracy gain, not a new axis being
+# tested. use_prelu applies uniformly through ENet.py's shared _activation()
+# helper regardless of which other stage_4 flag is set, so this does not
+# interact with any of the 9 per-task architecture flags below.
 #
 # 4.8/4.9 (tasks 9-10) added after real stage_2_special_ops results came
 # in: no_dilated collapsed from U4's 0.747 dice to 0.399, confirming
@@ -163,7 +177,7 @@ export ENET_CHANNELS="${CHANNELS_ARR[$TASK_ID]}"
 export ENET_BOTTLENECKS="4,8,8,2,1"
 export ENET_CONTEXT_PATTERN="${CONTEXT_PATTERN_ARR[$TASK_ID]}"
 export ENET_DECODER_TYPE="upsample_conv"
-export ENET_USE_PRELU=0
+export ENET_USE_PRELU=1
 export ENET_USE_DILATED=1
 export ENET_USE_ASYMMETRIC=0
 export ENET_USE_STRIDED=1
