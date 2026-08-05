@@ -23,3 +23,11 @@ S4-TwoBlockSkip,nnUNetTrainerENet_4_6_two_block_skip,4_arch_probes,"4,16,32,16,4
 S4-DscNoProjection,nnUNetTrainerENet_4_7_dsc_no_projection,4_arch_probes,"4,16,32,16,4",upsample_conv,1,1,0
 S4-DenseDilation,nnUNetTrainerENet_4_8_dense_dilation,4_arch_probes,"4,16,32,16,4",upsample_conv,1,1,0
 S4-ShallowDilationWide,nnUNetTrainerENet_4_9_shallow_dilation_wide,4_arch_probes,"4,16,32,16,4",upsample_conv,1,1,0
+S5-DscNoProjDense,nnUNetTrainerENet_5_1_dscnoprojection_dense_dilation,5_arch_probe_pairs,"4,16,32,16,4",upsample_conv,1,1,0
+S5-ShallowWideDense,nnUNetTrainerENet_5_2_dense_dilation_shallow_wide_dense,5_arch_probe_pairs,"4,16,32,16,4",upsample_conv,1,1,0
+S5-MergeDense,nnUNetTrainerENet_5_3_dense_dilation_merge_pairs,5_arch_probe_pairs,"4,16,32,16,4",upsample_conv,1,1,0
+S5-DenseE1Shape,nnUNetTrainerENet_5_4_dense_dilation_e1shape,5_arch_probe_pairs,"4,16,28,16,4",upsample_conv,1,1,0
+S5-DscNoProjE1Shape,nnUNetTrainerENet_5_5_dscnoprojection_e1shape,5_arch_probe_pairs,"4,16,28,16,4",upsample_conv,1,1,0
+S5-SeparableDense,nnUNetTrainerENet_5_6_separable_dense_dilation,5_arch_probe_pairs,"4,16,32,16,4",upsample_conv,1,1,0
+S5-MergeSeparable,nnUNetTrainerENet_5_7_merge_pairs_separable,5_arch_probe_pairs,"4,16,32,16,4",upsample_conv,1,1,0
+S5-ShallowWideMerge,nnUNetTrainerENet_5_8_shallow_wide_merge_pairs,5_arch_probe_pairs,"4,16,32,16,4",upsample_conv,1,1,0
