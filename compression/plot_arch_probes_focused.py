@@ -1,10 +1,11 @@
 """Focused Dice vs. params/MACs plot for just U4 (the shared reference
-cell) plus every stage_4_arch_probes, stage_5_arch_probe_pairs, and
-stage_6_dscnoprojdense_variants config -- i.e. everything actually built
-off that one reference point, with the rest of the sweep (Base/U2/U3/U6/
-U8/U16/E1, stage_2_special_ops, stage_3_transfer_original) filtered out as
-noise for this comparison. A horizontal dashed line at U4's own dice marks
-the bar every probe is trying to clear.
+cell) plus every stage_4_arch_probes, stage_5_arch_probe_pairs,
+stage_6_dscnoprojdense_variants, and stage_7_reginterleaved_shape_variants
+config -- i.e. everything actually built off that one reference point,
+with the rest of the sweep (Base/U2/U3/U6/U8/U16/E1, stage_2_special_ops,
+stage_3_transfer_original) filtered out as noise for this comparison. A
+horizontal dashed line at U4's own dice marks the bar every probe is
+trying to clear.
 
 Usage:
     python compression/plot_arch_probes_focused.py
@@ -28,6 +29,7 @@ STAGE_COLORS = {
     "4_arch_probes": "#eda100",
     "5_arch_probe_pairs": "#8e44ad",
     "6_dscnoprojdense_variants": "#e91e8c",
+    "7_reginterleaved_shape_variants": "#00acc1",
 }
 U4_LINE_COLOR = "#2a78d6"
 
@@ -88,9 +90,10 @@ def main() -> int:
         | (df["stage"] == "4_arch_probes")
         | (df["stage"] == "5_arch_probe_pairs")
         | (df["stage"] == "6_dscnoprojdense_variants")
+        | (df["stage"] == "7_reginterleaved_shape_variants")
     ].dropna(subset=["params", "dice"]).copy()
     if focused.empty:
-        print("No U4/stage_4/stage_5/stage_6 rows found in results.csv yet.")
+        print("No U4/stage_4/stage_5/stage_6/stage_7 rows found in results.csv yet.")
         return 1
     u4_rows = focused[focused["config_name"] == U4_CONFIG_NAME]
     if u4_rows.empty:
@@ -102,7 +105,7 @@ def main() -> int:
 
     fig, ax = plt.subplots(figsize=(11, 8), facecolor=SURFACE)
     _plot(ax, focused, "params", "Parameters", abbrev, u4_dice)
-    ax.set_title("U4 reference + all stage_4/5/6 architecture probes: Dice vs. Parameters",
+    ax.set_title("U4 reference + all stage_4/5/6/7 architecture probes: Dice vs. Parameters",
                  color=INK, fontsize=12)
     fig.tight_layout()
     out_path = args.out_dir / "arch_probes_focused_dice_vs_params.png"
@@ -113,7 +116,7 @@ def main() -> int:
     focused["macs"] = focused["flops"] / 2
     fig, ax = plt.subplots(figsize=(11, 8), facecolor=SURFACE)
     _plot(ax, focused, "macs", "MACs", abbrev, u4_dice)
-    ax.set_title("U4 reference + all stage_4/5/6 architecture probes: Dice vs. MACs",
+    ax.set_title("U4 reference + all stage_4/5/6/7 architecture probes: Dice vs. MACs",
                  color=INK, fontsize=12)
     fig.tight_layout()
     out_path = args.out_dir / "arch_probes_focused_dice_vs_macs.png"
