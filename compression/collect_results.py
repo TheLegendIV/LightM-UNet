@@ -65,7 +65,7 @@ RESULTS_COLUMNS = [
     "config_name", "stage", "f_i", "f1", "f2", "f3", "f4", "f5",
     "bottlenecks_per_stage", "decoder_type", "ops_flags", "quant_bits",
     "params", "flops", "bops",
-    "dice", "dice_LAD", "dice_RCA", "dice_LCX", "dice_LM",
+    "dice", "dice_binary", "dice_LAD", "dice_RCA", "dice_LCX", "dice_LM",
     "cldice", "cldice_LAD", "cldice_RCA", "cldice_LCX", "cldice_LM",
     "n_components",
     "epochs", "converged_flag", "seed",
@@ -209,7 +209,17 @@ def run_inference(
 def compute_eval_metrics(labels_ts_dir: Path, prediction_dir: Path, dataset_name: str) -> dict:
     """Per-class dice/clDice (mean over each class's per-case scores, one
     class label = 1..K from dataset.json) + a single mean-across-classes
-    'dice'/'cldice' gate column, plus pooled (all-foreground-classes-
+    'dice'/'cldice' gate column (equally weighted across the 4 foreground
+    classes, NOT case-weighted or pixel-weighted), plus a separate
+    'dice_binary' -- every foreground class collapsed to one "vessel" label
+    before scoring (gt > 0 vs. pred > 0), the same scoring convention the
+    retired binary Dataset501 objective used throughout. 'dice' and
+    'dice_binary' answer different questions and can diverge: 'dice_binary'
+    only cares whether a pixel is vessel-or-not, so it's blind to class-
+    confusion errors (predicting LAD where GT says LCX scores as correct);
+    'dice' requires the right class too, so it's blind to nothing but also
+    lets one badly-scoring class (e.g. the sparse LM) drag the mean down
+    even if the other three are strong. Plus pooled (all-foreground-classes-
     together) n_components. Reuses segmentation_topology.dice_score/
     cldice_score/fragmentation_stats unchanged -- this only supplies
     per-class boolean masks (gt == class_id) via the binarize=False
@@ -223,6 +233,7 @@ def compute_eval_metrics(labels_ts_dir: Path, prediction_dir: Path, dataset_name
 
     per_class_dice = {name: [] for _, name in class_ids_names}
     per_class_cldice = {name: [] for _, name in class_ids_names}
+    binary_dice_list = []
     n_components_list = []
     n_cases = 0
     for _, gt, pred in topo.iter_matched_cases(labels_ts_dir, prediction_dir, binarize=False):
@@ -232,6 +243,7 @@ def compute_eval_metrics(labels_ts_dir: Path, prediction_dir: Path, dataset_name
             pred_mask = pred == class_id
             per_class_dice[name].append(topo.dice_score(gt_mask, pred_mask))
             per_class_cldice[name].append(topo.cldice_score(gt_mask, pred_mask))
+        binary_dice_list.append(topo.dice_score(gt > 0, pred > 0))
         n_components_list.append(topo.fragmentation_stats(gt, pred)["pred_components"])
     if n_cases == 0:
         raise FileNotFoundError(
@@ -248,6 +260,7 @@ def compute_eval_metrics(labels_ts_dir: Path, prediction_dir: Path, dataset_name
         class_dice_means.append(dice_mean)
         class_cldice_means.append(cldice_mean)
     result["dice"] = sum(class_dice_means) / len(class_dice_means)
+    result["dice_binary"] = sum(binary_dice_list) / len(binary_dice_list)
     result["cldice"] = sum(class_cldice_means) / len(class_cldice_means)
     result["n_components"] = sum(n_components_list) / len(n_components_list)
     return result
