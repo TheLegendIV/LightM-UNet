@@ -33,6 +33,7 @@ INK, SECONDARY_INK, MUTED, GRID, BASELINE_COLOR, SURFACE = (
 STAGE_COLORS = {
     "1_naive_baseline": "#2a78d6", "2_special_ops": "#eb6834",
     "3_transfer_original": "#1baf7a", "4_arch_probes": "#eda100",
+    "5_arch_probe_pairs": "#8e44ad", "6_dscnoprojdense_variants": "#e91e8c",
 }
 CURVE_STAGE = "1_naive_baseline"
 CURVE_COLOR = "#c3392b"

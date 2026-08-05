@@ -31,3 +31,5 @@ S5-DscNoProjE1Shape,nnUNetTrainerENet_5_5_dscnoprojection_e1shape,5_arch_probe_p
 S5-SeparableDense,nnUNetTrainerENet_5_6_separable_dense_dilation,5_arch_probe_pairs,"4,16,32,16,4",upsample_conv,1,1,0
 S5-MergeSeparable,nnUNetTrainerENet_5_7_merge_pairs_separable,5_arch_probe_pairs,"4,16,32,16,4",upsample_conv,1,1,0
 S5-ShallowWideMerge,nnUNetTrainerENet_5_8_shallow_wide_merge_pairs,5_arch_probe_pairs,"4,16,32,16,4",upsample_conv,1,1,0
+S6-RegInterleaved,nnUNetTrainerENet_6_1_reg_interleaved,6_dscnoprojdense_variants,"4,16,32,16,4",upsample_conv,1,1,0
+S6-ScheduleA,nnUNetTrainerENet_6_2_schedule_a,6_dscnoprojdense_variants,"4,16,32,16,4",upsample_conv,1,1,0
