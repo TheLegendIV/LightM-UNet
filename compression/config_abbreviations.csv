@@ -39,3 +39,7 @@ S8-DscNoProjContextOnly,nnUNetTrainerENet_8_1_dscnoproj_context_only,8_reginterl
 S8-ReLU,nnUNetTrainerENet_8_2_relu,8_reginterleaved_isolation,"4,16,32,16,4",upsample_conv,0,1,0
 S8-RegBookendDsc,nnUNetTrainerENet_8_3_reg_bookend_dsc,8_reginterleaved_isolation,"4,16,32,16,4",upsample_conv,1,1,0
 S8-DscNoProjContextOnlyDsc,nnUNetTrainerENet_8_4_dscnoproj_context_only_dsc,8_reginterleaved_isolation,"4,16,32,16,4",upsample_conv,1,1,0
+S9-DscProjected,nnUNetTrainerENet_9_1_dense_dilation_dsc_projected,9_dsc_projected_dense_dilation,"4,16,32,16,4",upsample_conv,1,1,0
+S9-DscProjectedExtraDepth,nnUNetTrainerENet_9_2_dense_dilation_dsc_projected_extra_depth,9_dsc_projected_dense_dilation,"4,16,32,16,4",upsample_conv,1,1,0
+S9-RegTrailing,nnUNetTrainerENet_9_3_dense_dilation_reg_trailing,9_dsc_projected_dense_dilation,"4,16,32,16,4",upsample_conv,1,1,0
+S9-DscProjectedReLU,nnUNetTrainerENet_9_4_dense_dilation_dsc_projected_relu,9_dsc_projected_dense_dilation,"4,16,32,16,4",upsample_conv,0,1,0
