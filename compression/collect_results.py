@@ -135,6 +135,8 @@ def run_inference(
     dsc_no_projection: bool = False,
     shallow_dilation_wide: bool = False,
     shallow_dilation_dense: bool = False,
+    dsc_no_projection_context_only: bool = False,
+    reg_bookend_dsc: bool = False,
 ) -> Path:
     """Uses `nnUNetv2_predict_from_modelfolder` (-m <exact folder>), NOT
     plain `nnUNetv2_predict` (-tr/-p/-c/-d): the latter's folder resolution
@@ -179,6 +181,8 @@ def run_inference(
     env["ENET_DSC_NO_PROJECTION"] = "1" if dsc_no_projection else "0"
     env["ENET_SHALLOW_DILATION_WIDE"] = "1" if shallow_dilation_wide else "0"
     env["ENET_SHALLOW_DILATION_DENSE"] = "1" if shallow_dilation_dense else "0"
+    env["ENET_DSC_NO_PROJECTION_CONTEXT_ONLY"] = "1" if dsc_no_projection_context_only else "0"
+    env["ENET_REG_BOOKEND_DSC"] = "1" if reg_bookend_dsc else "0"
     if quant_bits != 32:
         # Picked up by nnUNetTrainerENetQuant.build_network_architecture,
         # dynamically imported via the checkpoint's own stored trainer_name
@@ -360,6 +364,8 @@ def main() -> None:
     parser.add_argument("--shallow-dilation", type=int, default=0, choices=[0, 1], help="Stage 4.4.1: alternating regular/dilated(16) in stage1 and regular4 (regular5 unchanged). See ENet.py.")
     parser.add_argument("--shallow-dilation-wide", type=int, default=0, choices=[0, 1], help="Like --shallow-dilation but at dilation=32 instead of 16 -- stage1/regular4 run at 1/4 resolution, coarser than stage2/3, so there's headroom for a wider rate there. See ENet.py's SHALLOW_DILATION_WIDE_PATTERN.")
     parser.add_argument("--shallow-dilation-dense", type=int, default=0, choices=[0, 1], help="Stage 5.2: swaps --shallow-dilation/--shallow-dilation-wide's alternating pattern for an every-slot-dilated one (needs one of those two set). See ENet.py's SHALLOW_DILATION_DENSE_PATTERN / SHALLOW_DILATION_WIDE_DENSE_PATTERN.")
+    parser.add_argument("--dsc-no-projection-context-only", type=int, default=0, choices=[0, 1], help="Stage 8.1: narrows --dsc-no-projection's scope to stage2/stage3 only -- regular1/regular4/regular5 revert to normal projected bottlenecks (needs --dsc-no-projection 1 also set).")
+    parser.add_argument("--reg-bookend-dsc", type=int, default=0, choices=[0, 1], help="Stage 8.3: applies DSC (with projection kept) to context_pattern=dense_dilation_reg_interleaved's reg-bookend slots, instead of leaving them full-rank. No-op without that context_pattern and --dsc-no-projection 1.")
     parser.add_argument("--separable-dilated", type=int, default=0, choices=[0, 1], help="Stage 4.4.2: factor every dilated 3x3 in the context pattern into a (3,1)+(1,3) pair, same dilation on both passes.")
     parser.add_argument("--merge-dilated-pairs", type=int, default=0, choices=[0, 1], help="Stage 4.4.3: fuse each (regular-or-asymmetric, dilated) context-pattern PAIR into one block with a shared reduce/expand -- halves stage2/3's block count.")
     parser.add_argument("--dsc-dilated-only", type=int, default=0, choices=[0, 1], help="Stage 4.4.4: depthwise-separable ONLY on the context pattern's dilated slots, independent of --use-dsc.")
@@ -412,6 +418,8 @@ def main() -> None:
         dsc_no_projection=bool(args.dsc_no_projection),
         shallow_dilation_wide=bool(args.shallow_dilation_wide),
         shallow_dilation_dense=bool(args.shallow_dilation_dense),
+        dsc_no_projection_context_only=bool(args.dsc_no_projection_context_only),
+        reg_bookend_dsc=bool(args.reg_bookend_dsc),
     )
     macs, flops = count_flops(fp32_model, args.in_channels, tuple(args.input_hw))
 
@@ -467,6 +475,8 @@ def main() -> None:
             dsc_no_projection=bool(args.dsc_no_projection),
             shallow_dilation_wide=bool(args.shallow_dilation_wide),
             shallow_dilation_dense=bool(args.shallow_dilation_dense),
+            dsc_no_projection_context_only=bool(args.dsc_no_projection_context_only),
+            reg_bookend_dsc=bool(args.reg_bookend_dsc),
         )
     labels_ts_dir = NNUNET_RAW / dataset_name / "labelsTs"
     eval_metrics = compute_eval_metrics(labels_ts_dir, prediction_dir, dataset_name)
@@ -508,6 +518,7 @@ def main() -> None:
             + f",double_projections={args.double_projections},two_block_skip={args.two_block_skip}"
             + f",dsc_no_projection={args.dsc_no_projection},shallow_dilation_wide={args.shallow_dilation_wide}"
             + f",shallow_dilation_dense={args.shallow_dilation_dense}"
+            + f",dsc_no_projection_context_only={args.dsc_no_projection_context_only},reg_bookend_dsc={args.reg_bookend_dsc}"
         ),
         "quant_bits": args.quant_bits,
         "params": total_params,

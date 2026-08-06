@@ -685,6 +685,8 @@ class ENet(nn.Module):
         dsc_no_projection: bool = False,
         shallow_dilation_wide: bool = False,
         shallow_dilation_dense: bool = False,
+        dsc_no_projection_context_only: bool = False,
+        reg_bookend_dsc: bool = False,
     ):
         super().__init__()
         valid_context_patterns = (
@@ -696,6 +698,12 @@ class ENet(nn.Module):
             raise ValueError(
                 "shallow_dilation_dense modifies shallow_dilation/shallow_dilation_wide's alternating "
                 "pattern into an every-slot-dilated one -- meaningless without one of them also set."
+            )
+        if dsc_no_projection_context_only and not dsc_no_projection:
+            raise ValueError(
+                "dsc_no_projection_context_only narrows dsc_no_projection's scope to stage2/stage3 only "
+                "(regular1/regular4/regular5 revert to normal projected bottlenecks) -- meaningless "
+                "without dsc_no_projection=True itself."
             )
         if len(channels) == 5:
             # stage2 and stage3 share one width (the historical/default
@@ -759,6 +767,22 @@ class ENet(nn.Module):
         self.dsc_no_projection = dsc_no_projection         # DSC everywhere, no reduce/expand
         self.shallow_dilation_wide = shallow_dilation_wide  # push shallow-stage dilation reach to 32
         self.shallow_dilation_dense = shallow_dilation_dense  # every shallow-stage slot dilated, not alternating
+        # dsc_no_projection scoped to stage2/stage3 (where the dilated
+        # slots are) only -- regular1/regular4/regular5 build normally
+        # (projected, non-DSC unless the global use_dsc is also set).
+        # Isolates whether the no-projection savings specifically come
+        # from the dilated bottlenecks, or from applying it network-wide.
+        self.dsc_no_projection_context_only = dsc_no_projection_context_only
+        # Applies DSC (WITH its projection kept) to context_pattern=
+        # "dense_dilation_reg_interleaved"'s reg-bookend slots -- those
+        # currently use a full-rank (non-DSC) RegularBottleneck; this
+        # tests whether the same depthwise-separable factoring that (with
+        # NO projection) helps the dilated slots also saves compute/memory
+        # on the non-dilated bookends once projection is kept. No-op
+        # unless context_pattern="dense_dilation_reg_interleaved" and
+        # dsc_no_projection=True (the only path that ever builds a
+        # reg-bookend slot).
+        self.reg_bookend_dsc = reg_bookend_dsc
 
         n_stage1, n_stage2, n_stage3, n_regular4, n_regular5 = self.bottlenecks_per_stage
 
@@ -788,7 +812,7 @@ class ENet(nn.Module):
         self.up4 = UpsamplingBottleneck(stage3_channels, stage4_channels, double_projections=double_projections)
         self.regular4 = self._make_shallow_stage(stage4_channels, n_regular4, dropout_p=0.1, relu=True)
         self.up5 = UpsamplingBottleneck(stage4_channels, stage5_channels, double_projections=double_projections)
-        if dsc_no_projection:
+        if dsc_no_projection and not dsc_no_projection_context_only:
             self.regular5 = nn.Sequential(
                 *[DSCNoProjectionBottleneck(stage5_channels, dropout_p=0.1, relu=True) for _ in range(n_regular5)]
             )
@@ -870,14 +894,19 @@ class ENet(nn.Module):
                 kwargs = dict(pattern[i % len(pattern)])
                 if kwargs.get("reg_bottleneck", False):
                     # DENSE_DILATION_REG_INTERLEAVED_PATTERN's bookend slots:
-                    # a full (non-DSC) RegularBottleneck, not a
-                    # DSCNoProjectionBottleneck -- its reduce -> 3x3 -> expand
-                    # mixes channels and space jointly in one op, instead of
-                    # DSC's depthwise-then-pointwise factorization, so this
-                    # is a deliberately DIFFERENT bottleneck class per slot,
-                    # not just different conv kwargs.
+                    # a RegularBottleneck (real reduce/expand projection),
+                    # not a DSCNoProjectionBottleneck -- a deliberately
+                    # DIFFERENT bottleneck class per slot, not just
+                    # different conv kwargs. use_dsc=False by default (a
+                    # full-rank 3x3 that mixes channels and space jointly
+                    # in one op, instead of DSC's depthwise-then-pointwise
+                    # factorization); reg_bookend_dsc=True switches this to
+                    # DSC WITH the projection kept, testing whether the
+                    # same factoring that (with NO projection) helps the
+                    # dilated slots also pays off here once projection is
+                    # retained.
                     ops.append(RegularBottleneck(
-                        channels, dropout_p=0.1, use_dsc=False, relu=not self.use_prelu,
+                        channels, dropout_p=0.1, use_dsc=self.reg_bookend_dsc, relu=not self.use_prelu,
                         double_projections=self.double_projections,
                     ))
                     continue
@@ -966,8 +995,11 @@ class ENet(nn.Module):
         __init__, unchanged). dsc_no_projection (DSC everywhere, no
         reduce/expand) takes priority over all dilation variants here --
         plain (undilated) DSCNoProjectionBottleneck repeats, matching
-        regular5's own dsc_no_projection handling in __init__."""
-        if self.dsc_no_projection:
+        regular5's own dsc_no_projection handling in __init__ -- UNLESS
+        dsc_no_projection_context_only is also set, in which case this
+        stage ignores dsc_no_projection entirely and builds normally (it's
+        not stage2/stage3, so it's out of that flag's narrowed scope)."""
+        if self.dsc_no_projection and not self.dsc_no_projection_context_only:
             return nn.Sequential(
                 *[DSCNoProjectionBottleneck(channels, dropout_p=dropout_p, relu=relu) for _ in range(n_ops)]
             )
@@ -1405,3 +1437,89 @@ if __name__ == "__main__":
     assert not hasattr(reg_interleaved.stage2[1], "reduce"), "6.2: DSC slot unexpectedly has a projection"
 
     print("ENet Stage-6 DscNoProjDense-variant self-test PASSED: 2 configs (schedule_a, reg_interleaved).")
+
+    # Stage 8 -- RegInterleaved variants isolating where dsc_no_projection's
+    # savings actually come from: 8.1 narrows its scope to stage2/3 only
+    # (regular1/regular4/regular5 revert to normal projected bottlenecks);
+    # 8.3 applies DSC (with projection kept) to the reg-bookend slots
+    # themselves, instead of leaving them full-rank.
+    REG_INTERLEAVED_BOTTLENECKS = (4, 11, 11, 2, 1)
+
+    # 8.1 dsc_no_projection_context_only: regular1/regular4/regular5 must
+    # be plain RegularBottleneck (projected, non-DSC since global use_dsc
+    # is off) -- NOT DSCNoProjectionBottleneck -- while stage2/3 keep the
+    # exact same mixed reg-bookend/DSC-no-projection structure as plain
+    # reg_interleaved (unaffected by this flag, since it's already scoped
+    # to stage2/3 only).
+    context_only = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=REG_INTERLEAVED_BOTTLENECKS,
+        decoder_type="upsample_conv", use_prelu=True, use_asymmetric=False,
+        dsc_no_projection=True, dsc_no_projection_context_only=True,
+        context_pattern="dense_dilation_reg_interleaved",
+    )
+    with torch.no_grad():
+        assert context_only(dummy).shape == (1, 5, 512, 512)
+    for stage_name, stage in (("regular1", context_only.regular1), ("regular5", context_only.regular5)):
+        for i, block in enumerate(stage):
+            assert type(block) is RegularBottleneck, (
+                f"8.1: {stage_name}[{i}] is {type(block).__name__}, expected RegularBottleneck (context-only "
+                "should keep dsc_no_projection out of the shallow stages)"
+            )
+            assert hasattr(block, "reduce"), f"8.1: {stage_name}[{i}] missing its reduce/expand projection"
+    for i, (block, expected_type) in enumerate(zip(context_only.stage2, expected_types)):
+        assert type(block) is expected_type, (
+            f"8.1: stage2[{i}] is {type(block).__name__}, expected {expected_type.__name__} "
+            "(stage2/3 should be unaffected by context_only, same as plain reg_interleaved)"
+        )
+    # Narrowing the scope should never cost more params than the unscoped
+    # version -- regular1/4/5 reverting to projected bottlenecks is
+    # strictly cheaper for these channel widths (DSCNoProjectionBottleneck
+    # operates at full width with no squeeze, which is more expensive than
+    # a projected reduce->3x3->expand at this scale).
+    context_only_params = sum(p.numel() for p in context_only.parameters())
+    reg_interleaved_params = sum(p.numel() for p in reg_interleaved.parameters())
+    assert context_only_params < reg_interleaved_params, (
+        f"8.1: context-only params ({context_only_params}) should be less than "
+        f"unscoped reg_interleaved's ({reg_interleaved_params})"
+    )
+    # Without dsc_no_projection itself, the context_only flag is meaningless
+    # and must be rejected outright, not silently ignored.
+    try:
+        ENet(in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=REG_INTERLEAVED_BOTTLENECKS,
+             decoder_type="upsample_conv", use_prelu=True, use_asymmetric=False,
+             dsc_no_projection_context_only=True, context_pattern="dense_dilation_reg_interleaved")
+        raise AssertionError("8.1: expected ValueError with dsc_no_projection=False (default), got none")
+    except ValueError:
+        pass
+
+    # 8.3 reg_bookend_dsc: the reg-bookend slots (stage2[0]/stage2[5]/
+    # stage2[10] per DENSE_DILATION_REG_INTERLEAVED_PATTERN) must become
+    # DSC'd (a Sequential depthwise+pointwise conv, not a bare Conv2d) but
+    # KEEP their reduce/expand projection -- unlike the dilated slots,
+    # which have no projection at all.
+    reg_bookend_dsc_model = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=REG_INTERLEAVED_BOTTLENECKS,
+        decoder_type="upsample_conv", use_prelu=True, use_asymmetric=False,
+        dsc_no_projection=True, reg_bookend_dsc=True, context_pattern="dense_dilation_reg_interleaved",
+    )
+    with torch.no_grad():
+        assert reg_bookend_dsc_model(dummy).shape == (1, 5, 512, 512)
+    for stage in (reg_bookend_dsc_model.stage2, reg_bookend_dsc_model.stage3):
+        for i, block in enumerate(stage):
+            if i in (0, 5, 10):  # reg-bookend slots
+                assert type(block) is RegularBottleneck, f"8.3: block {i} is {type(block).__name__}, expected RegularBottleneck"
+                assert hasattr(block, "reduce"), f"8.3: reg-bookend block {i} missing its projection"
+                assert isinstance(block.conv, nn.Sequential), f"8.3: reg-bookend block {i}'s conv not DSC-factored"
+            else:  # dilated slots, unaffected by reg_bookend_dsc
+                assert type(block) is DSCNoProjectionBottleneck, f"8.3: block {i} is {type(block).__name__}, expected DSCNoProjectionBottleneck"
+    reg_bookend_dsc_params = sum(p.numel() for p in reg_bookend_dsc_model.parameters())
+    assert reg_bookend_dsc_params < reg_interleaved_params, (
+        f"8.3: reg_bookend_dsc params ({reg_bookend_dsc_params}) should be less than "
+        f"the full-rank bookend version's ({reg_interleaved_params})"
+    )
+
+    # 8.2 (plain ReLU instead of PReLU) is just use_prelu=False composed
+    # with the existing reg_interleaved config -- no new flag, already
+    # covered by every use_prelu=False build elsewhere in this self-test.
+
+    print("ENet Stage-8 RegInterleaved-isolation self-test PASSED: 2 new flags (dsc_no_projection_context_only, reg_bookend_dsc).")

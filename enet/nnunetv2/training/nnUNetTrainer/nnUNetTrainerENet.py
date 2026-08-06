@@ -130,6 +130,8 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
             dsc_no_projection=_parse_bool_env("ENET_DSC_NO_PROJECTION", False),
             shallow_dilation_wide=_parse_bool_env("ENET_SHALLOW_DILATION_WIDE", False),
             shallow_dilation_dense=_parse_bool_env("ENET_SHALLOW_DILATION_DENSE", False),
+            dsc_no_projection_context_only=_parse_bool_env("ENET_DSC_NO_PROJECTION_CONTEXT_ONLY", False),
+            reg_bookend_dsc=_parse_bool_env("ENET_REG_BOOKEND_DSC", False),
         )
 
     def configure_optimizers(self):
