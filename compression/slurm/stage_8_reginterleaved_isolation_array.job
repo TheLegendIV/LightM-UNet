@@ -7,7 +7,7 @@
 #SBATCH --gpus=1
 #SBATCH --mem=32G
 #SBATCH --time=04:00:00
-#SBATCH --array=0-2
+#SBATCH --array=0-3
 #SBATCH --output=logs/%x_%a_%j.out
 #SBATCH --error=logs/%x_%a_%j.err
 
@@ -17,7 +17,7 @@ set -e
 # dice=0.8167, best in the sweep) is now the default reference for this
 # stage: CHANNELS=4,16,32,16,4, BOTTLENECKS=4,11,11,2,1, DECODER_TYPE=
 # upsample_conv, USE_ASYMMETRIC=0, dilated/strided=1, dsc_no_projection=1,
-# CONTEXT_PATTERN=dense_dilation_reg_interleaved -- all three tasks here
+# CONTEXT_PATTERN=dense_dilation_reg_interleaved -- all four tasks here
 # keep every one of those, changing exactly one thing each.
 #
 #   0: 8_1_dscnoproj_context_only -- ENET_DSC_NO_PROJECTION_CONTEXT_ONLY=1
@@ -49,8 +49,22 @@ set -e
 #      helps the dilated slots also pays off on the non-dilated bookends
 #      once projection is retained. Structurally cheaper than the
 #      full-rank version (verified in ENet.py's self-test).
+#   3: 8_4_dscnoproj_context_only_dsc -- ENET_DSC_NO_PROJECTION_CONTEXT_ONLY=1
+#      + ENET_USE_DSC=1 (both existing flags, no new code -- pure
+#      composition). Same scope-narrowing as task 0, but regular1/4/5 now
+#      build via RegularBottleneck's own use_dsc=True path (DSC WITH the
+#      projection kept) instead of task 0's full-rank projected version.
+#      Directly measured (not assumed) to be the cheapest of all four
+#      regular1/4/5 treatments on BOTH axes -- 36394 params / 289.1M MACs,
+#      vs. task 0's 36945 params / 325.1M MACs and the unscoped base's
+#      37880 params / 299.9M MACs. An earlier version of this task list
+#      dropped this combination as "redundant with task 0" on the
+#      assumption that projected-DSC would just be a smaller step in the
+#      same direction as projected-full-rank -- that assumption was wrong
+#      (measuring it directly shows it isn't even between the other two on
+#      cost, it's cheaper than both), so it's back in as its own task.
 #
-# All 3 confirmed via local docker smoke test (nnUNetv2_train, 1 epoch/2
+# All 4 confirmed via local docker smoke test (nnUNetv2_train, 1 epoch/2
 # iterations against Dataset509_ARCADE_1x1_4c) to build and train without
 # error, and structurally verified in ENet.py's own self-test ("Stage-8
 # RegInterleaved-isolation self-test": exact per-slot bottleneck class,
