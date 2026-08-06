@@ -50,7 +50,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from nnunetv2.nets.ENet import ENet  # noqa: E402
 from nnunetv2.nets.QuantENet import QuantENet  # noqa: E402
 import segmentation_topology as topo  # noqa: E402
-from utils import count_bops, count_flops, count_params  # noqa: E402
+from utils import count_bops, count_buffer_elements, count_flops, count_params  # noqa: E402
 
 NNUNET_RAW = REPO_ROOT / "data" / "nnUNet_raw"
 NNUNET_PREPROCESSED = REPO_ROOT / "data" / "nnUNet_preprocessed"
@@ -64,7 +64,7 @@ RESULTS_CSV = Path(__file__).resolve().parent / "results.csv"
 RESULTS_COLUMNS = [
     "config_name", "stage", "f_i", "f1", "f2", "f3", "f4", "f5",
     "bottlenecks_per_stage", "decoder_type", "ops_flags", "quant_bits",
-    "params", "flops", "bops",
+    "params", "flops", "bops", "mem_elements",
     "dice", "dice_binary", "dice_LAD", "dice_RCA", "dice_LCX", "dice_LM",
     "cldice", "cldice_LAD", "cldice_RCA", "cldice_LCX", "cldice_LM",
     "n_components",
@@ -358,8 +358,9 @@ def main() -> None:
     parser.add_argument("--use-strided", type=int, default=1, choices=[0, 1])
     parser.add_argument("--use-dsc", type=int, default=0, choices=[0, 1], help="Depthwise-separable inner conv (rejects combination with --use-asymmetric 1).")
     parser.add_argument("--context-pattern", default="default",
-                         choices=["default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_reg_interleaved"],
-                         help="'sparse' = regular/dilated4/regular/dilated16 (section 2a's div2/div4 bottleneck axis), no 2/8 rungs, never asymmetric. 'dense_dilation' = every context-stage slot dilated (2/4/8/16 repeated twice over 8 slots), no plain/asymmetric slots at all. 'dense_dilation_a' = same but with the gridding-investigation's coprime (1,5,7,17) schedule instead of (2,4,8,16). 'dense_dilation_reg_interleaved' = (2,4,8,16) with a full RegularBottleneck bookending each cycle (needs dsc_no_projection=1 and stage2/3 bottleneck depth 11, see ENet.py's DENSE_DILATION_REG_INTERLEAVED_PATTERN).")
+                         choices=["default", "sparse", "dense_dilation", "dense_dilation_a",
+                                  "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing"],
+                         help="'sparse' = regular/dilated4/regular/dilated16 (section 2a's div2/div4 bottleneck axis), no 2/8 rungs, never asymmetric. 'dense_dilation' = every context-stage slot dilated (2/4/8/16 repeated twice over 8 slots), no plain/asymmetric slots at all. 'dense_dilation_a' = same but with the gridding-investigation's coprime (1,5,7,17) schedule instead of (2,4,8,16). 'dense_dilation_reg_interleaved' = (2,4,8,16) with a full RegularBottleneck bookending each cycle (needs dsc_no_projection=1 and stage2/3 bottleneck depth 11, see ENet.py's DENSE_DILATION_REG_INTERLEAVED_PATTERN). 'dense_dilation_reg_trailing' = (2,4,8,16,reg) repeating, reg TRAILS each dilation cycle instead of leading it, meant for use_dsc=1 + dsc_no_projection=0 (DSC WITH projection kept) at stage2/3 bottleneck depth 10, see ENet.py's DENSE_DILATION_REG_TRAILING_PATTERN.")
     parser.add_argument("--use-prelu", type=int, default=1, choices=[0, 1], help="0 = collapse the encoder's PReLU to plain ReLU too (section 1d's ablation) -- decoder is always ReLU regardless, see ENet.py.")
     parser.add_argument("--shallow-dilation", type=int, default=0, choices=[0, 1], help="Stage 4.4.1: alternating regular/dilated(16) in stage1 and regular4 (regular5 unchanged). See ENet.py.")
     parser.add_argument("--shallow-dilation-wide", type=int, default=0, choices=[0, 1], help="Like --shallow-dilation but at dilation=32 instead of 16 -- stage1/regular4 run at 1/4 resolution, coarser than stage2/3, so there's headroom for a wider rate there. See ENet.py's SHALLOW_DILATION_WIDE_PATTERN.")
@@ -421,6 +422,17 @@ def main() -> None:
         dsc_no_projection_context_only=bool(args.dsc_no_projection_context_only),
         reg_bookend_dsc=bool(args.reg_bookend_dsc),
     )
+    # FINN sliding-window-buffer memory estimate (activation elements, not
+    # bits -- see utils.count_buffer_elements's own docstring). Always from
+    # the FP32 reference model, same rationale as MACs below: buffer size is
+    # topology/channel-width-determined, not quantization-determined. MUST
+    # run before count_flops: thop's profile() leaves its own forward hooks
+    # registered on every Conv2d after it returns (a thop quirk -- it cleans
+    # up the total_ops/total_params buffers it adds but not the hooks that
+    # reference them), so a second forward pass on the same model afterward
+    # crashes those stale hooks with AttributeError. Running the buffer pass
+    # first keeps it on a hook-free model.
+    mem_elements = count_buffer_elements(fp32_model, args.in_channels, tuple(args.input_hw))["total"]
     macs, flops = count_flops(fp32_model, args.in_channels, tuple(args.input_hw))
 
     if args.quant_bits == 32:
@@ -524,6 +536,7 @@ def main() -> None:
         "params": total_params,
         "flops": flops,
         "bops": bops,
+        "mem_elements": mem_elements,
         "seed": args.seed,
         **eval_metrics,
         **training_info,
