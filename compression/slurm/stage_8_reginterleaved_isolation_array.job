@@ -7,7 +7,7 @@
 #SBATCH --gpus=1
 #SBATCH --mem=32G
 #SBATCH --time=04:00:00
-#SBATCH --array=0-3
+#SBATCH --array=0-2%1
 #SBATCH --output=logs/%x_%a_%j.out
 #SBATCH --error=logs/%x_%a_%j.err
 
@@ -17,7 +17,7 @@ set -e
 # dice=0.8167, best in the sweep) is now the default reference for this
 # stage: CHANNELS=4,16,32,16,4, BOTTLENECKS=4,11,11,2,1, DECODER_TYPE=
 # upsample_conv, USE_ASYMMETRIC=0, dilated/strided=1, dsc_no_projection=1,
-# CONTEXT_PATTERN=dense_dilation_reg_interleaved -- all four tasks here
+# CONTEXT_PATTERN=dense_dilation_reg_interleaved -- all three tasks here
 # keep every one of those, changing exactly one thing each.
 #
 #   0: 8_1_dscnoproj_context_only -- ENET_DSC_NO_PROJECTION_CONTEXT_ONLY=1
@@ -49,36 +49,61 @@ set -e
 #      helps the dilated slots also pays off on the non-dilated bookends
 #      once projection is retained. Structurally cheaper than the
 #      full-rank version (verified in ENet.py's self-test).
-#   3: 8_4_dscnoproj_context_only_dsc -- ENET_DSC_NO_PROJECTION_CONTEXT_ONLY=1
-#      + ENET_USE_DSC=1 (both existing flags, no new code -- pure
-#      composition). Same scope-narrowing as task 0, but regular1/4/5 now
-#      build via RegularBottleneck's own use_dsc=True path (DSC WITH the
-#      projection kept) instead of task 0's full-rank projected version.
-#      Directly measured (not assumed) to be the cheapest of all four
-#      regular1/4/5 treatments on BOTH axes -- 36394 params / 289.1M MACs,
-#      vs. task 0's 36945 params / 325.1M MACs and the unscoped base's
-#      37880 params / 299.9M MACs. An earlier version of this task list
-#      dropped this combination as "redundant with task 0" on the
-#      assumption that projected-DSC would just be a smaller step in the
-#      same direction as projected-full-rank -- that assumption was wrong
-#      (measuring it directly shows it isn't even between the other two on
-#      cost, it's cheaper than both), so it's back in as its own task.
 #
-# All 4 confirmed via local docker smoke test (nnUNetv2_train, 1 epoch/2
-# iterations against Dataset509_ARCADE_1x1_4c) to build and train without
-# error, and structurally verified in ENet.py's own self-test ("Stage-8
+# A 4th task (8_4_dscnoproj_context_only_dsc -- idea 2: task 0's scope
+# narrowing PLUS global ENET_USE_DSC=1, i.e. DSC-with-projection at
+# regular1/4/5 instead of task 0's full-rank-projected version) already
+# completed successfully in an earlier run of this array (dice=0.8030,
+# 36394 params / 289.1M MACs -- the cheapest of all four regular1/4/5
+# treatments on both axes) and has been collected into results.csv already.
+# It's been dropped from this array so a rerun doesn't waste cluster time
+# retraining it.
+#
+# All 4 tasks (including the now-dropped 8_4) were confirmed via local
+# docker smoke test (nnUNetv2_train, 1 epoch/2 iterations against
+# Dataset509_ARCADE_1x1_4c) to build and train without error, and
+# structurally verified in ENet.py's own self-test ("Stage-8
 # RegInterleaved-isolation self-test": exact per-slot bottleneck class,
 # presence/absence of reduce/expand projection, and params-strictly-less-
 # than-baseline checks for both new flags, not just "it built").
+#
+# RETRY NOTES (this array previously ran all 4 tasks concurrently on one
+# node; tasks 0-2 died silently ~5 epochs into their 150-epoch runs -- their
+# shared default-output-folder training log, see below, shows all three
+# interleaved and pseudo dice flatlined at 0 the whole time, then the log
+# just stops mid-epoch with no python exception, the signature of an
+# external kill (OOM-cgroup or similar) rather than a code bug. Root cause
+# wasn't confirmed (no sacct/dmesg access from here), but concurrent
+# execution on a shared gpu_mig node is the one variable that's easy to
+# remove, so:
+#   - `--array=0-2%1` now caps this array at 1 concurrently running task,
+#     serializing it instead of letting SLURM start all 3 at once.
+# Separately -- and regardless of what actually caused the crash -- the
+# job's own checkpoint-exists skip guard had a real bug that let this
+# failure silently corrupt results.csv: it treated the mere presence of
+# checkpoint_best.pth (written after epoch 0, long before real convergence)
+# as proof training had finished, so a later run of this same job skipped
+# straight to collect_results.py against that undertrained checkpoint and
+# wrote 3 bogus, byte-identical dice=0.4983 rows. Fixed below to only treat
+# checkpoint_final.pth (written once, at the very end of a completed
+# `num_epochs`-epoch run) as the completion signal -- checkpoint_best.pth
+# alone no longer skips training.
+#
+# nnU-Net's own training-log file (as opposed to the checkpoint/results
+# files) is written to a path derived from TRAINER_CLASS+PLANS+CONFIGURATION
+# only -- it ignores ENET_OUTPUT_FOLDER, so every RUN_NAME in every stage
+# shares ONE default `nnUNetTrainerENet__nnUNetPlans__2d/fold_0/` log
+# folder. That's an existing quirk elsewhere in this project too, not
+# something this job works around -- worth knowing when reading logs after
+# a run, especially when (as here) multiple tasks were live at once.
 
 DATASET_ID=509
 DATASET_NAME="Dataset509_ARCADE_1x1_4c"
 
-CONFIG_NAMES=(8_1_dscnoproj_context_only 8_2_relu 8_3_reg_bookend_dsc 8_4_dscnoproj_context_only_dsc)
-USE_PRELU_ARR=(1 0 1 1)
-DSC_NO_PROJECTION_CONTEXT_ONLY_ARR=(1 0 0 1)
-REG_BOOKEND_DSC_ARR=(0 0 1 0)
-USE_DSC_ARR=(0 0 0 1)
+CONFIG_NAMES=(8_1_dscnoproj_context_only 8_2_relu 8_3_reg_bookend_dsc)
+USE_PRELU_ARR=(1 0 1)
+DSC_NO_PROJECTION_CONTEXT_ONLY_ARR=(1 0 0)
+REG_BOOKEND_DSC_ARR=(0 0 1)
 
 TASK_ID=${SLURM_ARRAY_TASK_ID}
 CONFIG_NAME="${CONFIG_NAMES[$TASK_ID]}"
@@ -120,7 +145,7 @@ export ENET_USE_PRELU="${USE_PRELU_ARR[$TASK_ID]}"
 export ENET_USE_DILATED=1
 export ENET_USE_ASYMMETRIC=0
 export ENET_USE_STRIDED=1
-export ENET_USE_DSC="${USE_DSC_ARR[$TASK_ID]}"
+export ENET_USE_DSC=0
 export ENET_DSC_NO_PROJECTION=1
 export ENET_DSC_NO_PROJECTION_CONTEXT_ONLY="${DSC_NO_PROJECTION_CONTEXT_ONLY_ARR[$TASK_ID]}"
 export ENET_REG_BOOKEND_DSC="${REG_BOOKEND_DSC_ARR[$TASK_ID]}"
@@ -131,7 +156,7 @@ echo "=== Job info ==="
 echo "Host: $(hostname)"
 echo "Date: $(date)"
 echo "Array task: ${TASK_ID} -> ${RUN_NAME}"
-echo "ENET_USE_PRELU=${ENET_USE_PRELU} ENET_DSC_NO_PROJECTION_CONTEXT_ONLY=${ENET_DSC_NO_PROJECTION_CONTEXT_ONLY} ENET_REG_BOOKEND_DSC=${ENET_REG_BOOKEND_DSC} ENET_USE_DSC=${ENET_USE_DSC}"
+echo "ENET_USE_PRELU=${ENET_USE_PRELU} ENET_DSC_NO_PROJECTION_CONTEXT_ONLY=${ENET_DSC_NO_PROJECTION_CONTEXT_ONLY} ENET_REG_BOOKEND_DSC=${ENET_REG_BOOKEND_DSC}"
 echo "Output folder: ${ENET_OUTPUT_FOLDER}"
 
 echo "=== GPU info ==="
@@ -150,9 +175,15 @@ if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
        "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
 fi
 
-echo "=== Checking for an existing checkpoint for ${RUN_NAME} ==="
-if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ] || [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_best.pth" ]; then
-    echo "Checkpoint already exists at ${ENET_OUTPUT_FOLDER} -- skipping training, going straight to collect_results.py."
+echo "=== Checking for a COMPLETED checkpoint for ${RUN_NAME} ==="
+# Only checkpoint_final.pth (written once, at the very end of a finished
+# num_epochs-epoch run) counts as "already trained" -- checkpoint_best.pth
+# gets written as early as epoch 0 on every run (any first pseudo-dice
+# counts as "new best"), so treating IT as a completion signal is what let
+# a previous crashed run's undertrained checkpoint get silently collected
+# as if it were a finished result. See the RETRY NOTES above.
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    echo "checkpoint_final.pth already exists at ${ENET_OUTPUT_FOLDER} -- skipping training, going straight to collect_results.py."
 else
     echo "=== Start training: ${RUN_NAME} ==="
     nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
