@@ -7,7 +7,7 @@
 #SBATCH --gpus=1
 #SBATCH --mem=32G
 #SBATCH --time=04:00:00
-#SBATCH --array=0-2%1
+#SBATCH --array=0-2
 #SBATCH --output=logs/%x_%a_%j.out
 #SBATCH --error=logs/%x_%a_%j.err
 
@@ -73,11 +73,15 @@ set -e
 # interleaved and pseudo dice flatlined at 0 the whole time, then the log
 # just stops mid-epoch with no python exception, the signature of an
 # external kill (OOM-cgroup or similar) rather than a code bug. Root cause
-# wasn't confirmed (no sacct/dmesg access from here), but concurrent
-# execution on a shared gpu_mig node is the one variable that's easy to
-# remove, so:
-#   - `--array=0-2%1` now caps this array at 1 concurrently running task,
-#     serializing it instead of letting SLURM start all 3 at once.
+# wasn't confirmed (no sacct/dmesg access from here). An earlier version of
+# this job serialized the array (--array=0-2%1) as a precaution, but
+# stage_6/stage_7's arrays run the exact same --gpus=1/--mem=32G/
+# --cpus-per-task=8 request with 2 concurrent tasks with no issue, so
+# concurrency itself isn't the established culprit -- 3-at-once specifically
+# (one more than any prior array here) is the more likely trigger, or it
+# was simply a one-off scheduling fluke. Left un-serialized (plain
+# --array=0-2) to keep this at normal sweep speed rather than pay a 3x
+# wall-clock cost on an unconfirmed hypothesis; if it recurs, revisit.
 # Separately -- and regardless of what actually caused the crash -- the
 # job's own checkpoint-exists skip guard had a real bug that let this
 # failure silently corrupt results.csv: it treated the mere presence of
