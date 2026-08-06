@@ -126,7 +126,21 @@ def main() -> int:
     plt.close(fig)
     print(f"Wrote {out_path}")
 
-    cols = ["config_name", "stage", "params", "flops", "dice", "converged_flag"]
+    if "mem_elements" in focused.columns:
+        mem_focused = focused.dropna(subset=["mem_elements"])
+        if not mem_focused.empty:
+            fig, ax = plt.subplots(figsize=(11, 8), facecolor=SURFACE)
+            _plot(ax, mem_focused, "mem_elements", "FINN buffer memory (activation elements)", abbrev, u4_dice)
+            ax.set_title("U4 reference + all stage_4/5/6/7/8 architecture probes: Dice vs. FINN buffer memory",
+                         color=INK, fontsize=12)
+            fig.tight_layout()
+            out_path = args.out_dir / "arch_probes_focused_dice_vs_mem_elements.png"
+            fig.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=SURFACE)
+            plt.close(fig)
+            print(f"Wrote {out_path}")
+
+    cols = ["config_name", "stage", "params", "flops", "mem_elements", "dice", "converged_flag"]
+    cols = [c for c in cols if c in focused.columns]
     printable = focused[cols].copy()
     printable.insert(0, "abbrev", printable["config_name"].map(lambda c: abbrev.get(c, c)))
     printable["dice_vs_u4"] = printable["dice"] - u4_dice

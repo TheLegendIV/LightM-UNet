@@ -140,10 +140,27 @@ def main() -> int:
     plt.close(fig)
     print(f"Wrote {out_path}")
 
+    # Dice vs FINN buffer-memory elements (utils.count_buffer_elements --
+    # activation line-buffer size, not weight/params memory; see that
+    # function's docstring). Only present for rows collected after this
+    # column was added / backfilled -- dropna keeps older/partial rows from
+    # plotting at mem_elements=NaN.
+    if "mem_elements" in df.columns:
+        mem_df = df.dropna(subset=["mem_elements"])
+        if not mem_df.empty:
+            fig, ax = plt.subplots(figsize=(10, 7), facecolor=SURFACE)
+            _scatter_all(ax, mem_df, "mem_elements", "FINN buffer memory (activation elements)", abbrev)
+            ax.set_title("All configs: Dice vs. FINN buffer memory", color=INK, fontsize=12)
+            fig.tight_layout()
+            out_path = args.out_dir / "all_configs_dice_vs_mem_elements.png"
+            fig.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=SURFACE)
+            plt.close(fig)
+            print(f"Wrote {out_path}")
+
     # Print the abbreviation lookup + underlying numbers actually plotted,
     # matching every other script in this folder's "print what got written"
     # convention -- not just the two PNGs.
-    cols = ["config_name", "stage", "params", "flops", "dice"]
+    cols = ["config_name", "stage", "params", "flops", "mem_elements", "dice"]
     cols = [c for c in cols if c in df.columns]
     printable = df[cols].copy()
     printable.insert(0, "abbrev", printable["config_name"].map(lambda c: abbrev.get(c, c)))

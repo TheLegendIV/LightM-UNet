@@ -9,6 +9,7 @@ import torch.nn.functional as F
 DecoderType = Literal["max_unpool", "upsample_conv"]
 ContextPattern = Literal[
     "default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_reg_interleaved",
+    "dense_dilation_reg_trailing",
 ]
 
 # The ENet-native context-stage pattern (Paszke et al.): regular, dilated x2,
@@ -116,6 +117,31 @@ DENSE_DILATION_REG_INTERLEAVED_PATTERN: tuple[dict, ...] = (
     {"padding": 8, "dilation": 8},
     {"padding": 16, "dilation": 16},
     {"reg_bottleneck": True},
+    {"padding": 2, "dilation": 2},
+    {"padding": 4, "dilation": 4},
+    {"padding": 8, "dilation": 8},
+    {"padding": 16, "dilation": 16},
+    {"reg_bottleneck": True},
+)
+
+# Same reg/dilation interleaving idea as DENSE_DILATION_REG_INTERLEAVED_PATTERN,
+# but the reg-bookend TRAILS each dilation cycle instead of leading it: 2, 4,
+# 8, 16, reg -- a 5-slot cycle repeating via i % len(pattern), so n_ops=10
+# gives exactly two full (dilate-then-consolidate) cycles with no truncation
+# (vs. the 11-slot lead-in/lead-out version's 3 reg-bookends). Rationale: the
+# stage immediately after down2 (or down1, for stage3) already got a real
+# joint spatial+channel operation from the downsampling bottleneck's own
+# reduce/main conv, so opening stage2/3 with ANOTHER reg block may be
+# redundant -- this variant only spends a reg block where the stage has no
+# other source of a joint (non-factorized) operation nearby: right before
+# the dilated context gets handed off (to proj2_to_3/stage3, or to up4).
+# Unlike the reg_bottleneck slots elsewhere, this pattern is meant to run
+# under dsc_no_projection=False (DSC WITH projection kept on the dilated
+# slots -- see _make_context_stage's "plain" loop, which now also honors
+# the reg_bottleneck sentinel to force a genuine non-DSC RegularBottleneck
+# for that one slot, matching the sentinel's existing meaning under
+# dsc_no_projection=True).
+DENSE_DILATION_REG_TRAILING_PATTERN: tuple[dict, ...] = (
     {"padding": 2, "dilation": 2},
     {"padding": 4, "dilation": 4},
     {"padding": 8, "dilation": 8},
@@ -691,6 +717,7 @@ class ENet(nn.Module):
         super().__init__()
         valid_context_patterns = (
             "default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_reg_interleaved",
+            "dense_dilation_reg_trailing",
         )
         if context_pattern not in valid_context_patterns:
             raise ValueError(f"context_pattern must be one of {valid_context_patterns}, got {context_pattern!r}.")
@@ -865,7 +892,15 @@ class ENet(nn.Module):
         DENSE_DILATION_REG_INTERLEAVED_PATTERN when context_pattern=
         "dense_dilation_reg_interleaved" (11 slots: reg,2,4,8,16,reg,2,4,8,
         16,reg -- only meaningful under dsc_no_projection, see that
-        pattern's own module comment).
+        pattern's own module comment); DENSE_DILATION_REG_TRAILING_PATTERN
+        when context_pattern="dense_dilation_reg_trailing" (5-slot cycle:
+        2,4,8,16,reg -- reg trails each dilation cycle instead of leading
+        it, meant for dsc_no_projection=False so use_dsc keeps the dilated
+        slots' own reduce/expand projection; see that pattern's own module
+        comment). Both reg-bookend patterns rely on the SAME
+        {"reg_bottleneck": True} sentinel, honored in both the
+        dsc_no_projection branch below AND the plain (projected) loop at
+        the bottom of this method.
 
         Stage 4 probes layer on top of this same pattern:
         merge_dilated_pairs (4.4.3) pairs up (non-dilated, dilated) slots
@@ -885,6 +920,8 @@ class ENet(nn.Module):
             pattern = DENSE_DILATION_SCHEDULE_A_PATTERN
         elif self.context_pattern == "dense_dilation_reg_interleaved":
             pattern = DENSE_DILATION_REG_INTERLEAVED_PATTERN
+        elif self.context_pattern == "dense_dilation_reg_trailing":
+            pattern = DENSE_DILATION_REG_TRAILING_PATTERN
         else:
             pattern = CONTEXT_STAGE_PATTERN
 
@@ -962,13 +999,23 @@ class ENet(nn.Module):
         ops = []
         for i in range(n_ops):
             kwargs = dict(pattern[i % len(pattern)])
+            # DENSE_DILATION_REG_TRAILING_PATTERN's reg-bookend slot -- forces
+            # a genuine non-DSC RegularBottleneck here regardless of the
+            # global use_dsc, same meaning the sentinel already has under
+            # dsc_no_projection=True (see that branch above). Every OTHER
+            # existing pattern never sets this key, so this is a no-op for
+            # them (kwargs.pop returns False, nothing changes).
+            is_reg_bookend = kwargs.pop("reg_bottleneck", False)
             is_dilated = kwargs.get("dilation", 1) != 1
             if is_dilated and not self.use_dilated:
                 kwargs = {}
                 is_dilated = False
             if kwargs.get("asymmetric", False) and not self.use_asymmetric:
                 kwargs = {}
-            use_dsc_here = self.use_dsc or (self.dsc_dilated_only and is_dilated)
+            if is_reg_bookend:
+                use_dsc_here = False
+            else:
+                use_dsc_here = self.use_dsc or (self.dsc_dilated_only and is_dilated)
             ops.append(RegularBottleneck(
                 channels, dropout_p=0.1, use_dsc=use_dsc_here, relu=not self.use_prelu,
                 separable_dilated=self.separable_dilated, double_projections=self.double_projections,
@@ -1523,3 +1570,107 @@ if __name__ == "__main__":
     # covered by every use_prelu=False build elsewhere in this self-test.
 
     print("ENet Stage-8 RegInterleaved-isolation self-test PASSED: 2 new flags (dsc_no_projection_context_only, reg_bookend_dsc).")
+
+    # Stage 9 -- DSC-WITH-projection dense_dilation variants (probing the
+    # buffer-memory analysis in compression/: does dsc_no_projection's full-
+    # channel-width DSC cost accuracy, or just memory?). All three keep
+    # RegularBottleneck's own reduce/expand (use_dsc=True only swaps the
+    # INNER conv for depthwise+pointwise, still at internal_channels) --
+    # unlike every dsc_no_projection=True config above, which drops that
+    # projection entirely.
+    def _dsc_dilation_of(block: RegularBottleneck) -> int:
+        # block.conv is a Sequential(depthwise, pointwise) when use_dsc=True
+        # (see RegularBottleneck's `elif use_dsc:` branch) -- conv[0] is the
+        # depthwise conv itself, unlike _dilation_of's conv_bn_act[0] path
+        # (which only works for a bare, non-DSC'd inner conv).
+        return block.conv[0].dilation[0]
+
+    # 9.1 dense_dilation + DSC + projection, native depth (8 slots, all
+    # dilated 2,4,8,16 x2, no reg-bookend at all).
+    dsc_projected = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=U4_BOTTLENECKS,
+        decoder_type="upsample_conv", use_prelu=True, use_asymmetric=False,
+        use_dsc=True, context_pattern="dense_dilation",
+    )
+    with torch.no_grad():
+        assert dsc_projected(dummy).shape == (1, 5, 512, 512)
+    expected_9_1_dilations = (2, 4, 8, 16, 2, 4, 8, 16)
+    for stage_name, stage in (("stage2", dsc_projected.stage2), ("stage3", dsc_projected.stage3)):
+        assert len(stage) == 8, f"9.1: {stage_name} has {len(stage)} blocks, expected 8"
+        for i, block in enumerate(stage):
+            assert type(block) is RegularBottleneck, f"9.1: {stage_name}[{i}] is {type(block).__name__}, expected RegularBottleneck"
+            assert hasattr(block, "reduce"), f"9.1: {stage_name}[{i}] missing its reduce/expand projection (DSC should not drop it here)"
+            assert isinstance(block.conv, nn.Sequential), f"9.1: {stage_name}[{i}]'s conv not DSC-factored"
+            actual = _dsc_dilation_of(block)
+            assert actual == expected_9_1_dilations[i], f"9.1: {stage_name}[{i}] dilation {actual} != {expected_9_1_dilations[i]}"
+    # regular1/regular4/regular5 also inherit use_dsc=True (dsc_no_projection
+    # is off, so _make_shallow_stage's plain branch applies self.use_dsc) --
+    # but MUST still keep their own reduce/expand, unlike dsc_no_projection's
+    # regular1/4/5 (a DSCNoProjectionBottleneck, no projection at all).
+    for stage_name, stage in (("regular1", dsc_projected.regular1), ("regular5", dsc_projected.regular5)):
+        for i, block in enumerate(stage):
+            assert type(block) is RegularBottleneck, f"9.1: {stage_name}[{i}] is {type(block).__name__}, expected RegularBottleneck"
+            assert hasattr(block, "reduce"), f"9.1: {stage_name}[{i}] missing its reduce/expand projection"
+            assert isinstance(block.conv, nn.Sequential), f"9.1: {stage_name}[{i}]'s conv not DSC-factored"
+
+    # 9.2 same as 9.1 but stage2/3 widened to 11 blocks (matching
+    # RegInterleaved's total depth) -- isolates whether extra DEPTH alone
+    # (not the reg-bookend's specific non-DSC character) explains any of
+    # RegInterleaved's edge over the native-depth version. DENSE_DILATION_
+    # PATTERN is 8 slots long, so slot 8/9/10 wrap back to its own start
+    # (2,4,8 again) via the existing i % len(pattern) repeat -- no new code,
+    # purely bottlenecks_per_stage=11 composed with 9.1's flags.
+    dsc_projected_deep = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=(4, 11, 11, 2, 1),
+        decoder_type="upsample_conv", use_prelu=True, use_asymmetric=False,
+        use_dsc=True, context_pattern="dense_dilation",
+    )
+    with torch.no_grad():
+        assert dsc_projected_deep(dummy).shape == (1, 5, 512, 512)
+    expected_9_2_dilations = (2, 4, 8, 16, 2, 4, 8, 16, 2, 4, 8)
+    for stage_name, stage in (("stage2", dsc_projected_deep.stage2), ("stage3", dsc_projected_deep.stage3)):
+        assert len(stage) == 11, f"9.2: {stage_name} has {len(stage)} blocks, expected 11"
+        for i, block in enumerate(stage):
+            assert type(block) is RegularBottleneck, f"9.2: {stage_name}[{i}] is {type(block).__name__}, expected RegularBottleneck"
+            actual = _dsc_dilation_of(block)
+            assert actual == expected_9_2_dilations[i], f"9.2: {stage_name}[{i}] dilation {actual} != {expected_9_2_dilations[i]}"
+    dsc_projected_params = sum(p.numel() for p in dsc_projected.parameters())
+    dsc_projected_deep_params = sum(p.numel() for p in dsc_projected_deep.parameters())
+    assert dsc_projected_deep_params > dsc_projected_params, (
+        f"9.2: deepened params ({dsc_projected_deep_params}) should exceed the native-depth version's "
+        f"({dsc_projected_params}) -- 3 extra blocks per stage must add real parameters"
+    )
+
+    # 9.3 dense_dilation_reg_trailing: 2,4,8,16,reg x2 (10 slots) -- the
+    # reg-bookend TRAILS each dilation cycle instead of leading it (unlike
+    # dense_dilation_reg_interleaved's reg-first pattern), and -- unlike
+    # 9.1/9.2's dilated slots -- the reg slot itself must be forced non-DSC
+    # (a bare Conv2d, not a Sequential) even though the global use_dsc=True,
+    # via the {"reg_bottleneck": True} sentinel now also honored in the
+    # "plain" (projected) loop, not just the dsc_no_projection branch.
+    reg_trailing = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=(4, 10, 10, 2, 1),
+        decoder_type="upsample_conv", use_prelu=True, use_asymmetric=False,
+        use_dsc=True, context_pattern="dense_dilation_reg_trailing",
+    )
+    with torch.no_grad():
+        assert reg_trailing(dummy).shape == (1, 5, 512, 512)
+    reg_slot_indices = (4, 9)
+    expected_9_3_dilations = {0: 2, 1: 4, 2: 8, 3: 16, 5: 2, 6: 4, 7: 8, 8: 16}
+    for stage_name, stage in (("stage2", reg_trailing.stage2), ("stage3", reg_trailing.stage3)):
+        assert len(stage) == 10, f"9.3: {stage_name} has {len(stage)} blocks, expected 10"
+        for i, block in enumerate(stage):
+            assert type(block) is RegularBottleneck, f"9.3: {stage_name}[{i}] is {type(block).__name__}, expected RegularBottleneck"
+            assert hasattr(block, "reduce"), f"9.3: {stage_name}[{i}] missing its reduce/expand projection"
+            if i in reg_slot_indices:
+                assert isinstance(block.conv, torch.nn.Conv2d), (
+                    f"9.3: {stage_name}[{i}] (reg-trailing slot) is DSC-factored -- expected a bare, "
+                    "non-DSC Conv2d (the reg_bottleneck sentinel must force use_dsc=False here)"
+                )
+                assert block.conv.dilation[0] == 1, f"9.3: {stage_name}[{i}] reg slot dilation != 1"
+            else:
+                assert isinstance(block.conv, nn.Sequential), f"9.3: {stage_name}[{i}] (dilated slot) not DSC-factored"
+                actual = _dsc_dilation_of(block)
+                assert actual == expected_9_3_dilations[i], f"9.3: {stage_name}[{i}] dilation {actual} != {expected_9_3_dilations[i]}"
+
+    print("ENet Stage-9 DSC+projection dense_dilation self-test PASSED: 3 configs (dsc_projected, dsc_projected_deep, reg_trailing) + 1 new context_pattern (dense_dilation_reg_trailing).")
