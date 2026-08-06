@@ -1674,3 +1674,40 @@ if __name__ == "__main__":
                 assert actual == expected_9_3_dilations[i], f"9.3: {stage_name}[{i}] dilation {actual} != {expected_9_3_dilations[i]}"
 
     print("ENet Stage-9 DSC+projection dense_dilation self-test PASSED: 3 configs (dsc_projected, dsc_projected_deep, reg_trailing) + 1 new context_pattern (dense_dilation_reg_trailing).")
+
+    # Stage 10 -- "breeding" probe: dense_dilation_reg_interleaved's proven
+    # bookend structure (stage 6/8) crossed with separable_dilated applied
+    # to a DENSE conv (stage 5's real quadratic-term win, NOT the depthwise
+    # version stage 9.5 dropped), with the projection kept throughout
+    # (dsc_no_projection=False, use_dsc=False) -- no new code, every piece
+    # of this combination already exists individually; this is the first
+    # time they're composed together. The reg-bookend slots naturally stay
+    # plain dense 3x3 (dilation=1 skips separable_dilated's own `dilation
+    # != 1` guard) without needing special-casing.
+    for relu_flag, label in ((False, "10.1 (prelu)"), (True, "10.2 (relu)")):
+        hybrid = ENet(
+            in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=(4, 11, 11, 2, 1),
+            decoder_type="upsample_conv", use_prelu=not relu_flag, use_asymmetric=False,
+            use_dsc=False, separable_dilated=True, dsc_no_projection=False,
+            context_pattern="dense_dilation_reg_interleaved",
+        )
+        with torch.no_grad():
+            assert hybrid(dummy).shape == (1, 5, 512, 512)
+        for stage_name, stage in (("stage2", hybrid.stage2), ("stage3", hybrid.stage3)):
+            assert len(stage) == 11, f"{label}: {stage_name} has {len(stage)} blocks, expected 11"
+            for i, block in enumerate(stage):
+                assert type(block) is RegularBottleneck, f"{label}: {stage_name}[{i}] is {type(block).__name__}, expected RegularBottleneck"
+                assert hasattr(block, "reduce"), f"{label}: {stage_name}[{i}] missing its reduce/expand projection"
+                conv = block.conv
+                if i in (0, 5, 10):  # reg-bookend slots
+                    assert isinstance(conv, nn.Conv2d) and conv.kernel_size == (3, 3), (
+                        f"{label}: {stage_name}[{i}] (bookend) is {type(conv).__name__}, expected a plain dense 3x3 Conv2d"
+                    )
+                    assert conv.groups == 1, f"{label}: {stage_name}[{i}] (bookend) unexpectedly grouped/depthwise"
+                else:  # dilated slots -- dense (k,1)+(1,k), NOT depthwise
+                    assert isinstance(conv, nn.Sequential) and conv[0].kernel_size == (3, 1), (
+                        f"{label}: {stage_name}[{i}] (dilated) is {type(conv).__name__}, expected a separable-factored Sequential starting (3,1)"
+                    )
+                    assert conv[0].groups == 1, f"{label}: {stage_name}[{i}] (dilated) unexpectedly depthwise -- should stay dense like S5-SeparableDense, not DSC"
+
+    print("ENet Stage-10 reg_interleaved+separable_dilated hybrid self-test PASSED: 2 configs (prelu, relu), 0 new code -- pure composition of existing flags.")
