@@ -35,3 +35,7 @@ S6-RegInterleaved,nnUNetTrainerENet_6_1_reg_interleaved,6_dscnoprojdense_variant
 S6-ScheduleA,nnUNetTrainerENet_6_2_schedule_a,6_dscnoprojdense_variants,"4,16,32,16,4",upsample_conv,1,1,0
 S7-RegInterleavedE1Shape,nnUNetTrainerENet_7_1_reginterleaved_e1shape,7_reginterleaved_shape_variants,"4,16,28,16,4",upsample_conv,1,1,0
 S7-RegInterleavedExtraInitial,nnUNetTrainerENet_7_2_reginterleaved_extrainitial,7_reginterleaved_shape_variants,"8,16,32,16,4",upsample_conv,1,1,0
+S8-DscNoProjContextOnly,nnUNetTrainerENet_8_1_dscnoproj_context_only,8_reginterleaved_isolation,"4,16,32,16,4",upsample_conv,1,1,0
+S8-ReLU,nnUNetTrainerENet_8_2_relu,8_reginterleaved_isolation,"4,16,32,16,4",upsample_conv,0,1,0
+S8-RegBookendDsc,nnUNetTrainerENet_8_3_reg_bookend_dsc,8_reginterleaved_isolation,"4,16,32,16,4",upsample_conv,1,1,0
+S8-DscNoProjContextOnlyDsc,nnUNetTrainerENet_8_4_dscnoproj_context_only_dsc,8_reginterleaved_isolation,"4,16,32,16,4",upsample_conv,1,1,0

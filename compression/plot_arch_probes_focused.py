@@ -1,11 +1,11 @@
 """Focused Dice vs. params/MACs plot for just U4 (the shared reference
 cell) plus every stage_4_arch_probes, stage_5_arch_probe_pairs,
-stage_6_dscnoprojdense_variants, and stage_7_reginterleaved_shape_variants
-config -- i.e. everything actually built off that one reference point,
-with the rest of the sweep (Base/U2/U3/U6/U8/U16/E1, stage_2_special_ops,
-stage_3_transfer_original) filtered out as noise for this comparison. A
-horizontal dashed line at U4's own dice marks the bar every probe is
-trying to clear.
+stage_6_dscnoprojdense_variants, stage_7_reginterleaved_shape_variants, and
+stage_8_reginterleaved_isolation config -- i.e. everything actually built
+off that one reference point, with the rest of the sweep (Base/U2/U3/U6/U8/
+U16/E1, stage_2_special_ops, stage_3_transfer_original) filtered out as
+noise for this comparison. A horizontal dashed line at U4's own dice marks
+the bar every probe is trying to clear.
 
 Usage:
     python compression/plot_arch_probes_focused.py
@@ -30,6 +30,7 @@ STAGE_COLORS = {
     "5_arch_probe_pairs": "#8e44ad",
     "6_dscnoprojdense_variants": "#e91e8c",
     "7_reginterleaved_shape_variants": "#00acc1",
+    "8_reginterleaved_isolation": "#7cb342",
 }
 U4_LINE_COLOR = "#2a78d6"
 
@@ -91,9 +92,10 @@ def main() -> int:
         | (df["stage"] == "5_arch_probe_pairs")
         | (df["stage"] == "6_dscnoprojdense_variants")
         | (df["stage"] == "7_reginterleaved_shape_variants")
+        | (df["stage"] == "8_reginterleaved_isolation")
     ].dropna(subset=["params", "dice"]).copy()
     if focused.empty:
-        print("No U4/stage_4/stage_5/stage_6/stage_7 rows found in results.csv yet.")
+        print("No U4/stage_4/stage_5/stage_6/stage_7/stage_8 rows found in results.csv yet.")
         return 1
     u4_rows = focused[focused["config_name"] == U4_CONFIG_NAME]
     if u4_rows.empty:
