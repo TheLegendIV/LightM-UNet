@@ -1,3 +1,4 @@
+import json
 import os
 
 import torch
@@ -69,6 +70,8 @@ class nnUNetTrainerENetQuant(nnUNetTrainerENet):
         bottlenecks_per_stage = _parse_bottlenecks(os.environ.get("ENET_BOTTLENECKS", "4,8,8,2,1"))
         decoder_type = os.environ.get("ENET_DECODER_TYPE", "max_unpool")
         quant_bits = int(os.environ.get("ENET_QUANT_BITS", "8"))
+        context_pattern = os.environ.get("ENET_CONTEXT_PATTERN", "default")
+        leaky_slope_map_json = os.environ.get("ENET_LEAKY_SLOPE_MAP")
         return QuantENet(
             in_channels=num_input_channels,
             out_channels=label_manager.num_segmentation_heads,
@@ -81,4 +84,9 @@ class nnUNetTrainerENetQuant(nnUNetTrainerENet):
             use_dsc=_parse_bool_env("ENET_USE_DSC", False),
             weight_bit_width=quant_bits,
             act_bit_width=quant_bits,
+            context_pattern=context_pattern,
+            dsc_no_projection=_parse_bool_env("ENET_DSC_NO_PROJECTION", False),
+            dsc_no_projection_context_only=_parse_bool_env("ENET_DSC_NO_PROJECTION_CONTEXT_ONLY", False),
+            separable_dilated=_parse_bool_env("ENET_SEPARABLE_DILATED", False),
+            leaky_slope_map=json.loads(leaky_slope_map_json) if leaky_slope_map_json else None,
         )

@@ -31,6 +31,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 try:
@@ -47,7 +48,7 @@ ANALYSIS_ROOT = REPO_ROOT / "analysis" / "501_ARCADE"
 sys.path.insert(0, str(PACKAGE_ROOT))
 sys.path.insert(0, str(ANALYSIS_ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from nnunetv2.nets.ENet import ENet  # noqa: E402
+from nnunetv2.nets.ENet import ENet, apply_block_pruning  # noqa: E402
 from nnunetv2.nets.QuantENet import QuantENet  # noqa: E402
 import segmentation_topology as topo  # noqa: E402
 from utils import count_bops, count_buffer_elements, count_flops, count_params  # noqa: E402
@@ -140,6 +141,7 @@ def run_inference(
     shallow_dilation_dense: bool = False,
     dsc_no_projection_context_only: bool = False,
     reg_bookend_dsc: bool = False,
+    pruned_blocks: str | None = None,
 ) -> Path:
     """Uses `nnUNetv2_predict_from_modelfolder` (-m <exact folder>), NOT
     plain `nnUNetv2_predict` (-tr/-p/-c/-d): the latter's folder resolution
@@ -180,6 +182,8 @@ def run_inference(
         env["ENET_LEAKY_SLOPE"] = str(leaky_slope)
     if leaky_slope_map is not None:
         env["ENET_LEAKY_SLOPE_MAP"] = leaky_slope_map
+    if pruned_blocks is not None:
+        env["ENET_PRUNED_BLOCKS"] = pruned_blocks
     env["ENET_SHALLOW_DILATION"] = "1" if shallow_dilation else "0"
     env["ENET_SEPARABLE_DILATED"] = "1" if separable_dilated else "0"
     env["ENET_MERGE_DILATED_PAIRS"] = "1" if merge_dilated_pairs else "0"
@@ -325,7 +329,19 @@ def upsert_row(row: dict) -> None:
     both add their own new row and the later write clobbers the earlier
     one's -- silently losing a whole run's result. flock serializes the
     whole read+merge+write critical section so every writer's read reflects
-    every prior writer's completed write."""
+    every prior writer's completed write.
+
+    The final to_csv is retried a few times on OSError: observed in
+    practice (Windows dev machine, Docker bind mount) as a transient
+    `OSError: [Errno 22] Invalid argument` specifically after a long-running
+    process (real inference + thop profiling) reaches this point -- NOT
+    reproducible calling upsert_row standalone/in isolation right after
+    import, and NOT a lock-contention issue (single-process runs hit it
+    too). Whatever underlying bind-mount flakiness causes it, it has always
+    cleared within a couple of short retries in practice; this is cheap
+    insurance against losing an otherwise-fully-computed row (real
+    inference + metrics already ran by this point) to what is, empirically,
+    a few-hundred-millisecond hiccup."""
     row = {col: row.get(col) for col in RESULTS_COLUMNS}
     lock_path = RESULTS_CSV.parent / ".results.csv.lock"
     lock_path.touch(exist_ok=True)
@@ -339,7 +355,18 @@ def upsert_row(row: dict) -> None:
                 combined = pd.concat([existing, pd.DataFrame([row])], ignore_index=True)
             else:
                 combined = pd.DataFrame([row], columns=RESULTS_COLUMNS)
-            combined.to_csv(RESULTS_CSV, index=False)
+            last_error = None
+            for attempt in range(5):
+                try:
+                    combined.to_csv(RESULTS_CSV, index=False)
+                    last_error = None
+                    break
+                except OSError as error:
+                    last_error = error
+                    print(f"  [retry {attempt + 1}/5] results.csv write failed ({error}), retrying...")
+                    time.sleep(1.0)
+            if last_error is not None:
+                raise last_error
             print(f"Wrote {RESULTS_CSV} ({len(combined)} rows).")
         finally:
             if fcntl is not None:
@@ -391,6 +418,10 @@ def main() -> None:
                               "negative_slope override, e.g. '{\"stage2.0\": 0.13, \"stage2.1\": 0.09}'. Any "
                               "LeakyReLU site not covered by a key here falls back to --leaky-slope. See ENet.py's "
                               "apply_leaky_slope_overrides.")
+    parser.add_argument("--pruned-blocks", default=None,
+                         help="Comma-separated dotted block names to post-training structural-ablate (replace "
+                              "with nn.Identity(), no retraining), e.g. 'stage3.0' or 'stage3.0,stage2.5'. Only "
+                              "sound for channel-preserving residual blocks -- see ENet.py's apply_block_pruning.")
     parser.add_argument("--shallow-dilation", type=int, default=0, choices=[0, 1], help="Stage 4.4.1: alternating regular/dilated(16) in stage1 and regular4 (regular5 unchanged). See ENet.py.")
     parser.add_argument("--shallow-dilation-wide", type=int, default=0, choices=[0, 1], help="Like --shallow-dilation but at dilation=32 instead of 16 -- stage1/regular4 run at 1/4 resolution, coarser than stage2/3, so there's headroom for a wider rate there. See ENet.py's SHALLOW_DILATION_WIDE_PATTERN.")
     parser.add_argument("--shallow-dilation-dense", type=int, default=0, choices=[0, 1], help="Stage 5.2: swaps --shallow-dilation/--shallow-dilation-wide's alternating pattern for an every-slot-dilated one (needs one of those two set). See ENet.py's SHALLOW_DILATION_DENSE_PATTERN / SHALLOW_DILATION_WIDE_DENSE_PATTERN.")
@@ -452,6 +483,8 @@ def main() -> None:
         dsc_no_projection_context_only=bool(args.dsc_no_projection_context_only),
         reg_bookend_dsc=bool(args.reg_bookend_dsc),
     )
+    if args.pruned_blocks:
+        apply_block_pruning(fp32_model, [name.strip() for name in args.pruned_blocks.split(",") if name.strip()])
     # FINN sliding-window-buffer memory estimate (activation elements, not
     # bits -- see utils.count_buffer_elements's own docstring). Always from
     # the FP32 reference model, same rationale as MACs below: buffer size is
@@ -484,6 +517,11 @@ def main() -> None:
             use_dsc=bool(args.use_dsc),
             weight_bit_width=args.quant_bits,
             act_bit_width=args.quant_bits,
+            context_pattern=args.context_pattern,
+            dsc_no_projection=bool(args.dsc_no_projection),
+            dsc_no_projection_context_only=bool(args.dsc_no_projection_context_only),
+            separable_dilated=bool(args.separable_dilated),
+            leaky_slope_map=json.loads(args.leaky_slope_map) if args.leaky_slope_map else None,
         )
         total_params, _ = count_params(quant_model)
         bops = count_bops(macs, args.quant_bits)
@@ -522,6 +560,7 @@ def main() -> None:
             shallow_dilation_dense=bool(args.shallow_dilation_dense),
             dsc_no_projection_context_only=bool(args.dsc_no_projection_context_only),
             reg_bookend_dsc=bool(args.reg_bookend_dsc),
+            pruned_blocks=args.pruned_blocks,
         )
     labels_ts_dir = NNUNET_RAW / dataset_name / "labelsTs"
     eval_metrics = compute_eval_metrics(labels_ts_dir, prediction_dir, dataset_name)
@@ -567,6 +606,7 @@ def main() -> None:
             + f",dsc_no_projection={args.dsc_no_projection},shallow_dilation_wide={args.shallow_dilation_wide}"
             + f",shallow_dilation_dense={args.shallow_dilation_dense}"
             + f",dsc_no_projection_context_only={args.dsc_no_projection_context_only},reg_bookend_dsc={args.reg_bookend_dsc}"
+            + f",pruned_blocks={args.pruned_blocks}"
         ),
         "quant_bits": args.quant_bits,
         "params": total_params,

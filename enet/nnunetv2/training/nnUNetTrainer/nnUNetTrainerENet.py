@@ -7,7 +7,7 @@ import torch
 from torch import nn
 from torch.optim import AdamW
 
-from nnunetv2.nets.ENet import ENet, apply_leaky_slope_overrides, apply_nonneg_block_init
+from nnunetv2.nets.ENet import ENet, apply_block_pruning, apply_leaky_slope_overrides, apply_nonneg_block_init
 from nnunetv2.training.lr_scheduler.polylr import PolyLRScheduler
 from nnunetv2.training.nnUNetTrainer.nnUNetTrainerLightMUNet import nnUNetTrainerLightMUNet
 from nnunetv2.utilities.plans_handling.plans_handler import ConfigurationManager, PlansManager
@@ -187,6 +187,22 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
             n_init = apply_nonneg_block_init(network, json.loads(nonneg_block_init_map_json))
             if n_init == 0:
                 raise ValueError("ENET_NONNEG_BLOCK_INIT_MAP set but no blocks were initialized -- check the block name keys.")
+
+        # Post-training structural ablation (see ENet.py's apply_block_
+        # pruning docstring): replaces named blocks with nn.Identity() at
+        # construction time, both when building a checkpoint to save (a
+        # one-off script) and when nnU-Net's own predictor reconstructs
+        # the network for inference (this same env-var path) -- keeping
+        # both reconstructions structurally identical so a checkpoint
+        # filtered to exclude the pruned block's own weights can strict-
+        # load into either one. Comma-separated dotted block names, e.g.
+        # "stage3.0" or "stage3.0,stage2.5".
+        pruned_blocks_csv = os.environ.get("ENET_PRUNED_BLOCKS")
+        if pruned_blocks_csv:
+            block_names = [name.strip() for name in pruned_blocks_csv.split(",") if name.strip()]
+            n_pruned = apply_block_pruning(network, block_names)
+            if n_pruned != len(block_names):
+                raise ValueError(f"ENET_PRUNED_BLOCKS={pruned_blocks_csv!r} -- expected {len(block_names)} blocks pruned, got {n_pruned}.")
 
         return network
 

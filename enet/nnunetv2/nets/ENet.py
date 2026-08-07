@@ -1342,6 +1342,47 @@ def apply_leaky_slope_overrides(
     return patched
 
 
+def apply_block_pruning(model: nn.Module, block_names: list) -> int:
+    """Post-training structural ablation: replaces each named block (e.g.
+    "stage3.0") with nn.Identity() -- a pure skip, zero computation --
+    leaving every OTHER block's already-trained weights untouched. No
+    retraining involved; this is meant for measuring how much a single
+    already-trained block actually contributes by removing it after the
+    fact and re-running real inference (see compression/results.csv's
+    experiment_* rows for the established pattern of this kind of ad-hoc
+    post-hoc probe).
+
+    Only sound for blocks whose output channel count matches their input
+    -- every bottleneck class in this module (RegularBottleneck,
+    DownsamplingBottleneck [no, channel-changing -- do not prune those],
+    DSCNoProjectionBottleneck, MergedContextBottleneck) except the
+    channel-changing Downsampling/Upsampling ones is a residual block
+    (`out_act(x + branch(x))`), so replacing the WHOLE block with identity
+    is channel-safe there -- this function does not itself check that a
+    given name is safe to prune, that's the caller's responsibility (e.g.
+    don't pass "down1" or "up4").
+
+    Dotted names use the same convention as collect_prelu_block_means/
+    apply_leaky_slope_overrides -- "stageN.i" for the i-th op in a
+    context/shallow stage's nn.Sequential (resolved here via integer
+    indexing into that Sequential), or a bare top-level attribute name
+    ("regular5") for a standalone block. Returns the number of blocks
+    pruned, for self-test/sanity checks."""
+    pruned = 0
+    for block_name in block_names:
+        parts = block_name.split(".")
+        container = model
+        for part in parts[:-1]:
+            container = container[int(part)] if part.isdigit() else getattr(container, part)
+        last = parts[-1]
+        if last.isdigit():
+            container[int(last)] = nn.Identity()
+        else:
+            setattr(container, last, nn.Identity())
+        pruned += 1
+    return pruned
+
+
 if __name__ == "__main__":
     # Foundation self-test: every filter config x bottleneck-depth x decoder
     # type x op-flag combination that the compression sweep plans to build
@@ -2254,3 +2295,59 @@ if __name__ == "__main__":
         assert block_act.weight.requires_grad, f"13: block {name!r}'s scalar must stay a live learnable Parameter after warm-start init, not get frozen"
 
     print("ENet Stage-13 nonneg_block self-test PASSED: true parameter tying (object identity), gradient flow through the shared scalar, warm-start initialization, and a full nonneg_block -> leaky conversion round trip all verified.")
+
+    # Stage 14: apply_block_pruning -- post-training structural ablation
+    # (whole block -> nn.Identity(), no retraining). Uses S8-ReLU's real
+    # recipe (dense_dilation_reg_interleaved + dsc_no_projection=1,
+    # bottlenecks widened to 4,11,11,2,1) since that's the config this was
+    # built to probe (stage2.10/stage3.0 sit back-to-back as two reg-
+    # bookend RegularBottleneck slots with nothing dilated between them --
+    # proj2_to_3 is nn.Identity() when stage2/stage3 channels match, as
+    # they do here).
+    prune_model = ENet(
+        in_channels=1, out_channels=5, channels=(4, 16, 32, 16, 4), bottlenecks_per_stage=(4, 11, 11, 2, 1),
+        decoder_type="upsample_conv", use_prelu=False, use_asymmetric=False,
+        context_pattern="dense_dilation_reg_interleaved", dsc_no_projection=True,
+    )
+    assert isinstance(prune_model.stage3[0], RegularBottleneck), f"14: expected stage3.0 to start as RegularBottleneck, got {type(prune_model.stage3[0]).__name__}"
+    assert isinstance(prune_model.stage2[10], RegularBottleneck), "14: expected stage2.10 (adjacent reg-bookend) to be RegularBottleneck"
+    n_pruned = apply_block_pruning(prune_model, ["stage3.0"])
+    assert n_pruned == 1, f"14: expected 1 block pruned, got {n_pruned}"
+    assert isinstance(prune_model.stage3[0], nn.Identity), f"14: stage3.0 should now be nn.Identity, got {type(prune_model.stage3[0]).__name__}"
+    # Every OTHER slot must be untouched -- both its neighbor (stage2.10,
+    # the other half of the back-to-back reg-bookend pair) and a same-
+    # index-different-stage slot (stage3.1) must keep their real class.
+    assert isinstance(prune_model.stage2[10], RegularBottleneck), "14: stage2.10 must NOT be pruned by pruning stage3.0"
+    assert isinstance(prune_model.stage3[1], DSCNoProjectionBottleneck), "14: stage3.1 must NOT be pruned by pruning stage3.0"
+
+    # A pruned model must still forward-pass cleanly (Identity is
+    # channel-preserving here since stage3.0 was a residual block with
+    # matching in/out channels) and produce the expected output shape.
+    prune_model.eval()
+    with torch.no_grad():
+        pruned_out = prune_model(torch.randn(1, 1, 64, 64))
+    assert pruned_out.shape == (1, 5, 64, 64), f"14: pruned model output shape mismatch: {tuple(pruned_out.shape)}"
+
+    # Numeric sanity: with stage3.0 replaced by Identity, the value flowing
+    # INTO stage3.1 must be EXACTLY the value that flowed OUT of stage2's
+    # last slot (through the Identity proj2_to_3, since stage2/stage3
+    # channels match here) -- i.e. stage3.0 contributed literally nothing.
+    # Verified via a forward hook rather than trusting object-type checks
+    # alone.
+    captured = {}
+    def _capture_input(module, inputs):
+        captured["stage3_1_input"] = inputs[0]
+    handle = prune_model.stage3[1].register_forward_pre_hook(_capture_input)
+    x = torch.randn(1, 1, 64, 64)
+    with torch.no_grad():
+        after_initial = prune_model.initial(x)
+        after_down1, _, _ = prune_model.down1(after_initial)
+        after_regular1 = prune_model.regular1(after_down1)
+        after_down2, _, _ = prune_model.down2(after_regular1)
+        after_stage2 = prune_model.stage2(after_down2)
+        pre_stage3_state = prune_model.proj2_to_3(after_stage2)
+        prune_model(x)
+    handle.remove()
+    assert torch.equal(captured["stage3_1_input"], pre_stage3_state), "14: stage3.1's input should exactly equal stage2's output (Identity pass-through), got a numeric mismatch"
+
+    print("ENet Stage-14 apply_block_pruning self-test PASSED: targeted block correctly replaced with Identity, sibling blocks untouched, and numeric pass-through verified via forward hook.")
