@@ -37,3 +37,21 @@ informed the findings in `foundation_log.md`), not part of the active plan.
   the only archive location in the repo and it shares the same
   binary-Dataset501 fate as the rest of this list)
 - `train_enet_original.job` (repo root, same as above)
+
+## `stage_11_separable_dense_prelu_variants_array.job` -- superseded by FINN's LeakyReLU-only constraint
+
+Built to sweep two new `ENet.py` `prelu_variant` options (`leaky`: fixed
+`nn.LeakyReLU(0.01)`; `nonneg`: learnable per-channel PReLU clamped to
+`a>=0` every forward pass) on top of `5_6_separable_dense_dilation`
+(S5-SeparableDense). Never submitted -- superseded before running once it
+was confirmed FINN has no PReLU support at all (learnable or clamped), so
+`nonneg` can never be deployed regardless of its dice, and a *fixed*
+0.01 slope was an arbitrary constant rather than one informed by the
+already-trained model. The underlying `PReluVariant`/`_activation`
+machinery in `ENet.py` (including `NonNegativePReLU`) is kept, not deleted
+-- `nonneg` may still be useful as a training-time probe even though it
+isn't FINN-deployable, and `leaky`'s fixed-0.01 path is still valid as a
+generic baseline. The actual FINN-motivated follow-up (LeakyReLU with a
+slope derived from `5_6_separable_dense_dilation`'s own trained PReLU
+statistics, both a single network-wide value and a per-bottleneck-block
+value) lives in `apply_leaky_slope_overrides` (`ENet.py`) instead.

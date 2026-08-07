@@ -188,13 +188,89 @@ SHALLOW_DILATION_WIDE_DENSE_PATTERN: tuple[dict, ...] = (
 )
 
 
-def _activation(channels: int, relu: bool) -> nn.Module:
-    return nn.ReLU(inplace=True) if relu else nn.PReLU(channels)
+class NonNegativePReLU(nn.Module):
+    """PReLU (`f(x) = max(0,x) + a*min(0,x)`) whose learnable per-channel
+    slope `a` is clamped to [0, inf) on every forward pass, ruling out the
+    sign-flipping behavior real PReLU is otherwise free to learn -- a
+    negative `a` maps negative inputs to POSITIVE outputs (`a*x` with both
+    factors negative), which trained checkpoints in this project actually
+    do learn at some sites (see compression/plot_prelu_activations.py's
+    findings, e.g. RegInterleaved's stage2.5.conv_bn_act.2 learning
+    a=-0.12). Clamping happens on `weight` at forward time, not by
+    reparameterizing the stored parameter itself, so the underlying
+    nn.Parameter stays a normal unconstrained tensor for the optimizer --
+    gradients simply stop flowing through it once it's been driven <= 0
+    for a given step (clamp's subgradient is 0 there), same as how a
+    plain ReLU's own gradient vanishes for negative inputs."""
+
+    def __init__(self, num_parameters: int = 1, init: float = 0.25):
+        super().__init__()
+        self.weight = nn.Parameter(torch.full((num_parameters,), float(init)))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return F.prelu(x, self.weight.clamp(min=0.0))
+
+
+# "standard" = real nn.PReLU (learnable, unconstrained sign, per-channel,
+# the default throughout this module); "leaky" = nn.LeakyReLU(0.01) (fixed,
+# non-learnable negative slope, PyTorch's own default rate); "nonneg" =
+# NonNegativePReLU above (learnable, per-channel, but never negative);
+# "nonneg_block" = ONE NonNegativePReLU(num_parameters=1) instance SHARED
+# across every activation site (reduce/inner-conv/outer-conv/out_act) within
+# a single bottleneck block -- see each bottleneck class's own `shared_act`
+# construction. Only meaningful on the encoder half (wherever `relu=False`
+# is passed in) -- the decoder half (regular4/regular5/up4/up5) hardcodes
+# relu=True everywhere regardless of this, so _activation's `if relu:`
+# branch below always wins there and prelu_variant is simply never
+# consulted for those sites.
+#
+# DEPRECATED (not deleted) for FINN deployment purposes: FINN has no PReLU
+# op support at all, learnable or otherwise, so plain "nonneg" (per-channel)
+# can never be FINN-deployed regardless of dice, and "leaky"'s fixed 0.01
+# here is just an arbitrary constant. Kept for training-time probes. A
+# post-hoc conversion strategy (average an already-trained per-channel
+# "standard" PReLU checkpoint's slopes into a single fixed LeakyReLU value,
+# globally or per-block, via apply_leaky_slope_overrides applied to a
+# "leaky"-variant model) was tried and measured to be badly lossy (S5-
+# SeparableDense's real dice 0.7985 -> ~0.38-0.41 after averaging, see
+# compression/results.csv's experiment_leaky_from_prelu_global/_perblock
+# rows) -- forcing a per-channel-trained network into a block-uniform slope
+# AFTER the fact throws away too much. "nonneg_block" instead bakes the
+# block-uniform constraint in from the start of training (warm-started from
+# those exact same per-block means via collect_prelu_block_means, so it
+# isn't starting blind), so the network can adapt to it. FINN deployment
+# still ends the same way -- apply_leaky_slope_overrides converts each
+# block's ONE learned scalar into a fixed LeakyReLU at inference -- but
+# lossless this time, since there's only one real trained number per block
+# to begin with, not an approximation of many.
+PReluVariant = Literal["standard", "leaky", "nonneg", "nonneg_block"]
+
+
+def _activation(
+    channels: int, relu: bool, prelu_variant: PReluVariant = "standard",
+    shared_act: nn.Module | None = None,
+) -> nn.Module:
+    if relu:
+        return nn.ReLU(inplace=True)
+    if prelu_variant == "nonneg_block":
+        if shared_act is None:
+            raise ValueError(
+                "prelu_variant='nonneg_block' requires shared_act -- one NonNegativePReLU(1) "
+                "instance built once per bottleneck block and reused across every activation "
+                "site in that block (see e.g. RegularBottleneck.__init__'s own shared_act)."
+            )
+        return shared_act
+    if prelu_variant == "leaky":
+        return nn.LeakyReLU(negative_slope=0.01, inplace=True)
+    if prelu_variant == "nonneg":
+        return NonNegativePReLU(channels)
+    return nn.PReLU(channels)
 
 
 def _dilatable_conv_block(
     internal_channels: int, kernel_size: int, padding: int, dilation: int,
-    relu: bool, use_dsc: bool, separable_dilated: bool,
+    relu: bool, use_dsc: bool, separable_dilated: bool, prelu_variant: PReluVariant = "standard",
+    shared_act: nn.Module | None = None,
 ) -> nn.Sequential:
     """Shared inner-conv builder for one (possibly dilated, non-asymmetric)
     context slot: plain k x k, DSC-factored (depthwise + pointwise), or
@@ -202,68 +278,78 @@ def _dilatable_conv_block(
     RegularBottleneck's own non-asymmetric conv uses. Used by
     MergedContextBottleneck for BOTH its op1 and op2 halves, so either half
     can independently be plain, dilated, DSC'd, or separable-dilated,
-    depending on what pattern slot it was built from."""
+    depending on what pattern slot it was built from. shared_act (only
+    consulted for prelu_variant="nonneg_block") is passed straight through
+    to every _activation call -- the SAME single instance ties op1's and
+    op2's activations together with the rest of their bottleneck, matching
+    "block level" meaning the whole bottleneck, not each op half."""
     if use_dsc:
         return nn.Sequential(
             nn.Conv2d(internal_channels, internal_channels, kernel_size=kernel_size,
                       padding=padding, dilation=dilation, groups=internal_channels, bias=False),
             nn.Conv2d(internal_channels, internal_channels, kernel_size=1, bias=False),
             nn.BatchNorm2d(internal_channels),
-            _activation(internal_channels, relu),
+            _activation(internal_channels, relu, prelu_variant, shared_act),
         )
     if separable_dilated and dilation != 1:
         return nn.Sequential(
             nn.Conv2d(internal_channels, internal_channels, kernel_size=(kernel_size, 1),
                       padding=(padding, 0), dilation=dilation, bias=False),
             nn.BatchNorm2d(internal_channels),
-            _activation(internal_channels, relu),
+            _activation(internal_channels, relu, prelu_variant, shared_act),
             nn.Conv2d(internal_channels, internal_channels, kernel_size=(1, kernel_size),
                       padding=(0, padding), dilation=dilation, bias=False),
             nn.BatchNorm2d(internal_channels),
-            _activation(internal_channels, relu),
+            _activation(internal_channels, relu, prelu_variant, shared_act),
         )
     return nn.Sequential(
         nn.Conv2d(internal_channels, internal_channels, kernel_size=kernel_size,
                   padding=padding, dilation=dilation, bias=False),
         nn.BatchNorm2d(internal_channels),
-        _activation(internal_channels, relu),
+        _activation(internal_channels, relu, prelu_variant, shared_act),
     )
 
 
-def _reduce_proj(in_channels: int, internal_channels: int, relu: bool, double: bool) -> nn.Sequential:
+def _reduce_proj(
+    in_channels: int, internal_channels: int, relu: bool, double: bool,
+    prelu_variant: PReluVariant = "standard", shared_act: nn.Module | None = None,
+) -> nn.Sequential:
     """1x1 squeeze projection, in_channels -> internal_channels, ending in an
     activation. Stage 4.5's double=True inserts a second internal_channels
     -> internal_channels (1x1 conv, BN, activation) unit after the first --
     twice the ops in the same projection for zero extra spatial buffering
     (1x1 convs need no SWG line buffer in FINN, unlike the 3x3/5x5 spatial
-    convs this leaves untouched)."""
+    convs this leaves untouched). shared_act, see _dilatable_conv_block."""
     layers = [
         nn.Conv2d(in_channels, internal_channels, kernel_size=1, bias=False),
         nn.BatchNorm2d(internal_channels),
-        _activation(internal_channels, relu),
+        _activation(internal_channels, relu, prelu_variant, shared_act),
     ]
     if double:
         layers += [
             nn.Conv2d(internal_channels, internal_channels, kernel_size=1, bias=False),
             nn.BatchNorm2d(internal_channels),
-            _activation(internal_channels, relu),
+            _activation(internal_channels, relu, prelu_variant, shared_act),
         ]
     return nn.Sequential(*layers)
 
 
-def _expand_proj(internal_channels: int, out_channels: int, relu: bool, double: bool) -> nn.Sequential:
+def _expand_proj(
+    internal_channels: int, out_channels: int, relu: bool, double: bool,
+    prelu_variant: PReluVariant = "standard", shared_act: nn.Module | None = None,
+) -> nn.Sequential:
     """1x1 expand projection, internal_channels -> out_channels, ending in a
     bare BN (no activation -- every caller applies its own out_act AFTER
     adding the residual, not here). Stage 4.5's double=True inserts a
     leading internal_channels -> internal_channels (1x1 conv, BN,
     activation) unit before the final projection, same rationale as
-    _reduce_proj."""
+    _reduce_proj. shared_act, see _dilatable_conv_block."""
     layers = []
     if double:
         layers += [
             nn.Conv2d(internal_channels, internal_channels, kernel_size=1, bias=False),
             nn.BatchNorm2d(internal_channels),
-            _activation(internal_channels, relu),
+            _activation(internal_channels, relu, prelu_variant, shared_act),
         ]
     layers += [
         nn.Conv2d(internal_channels, out_channels, kernel_size=1, bias=False),
@@ -273,14 +359,15 @@ def _expand_proj(internal_channels: int, out_channels: int, relu: bool, double: 
 
 
 class InitialBlock(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, relu: bool = False):
+    def __init__(self, in_channels: int, out_channels: int, relu: bool = False, prelu_variant: PReluVariant = "standard"):
         super().__init__()
         if out_channels <= in_channels:
             raise ValueError("InitialBlock out_channels must exceed in_channels.")
         self.conv = nn.Conv2d(in_channels, out_channels - in_channels, kernel_size=3, stride=2, padding=1, bias=False)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
         self.bn = nn.BatchNorm2d(out_channels)
-        self.act = _activation(out_channels, relu)
+        shared_act = NonNegativePReLU(1) if (prelu_variant == "nonneg_block" and not relu) else None
+        self.act = _activation(out_channels, relu, prelu_variant, shared_act)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.act(self.bn(torch.cat([self.conv(x), self.pool(x)], dim=1)))
@@ -300,12 +387,17 @@ class RegularBottleneck(nn.Module):
         use_dsc: bool = False,
         separable_dilated: bool = False,
         double_projections: bool = False,
+        prelu_variant: PReluVariant = "standard",
     ):
         super().__init__()
         internal_channels = max(1, channels // internal_ratio)
-        activation = nn.ReLU if relu else nn.PReLU
+        # One shared scalar for the WHOLE block (reduce + inner conv's
+        # activation(s) + conv_bn_act's outer activation + out_act) -- see
+        # PReluVariant's "nonneg_block" note. None (unused) whenever this
+        # instance is actually a decoder block (relu=True always wins).
+        shared_act = NonNegativePReLU(1) if (prelu_variant == "nonneg_block" and not relu) else None
 
-        self.reduce = _reduce_proj(channels, internal_channels, relu, double_projections)
+        self.reduce = _reduce_proj(channels, internal_channels, relu, double_projections, prelu_variant, shared_act)
 
         if asymmetric:
             if use_dsc:
@@ -337,7 +429,7 @@ class RegularBottleneck(nn.Module):
                     bias=False,
                 ),
                 nn.BatchNorm2d(internal_channels),
-                activation(internal_channels) if not relu else activation(inplace=True),
+                _activation(internal_channels, relu, prelu_variant, shared_act),
                 nn.Conv2d(
                     internal_channels,
                     internal_channels,
@@ -374,7 +466,7 @@ class RegularBottleneck(nn.Module):
                     padding=(padding, 0), dilation=dilation, bias=False,
                 ),
                 nn.BatchNorm2d(internal_channels),
-                activation(internal_channels) if not relu else activation(inplace=True),
+                _activation(internal_channels, relu, prelu_variant, shared_act),
                 nn.Conv2d(
                     internal_channels, internal_channels, kernel_size=(1, kernel_size),
                     padding=(0, padding), dilation=dilation, bias=False,
@@ -393,11 +485,11 @@ class RegularBottleneck(nn.Module):
         self.conv_bn_act = nn.Sequential(
             self.conv,
             nn.BatchNorm2d(internal_channels),
-            activation(internal_channels) if not relu else activation(inplace=True),
+            _activation(internal_channels, relu, prelu_variant, shared_act),
         )
-        self.expand = _expand_proj(internal_channels, channels, relu, double_projections)
+        self.expand = _expand_proj(internal_channels, channels, relu, double_projections, prelu_variant, shared_act)
         self.dropout = nn.Dropout2d(p=dropout_p)
-        self.out_act = activation(channels) if not relu else activation(inplace=True)
+        self.out_act = _activation(channels, relu, prelu_variant, shared_act)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.reduce(x)
@@ -416,9 +508,11 @@ class DownsamplingBottleneck(nn.Module):
         use_strided: bool = True,
         relu: bool = False,
         double_projections: bool = False,
+        prelu_variant: PReluVariant = "standard",
     ):
         super().__init__()
         internal_channels = max(1, out_channels // internal_ratio)
+        shared_act = NonNegativePReLU(1) if (prelu_variant == "nonneg_block" and not relu) else None
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2, return_indices=True)
         if use_strided:
             # Spatial downsampling folded into the reduce conv itself (single
@@ -431,23 +525,23 @@ class DownsamplingBottleneck(nn.Module):
             self.reduce = nn.Sequential(
                 nn.Conv2d(in_channels, internal_channels, kernel_size=2, stride=2, bias=False),
                 nn.BatchNorm2d(internal_channels),
-                _activation(internal_channels, relu),
+                _activation(internal_channels, relu, prelu_variant, shared_act),
             )
         else:
             # Stage-1b ablation: separate maxpool (no learned downsampling)
             # followed by a stride-1 1x1 conv, instead of a strided conv.
             self.reduce = nn.Sequential(
                 nn.MaxPool2d(kernel_size=2, stride=2),
-                *_reduce_proj(in_channels, internal_channels, relu, double_projections),
+                *_reduce_proj(in_channels, internal_channels, relu, double_projections, prelu_variant, shared_act),
             )
         self.conv = nn.Sequential(
             nn.Conv2d(internal_channels, internal_channels, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(internal_channels),
-            _activation(internal_channels, relu),
+            _activation(internal_channels, relu, prelu_variant, shared_act),
         )
-        self.expand = _expand_proj(internal_channels, out_channels, relu, double_projections)
+        self.expand = _expand_proj(internal_channels, out_channels, relu, double_projections, prelu_variant, shared_act)
         self.dropout = nn.Dropout2d(p=dropout_p)
-        self.out_act = _activation(out_channels, relu)
+        self.out_act = _activation(out_channels, relu, prelu_variant, shared_act)
         self.out_channels = out_channels
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Size]:
@@ -487,9 +581,15 @@ class UpsamplingBottleneck(nn.Module):
         internal_ratio: int = 4,
         relu: bool = True,
         double_projections: bool = False,
+        prelu_variant: PReluVariant = "standard",
     ):
         super().__init__()
         internal_channels = max(1, in_channels // internal_ratio)
+        # Always None in practice: UpsamplingBottleneck is only ever built
+        # with relu=True (decoder), so _activation's `if relu:` branch wins
+        # before shared_act would matter -- threaded through anyway for
+        # signature consistency with the other bottleneck classes.
+        shared_act = NonNegativePReLU(1) if (prelu_variant == "nonneg_block" and not relu) else None
         # main_proj is NOT doubled by double_projections -- probe 4.5 scoped
         # this to the reduce/expand pair specifically (confirmed), not the
         # skip-path projection.
@@ -498,15 +598,15 @@ class UpsamplingBottleneck(nn.Module):
             nn.BatchNorm2d(out_channels),
         )
         self.unpool = nn.MaxUnpool2d(kernel_size=2, stride=2)
-        self.reduce = _reduce_proj(in_channels, internal_channels, relu, double_projections)
+        self.reduce = _reduce_proj(in_channels, internal_channels, relu, double_projections, prelu_variant, shared_act)
         self.up = nn.Sequential(
             nn.ConvTranspose2d(internal_channels, internal_channels, kernel_size=2, stride=2, bias=False),
             nn.BatchNorm2d(internal_channels),
-            nn.ReLU(inplace=True) if relu else nn.PReLU(internal_channels),
+            _activation(internal_channels, relu, prelu_variant, shared_act),
         )
-        self.expand = _expand_proj(internal_channels, out_channels, relu, double_projections)
+        self.expand = _expand_proj(internal_channels, out_channels, relu, double_projections, prelu_variant, shared_act)
         self.dropout = nn.Dropout2d(p=0.1)
-        self.out_act = nn.ReLU(inplace=True) if relu else nn.PReLU(out_channels)
+        self.out_act = _activation(out_channels, relu, prelu_variant, shared_act)
 
     def forward(
         self,
@@ -571,19 +671,20 @@ class DSCNoProjectionBottleneck(nn.Module):
         dilation: int = 1,
         dropout_p: float = 0.1,
         relu: bool = False,
+        prelu_variant: PReluVariant = "standard",
     ):
         super().__init__()
-        activation = nn.ReLU if relu else nn.PReLU
+        shared_act = NonNegativePReLU(1) if (prelu_variant == "nonneg_block" and not relu) else None
         self.conv = nn.Sequential(
             nn.Conv2d(channels, channels, kernel_size=kernel_size, padding=padding,
                       dilation=dilation, groups=channels, bias=False),
             nn.BatchNorm2d(channels),
-            activation(channels) if not relu else activation(inplace=True),
+            _activation(channels, relu, prelu_variant, shared_act),
             nn.Conv2d(channels, channels, kernel_size=1, bias=False),
             nn.BatchNorm2d(channels),
         )
         self.dropout = nn.Dropout2d(p=dropout_p)
-        self.out_act = activation(channels) if not relu else activation(inplace=True)
+        self.out_act = _activation(channels, relu, prelu_variant, shared_act)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.dropout(self.conv(x))
@@ -616,10 +717,15 @@ class MergedContextBottleneck(nn.Module):
         relu: bool = False,
         use_dsc: bool = False,
         separable_dilated: bool = False,
+        prelu_variant: PReluVariant = "standard",
     ):
         super().__init__()
         internal_channels = max(1, channels // internal_ratio)
-        self.reduce = _reduce_proj(channels, internal_channels, relu, double=False)
+        # One shared scalar for the WHOLE fused block (reduce + op1 + op2 +
+        # out_act) -- "block level" means this whole merged pair, not each
+        # op half independently.
+        shared_act = NonNegativePReLU(1) if (prelu_variant == "nonneg_block" and not relu) else None
+        self.reduce = _reduce_proj(channels, internal_channels, relu, double=False, prelu_variant=prelu_variant, shared_act=shared_act)
 
         kernel_size = first_kwargs.get("kernel_size", 3)
         padding = first_kwargs.get("padding", 1)
@@ -629,25 +735,26 @@ class MergedContextBottleneck(nn.Module):
                 nn.Conv2d(internal_channels, internal_channels, kernel_size=(kernel_size, 1),
                           padding=(padding, 0), bias=False),
                 nn.BatchNorm2d(internal_channels),
-                _activation(internal_channels, relu),
+                _activation(internal_channels, relu, prelu_variant, shared_act),
                 nn.Conv2d(internal_channels, internal_channels, kernel_size=(1, kernel_size),
                           padding=(0, padding), bias=False),
                 nn.BatchNorm2d(internal_channels),
-                _activation(internal_channels, relu),
+                _activation(internal_channels, relu, prelu_variant, shared_act),
             )
         else:
             self.op1 = _dilatable_conv_block(
-                internal_channels, kernel_size, padding, dilation1, relu, use_dsc, separable_dilated,
+                internal_channels, kernel_size, padding, dilation1, relu, use_dsc, separable_dilated, prelu_variant,
+                shared_act,
             )
 
         # Second op: normally the dilated 3x3 (the pairing's dilated half).
         self.op2 = _dilatable_conv_block(
-            internal_channels, 3, dilation, dilation, relu, use_dsc, separable_dilated,
+            internal_channels, 3, dilation, dilation, relu, use_dsc, separable_dilated, prelu_variant, shared_act,
         )
 
-        self.expand = _expand_proj(internal_channels, channels, relu, double=False)
+        self.expand = _expand_proj(internal_channels, channels, relu, double=False, prelu_variant=prelu_variant, shared_act=shared_act)
         self.dropout = nn.Dropout2d(p=dropout_p)
-        self.out_act = _activation(channels, relu)
+        self.out_act = _activation(channels, relu, prelu_variant, shared_act)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.reduce(x)
@@ -702,6 +809,7 @@ class ENet(nn.Module):
         use_dsc: bool = False,
         context_pattern: ContextPattern = "default",
         use_prelu: bool = True,
+        prelu_variant: PReluVariant = "standard",
         shallow_dilation: bool = False,
         separable_dilated: bool = False,
         merge_dilated_pairs: bool = False,
@@ -731,6 +839,15 @@ class ENet(nn.Module):
                 "dsc_no_projection_context_only narrows dsc_no_projection's scope to stage2/stage3 only "
                 "(regular1/regular4/regular5 revert to normal projected bottlenecks) -- meaningless "
                 "without dsc_no_projection=True itself."
+            )
+        valid_prelu_variants = ("standard", "leaky", "nonneg", "nonneg_block")
+        if prelu_variant not in valid_prelu_variants:
+            raise ValueError(f"prelu_variant must be one of {valid_prelu_variants}, got {prelu_variant!r}.")
+        if prelu_variant != "standard" and not use_prelu:
+            raise ValueError(
+                "prelu_variant only has an effect on the encoder-half activation use_prelu=True selects "
+                "(nn.PReLU by default) -- meaningless with use_prelu=False, which already collapses the "
+                "whole network to plain ReLU regardless of this flag."
             )
         if len(channels) == 5:
             # stage2 and stage3 share one width (the historical/default
@@ -782,6 +899,11 @@ class ENet(nn.Module):
         # switches the encoder to ReLU too, collapsing the whole network to
         # a single activation, for section 1d's ablation of that split.
         self.use_prelu = use_prelu
+        # "standard" (real learnable PReLU, default), "leaky" (fixed
+        # LeakyReLU(0.01)), or "nonneg" (learnable PReLU clamped >= 0) --
+        # see PReluVariant/_activation's own module-level comment. No-op
+        # (validated above) unless use_prelu=True.
+        self.prelu_variant: PReluVariant = prelu_variant
         # Stage 4 architecture probes (all default False/off -- every prior
         # config, including every Stage 1/1b/1c/2/2a/2b/3 sweep cell, builds
         # byte-identical to before these were added):
@@ -816,13 +938,13 @@ class ENet(nn.Module):
         self.initial = self._build_initial_block(in_channels, initial_channels)
         self.down1 = DownsamplingBottleneck(
             initial_channels, stage1_channels, dropout_p=0.01, use_strided=use_strided,
-            relu=not use_prelu, double_projections=double_projections,
+            relu=not use_prelu, double_projections=double_projections, prelu_variant=self.prelu_variant,
         )
         self.regular1 = self._make_shallow_stage(stage1_channels, n_stage1, dropout_p=0.01, relu=not use_prelu)
 
         self.down2 = DownsamplingBottleneck(
             stage1_channels, stage2_channels, dropout_p=0.1, use_strided=use_strided,
-            relu=not use_prelu, double_projections=double_projections,
+            relu=not use_prelu, double_projections=double_projections, prelu_variant=self.prelu_variant,
         )
         self.stage2 = self._make_context_stage(stage2_channels, n_stage2)
         self.proj2_to_3 = (
@@ -831,22 +953,25 @@ class ENet(nn.Module):
             else nn.Sequential(
                 nn.Conv2d(stage2_channels, stage3_channels, kernel_size=1, bias=False),
                 nn.BatchNorm2d(stage3_channels),
-                _activation(stage3_channels, not use_prelu),
+                _activation(stage3_channels, not use_prelu, self.prelu_variant),
             )
         )
         self.stage3 = self._make_context_stage(stage3_channels, n_stage3)
 
-        self.up4 = UpsamplingBottleneck(stage3_channels, stage4_channels, double_projections=double_projections)
+        self.up4 = UpsamplingBottleneck(stage3_channels, stage4_channels, double_projections=double_projections,
+                                         prelu_variant=self.prelu_variant)
         self.regular4 = self._make_shallow_stage(stage4_channels, n_regular4, dropout_p=0.1, relu=True)
-        self.up5 = UpsamplingBottleneck(stage4_channels, stage5_channels, double_projections=double_projections)
+        self.up5 = UpsamplingBottleneck(stage4_channels, stage5_channels, double_projections=double_projections,
+                                         prelu_variant=self.prelu_variant)
         if dsc_no_projection and not dsc_no_projection_context_only:
             self.regular5 = nn.Sequential(
-                *[DSCNoProjectionBottleneck(stage5_channels, dropout_p=0.1, relu=True) for _ in range(n_regular5)]
+                *[DSCNoProjectionBottleneck(stage5_channels, dropout_p=0.1, relu=True,
+                                             prelu_variant=self.prelu_variant) for _ in range(n_regular5)]
             )
         else:
             self.regular5 = nn.Sequential(
                 *[RegularBottleneck(stage5_channels, dropout_p=0.1, relu=True, use_dsc=use_dsc,
-                                     double_projections=double_projections)
+                                     double_projections=double_projections, prelu_variant=self.prelu_variant)
                   for _ in range(n_regular5)]
             )
         self.final = nn.ConvTranspose2d(stage5_channels, out_channels, kernel_size=2, stride=2)
@@ -944,7 +1069,7 @@ class ENet(nn.Module):
                     # retained.
                     ops.append(RegularBottleneck(
                         channels, dropout_p=0.1, use_dsc=self.reg_bookend_dsc, relu=not self.use_prelu,
-                        double_projections=self.double_projections,
+                        double_projections=self.double_projections, prelu_variant=self.prelu_variant,
                     ))
                     continue
                 if kwargs.get("asymmetric", False):
@@ -959,7 +1084,7 @@ class ENet(nn.Module):
                     dilation = 1
                 ops.append(DSCNoProjectionBottleneck(
                     channels, kernel_size=3, padding=dilation, dilation=dilation,
-                    dropout_p=0.1, relu=not self.use_prelu,
+                    dropout_p=0.1, relu=not self.use_prelu, prelu_variant=self.prelu_variant,
                 ))
             return TwoBlockSkipStage(ops) if self.two_block_skip else nn.Sequential(*ops)
 
@@ -984,14 +1109,14 @@ class ENet(nn.Module):
                     ops.append(MergedContextBottleneck(
                         channels, first_kwargs, dilation, dropout_p=0.1,
                         relu=not self.use_prelu, use_dsc=self.use_dsc,
-                        separable_dilated=self.separable_dilated,
+                        separable_dilated=self.separable_dilated, prelu_variant=self.prelu_variant,
                     ))
                     i += 2
                 else:
                     # Odd leftover slot (only possible if n_ops is odd) --
                     # falls back to one plain RegularBottleneck for it.
                     ops.append(RegularBottleneck(channels, dropout_p=0.1, use_dsc=self.use_dsc,
-                                                  relu=not self.use_prelu,
+                                                  relu=not self.use_prelu, prelu_variant=self.prelu_variant,
                                                   double_projections=self.double_projections, **first_kwargs))
                     i += 1
             return TwoBlockSkipStage(ops) if self.two_block_skip else nn.Sequential(*ops)
@@ -1019,7 +1144,7 @@ class ENet(nn.Module):
             ops.append(RegularBottleneck(
                 channels, dropout_p=0.1, use_dsc=use_dsc_here, relu=not self.use_prelu,
                 separable_dilated=self.separable_dilated, double_projections=self.double_projections,
-                **kwargs,
+                prelu_variant=self.prelu_variant, **kwargs,
             ))
         return TwoBlockSkipStage(ops) if self.two_block_skip else nn.Sequential(*ops)
 
@@ -1048,7 +1173,8 @@ class ENet(nn.Module):
         not stage2/stage3, so it's out of that flag's narrowed scope)."""
         if self.dsc_no_projection and not self.dsc_no_projection_context_only:
             return nn.Sequential(
-                *[DSCNoProjectionBottleneck(channels, dropout_p=dropout_p, relu=relu) for _ in range(n_ops)]
+                *[DSCNoProjectionBottleneck(channels, dropout_p=dropout_p, relu=relu,
+                                             prelu_variant=self.prelu_variant) for _ in range(n_ops)]
             )
         if self.shallow_dilation_wide:
             pattern = SHALLOW_DILATION_WIDE_DENSE_PATTERN if self.shallow_dilation_dense else SHALLOW_DILATION_WIDE_PATTERN
@@ -1057,7 +1183,7 @@ class ENet(nn.Module):
         else:
             return nn.Sequential(
                 *[RegularBottleneck(channels, dropout_p=dropout_p, use_dsc=self.use_dsc, relu=relu,
-                                     double_projections=self.double_projections)
+                                     double_projections=self.double_projections, prelu_variant=self.prelu_variant)
                   for _ in range(n_ops)]
             )
         ops = []
@@ -1066,7 +1192,8 @@ class ENet(nn.Module):
             if kwargs.get("dilation", 1) != 1 and not self.use_dilated:
                 kwargs = {}
             ops.append(RegularBottleneck(channels, dropout_p=dropout_p, use_dsc=self.use_dsc, relu=relu,
-                                          double_projections=self.double_projections, **kwargs))
+                                          double_projections=self.double_projections,
+                                          prelu_variant=self.prelu_variant, **kwargs))
         return nn.Sequential(*ops)
 
     def _build_initial_block(self, in_channels: int, initial_channels: int) -> nn.Module:
@@ -1075,7 +1202,7 @@ class ENet(nn.Module):
         the rest of __init__ -- everything downstream of self.initial is
         architecture-agnostic to how it got built, it just needs to receive
         (in_channels, H/2, W/2) and emit (initial_channels, H/2, W/2)."""
-        return InitialBlock(in_channels, initial_channels, relu=not self.use_prelu)
+        return InitialBlock(in_channels, initial_channels, relu=not self.use_prelu, prelu_variant=self.prelu_variant)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         input_size = x.shape[2:]
@@ -1095,6 +1222,124 @@ class ENet(nn.Module):
         if x.shape[2:] != input_size:
             x = F.interpolate(x, size=input_size, mode="bilinear", align_corners=False)
         return x
+
+
+# The set of "bottleneck-like" container modules used to group individual
+# PReLU activation sites into one block for collect_prelu_block_means below
+# -- each may hold 1-3 internal PReLU sites (reduce/expand/out_act) that get
+# pooled into a single blended mean per container instance.
+_BOTTLENECK_CONTAINER_TYPES = (
+    InitialBlock, RegularBottleneck, DownsamplingBottleneck, UpsamplingBottleneck,
+    DSCNoProjectionBottleneck, MergedContextBottleneck,
+)
+
+
+def _prelu_weight_values(module: nn.Module) -> list[float]:
+    if isinstance(module, NonNegativePReLU):
+        return module.weight.clamp(min=0.0).detach().cpu().tolist()
+    return module.weight.detach().cpu().tolist()
+
+
+def collect_prelu_global_mean(model: nn.Module) -> float:
+    """Mean learned slope across every nn.PReLU/NonNegativePReLU channel in
+    the whole model (all sites pooled together into one scalar) -- the
+    FINN-motivated use case is deriving a single network-wide LeakyReLU
+    negative_slope from an already-trained PReLU checkpoint's own
+    statistics, see apply_leaky_slope_overrides's global_slope arg."""
+    values: list[float] = []
+    for module in model.modules():
+        if isinstance(module, (nn.PReLU, NonNegativePReLU)):
+            values.extend(_prelu_weight_values(module))
+    if not values:
+        raise ValueError("Model has no nn.PReLU/NonNegativePReLU modules -- was it built with prelu_variant='standard' or 'nonneg'?")
+    return sum(values) / len(values)
+
+
+def collect_prelu_block_means(model: nn.Module) -> dict[str, float]:
+    """Like collect_prelu_global_mean, but pools each bottleneck-container
+    instance's own internal PReLU sites (reduce/expand/out_act) into ONE
+    mean per container, keyed by that container's dotted module name (e.g.
+    "stage2.3") -- one blended value per residual block, not per individual
+    activation site. Meant to be passed straight into
+    apply_leaky_slope_overrides's block_slopes arg to build a per-block
+    FINN-deployable LeakyReLU model from an already-trained PReLU
+    checkpoint. Containers with no PReLU inside (relu=True decoder blocks)
+    are simply absent from the returned dict."""
+    containers = {
+        name: module for name, module in model.named_modules()
+        if isinstance(module, _BOTTLENECK_CONTAINER_TYPES)
+    }
+    # Longest name first so a nested container (none exist today, but keeps
+    # this robust against future nesting) claims its own PReLUs before an
+    # ancestor container's prefix match would.
+    container_names_by_len = sorted(containers, key=len, reverse=True)
+    values_by_container: dict[str, list[float]] = {name: [] for name in containers}
+    for name, module in model.named_modules():
+        if not isinstance(module, (nn.PReLU, NonNegativePReLU)):
+            continue
+        for container_name in container_names_by_len:
+            if name == container_name or name.startswith(container_name + "."):
+                values_by_container[container_name].extend(_prelu_weight_values(module))
+                break
+    return {name: sum(vals) / len(vals) for name, vals in values_by_container.items() if vals}
+
+
+def apply_nonneg_block_init(model: nn.Module, block_init_values: dict) -> int:
+    """Post-construction, pre-training initializer for prelu_variant=
+    'nonneg_block' models: sets each bottleneck block's ONE shared
+    NonNegativePReLU scalar to block_init_values[block_name] (keys are
+    dotted bottleneck-container names, e.g. "stage2.3" -- same convention
+    as collect_prelu_block_means's own keys, which is the intended source
+    for this dict: a warm start from an already-trained per-channel PReLU
+    checkpoint's own per-block means). The parameter STAYS learnable
+    afterward (unlike apply_leaky_slope_overrides's permanently-fixed
+    LeakyReLU slope) -- this only sets its starting point before training
+    begins. Any block not covered by block_init_values keeps
+    NonNegativePReLU's own default init (0.25). Returns the number of
+    blocks initialized, for self-test/sanity checks."""
+    patched = 0
+    for name, module in model.named_modules():
+        if not isinstance(module, _BOTTLENECK_CONTAINER_TYPES):
+            continue
+        block_act = module.act if isinstance(module, InitialBlock) else getattr(module, "out_act", None)
+        if isinstance(block_act, NonNegativePReLU) and name in block_init_values:
+            with torch.no_grad():
+                block_act.weight.fill_(float(block_init_values[name]))
+            patched += 1
+    return patched
+
+
+def apply_leaky_slope_overrides(
+    model: nn.Module,
+    global_slope: float | None = None,
+    block_slopes: dict | None = None,
+) -> int:
+    """Post-construction patch for a prelu_variant="leaky" model: overrides
+    each nn.LeakyReLU's fixed negative_slope in place. negative_slope is a
+    plain Python float baked in at construction, not a Parameter/buffer, so
+    it is NOT part of state_dict and can't be carried through a checkpoint
+    load -- it must be reapplied here, after building the model but before
+    (or after, doesn't matter -- it only affects forward(), not stored
+    state) loading weights, every time. block_slopes keys are dotted
+    bottleneck-container names (see collect_prelu_block_means) matched by
+    longest-prefix; any LeakyReLU not covered by a block_slopes prefix
+    falls back to global_slope. Returns the number of LeakyReLU modules
+    patched, for self-test/sanity checks."""
+    patched = 0
+    for name, module in model.named_modules():
+        if not isinstance(module, nn.LeakyReLU):
+            continue
+        slope = global_slope
+        if block_slopes:
+            best_prefix_len = -1
+            for prefix, value in block_slopes.items():
+                if (name == prefix or name.startswith(prefix + ".")) and len(prefix) > best_prefix_len:
+                    slope = value
+                    best_prefix_len = len(prefix)
+        if slope is not None:
+            module.negative_slope = float(slope)
+            patched += 1
+    return patched
 
 
 if __name__ == "__main__":
@@ -1711,3 +1956,301 @@ if __name__ == "__main__":
                     assert conv[0].groups == 1, f"{label}: {stage_name}[{i}] (dilated) unexpectedly depthwise -- should stay dense like S5-SeparableDense, not DSC"
 
     print("ENet Stage-10 reg_interleaved+separable_dilated hybrid self-test PASSED: 2 configs (prelu, relu), 0 new code -- pure composition of existing flags.")
+
+    # Stage 11 -- prelu_variant: a third/fourth activation choice for
+    # wherever use_prelu=True would otherwise build a real nn.PReLU.
+    # "leaky" -> fixed nn.LeakyReLU(0.01), no learnable params at all.
+    # "nonneg" -> NonNegativePReLU, learnable but clamped to a>=0 every
+    # forward pass -- rules out the sign-flipping behavior real PReLU
+    # sometimes learns (compression/plot_prelu_activations.py found
+    # negative slopes at a few sites in real trained checkpoints).
+    for variant, expected_cls in (("leaky", nn.LeakyReLU), ("nonneg", NonNegativePReLU)):
+        m = ENet(
+            in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=U4_BOTTLENECKS,
+            decoder_type="upsample_conv", use_prelu=True, prelu_variant=variant, use_asymmetric=False,
+            separable_dilated=True, context_pattern="dense_dilation",
+        )
+        with torch.no_grad():
+            assert m(dummy).shape == (1, 5, 512, 512)
+        assert type(m.initial.act) is expected_cls, f"11.{variant}: initial.act is {type(m.initial.act).__name__}"
+        assert type(m.stage2[0].out_act) is expected_cls, f"11.{variant}: stage2[0].out_act is {type(m.stage2[0].out_act).__name__}"
+        assert type(m.stage2[0].reduce[2]) is expected_cls, f"11.{variant}: stage2[0].reduce[2] is {type(m.stage2[0].reduce[2]).__name__}"
+        # Decoder half is untouched -- still hardcoded plain ReLU regardless
+        # of prelu_variant, same as it already is regardless of use_prelu.
+        assert type(m.regular5[0].out_act) is nn.ReLU, f"11.{variant}: regular5[0].out_act is {type(m.regular5[0].out_act).__name__}, expected plain ReLU (decoder always is)"
+        assert type(m.up4.out_act) is nn.ReLU, f"11.{variant}: up4.out_act is {type(m.up4.out_act).__name__}, expected plain ReLU"
+
+    if True:
+        leaky = ENet(in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=U4_BOTTLENECKS,
+                     decoder_type="upsample_conv", use_prelu=True, prelu_variant="leaky")
+        assert leaky.initial.act.negative_slope == 0.01, "11.leaky: negative_slope should be PyTorch's default 0.01"
+        assert sum(p.numel() for p in leaky.initial.act.parameters()) == 0, "11.leaky: LeakyReLU must have zero learnable params"
+
+    # NonNegativePReLU: force its weight negative directly, then confirm the
+    # FORWARD PASS still clamps to plain-ReLU behavior for negative inputs
+    # (not just that the module type is right) -- the whole point of this
+    # variant is that a negative underlying parameter can never leak into
+    # the output, unlike real nn.PReLU where it's the actual learned value.
+    nonneg_act = NonNegativePReLU(num_parameters=4)
+    with torch.no_grad():
+        nonneg_act.weight.fill_(-0.7)
+    probe = torch.tensor([[-2.0, -2.0, -2.0, -2.0]])
+    out = nonneg_act(probe.view(1, 4, 1, 1)).flatten()
+    assert torch.all(out == 0.0), f"11.nonneg: negative weight leaked through as {out.tolist()}, expected all zeros (clamped)"
+    # Positive input must still pass through unchanged regardless of weight sign.
+    probe_pos = torch.tensor([[3.0, 3.0, 3.0, 3.0]])
+    out_pos = nonneg_act(probe_pos.view(1, 4, 1, 1)).flatten()
+    assert torch.all(out_pos == 3.0), f"11.nonneg: positive input altered to {out_pos.tolist()}"
+
+    # Validation: prelu_variant only means something under use_prelu=True.
+    try:
+        ENet(in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=U4_BOTTLENECKS,
+             decoder_type="upsample_conv", use_prelu=False, prelu_variant="leaky")
+        raise AssertionError("11: expected ValueError for prelu_variant != standard with use_prelu=False, got none")
+    except ValueError:
+        pass
+    try:
+        ENet(in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=U4_BOTTLENECKS,
+             decoder_type="upsample_conv", use_prelu=True, prelu_variant="bogus")
+        raise AssertionError("11: expected ValueError for an invalid prelu_variant string, got none")
+    except ValueError:
+        pass
+
+    print("ENet Stage-11 prelu_variant self-test PASSED: 2 new activation variants (leaky, nonneg) + clamping-behavior + validation checks.")
+
+    # Stage 12: apply_leaky_slope_overrides / collect_prelu_global_mean /
+    # collect_prelu_block_means -- the FINN-motivated follow-up (see
+    # PReluVariant's deprecation note and compression/slurm/archive/
+    # README.md's stage_11 entry). Hand-set known PReLU weights on a real
+    # "standard" model, verify the collected means match a by-hand
+    # calculation exactly, then verify a "leaky" twin gets patched to those
+    # exact per-block values (and a global fallback for anything not
+    # covered) and still forward-passes cleanly afterward.
+    standard_model = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=U4_BOTTLENECKS,
+        decoder_type="upsample_conv", use_prelu=True, prelu_variant="standard",
+        context_pattern="dense_dilation", separable_dilated=True,
+    )
+    prelu_sites = [
+        (name, module) for name, module in standard_model.named_modules() if isinstance(module, nn.PReLU)
+    ]
+    assert len(prelu_sites) > 0, "12: expected at least one nn.PReLU site to hand-set weights on"
+    # Deterministic, distinguishable-per-site values so a bug that pools
+    # the wrong sites together (or mixes up which block owns which site)
+    # would change the computed means.
+    for i, (name, module) in enumerate(prelu_sites):
+        module.weight.data.fill_(0.05 * (i + 1))
+    expected_global_values = [v for _, m in prelu_sites for v in m.weight.detach().tolist()]
+    expected_global_mean = sum(expected_global_values) / len(expected_global_values)
+    got_global_mean = collect_prelu_global_mean(standard_model)
+    assert abs(got_global_mean - expected_global_mean) < 1e-6, (
+        f"12: collect_prelu_global_mean mismatch: expected {expected_global_mean}, got {got_global_mean}"
+    )
+
+    block_means = collect_prelu_block_means(standard_model)
+    assert len(block_means) > 0, "12: collect_prelu_block_means returned no blocks"
+    # Cross-check one specific block by hand: every PReLU site whose dotted
+    # name is nested under that block's own name must contribute to (and
+    # nothing else must leak into) its mean.
+    sample_block_name = next(iter(block_means))
+    expected_block_values = [
+        v for name, m in prelu_sites
+        if name == sample_block_name or name.startswith(sample_block_name + ".")
+        for v in m.weight.detach().tolist()
+    ]
+    assert len(expected_block_values) > 0, f"12: no PReLU sites matched sample block {sample_block_name!r}"
+    expected_block_mean = sum(expected_block_values) / len(expected_block_values)
+    assert abs(block_means[sample_block_name] - expected_block_mean) < 1e-6, (
+        f"12: collect_prelu_block_means[{sample_block_name!r}] mismatch: "
+        f"expected {expected_block_mean}, got {block_means[sample_block_name]}"
+    )
+    # Every block's mean must equal a fresh independent recomputation from
+    # ALL of standard_model's own named_modules() (not just the cached
+    # prelu_sites list) -- guards against collect_prelu_block_means silently
+    # dropping or double-counting a site.
+    for block_name, mean in block_means.items():
+        recomputed = [
+            v for name, m in standard_model.named_modules()
+            if isinstance(m, nn.PReLU) and (name == block_name or name.startswith(block_name + "."))
+            for v in m.weight.detach().tolist()
+        ]
+        assert abs(mean - sum(recomputed) / len(recomputed)) < 1e-6, f"12: block mean drift for {block_name!r}"
+
+    leaky_model = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=U4_BOTTLENECKS,
+        decoder_type="upsample_conv", use_prelu=True, prelu_variant="leaky",
+        context_pattern="dense_dilation", separable_dilated=True,
+    )
+    leaky_sites_before = {name: m.negative_slope for name, m in leaky_model.named_modules() if isinstance(m, nn.LeakyReLU)}
+    assert all(v == 0.01 for v in leaky_sites_before.values()), "12: leaky variant should default every site to 0.01 before patching"
+
+    global_only_patched = apply_leaky_slope_overrides(leaky_model, global_slope=0.42)
+    assert global_only_patched == len(leaky_sites_before), (
+        f"12: global-only patch count mismatch: expected {len(leaky_sites_before)}, got {global_only_patched}"
+    )
+    assert all(
+        m.negative_slope == 0.42 for name, m in leaky_model.named_modules() if isinstance(m, nn.LeakyReLU)
+    ), "12: global_slope should apply to every LeakyReLU site with no block_slopes given"
+
+    # Re-patch with a per-block override on the same sample_block_name
+    # (guaranteed present in leaky_model too -- both models share identical
+    # topology/naming, only the activation TYPE differs) plus a global
+    # fallback for everything else, then verify BOTH populations landed on
+    # the right value.
+    per_block_patched = apply_leaky_slope_overrides(
+        leaky_model, global_slope=0.11, block_slopes={sample_block_name: 0.77},
+    )
+    assert per_block_patched == len(leaky_sites_before), "12: per-block patch should still cover every LeakyReLU site (global fallback)"
+    for name, m in leaky_model.named_modules():
+        if not isinstance(m, nn.LeakyReLU):
+            continue
+        if name == sample_block_name or name.startswith(sample_block_name + "."):
+            assert m.negative_slope == 0.77, f"12: {name!r} under {sample_block_name!r} should have been overridden to 0.77, got {m.negative_slope}"
+        else:
+            assert m.negative_slope == 0.11, f"12: {name!r} should have fallen back to global_slope=0.11, got {m.negative_slope}"
+
+    # A patched leaky model must still forward-pass cleanly -- negative_slope
+    # is read dynamically in nn.LeakyReLU.forward, no cached/compiled state
+    # to go stale.
+    with torch.no_grad():
+        leaky_model.eval()
+        _ = leaky_model(torch.randn(1, 1, 64, 64))
+
+    print("ENet Stage-12 apply_leaky_slope_overrides self-test PASSED: global mean, per-block means, and post-construction LeakyReLU patching all verified against hand-computed values.")
+
+    # Stage 13: prelu_variant="nonneg_block" -- ONE shared non-negative
+    # learnable scalar per bottleneck block (not per-channel, not one
+    # global value), warm-startable from collect_prelu_block_means and
+    # losslessly convertible to a fixed per-block LeakyReLU at inference
+    # (see PReluVariant's deprecation note). Verifies true parameter TYING
+    # (same nn.Module object at every site in a block, not just equal
+    # values), correct gradient flow through the shared parameter, and a
+    # full end-to-end nonneg_block -> leaky conversion.
+    block_model = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=U4_BOTTLENECKS,
+        decoder_type="upsample_conv", use_prelu=True, prelu_variant="nonneg_block",
+        context_pattern="dense_dilation", separable_dilated=True,
+    )
+    # Every encoder bottleneck's activation SITES must be the literal same
+    # object (identity, not just equal value) -- this is what makes it a
+    # true single learnable scalar rather than several independently-
+    # learnable ones that merely started equal.
+    sample_block = block_model.stage2[0]
+    assert isinstance(sample_block, RegularBottleneck), f"13: expected stage2.0 to be RegularBottleneck, got {type(sample_block).__name__}"
+    assert sample_block.reduce[2] is sample_block.out_act, "13: reduce's activation and out_act should be the SAME shared object"
+    assert sample_block.conv_bn_act[2] is sample_block.out_act, "13: conv_bn_act's outer activation should be the SAME shared object"
+    assert sample_block.conv[2] is sample_block.out_act, "13: conv's inner activation (separable_dilated pass) should be the SAME shared object too"
+    assert isinstance(sample_block.out_act, NonNegativePReLU), f"13: expected NonNegativePReLU, got {type(sample_block.out_act).__name__}"
+    assert tuple(sample_block.out_act.weight.shape) == (1,), f"13: nonneg_block activation should have exactly 1 parameter, got shape {tuple(sample_block.out_act.weight.shape)}"
+
+    # Every OTHER encoder block must have its OWN distinct shared object
+    # (not accidentally tied across different blocks too).
+    other_block = block_model.stage2[1]
+    assert other_block.out_act is not sample_block.out_act, "13: different blocks must NOT share the same activation object"
+
+    # Decoder stays plain ReLU regardless, same as every other prelu_variant.
+    assert isinstance(block_model.regular5[0].out_act, nn.ReLU), "13: decoder (regular5) should stay plain ReLU under nonneg_block too"
+    assert isinstance(block_model.up4.out_act, nn.ReLU), "13: decoder (up4) should stay plain ReLU under nonneg_block too"
+
+    # Clamping still works on a nonneg_block instance specifically (Stage-11
+    # already covers NonNegativePReLU generically, this confirms the
+    # block-shared construction path specifically).
+    with torch.no_grad():
+        sample_block.out_act.weight.fill_(-0.9)
+        clamped_out = sample_block.out_act(torch.tensor([-2.0]))
+        assert clamped_out.item() == 0.0, f"13: negative shared slope should clamp to 0, got {clamped_out.item()}"
+        sample_block.out_act.weight.fill_(0.3)
+
+    # Gradient flow: a backward pass through the whole network must
+    # populate a non-None, non-zero gradient on a shared block's ONE
+    # parameter (confirms autograd correctly accumulates contributions from
+    # every site that reads it, not just the last one assigned).
+    block_model.train()
+    x = torch.randn(1, 1, 64, 64, requires_grad=False)
+    out = block_model(x)
+    out.sum().backward()
+    assert sample_block.out_act.weight.grad is not None, "13: shared activation parameter got no gradient at all"
+    assert sample_block.out_act.weight.grad.abs().item() > 0, "13: shared activation parameter's gradient is exactly zero (suspicious -- expected nonzero from 4+ contributing sites)"
+
+    # Full nonneg_block -> leaky conversion round trip: hand-set each
+    # block's ONE scalar to a distinct known value, verify
+    # collect_prelu_block_means recovers exactly those values (no
+    # averaging needed/possible -- only one real number per block), then
+    # verify apply_leaky_slope_overrides on a matching "leaky" build lands
+    # on those exact values.
+    block_model.eval()
+    # Key by BLOCK CONTAINER name (matching collect_prelu_block_means's own
+    # keys), not by whichever activation SITE path named_modules() happens
+    # to surface first for the shared object (dedup means only one site's
+    # path is ever visited per block, and it need not be out_act's).
+    known_values = {}
+    for i, (name, module) in enumerate(block_model.named_modules()):
+        if not isinstance(module, _BOTTLENECK_CONTAINER_TYPES):
+            continue
+        # InitialBlock's trailing activation attribute is named `act`, every
+        # other container's is `out_act` -- see each class's own __init__.
+        block_act = module.act if isinstance(module, InitialBlock) else getattr(module, "out_act", None)
+        if isinstance(block_act, NonNegativePReLU):
+            value = 0.05 * (i + 1)
+            with torch.no_grad():
+                block_act.weight.fill_(value)
+            known_values[name] = value
+    assert len(known_values) > 0, "13: expected at least one NonNegativePReLU block in the nonneg_block model"
+    recovered_means = collect_prelu_block_means(block_model)
+    assert set(recovered_means.keys()) == set(known_values.keys()), (
+        f"13: block name mismatch: {set(recovered_means.keys()) ^ set(known_values.keys())}"
+    )
+    for name, value in known_values.items():
+        assert abs(recovered_means[name] - value) < 1e-6, f"13: collect_prelu_block_means[{name!r}] expected {value}, got {recovered_means[name]}"
+
+    leaky_twin = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=U4_BOTTLENECKS,
+        decoder_type="upsample_conv", use_prelu=True, prelu_variant="leaky",
+        context_pattern="dense_dilation", separable_dilated=True,
+    )
+    patched = apply_leaky_slope_overrides(leaky_twin, block_slopes=recovered_means)
+    for name, m in leaky_twin.named_modules():
+        if isinstance(m, nn.LeakyReLU):
+            for block_name, value in known_values.items():
+                if name == block_name or name.startswith(block_name + "."):
+                    assert abs(m.negative_slope - value) < 1e-6, f"13: {name!r} expected negative_slope {value}, got {m.negative_slope}"
+                    break
+    assert patched > 0, "13: expected at least one LeakyReLU site patched in the leaky twin"
+
+    try:
+        ENet(in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=U4_BOTTLENECKS,
+             decoder_type="upsample_conv", use_prelu=False, prelu_variant="nonneg_block")
+        raise AssertionError("13: expected ValueError for prelu_variant='nonneg_block' with use_prelu=False, got none")
+    except ValueError:
+        pass
+
+    # apply_nonneg_block_init -- the warm-start entry point: a FRESH
+    # nonneg_block model's blocks all start at NonNegativePReLU's own
+    # default (0.25); after applying a partial init map, only the covered
+    # blocks should move, and each learned scalar must STAY a live
+    # nn.Parameter (requires_grad still True -- unlike apply_leaky_slope_
+    # overrides's permanently-fixed LeakyReLU, this is only a starting
+    # point, not a freeze).
+    fresh_block_model = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=U4_BOTTLENECKS,
+        decoder_type="upsample_conv", use_prelu=True, prelu_variant="nonneg_block",
+        context_pattern="dense_dilation", separable_dilated=True,
+    )
+    all_block_names = list(collect_prelu_block_means(fresh_block_model).keys())
+    assert all(abs(v - 0.25) < 1e-6 for v in collect_prelu_block_means(fresh_block_model).values()), (
+        "13: a freshly-built nonneg_block model should start every block at NonNegativePReLU's default init 0.25"
+    )
+    partial_init = {name: 0.6 for name in all_block_names[: len(all_block_names) // 2]}
+    n_init_applied = apply_nonneg_block_init(fresh_block_model, partial_init)
+    assert n_init_applied == len(partial_init), f"13: expected {len(partial_init)} blocks initialized, got {n_init_applied}"
+    post_init_means = collect_prelu_block_means(fresh_block_model)
+    for name in all_block_names:
+        expected = 0.6 if name in partial_init else 0.25
+        assert abs(post_init_means[name] - expected) < 1e-6, (
+            f"13: block {name!r} expected {expected} after partial warm-start init, got {post_init_means[name]}"
+        )
+        block_module = dict(fresh_block_model.named_modules())[name]
+        block_act = block_module.act if isinstance(block_module, InitialBlock) else block_module.out_act
+        assert block_act.weight.requires_grad, f"13: block {name!r}'s scalar must stay a live learnable Parameter after warm-start init, not get frozen"
+
+    print("ENet Stage-13 nonneg_block self-test PASSED: true parameter tying (object identity), gradient flow through the shared scalar, warm-start initialization, and a full nonneg_block -> leaky conversion round trip all verified.")

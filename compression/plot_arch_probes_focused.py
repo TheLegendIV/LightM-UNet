@@ -34,6 +34,8 @@ STAGE_COLORS = {
     "8_reginterleaved_isolation": "#7cb342",
     "9_dsc_projected_dense_dilation": "#9c6b30",
     "10_reginterleaved_separable_projected": "#5c6bc0",
+    "12_separable_dense_relu": "#c2185b",
+    "13_separable_dense_nonneg_block_warmstart": "#00897b",
 }
 U4_LINE_COLOR = "#2a78d6"
 
@@ -98,9 +100,11 @@ def main() -> int:
         | (df["stage"] == "8_reginterleaved_isolation")
         | (df["stage"] == "9_dsc_projected_dense_dilation")
         | (df["stage"] == "10_reginterleaved_separable_projected")
+        | (df["stage"] == "12_separable_dense_relu")
+        | (df["stage"] == "13_separable_dense_nonneg_block_warmstart")
     ].dropna(subset=["params", "dice"]).copy()
     if focused.empty:
-        print("No U4/stage_4/.../stage_10 rows found in results.csv yet.")
+        print("No U4/stage_4/.../stage_13 rows found in results.csv yet.")
         return 1
     u4_rows = focused[focused["config_name"] == U4_CONFIG_NAME]
     if u4_rows.empty:

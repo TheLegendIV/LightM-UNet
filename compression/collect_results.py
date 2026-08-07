@@ -126,6 +126,9 @@ def run_inference(
     use_dsc: bool = False,
     context_pattern: str = "default",
     use_prelu: bool = True,
+    prelu_variant: str = "standard",
+    leaky_slope: float | None = None,
+    leaky_slope_map: str | None = None,
     shallow_dilation: bool = False,
     separable_dilated: bool = False,
     merge_dilated_pairs: bool = False,
@@ -172,6 +175,11 @@ def run_inference(
     env["ENET_USE_DSC"] = "1" if use_dsc else "0"
     env["ENET_CONTEXT_PATTERN"] = context_pattern
     env["ENET_USE_PRELU"] = "1" if use_prelu else "0"
+    env["ENET_PRELU_VARIANT"] = prelu_variant
+    if leaky_slope is not None:
+        env["ENET_LEAKY_SLOPE"] = str(leaky_slope)
+    if leaky_slope_map is not None:
+        env["ENET_LEAKY_SLOPE_MAP"] = leaky_slope_map
     env["ENET_SHALLOW_DILATION"] = "1" if shallow_dilation else "0"
     env["ENET_SEPARABLE_DILATED"] = "1" if separable_dilated else "0"
     env["ENET_MERGE_DILATED_PAIRS"] = "1" if merge_dilated_pairs else "0"
@@ -362,6 +370,27 @@ def main() -> None:
                                   "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing"],
                          help="'sparse' = regular/dilated4/regular/dilated16 (section 2a's div2/div4 bottleneck axis), no 2/8 rungs, never asymmetric. 'dense_dilation' = every context-stage slot dilated (2/4/8/16 repeated twice over 8 slots), no plain/asymmetric slots at all. 'dense_dilation_a' = same but with the gridding-investigation's coprime (1,5,7,17) schedule instead of (2,4,8,16). 'dense_dilation_reg_interleaved' = (2,4,8,16) with a full RegularBottleneck bookending each cycle (needs dsc_no_projection=1 and stage2/3 bottleneck depth 11, see ENet.py's DENSE_DILATION_REG_INTERLEAVED_PATTERN). 'dense_dilation_reg_trailing' = (2,4,8,16,reg) repeating, reg TRAILS each dilation cycle instead of leading it, meant for use_dsc=1 + dsc_no_projection=0 (DSC WITH projection kept) at stage2/3 bottleneck depth 10, see ENet.py's DENSE_DILATION_REG_TRAILING_PATTERN.")
     parser.add_argument("--use-prelu", type=int, default=1, choices=[0, 1], help="0 = collapse the encoder's PReLU to plain ReLU too (section 1d's ablation) -- decoder is always ReLU regardless, see ENet.py.")
+    parser.add_argument("--prelu-variant", default="standard", choices=["standard", "leaky", "nonneg", "nonneg_block"],
+                         help="Only meaningful with --use-prelu 1. 'standard' = real learnable nn.PReLU (default). "
+                              "'leaky' = fixed nn.LeakyReLU(0.01), no learnable params. 'nonneg' = learnable PReLU "
+                              "clamped to a>=0 every forward pass, ruling out the sign-flipping negative-slope "
+                              "behavior real PReLU sometimes learns (see compression/plot_prelu_activations.py). "
+                              "'nonneg_block' = ONE learnable non-negative scalar SHARED across every activation "
+                              "site within a bottleneck block (not per-channel) -- the FINN-deployable target: "
+                              "converts losslessly to a fixed per-block LeakyReLU at inference via "
+                              "ENet.py's apply_leaky_slope_overrides, since there's only one real trained number "
+                              "per block to begin with. See ENet.py's PReluVariant/_activation.")
+    parser.add_argument("--leaky-slope", type=float, default=None,
+                         help="Only meaningful with --prelu-variant leaky. Overrides that variant's fixed 0.01 "
+                              "negative_slope network-wide with this value (e.g. a mean slope collected from an "
+                              "already-trained PReLU checkpoint via ENet.py's collect_prelu_global_mean). See "
+                              "ENet.py's apply_leaky_slope_overrides.")
+    parser.add_argument("--leaky-slope-map", default=None,
+                         help="Only meaningful with --prelu-variant leaky. JSON string mapping bottleneck-container "
+                              "dotted module names (see ENet.py's collect_prelu_block_means) to a per-block "
+                              "negative_slope override, e.g. '{\"stage2.0\": 0.13, \"stage2.1\": 0.09}'. Any "
+                              "LeakyReLU site not covered by a key here falls back to --leaky-slope. See ENet.py's "
+                              "apply_leaky_slope_overrides.")
     parser.add_argument("--shallow-dilation", type=int, default=0, choices=[0, 1], help="Stage 4.4.1: alternating regular/dilated(16) in stage1 and regular4 (regular5 unchanged). See ENet.py.")
     parser.add_argument("--shallow-dilation-wide", type=int, default=0, choices=[0, 1], help="Like --shallow-dilation but at dilation=32 instead of 16 -- stage1/regular4 run at 1/4 resolution, coarser than stage2/3, so there's headroom for a wider rate there. See ENet.py's SHALLOW_DILATION_WIDE_PATTERN.")
     parser.add_argument("--shallow-dilation-dense", type=int, default=0, choices=[0, 1], help="Stage 5.2: swaps --shallow-dilation/--shallow-dilation-wide's alternating pattern for an every-slot-dilated one (needs one of those two set). See ENet.py's SHALLOW_DILATION_DENSE_PATTERN / SHALLOW_DILATION_WIDE_DENSE_PATTERN.")
@@ -410,6 +439,7 @@ def main() -> None:
         use_dsc=bool(args.use_dsc),
         context_pattern=args.context_pattern,
         use_prelu=bool(args.use_prelu),
+        prelu_variant=args.prelu_variant,
         shallow_dilation=bool(args.shallow_dilation),
         separable_dilated=bool(args.separable_dilated),
         merge_dilated_pairs=bool(args.merge_dilated_pairs),
@@ -478,6 +508,9 @@ def main() -> None:
             use_dsc=bool(args.use_dsc),
             context_pattern=args.context_pattern,
             use_prelu=bool(args.use_prelu),
+            prelu_variant=args.prelu_variant,
+            leaky_slope=args.leaky_slope,
+            leaky_slope_map=args.leaky_slope_map,
             shallow_dilation=bool(args.shallow_dilation),
             separable_dilated=bool(args.separable_dilated),
             merge_dilated_pairs=bool(args.merge_dilated_pairs),
@@ -525,6 +558,9 @@ def main() -> None:
         "ops_flags": (
             f"dilated={args.use_dilated},asymmetric={args.use_asymmetric},strided={args.use_strided},dsc={args.use_dsc},context_pattern={args.context_pattern},prelu="
             + ("n/a(quant-forces-relu)" if args.quant_bits != 32 else str(args.use_prelu))
+            + ",prelu_variant="
+            + ("n/a(quant-forces-relu)" if args.quant_bits != 32 else args.prelu_variant)
+            + f",leaky_slope={args.leaky_slope},leaky_slope_map={args.leaky_slope_map}"
             + f",shallow_dilation={args.shallow_dilation},separable_dilated={args.separable_dilated}"
             + f",merge_dilated_pairs={args.merge_dilated_pairs},dsc_dilated_only={args.dsc_dilated_only}"
             + f",double_projections={args.double_projections},two_block_skip={args.two_block_skip}"

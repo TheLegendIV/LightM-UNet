@@ -37,6 +37,8 @@ STAGE_COLORS = {
     "7_reginterleaved_shape_variants": "#00acc1", "8_reginterleaved_isolation": "#7cb342",
     "9_dsc_projected_dense_dilation": "#9c6b30",
     "10_reginterleaved_separable_projected": "#5c6bc0",
+    "12_separable_dense_relu": "#c2185b",
+    "13_separable_dense_nonneg_block_warmstart": "#00897b",
 }
 CURVE_STAGE = "1_naive_baseline"
 CURVE_COLOR = "#c3392b"

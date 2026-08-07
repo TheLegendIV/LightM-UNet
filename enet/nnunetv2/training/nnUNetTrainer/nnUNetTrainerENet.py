@@ -1,3 +1,4 @@
+import json
 import os
 import random
 
@@ -6,7 +7,7 @@ import torch
 from torch import nn
 from torch.optim import AdamW
 
-from nnunetv2.nets.ENet import ENet
+from nnunetv2.nets.ENet import ENet, apply_leaky_slope_overrides, apply_nonneg_block_init
 from nnunetv2.training.lr_scheduler.polylr import PolyLRScheduler
 from nnunetv2.training.nnUNetTrainer.nnUNetTrainerLightMUNet import nnUNetTrainerLightMUNet
 from nnunetv2.utilities.plans_handling.plans_handler import ConfigurationManager, PlansManager
@@ -108,7 +109,11 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
         )
         if context_pattern not in valid_context_patterns:
             raise ValueError(f"ENET_CONTEXT_PATTERN must be one of {valid_context_patterns}, got {context_pattern!r}.")
-        return ENet(
+        prelu_variant = os.environ.get("ENET_PRELU_VARIANT", "standard")
+        valid_prelu_variants = ("standard", "leaky", "nonneg", "nonneg_block")
+        if prelu_variant not in valid_prelu_variants:
+            raise ValueError(f"ENET_PRELU_VARIANT must be one of {valid_prelu_variants}, got {prelu_variant!r}.")
+        network = ENet(
             in_channels=num_input_channels,
             out_channels=label_manager.num_segmentation_heads,
             channels=channels,
@@ -120,6 +125,7 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
             use_dsc=_parse_bool_env("ENET_USE_DSC", False),
             context_pattern=context_pattern,
             use_prelu=_parse_bool_env("ENET_USE_PRELU", True),
+            prelu_variant=prelu_variant,
             # Stage 4 architecture probes (all default False -- see
             # ENet.py's own constructor docstring for what each does):
             shallow_dilation=_parse_bool_env("ENET_SHALLOW_DILATION", False),
@@ -134,6 +140,55 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
             dsc_no_projection_context_only=_parse_bool_env("ENET_DSC_NO_PROJECTION_CONTEXT_ONLY", False),
             reg_bookend_dsc=_parse_bool_env("ENET_REG_BOOKEND_DSC", False),
         )
+
+        # FINN-deployable follow-up to prelu_variant="leaky": overrides the
+        # variant's fixed 0.01 negative_slope with a value derived from an
+        # already-trained PReLU checkpoint's own statistics (see ENet.py's
+        # apply_leaky_slope_overrides / PReluVariant deprecation note).
+        # negative_slope isn't a Parameter/buffer, so it can't ride along in
+        # a checkpoint's state_dict -- this must run on every reconstruction
+        # (both training and inference-time), which is exactly why it lives
+        # here rather than in a one-off script.
+        leaky_slope = os.environ.get("ENET_LEAKY_SLOPE")
+        leaky_slope_map_json = os.environ.get("ENET_LEAKY_SLOPE_MAP")
+        if leaky_slope or leaky_slope_map_json:
+            if prelu_variant != "leaky":
+                raise ValueError(
+                    "ENET_LEAKY_SLOPE/ENET_LEAKY_SLOPE_MAP only have an effect on prelu_variant='leaky' "
+                    f"(overrides its fixed 0.01 negative_slope) -- got prelu_variant={prelu_variant!r}."
+                )
+            block_slopes = json.loads(leaky_slope_map_json) if leaky_slope_map_json else None
+            patched = apply_leaky_slope_overrides(
+                network,
+                global_slope=float(leaky_slope) if leaky_slope else None,
+                block_slopes=block_slopes,
+            )
+            if patched == 0:
+                raise ValueError("ENET_LEAKY_SLOPE/ENET_LEAKY_SLOPE_MAP set but no nn.LeakyReLU sites were found to patch.")
+
+        # Warm start for prelu_variant="nonneg_block": sets each block's ONE
+        # shared learnable scalar's STARTING value (stays learnable, unlike
+        # the leaky override above) from an already-trained per-channel
+        # PReLU checkpoint's own per-block means (see ENet.py's
+        # apply_nonneg_block_init / collect_prelu_block_means). Conv/BN
+        # weight transfer from that same reference checkpoint is handled
+        # separately by nnU-Net's own -pretrained_weights flag (its
+        # shape-mismatch skip logic already leaves these per-block scalars
+        # alone, since their shape never matches the reference's per-channel
+        # PReLU tensors -- this only needs to set the value BEFORE that
+        # transfer or training starts).
+        nonneg_block_init_map_json = os.environ.get("ENET_NONNEG_BLOCK_INIT_MAP")
+        if nonneg_block_init_map_json:
+            if prelu_variant != "nonneg_block":
+                raise ValueError(
+                    "ENET_NONNEG_BLOCK_INIT_MAP only has an effect on prelu_variant='nonneg_block' "
+                    f"-- got prelu_variant={prelu_variant!r}."
+                )
+            n_init = apply_nonneg_block_init(network, json.loads(nonneg_block_init_map_json))
+            if n_init == 0:
+                raise ValueError("ENET_NONNEG_BLOCK_INIT_MAP set but no blocks were initialized -- check the block name keys.")
+
+        return network
 
     def configure_optimizers(self):
         optimizer = AdamW(

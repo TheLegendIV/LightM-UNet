@@ -1,0 +1,183 @@
+#!/bin/bash
+#SBATCH --job-name=stage_13_separable_dense_nonneg_block_warmstart
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# Stage 13 -- FINN-deployable follow-up to S5-SeparableDense
+# (5_6_separable_dense_dilation, dice=0.7985): FINN has no PReLU op support
+# at all (see compression/slurm/archive/README.md's stage_11 entry), so
+# this replaces every per-channel learnable nn.PReLU with ONE learnable
+# non-negative scalar SHARED across all activation sites in each
+# bottleneck block (ENet.py's prelu_variant="nonneg_block" -- true
+# parameter tying, not just several independently-learned values that
+# start equal, see ENet.py's Stage-13 self-test). At inference this
+# collapses losslessly into a fixed per-block LeakyReLU
+# (apply_leaky_slope_overrides) -- lossless because there's only ONE real
+# trained number per block to begin with, unlike the naive post-hoc
+# averaging strategy this supersedes (which forced an ALREADY per-channel-
+# trained model into a block-uniform slope after the fact and lost badly:
+# 0.7985 -> ~0.38-0.41, see compression/results.csv's
+# experiment_leaky_from_prelu_global/_perblock rows and ENet.py's
+# PReluVariant deprecation note).
+#
+# Warm-started from 5_6_separable_dense_dilation's own trained checkpoint,
+# two independent mechanisms combining:
+#   1. -pretrained_weights transfers every conv/BN weight by name+shape
+#      match (nnU-Net's own enet/nnunetv2/run/load_pretrained_weights.py --
+#      unmodified, its existing shape-mismatch-skip logic is exactly what's
+#      needed here: it automatically skips the 99 activation-parameter keys
+#      whose shape no longer matches (per-channel in the reference vs. this
+#      run's single shared scalar per block), leaving them at whatever
+#      ENET_NONNEG_BLOCK_INIT_MAP below just set, instead of overwriting or
+#      crashing).
+#   2. ENET_NONNEG_BLOCK_INIT_MAP sets each block's ONE shared scalar's
+#      STARTING value to that exact block's mean PReLU slope in the
+#      reference checkpoint (computed via ENet.py's
+#      collect_prelu_block_means against
+#      nnUNetTrainerENet_5_6_separable_dense_dilation__nnUNetPlans__2d/
+#      fold_0/checkpoint_best.pth) -- stays fully learnable afterward, this
+#      only sets where training starts from.
+#
+# Confirmed via local docker smoke test: (a) nnUNetv2_train runs end-to-end
+# (forward+backward+optimizer, 1 epoch/2 iterations) with both mechanisms
+# combined; (b) load_pretrained_weights' own log confirmed exactly 99 keys
+# skipped for shape mismatch (matches the reference checkpoint's 99 aliased
+# PReLU-related keys, see ENet.py's RegularBottleneck conv_bn_act[0]/self.conv
+# aliasing note); (c) epoch-0 train_loss landed at ~0.07 with the warm start
+# vs. ~1.4-1.5 for an equivalent cold random-init run -- confirms the
+# transfer is actually taking effect, not silently no-op'ing.
+#
+# Single run, not an array -- one architecture, one checkpoint, one warm
+# start.
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+PRETRAINED_CKPT="$HOME/LightM-UNet/data/nnUNet_results/${DATASET_NAME}/nnUNetTrainerENet_5_6_separable_dense_dilation__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
+
+RUN_NAME="13_separable_dense_nonneg_block_warmstart"
+TRAINER_CLASS="nnUNetTrainerENet"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- ENet trainer knobs -- S5-SeparableDense's exact recipe, nonneg_block
+#    activation, warm-started from its own PReLU checkpoint -------------
+export ENET_CHANNELS="4,16,32,16,4"
+export ENET_BOTTLENECKS="4,8,8,2,1"
+export ENET_CONTEXT_PATTERN="dense_dilation"
+export ENET_DECODER_TYPE="upsample_conv"
+export ENET_USE_PRELU=1
+export ENET_PRELU_VARIANT="nonneg_block"
+export ENET_USE_DILATED=1
+export ENET_USE_ASYMMETRIC=0
+export ENET_USE_STRIDED=1
+export ENET_USE_DSC=0
+export ENET_SEPARABLE_DILATED=1
+export ENET_DSC_NO_PROJECTION=0
+# Per-block mean PReLU slope from nnUNetTrainerENet_5_6_separable_dense_dilation's
+# own trained checkpoint (ENet.py's collect_prelu_block_means) -- one shared
+# scalar's warm-start value per bottleneck block, dotted-name keyed.
+export ENET_NONNEG_BLOCK_INIT_MAP='{"initial": 0.6513726264238358, "down1": 0.41370914100358885, "regular1.0": 0.17824443763432404, "regular1.1": 0.28686505431930226, "regular1.2": 0.1469950194004923, "regular1.3": 0.10209468783189853, "down2": 0.2798544540425307, "stage2.0": 0.18345298638035143, "stage2.1": 0.25752059428175145, "stage2.2": 0.266184802832348, "stage2.3": 0.23814578940826842, "stage2.4": 0.1806933654339186, "stage2.5": 0.16654214098733583, "stage2.6": 0.1725433590347945, "stage2.7": 0.2387286664701865, "stage3.0": 0.22525003122531675, "stage3.1": 0.14585323149679294, "stage3.2": 0.20456546678490536, "stage3.3": 0.25696820098840234, "stage3.4": 0.21921965313543165, "stage3.5": 0.23538206509381002, "stage3.6": 0.34168835522307617, "stage3.7": 0.2263517238815049}'
+export ENET_EPOCHS=150
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Run: ${RUN_NAME}"
+echo "ENET_PRELU_VARIANT=${ENET_PRELU_VARIANT}"
+echo "Pretrained checkpoint: ${PRETRAINED_CKPT}"
+echo "Output folder: ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Checking pretrained checkpoint exists ==="
+if [ ! -f "${PRETRAINED_CKPT}" ]; then
+    echo "ERROR: pretrained checkpoint not found at ${PRETRAINED_CKPT}" >&2
+    exit 1
+fi
+
+echo "=== Checking for a COMPLETED checkpoint for ${RUN_NAME} ==="
+# Only checkpoint_final.pth (written once, at the very end of a finished
+# num_epochs-epoch run) counts as "already trained" -- checkpoint_best.pth
+# gets written as early as epoch 0, see stage_8's own job file for the
+# incident this guards against.
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    echo "checkpoint_final.pth already exists at ${ENET_OUTPUT_FOLDER} -- skipping training, going straight to collect_results.py."
+else
+    echo "=== Start training: ${RUN_NAME} (warm-started from ${PRETRAINED_CKPT}) ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}" -pretrained_weights "${PRETRAINED_CKPT}"
+    echo "Training finished for ${RUN_NAME}."
+
+    echo "=== Archiving checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+fi
+
+echo "=== Collecting results into compression/results.csv (structural nonneg_block dice, block-tied but not yet frozen to leaky) ==="
+cd "$HOME/LightM-UNet"
+python compression/collect_results.py \
+    --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+    --stage 13_separable_dense_nonneg_block_warmstart \
+    --dataset-name "${DATASET_NAME}" \
+    --dataset-id "${DATASET_ID}" \
+    --channels "${ENET_CHANNELS}" \
+    --bottlenecks "${ENET_BOTTLENECKS}" \
+    --decoder-type "${ENET_DECODER_TYPE}" \
+    --use-dilated "${ENET_USE_DILATED}" \
+    --use-asymmetric "${ENET_USE_ASYMMETRIC}" \
+    --use-strided "${ENET_USE_STRIDED}" \
+    --use-dsc "${ENET_USE_DSC}" \
+    --separable-dilated "${ENET_SEPARABLE_DILATED}" \
+    --context-pattern "${ENET_CONTEXT_PATTERN}" \
+    --use-prelu "${ENET_USE_PRELU}" \
+    --prelu-variant "${ENET_PRELU_VARIANT}" \
+    --dsc-no-projection "${ENET_DSC_NO_PROJECTION}" \
+    --trainer-class "${TRAINER_CLASS}"
+
+echo "Done: ${RUN_NAME}. Next (manual, not part of this job): convert the trained checkpoint's per-block scalars to a fixed LeakyReLU via ENet.py's apply_leaky_slope_overrides + collect_prelu_block_means (this time collecting from THIS run's own already block-tied checkpoint, not the original per-channel reference) and re-run collect_results.py --prelu-variant leaky --leaky-slope-map ... for the final FINN-deployable dice number."
