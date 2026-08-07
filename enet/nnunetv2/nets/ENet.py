@@ -149,6 +149,33 @@ DENSE_DILATION_REG_TRAILING_PATTERN: tuple[dict, ...] = (
     {"reg_bottleneck": True},
 )
 
+# S15's own pattern: drops the 2/4/8/16 progression entirely in favor of
+# dilation=16 ONLY, repeated 4 times, with a reg-bookend bracketing EVERY
+# repeat (not just cycle boundaries the way DENSE_DILATION_REG_INTERLEAVED_
+# PATTERN's reg slots do) -- reg,16,reg,16,reg,16,reg,16,reg (9 slots).
+# Motivated directly by the pruning-sensitivity sweep on S8-ReLU
+# (dense_dilation_reg_interleaved): d=16 slots were consistently the
+# steepest individual-block drops in both stages (see compression/
+# results_pruning.csv), and reg-bookends were mostly redundant when they
+# had a neighboring reg to fall back on -- this pattern bets everything on
+# what the sweep found actually mattered (d=16) while keeping a reg
+# consolidation step immediately on both sides of every one, not just
+# every 4 slots. Only meaningful under dsc_no_projection=True (same as
+# DENSE_DILATION_REG_INTERLEAVED_PATTERN): that mode's own {"reg_
+# bottleneck": True} sentinel handling in _make_context_stage already
+# covers this pattern with zero new code there.
+D16_REG_INTERLEAVED_PATTERN: tuple[dict, ...] = (
+    {"reg_bottleneck": True},
+    {"padding": 16, "dilation": 16},
+    {"reg_bottleneck": True},
+    {"padding": 16, "dilation": 16},
+    {"reg_bottleneck": True},
+    {"padding": 16, "dilation": 16},
+    {"reg_bottleneck": True},
+    {"padding": 16, "dilation": 16},
+    {"reg_bottleneck": True},
+)
+
 # Stage 4.4.1's shallow-stage pattern: alternating regular/dilated(16), for
 # stage1 and regular4 -- both stages currently have NO dilation mechanism at
 # all (only stage2/3's context pattern does). Same max dilation rate (16) as
@@ -821,11 +848,12 @@ class ENet(nn.Module):
         shallow_dilation_dense: bool = False,
         dsc_no_projection_context_only: bool = False,
         reg_bookend_dsc: bool = False,
+        merge_reg_boundary: bool = False,
     ):
         super().__init__()
         valid_context_patterns = (
             "default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_reg_interleaved",
-            "dense_dilation_reg_trailing",
+            "dense_dilation_reg_trailing", "d16_reg_interleaved",
         )
         if context_pattern not in valid_context_patterns:
             raise ValueError(f"context_pattern must be one of {valid_context_patterns}, got {context_pattern!r}.")
@@ -839,6 +867,12 @@ class ENet(nn.Module):
                 "dsc_no_projection_context_only narrows dsc_no_projection's scope to stage2/stage3 only "
                 "(regular1/regular4/regular5 revert to normal projected bottlenecks) -- meaningless "
                 "without dsc_no_projection=True itself."
+            )
+        if merge_reg_boundary and not dsc_no_projection:
+            raise ValueError(
+                "merge_reg_boundary only has an effect under dsc_no_projection=True -- it shifts "
+                "_make_context_stage's dsc_no_projection branch's pattern indexing for stage3 only, "
+                "meaningless for the plain (projected) loop."
             )
         valid_prelu_variants = ("standard", "leaky", "nonneg", "nonneg_block")
         if prelu_variant not in valid_prelu_variants:
@@ -932,6 +966,22 @@ class ENet(nn.Module):
         # dsc_no_projection=True (the only path that ever builds a
         # reg-bookend slot).
         self.reg_bookend_dsc = reg_bookend_dsc
+        # S8-derived probe: stage2's LAST slot (index n_stage2-1) and
+        # stage3's FIRST slot (index 0) are both {"reg_bottleneck": True}
+        # under context_pattern="dense_dilation_reg_interleaved" (or
+        # "d16_reg_interleaved") -- with proj2_to_3 an nn.Identity()
+        # (stage2/stage3 same channel width, the normal case), that puts
+        # TWO real RegularBottleneck reg-bookends immediately back-to-back
+        # at the stage2/stage3 seam with nothing dilated between them.
+        # merge_reg_boundary=True shifts stage3's OWN pattern-index origin
+        # by +1 (skip its own would-be leading reg -- see
+        # _make_context_stage's dsc_no_projection branch), so stage3
+        # starts directly at the first dilation slot instead, relying on
+        # stage2's own trailing reg to cover the seam alone. Only shifts
+        # stage3 -- stage2 is untouched. Caller should shrink stage3's own
+        # bottleneck depth by 1 to keep the same trailing reg positioned
+        # correctly (e.g. 11 -> 10 for dense_dilation_reg_interleaved).
+        self.merge_reg_boundary = merge_reg_boundary
 
         n_stage1, n_stage2, n_stage3, n_regular4, n_regular5 = self.bottlenecks_per_stage
 
@@ -956,7 +1006,7 @@ class ENet(nn.Module):
                 _activation(stage3_channels, not use_prelu, self.prelu_variant),
             )
         )
-        self.stage3 = self._make_context_stage(stage3_channels, n_stage3)
+        self.stage3 = self._make_context_stage(stage3_channels, n_stage3, skip_leading_reg=self.merge_reg_boundary)
 
         self.up4 = UpsamplingBottleneck(stage3_channels, stage4_channels, double_projections=double_projections,
                                          prelu_variant=self.prelu_variant)
@@ -996,7 +1046,7 @@ class ENet(nn.Module):
             migrated[key] = value
         return super().load_state_dict(migrated, strict=strict)
 
-    def _make_context_stage(self, channels: int, n_ops: int) -> nn.Module:
+    def _make_context_stage(self, channels: int, n_ops: int, skip_leading_reg: bool = False) -> nn.Module:
         """Builds an n_ops-long context stage from the first n_ops entries of
         CONTEXT_STAGE_PATTERN (or SPARSE_DILATION_PATTERN when
         context_pattern="sparse" -- section 2a's reduced-depth bottleneck
@@ -1036,7 +1086,14 @@ class ENet(nn.Module):
         (DSC everywhere, no reduce/expand) takes priority over all of the
         above -- every slot becomes a DSCNoProjectionBottleneck instead,
         keeping only the pattern's dilation schedule (except
-        {"reg_bottleneck": True} slots, which become a full RegularBottleneck)."""
+        {"reg_bottleneck": True} slots, which become a full RegularBottleneck).
+
+        skip_leading_reg (self.merge_reg_boundary, stage3 only -- see
+        ENet.__init__'s own comment): shifts the pattern-index origin by
+        +1 in the dsc_no_projection branch, so slot 0 reads pattern[1]
+        instead of pattern[0] -- skips a would-be leading reg-bookend
+        that would otherwise sit right next to stage2's own trailing one
+        with nothing dilated in between."""
         if self.context_pattern == "sparse":
             pattern = SPARSE_DILATION_PATTERN
         elif self.context_pattern == "dense_dilation":
@@ -1047,13 +1104,16 @@ class ENet(nn.Module):
             pattern = DENSE_DILATION_REG_INTERLEAVED_PATTERN
         elif self.context_pattern == "dense_dilation_reg_trailing":
             pattern = DENSE_DILATION_REG_TRAILING_PATTERN
+        elif self.context_pattern == "d16_reg_interleaved":
+            pattern = D16_REG_INTERLEAVED_PATTERN
         else:
             pattern = CONTEXT_STAGE_PATTERN
 
         if self.dsc_no_projection:
             ops = []
+            index_offset = 1 if skip_leading_reg else 0
             for i in range(n_ops):
-                kwargs = dict(pattern[i % len(pattern)])
+                kwargs = dict(pattern[(i + index_offset) % len(pattern)])
                 if kwargs.get("reg_bottleneck", False):
                     # DENSE_DILATION_REG_INTERLEAVED_PATTERN's bookend slots:
                     # a RegularBottleneck (real reduce/expand projection),
@@ -2351,3 +2411,84 @@ if __name__ == "__main__":
     assert torch.equal(captured["stage3_1_input"], pre_stage3_state), "14: stage3.1's input should exactly equal stage2's output (Identity pass-through), got a numeric mismatch"
 
     print("ENet Stage-14 apply_block_pruning self-test PASSED: targeted block correctly replaced with Identity, sibling blocks untouched, and numeric pass-through verified via forward hook.")
+
+    # Stage 15: context_pattern="d16_reg_interleaved" -- S15's own pattern
+    # (reg,16,reg,16,reg,16,reg,16,reg, 9 slots), otherwise identical to
+    # S8-ReLU's own recipe (dsc_no_projection=1, use_asymmetric=0,
+    # use_prelu=0). Verifies the exact reg/DSC-dilated-16 alternation, the
+    # real dilation value baked into each DSC slot's depthwise conv, and a
+    # real forward pass at the widened stage2/3 bottleneck depth (9, not
+    # S8-ReLU's 11).
+    s15_model = ENet(
+        in_channels=1, out_channels=5, channels=(4, 16, 32, 16, 4), bottlenecks_per_stage=(4, 9, 9, 2, 1),
+        decoder_type="upsample_conv", use_prelu=False, use_asymmetric=False,
+        context_pattern="d16_reg_interleaved", dsc_no_projection=True,
+    )
+    expected_types_stage2 = [
+        RegularBottleneck, DSCNoProjectionBottleneck, RegularBottleneck, DSCNoProjectionBottleneck,
+        RegularBottleneck, DSCNoProjectionBottleneck, RegularBottleneck, DSCNoProjectionBottleneck,
+        RegularBottleneck,
+    ]
+    assert len(s15_model.stage2) == 9, f"15: expected stage2 depth 9, got {len(s15_model.stage2)}"
+    for i, (block, expected_type) in enumerate(zip(s15_model.stage2, expected_types_stage2)):
+        assert isinstance(block, expected_type), f"15: stage2.{i} expected {expected_type.__name__}, got {type(block).__name__}"
+    assert len(s15_model.stage3) == 9, f"15: expected stage3 depth 9, got {len(s15_model.stage3)}"
+    for i, (block, expected_type) in enumerate(zip(s15_model.stage3, expected_types_stage2)):
+        assert isinstance(block, expected_type), f"15: stage3.{i} expected {expected_type.__name__}, got {type(block).__name__}"
+    # Every DSC slot must actually be dilation=16 (not just the right
+    # class) -- check the depthwise conv's own real dilation attribute.
+    for i in (1, 3, 5, 7):
+        depthwise_conv = s15_model.stage2[i].conv[0]
+        assert depthwise_conv.dilation == (16, 16), f"15: stage2.{i}'s depthwise conv should be dilation=16, got {depthwise_conv.dilation}"
+        depthwise_conv3 = s15_model.stage3[i].conv[0]
+        assert depthwise_conv3.dilation == (16, 16), f"15: stage3.{i}'s depthwise conv should be dilation=16, got {depthwise_conv3.dilation}"
+    s15_model.eval()
+    with torch.no_grad():
+        s15_out = s15_model(torch.randn(1, 1, 64, 64))
+    assert s15_out.shape == (1, 5, 64, 64), f"15: output shape mismatch: {tuple(s15_out.shape)}"
+
+    print("ENet Stage-15 d16_reg_interleaved self-test PASSED: reg/DSC-d16 alternation, real dilation=16 values, and forward pass all verified.")
+
+    # Stage 16: merge_reg_boundary -- S8-ReLU with stage3's own leading reg
+    # dropped (stage2 unchanged, stage3 shrinks 11 -> 10 and starts
+    # directly at d=2 instead of a redundant reg). Verifies stage2 is
+    # completely untouched, stage3's new 10-slot sequence exactly matches
+    # d2,d4,d8,d16,reg,d2,d4,d8,d16,reg, and the validation guard.
+    s16_model = ENet(
+        in_channels=1, out_channels=5, channels=(4, 16, 32, 16, 4), bottlenecks_per_stage=(4, 11, 10, 2, 1),
+        decoder_type="upsample_conv", use_prelu=False, use_asymmetric=False,
+        context_pattern="dense_dilation_reg_interleaved", dsc_no_projection=True, merge_reg_boundary=True,
+    )
+    stage2_expected = [RegularBottleneck] + [DSCNoProjectionBottleneck] * 4 + [RegularBottleneck] + [DSCNoProjectionBottleneck] * 4 + [RegularBottleneck]
+    assert len(s16_model.stage2) == 11, f"16: stage2 must stay untouched at depth 11, got {len(s16_model.stage2)}"
+    for i, (block, expected_type) in enumerate(zip(s16_model.stage2, stage2_expected)):
+        assert isinstance(block, expected_type), f"16: stage2.{i} (should be untouched) expected {expected_type.__name__}, got {type(block).__name__}"
+
+    stage3_expected = [DSCNoProjectionBottleneck] * 4 + [RegularBottleneck] + [DSCNoProjectionBottleneck] * 4 + [RegularBottleneck]
+    assert len(s16_model.stage3) == 10, f"16: stage3 should be depth 10 (leading reg dropped), got {len(s16_model.stage3)}"
+    for i, (block, expected_type) in enumerate(zip(s16_model.stage3, stage3_expected)):
+        assert isinstance(block, expected_type), f"16: stage3.{i} expected {expected_type.__name__}, got {type(block).__name__}"
+    # The first 4 stage3 slots must be dilation 2,4,8,16 in that exact order
+    # (confirms the +1 index shift landed on the right pattern entries, not
+    # just the right CLASS sequence).
+    expected_dilations = [2, 4, 8, 16]
+    for i, expected_dilation in enumerate(expected_dilations):
+        depthwise_conv = s16_model.stage3[i].conv[0]
+        assert depthwise_conv.dilation == (expected_dilation, expected_dilation), (
+            f"16: stage3.{i} expected dilation={expected_dilation}, got {depthwise_conv.dilation}"
+        )
+
+    s16_model.eval()
+    with torch.no_grad():
+        s16_out = s16_model(torch.randn(1, 1, 64, 64))
+    assert s16_out.shape == (1, 5, 64, 64), f"16: output shape mismatch: {tuple(s16_out.shape)}"
+
+    try:
+        ENet(in_channels=1, out_channels=5, channels=(4, 16, 32, 16, 4), bottlenecks_per_stage=(4, 11, 10, 2, 1),
+             decoder_type="upsample_conv", context_pattern="dense_dilation_reg_interleaved",
+             dsc_no_projection=False, merge_reg_boundary=True)
+        raise AssertionError("16: expected ValueError for merge_reg_boundary=True with dsc_no_projection=False, got none")
+    except ValueError:
+        pass
+
+    print("ENet Stage-16 merge_reg_boundary self-test PASSED: stage2 untouched, stage3's leading reg correctly dropped with exact dilation-order preserved, validation checked.")

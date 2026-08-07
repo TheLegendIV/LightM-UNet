@@ -141,6 +141,7 @@ def run_inference(
     shallow_dilation_dense: bool = False,
     dsc_no_projection_context_only: bool = False,
     reg_bookend_dsc: bool = False,
+    merge_reg_boundary: bool = False,
     pruned_blocks: str | None = None,
 ) -> Path:
     """Uses `nnUNetv2_predict_from_modelfolder` (-m <exact folder>), NOT
@@ -195,6 +196,7 @@ def run_inference(
     env["ENET_SHALLOW_DILATION_DENSE"] = "1" if shallow_dilation_dense else "0"
     env["ENET_DSC_NO_PROJECTION_CONTEXT_ONLY"] = "1" if dsc_no_projection_context_only else "0"
     env["ENET_REG_BOOKEND_DSC"] = "1" if reg_bookend_dsc else "0"
+    env["ENET_MERGE_REG_BOUNDARY"] = "1" if merge_reg_boundary else "0"
     if quant_bits != 32:
         # Picked up by nnUNetTrainerENetQuant.build_network_architecture,
         # dynamically imported via the checkpoint's own stored trainer_name
@@ -394,8 +396,9 @@ def main() -> None:
     parser.add_argument("--use-dsc", type=int, default=0, choices=[0, 1], help="Depthwise-separable inner conv (rejects combination with --use-asymmetric 1).")
     parser.add_argument("--context-pattern", default="default",
                          choices=["default", "sparse", "dense_dilation", "dense_dilation_a",
-                                  "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing"],
-                         help="'sparse' = regular/dilated4/regular/dilated16 (section 2a's div2/div4 bottleneck axis), no 2/8 rungs, never asymmetric. 'dense_dilation' = every context-stage slot dilated (2/4/8/16 repeated twice over 8 slots), no plain/asymmetric slots at all. 'dense_dilation_a' = same but with the gridding-investigation's coprime (1,5,7,17) schedule instead of (2,4,8,16). 'dense_dilation_reg_interleaved' = (2,4,8,16) with a full RegularBottleneck bookending each cycle (needs dsc_no_projection=1 and stage2/3 bottleneck depth 11, see ENet.py's DENSE_DILATION_REG_INTERLEAVED_PATTERN). 'dense_dilation_reg_trailing' = (2,4,8,16,reg) repeating, reg TRAILS each dilation cycle instead of leading it, meant for use_dsc=1 + dsc_no_projection=0 (DSC WITH projection kept) at stage2/3 bottleneck depth 10, see ENet.py's DENSE_DILATION_REG_TRAILING_PATTERN.")
+                                  "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing",
+                                  "d16_reg_interleaved"],
+                         help="'sparse' = regular/dilated4/regular/dilated16 (section 2a's div2/div4 bottleneck axis), no 2/8 rungs, never asymmetric. 'dense_dilation' = every context-stage slot dilated (2/4/8/16 repeated twice over 8 slots), no plain/asymmetric slots at all. 'dense_dilation_a' = same but with the gridding-investigation's coprime (1,5,7,17) schedule instead of (2,4,8,16). 'dense_dilation_reg_interleaved' = (2,4,8,16) with a full RegularBottleneck bookending each cycle (needs dsc_no_projection=1 and stage2/3 bottleneck depth 11, see ENet.py's DENSE_DILATION_REG_INTERLEAVED_PATTERN). 'dense_dilation_reg_trailing' = (2,4,8,16,reg) repeating, reg TRAILS each dilation cycle instead of leading it, meant for use_dsc=1 + dsc_no_projection=0 (DSC WITH projection kept) at stage2/3 bottleneck depth 10, see ENet.py's DENSE_DILATION_REG_TRAILING_PATTERN. 'd16_reg_interleaved' = S15's own pattern: dilation=16 ONLY repeated 4 times, reg-bookended on both sides of EVERY repeat (reg,16,reg,16,reg,16,reg,16,reg, 9 slots) -- needs dsc_no_projection=1 and stage2/3 bottleneck depth 9, see ENet.py's D16_REG_INTERLEAVED_PATTERN.")
     parser.add_argument("--use-prelu", type=int, default=1, choices=[0, 1], help="0 = collapse the encoder's PReLU to plain ReLU too (section 1d's ablation) -- decoder is always ReLU regardless, see ENet.py.")
     parser.add_argument("--prelu-variant", default="standard", choices=["standard", "leaky", "nonneg", "nonneg_block"],
                          help="Only meaningful with --use-prelu 1. 'standard' = real learnable nn.PReLU (default). "
@@ -427,6 +430,7 @@ def main() -> None:
     parser.add_argument("--shallow-dilation-dense", type=int, default=0, choices=[0, 1], help="Stage 5.2: swaps --shallow-dilation/--shallow-dilation-wide's alternating pattern for an every-slot-dilated one (needs one of those two set). See ENet.py's SHALLOW_DILATION_DENSE_PATTERN / SHALLOW_DILATION_WIDE_DENSE_PATTERN.")
     parser.add_argument("--dsc-no-projection-context-only", type=int, default=0, choices=[0, 1], help="Stage 8.1: narrows --dsc-no-projection's scope to stage2/stage3 only -- regular1/regular4/regular5 revert to normal projected bottlenecks (needs --dsc-no-projection 1 also set).")
     parser.add_argument("--reg-bookend-dsc", type=int, default=0, choices=[0, 1], help="Stage 8.3: applies DSC (with projection kept) to context_pattern=dense_dilation_reg_interleaved's reg-bookend slots, instead of leaving them full-rank. No-op without that context_pattern and --dsc-no-projection 1.")
+    parser.add_argument("--merge-reg-boundary", type=int, default=0, choices=[0, 1], help="S15-derived probe: skips stage3's own leading reg-bookend (shifts its pattern-index origin by +1) so it doesn't sit directly next to stage2's trailing reg with nothing dilated between them -- relies on stage2's own trailing reg to cover the seam alone. Shrink stage3's own bottleneck depth by 1 to compensate (e.g. 11 -> 10 for dense_dilation_reg_interleaved). Needs --dsc-no-projection 1. See ENet.py's merge_reg_boundary.")
     parser.add_argument("--separable-dilated", type=int, default=0, choices=[0, 1], help="Stage 4.4.2: factor every dilated 3x3 in the context pattern into a (3,1)+(1,3) pair, same dilation on both passes.")
     parser.add_argument("--merge-dilated-pairs", type=int, default=0, choices=[0, 1], help="Stage 4.4.3: fuse each (regular-or-asymmetric, dilated) context-pattern PAIR into one block with a shared reduce/expand -- halves stage2/3's block count.")
     parser.add_argument("--dsc-dilated-only", type=int, default=0, choices=[0, 1], help="Stage 4.4.4: depthwise-separable ONLY on the context pattern's dilated slots, independent of --use-dsc.")
@@ -482,6 +486,7 @@ def main() -> None:
         shallow_dilation_dense=bool(args.shallow_dilation_dense),
         dsc_no_projection_context_only=bool(args.dsc_no_projection_context_only),
         reg_bookend_dsc=bool(args.reg_bookend_dsc),
+        merge_reg_boundary=bool(args.merge_reg_boundary),
     )
     if args.pruned_blocks:
         apply_block_pruning(fp32_model, [name.strip() for name in args.pruned_blocks.split(",") if name.strip()])
@@ -560,6 +565,7 @@ def main() -> None:
             shallow_dilation_dense=bool(args.shallow_dilation_dense),
             dsc_no_projection_context_only=bool(args.dsc_no_projection_context_only),
             reg_bookend_dsc=bool(args.reg_bookend_dsc),
+            merge_reg_boundary=bool(args.merge_reg_boundary),
             pruned_blocks=args.pruned_blocks,
         )
     labels_ts_dir = NNUNET_RAW / dataset_name / "labelsTs"
@@ -606,6 +612,7 @@ def main() -> None:
             + f",dsc_no_projection={args.dsc_no_projection},shallow_dilation_wide={args.shallow_dilation_wide}"
             + f",shallow_dilation_dense={args.shallow_dilation_dense}"
             + f",dsc_no_projection_context_only={args.dsc_no_projection_context_only},reg_bookend_dsc={args.reg_bookend_dsc}"
+            + f",merge_reg_boundary={args.merge_reg_boundary}"
             + f",pruned_blocks={args.pruned_blocks}"
         ),
         "quant_bits": args.quant_bits,

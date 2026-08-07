@@ -105,7 +105,7 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
         context_pattern = os.environ.get("ENET_CONTEXT_PATTERN", "default")
         valid_context_patterns = (
             "default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_reg_interleaved",
-            "dense_dilation_reg_trailing",
+            "dense_dilation_reg_trailing", "d16_reg_interleaved",
         )
         if context_pattern not in valid_context_patterns:
             raise ValueError(f"ENET_CONTEXT_PATTERN must be one of {valid_context_patterns}, got {context_pattern!r}.")
@@ -139,6 +139,7 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
             shallow_dilation_dense=_parse_bool_env("ENET_SHALLOW_DILATION_DENSE", False),
             dsc_no_projection_context_only=_parse_bool_env("ENET_DSC_NO_PROJECTION_CONTEXT_ONLY", False),
             reg_bookend_dsc=_parse_bool_env("ENET_REG_BOOKEND_DSC", False),
+            merge_reg_boundary=_parse_bool_env("ENET_MERGE_REG_BOUNDARY", False),
         )
 
         # FINN-deployable follow-up to prelu_variant="leaky": overrides the

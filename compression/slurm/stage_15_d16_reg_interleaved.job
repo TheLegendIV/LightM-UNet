@@ -1,0 +1,145 @@
+#!/bin/bash
+#SBATCH --job-name=stage_15_d16_reg_interleaved
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# Stage 15 -- S8-ReLU's own recipe (dsc_no_projection=1, use_asymmetric=0,
+# use_prelu=0, channels=4,16,32,16,4, decoder_type=upsample_conv), but with
+# a new context_pattern that drops the 2/4/8/16 progression entirely in
+# favor of dilation=16 ONLY, repeated 4 times, reg-bookended on BOTH sides
+# of every repeat: reg,16,reg,16,reg,16,reg,16,reg (9 slots, vs S8-ReLU's
+# own 11-slot reg,2,4,8,16,reg,2,4,8,16,reg).
+#
+# Directly motivated by the pruning-sensitivity sweep on S8-ReLU itself
+# (compression/results_pruning.csv / compression/plot_pruning_sensitivity.py):
+# d=16 slots were consistently the steepest individual-block drops in BOTH
+# stages, while reg-bookends were mostly redundant whenever they had a
+# neighboring reg to fall back on. This pattern bets everything on what the
+# sweep found actually mattered (d=16), while giving every single d=16 slot
+# its own reg consolidation immediately on both sides, not just every 4
+# slots the way the original pattern does.
+#
+# Structurally verified in ENet.py's own Stage-15 self-test: exact reg/DSC-
+# d16 alternation, real dilation=16 baked into every DSC slot's depthwise
+# conv (not just the right block CLASS), and a real forward pass at the
+# widened stage2/3 bottleneck depth (9, not S8-ReLU's 11). Confirmed via
+# local docker smoke test (nnUNetv2_train, 1 epoch/2 iterations) to build
+# and train (forward+backward+optimizer) without error.
+#
+# Single run, not an array -- one architecture, one new pattern.
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+
+RUN_NAME="15_d16_reg_interleaved"
+TRAINER_CLASS="nnUNetTrainerENet"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- ENet trainer knobs -- S8-ReLU's exact recipe, new d16_reg_interleaved
+#    pattern (stage2/3 bottleneck depth 9, not 11) --------------------------
+export ENET_CHANNELS="4,16,32,16,4"
+export ENET_BOTTLENECKS="4,9,9,2,1"
+export ENET_DECODER_TYPE="upsample_conv"
+export ENET_USE_DILATED=1
+export ENET_USE_ASYMMETRIC=0
+export ENET_USE_STRIDED=1
+export ENET_USE_DSC=0
+export ENET_CONTEXT_PATTERN="d16_reg_interleaved"
+export ENET_DSC_NO_PROJECTION=1
+export ENET_USE_PRELU=0
+export ENET_EPOCHS=150
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Run: ${RUN_NAME}"
+echo "ENET_CONTEXT_PATTERN=${ENET_CONTEXT_PATTERN} ENET_BOTTLENECKS=${ENET_BOTTLENECKS}"
+echo "Output folder: ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Checking for a COMPLETED checkpoint for ${RUN_NAME} ==="
+# Only checkpoint_final.pth (written once, at the very end of a finished
+# num_epochs-epoch run) counts as "already trained" -- checkpoint_best.pth
+# gets written as early as epoch 0, see stage_8's own job file for the
+# incident this guards against.
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    echo "checkpoint_final.pth already exists at ${ENET_OUTPUT_FOLDER} -- skipping training, going straight to collect_results.py."
+else
+    echo "=== Start training: ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+    echo "Training finished for ${RUN_NAME}."
+
+    echo "=== Archiving checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+fi
+
+echo "=== Collecting results into compression/results.csv ==="
+cd "$HOME/LightM-UNet"
+python compression/collect_results.py \
+    --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+    --stage 15_d16_reg_interleaved \
+    --dataset-name "${DATASET_NAME}" \
+    --dataset-id "${DATASET_ID}" \
+    --channels "${ENET_CHANNELS}" \
+    --bottlenecks "${ENET_BOTTLENECKS}" \
+    --decoder-type "${ENET_DECODER_TYPE}" \
+    --use-dilated "${ENET_USE_DILATED}" \
+    --use-asymmetric "${ENET_USE_ASYMMETRIC}" \
+    --use-strided "${ENET_USE_STRIDED}" \
+    --use-dsc "${ENET_USE_DSC}" \
+    --context-pattern "${ENET_CONTEXT_PATTERN}" \
+    --dsc-no-projection "${ENET_DSC_NO_PROJECTION}" \
+    --use-prelu "${ENET_USE_PRELU}" \
+    --trainer-class "${TRAINER_CLASS}"
+
+echo "Done: ${RUN_NAME}."
