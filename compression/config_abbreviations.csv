@@ -47,3 +47,4 @@ S10-ReginterleavedSeparable,nnUNetTrainerENet_10_1_reginterleaved_separable_proj
 S10-ReginterleavedSeparableReLU,nnUNetTrainerENet_10_2_reginterleaved_separable_projected_relu,10_reginterleaved_separable_projected,"4,16,32,16,4",upsample_conv,0,1,0
 S12-SeparableDenseReLU,nnUNetTrainerENet_12_separable_dense_relu,12_separable_dense_relu,"4,16,32,16,4",upsample_conv,0,1,0
 S13-SeparableDenseNonnegBlock,nnUNetTrainerENet_13_separable_dense_nonneg_block_warmstart,13_separable_dense_nonneg_block_warmstart,"4,16,32,16,4",upsample_conv,1,1,0
+S13-SeparableDenseLeakyFrozen,nnUNetTrainerENet_13_separable_dense_nonneg_block_leaky_frozen,experiment_13_leaky_frozen,"4,16,32,16,4",upsample_conv,1,1,0
