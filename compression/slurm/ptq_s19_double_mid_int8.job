@@ -1,0 +1,131 @@
+#!/bin/bash
+#SBATCH --job-name=ptq_s19_double_mid_int8
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=01:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# Post-training quantization (PTQ, NOT QAT -- see compression/post-quantization/
+# ptq.py's own module docstring for the distinction) of S19
+# (19_reginterleaved_separable_nonneg_block_double_mid, FP32 dice=0.7931)
+# at INT8: calibrates a Brevitas-quantized QuantENet mirror from S19's
+# already-trained FP32 weights via a few real-image forward passes, NO
+# retraining/backward pass at all. Answers "how much does quantizing this
+# already-trained model hurt", not "can the network learn to compensate"
+# (that's QAT's question, e.g. stage_14_s8relu_quant_int4.job).
+#
+# Needed QuantENet.py to learn S19's own context_pattern first (dense_
+# dilation_reg_interleaved_double_mid wasn't ported there yet -- only
+# ENet.py had it, from building S19 itself) -- added DENSE_DILATION_REG_
+# INTERLEAVED_DOUBLE_MID_PATTERN's import + pattern-selection wiring +
+# valid_context_patterns entry, mirroring ENet.py's own addition exactly.
+# New QuantENet.py self-test ("S19@INT8 recipe") verifies the 12-slot
+# pattern (4 reg-bookend slots incl. the doubled mid pair, 8 dilated slots
+# with exact 2/4/8/16 order, dense non-depthwise separable_dilated
+# factoring) matches ENet.py's own Stage-17 self-test finding. ptq.py's own
+# --context-pattern CLI choices extended to match.
+#
+# Uses checkpoint_final.pth as the source (NOT the default checkpoint_best.pth)
+# -- S19's own converged_flag=False (dice still trending up in its last ~30
+# logged epochs) makes the true end-of-training state the more representative
+# thing to quantize here, not whichever earlier epoch happened to have the
+# best EMA dice.
+#
+# Confirmed via local docker run: 42/64 real preprocessed calibration images
+# used (the rest skipped for the known odd-H/W-vs-stride-8 architectural
+# sensitivity, unrelated to quantization -- see ptq.py's own calibrate()
+# docstring), calibrated checkpoint saved, QuantENet.py's own self-test
+# suite (including the new S19@INT8 check) passes.
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+
+SOURCE_NET_NAME="nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid"
+OUT_NET_NAME="nnUNetTrainerENetQuant_19_double_mid_ptq_int8"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+cd "$HOME/LightM-UNet"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Source (FP32): ${SOURCE_NET_NAME}"
+echo "Out (INT8 PTQ): ${OUT_NET_NAME}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+echo "=== Checking source FP32 checkpoint exists ==="
+SOURCE_CKPT="$nnUNet_results/${DATASET_NAME}/${SOURCE_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_final.pth"
+if [ ! -f "$SOURCE_CKPT" ]; then
+    echo "ERROR: source checkpoint not found at $SOURCE_CKPT" >&2
+    exit 1
+fi
+
+echo "=== Checking for an already-calibrated PTQ checkpoint ==="
+OUT_CKPT="$nnUNet_results/${DATASET_NAME}/${OUT_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
+if [ -f "$OUT_CKPT" ]; then
+    echo "$OUT_CKPT already exists -- skipping PTQ calibration, going straight to collect_results.py."
+else
+    echo "=== Running PTQ calibration ==="
+    python compression/post-quantization/ptq.py \
+        --source-net-name "${SOURCE_NET_NAME}" \
+        --out-net-name "${OUT_NET_NAME}" \
+        --dataset-name "${DATASET_NAME}" \
+        --channels 4,16,32,16,4 --bottlenecks 4,12,12,2,1 --decoder-type upsample_conv \
+        --use-asymmetric 0 --context-pattern dense_dilation_reg_interleaved_double_mid \
+        --separable-dilated 1 --dsc-no-projection 0 \
+        --quant-bits 8 \
+        --source-checkpoint-name checkpoint_final.pth
+fi
+
+echo "=== Collecting results into compression/results.csv ==="
+python compression/collect_results.py \
+    --net-name "${OUT_NET_NAME}" \
+    --stage experiment_s19_ptq_int8 \
+    --dataset-name "${DATASET_NAME}" \
+    --dataset-id "${DATASET_ID}" \
+    --channels 4,16,32,16,4 \
+    --bottlenecks 4,12,12,2,1 \
+    --decoder-type upsample_conv \
+    --use-dilated 1 \
+    --use-asymmetric 0 \
+    --use-strided 1 \
+    --use-dsc 0 \
+    --separable-dilated 1 \
+    --context-pattern dense_dilation_reg_interleaved_double_mid \
+    --dsc-no-projection 0 \
+    --quant-bits 8 \
+    --trainer-class nnUNetTrainerENetQuant
+
+echo "Done: ${OUT_NET_NAME}."

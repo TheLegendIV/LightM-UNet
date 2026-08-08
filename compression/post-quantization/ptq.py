@@ -323,7 +323,7 @@ def main() -> None:
     parser.add_argument("--use-asymmetric", type=int, default=1, choices=[0, 1])
     parser.add_argument("--use-strided", type=int, default=1, choices=[0, 1])
     parser.add_argument("--use-dsc", type=int, default=0, choices=[0, 1])
-    parser.add_argument("--context-pattern", default="default", choices=["default", "dense_dilation", "dense_dilation_reg_interleaved"])
+    parser.add_argument("--context-pattern", default="default", choices=["default", "dense_dilation", "dense_dilation_reg_interleaved", "dense_dilation_reg_interleaved_double_mid"])
     parser.add_argument("--dsc-no-projection", type=int, default=0, choices=[0, 1])
     parser.add_argument("--dsc-no-projection-context-only", type=int, default=0, choices=[0, 1])
     parser.add_argument("--separable-dilated", type=int, default=0, choices=[0, 1])

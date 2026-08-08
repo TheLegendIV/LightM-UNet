@@ -59,6 +59,7 @@ from nnunetv2.nets.ENet import (
     CONTEXT_STAGE_PATTERN,
     DENSE_DILATION_PATTERN,
     DENSE_DILATION_REG_INTERLEAVED_PATTERN,
+    DENSE_DILATION_REG_INTERLEAVED_DOUBLE_MID_PATTERN,
 )
 
 DecoderType = Literal["max_unpool", "upsample_conv"]
@@ -391,7 +392,10 @@ class QuantENet(nn.Module):
         initial_channels, stage1_channels, stage23_channels, stage4_channels, stage5_channels = channels
         if decoder_type not in ("max_unpool", "upsample_conv"):
             raise ValueError(f"decoder_type must be 'max_unpool' or 'upsample_conv', got {decoder_type!r}.")
-        valid_context_patterns = ("default", "dense_dilation", "dense_dilation_reg_interleaved")
+        valid_context_patterns = (
+            "default", "dense_dilation", "dense_dilation_reg_interleaved",
+            "dense_dilation_reg_interleaved_double_mid",
+        )
         if context_pattern not in valid_context_patterns:
             raise ValueError(
                 f"QuantENet only supports {valid_context_patterns} so far (mirrors just the subset of "
@@ -473,16 +477,19 @@ class QuantENet(nn.Module):
         leaky_slope_map: dict | None,
     ) -> nn.Sequential:
         """Mirrors ENet.py's _make_context_stage, scoped to just what
-        QuantENet's two target configs need: context_pattern selection
-        (default/dense_dilation/dense_dilation_reg_interleaved),
-        dsc_no_projection (with its {"reg_bottleneck": True} bookend
-        sentinel), and separable_dilated -- NOT merge_dilated_pairs/
-        two_block_skip/dsc_dilated_only/sparse variants, unused by either
-        S8-ReLU or S13's quantized configs."""
+        QuantENet's target configs need: context_pattern selection
+        (default/dense_dilation/dense_dilation_reg_interleaved/
+        dense_dilation_reg_interleaved_double_mid), dsc_no_projection (with
+        its {"reg_bottleneck": True} bookend sentinel), and
+        separable_dilated -- NOT merge_dilated_pairs/two_block_skip/
+        dsc_dilated_only/sparse variants, unused by S8-ReLU/S13/S19's
+        quantized configs."""
         if context_pattern == "dense_dilation":
             pattern = DENSE_DILATION_PATTERN
         elif context_pattern == "dense_dilation_reg_interleaved":
             pattern = DENSE_DILATION_REG_INTERLEAVED_PATTERN
+        elif context_pattern == "dense_dilation_reg_interleaved_double_mid":
+            pattern = DENSE_DILATION_REG_INTERLEAVED_DOUBLE_MID_PATTERN
         else:
             pattern = CONTEXT_STAGE_PATTERN
 
@@ -708,3 +715,47 @@ if __name__ == "__main__":
     except ValueError:
         pass
     print("QuantENet validation self-test PASSED.")
+
+    # 8. S19's exact recipe (reginterleaved_separable_nonneg_block_double_mid's
+    # architecture): context_pattern=dense_dilation_reg_interleaved_double_mid,
+    # separable_dilated=1, dsc_no_projection=0 (projection kept, same as
+    # S10/S18's own quantized-config shape), bottlenecks widened to
+    # 4,12,12,2,1 for the doubled-mid-reg pattern's 12-slot cycle. Checks
+    # the new pattern constant threads through correctly here too: 4
+    # reg-bookend slots per stage (indices 0,5,6,11 -- plain dense 3x3, no
+    # DSC) with the 8 dilated slots (indices 1-4,7-10) built as the dense
+    # (non-depthwise) separable_dilated factoring, exact dilation order
+    # preserved on both sides of the doubled mid pair -- mirrors ENet.py's
+    # own Stage-17 self-test.
+    s19_int8 = QuantENet(
+        in_channels=1, out_channels=5, channels=(4, 16, 32, 16, 4),
+        bottlenecks_per_stage=(4, 12, 12, 2, 1), decoder_type="upsample_conv",
+        use_dilated=True, use_asymmetric=False, use_strided=True, use_dsc=False,
+        weight_bit_width=8, act_bit_width=8,
+        context_pattern="dense_dilation_reg_interleaved_double_mid", separable_dilated=True,
+    ).eval()
+    with torch.no_grad():
+        out = s19_int8(torch.randn(1, 1, 512, 512))
+    out_t = out.value if hasattr(out, "value") else out
+    assert out_t.shape == (1, 5, 512, 512), f"S19@INT8: got {tuple(out_t.shape)}"
+    for stage_name, stage in (("stage2", s19_int8.stage2), ("stage3", s19_int8.stage3)):
+        assert len(stage) == 12, f"S19@INT8: {stage_name} has {len(stage)} blocks, expected 12"
+        expected_dilations = {1: 2, 2: 4, 3: 8, 4: 16, 7: 2, 8: 4, 9: 8, 10: 16}
+        for i, block in enumerate(stage):
+            assert isinstance(block, QuantRegularBottleneck), f"S19@INT8: {stage_name}.{i} expected QuantRegularBottleneck, got {type(block).__name__}"
+            conv = block.conv
+            if i in (0, 5, 6, 11):
+                assert isinstance(conv, qnn.QuantConv2d) and conv.kernel_size == (3, 3), (
+                    f"S19@INT8: {stage_name}.{i} (bookend) is {type(conv).__name__}, expected a plain dense 3x3 QuantConv2d"
+                )
+                assert conv.groups == 1, f"S19@INT8: {stage_name}.{i} (bookend) unexpectedly grouped/depthwise"
+            else:
+                assert isinstance(conv, nn.Sequential) and conv[0].kernel_size == (3, 1), (
+                    f"S19@INT8: {stage_name}.{i} (dilated) is {type(conv).__name__}, expected a separable-factored Sequential starting (3,1)"
+                )
+                assert conv[0].groups == 1, f"S19@INT8: {stage_name}.{i} (dilated) unexpectedly depthwise"
+            if i in expected_dilations:
+                assert conv[0].dilation == (expected_dilations[i], expected_dilations[i]), (
+                    f"S19@INT8: {stage_name}.{i} expected dilation={expected_dilations[i]}, got {conv[0].dilation}"
+                )
+    print("S19@INT8 recipe (dense_dilation_reg_interleaved_double_mid): build+forward OK, 12-slot pattern (4 bookends, exact dilation order) verified.")
