@@ -227,6 +227,25 @@ class QuantRegularBottleneck(nn.Module):
             nn.BatchNorm2d(channels),
         )
         self.dropout = nn.Dropout2d(p=dropout_p)
+        # NOTE (FINN residual-join scale safety): brevitas.nn.QuantEltwiseAdd
+        # applies its OWN `input_quant` instance to BOTH operands --
+        # `forward()` does `self.input_quant(input)` then
+        # `self.input_quant(other)`, the SAME submodule both times (see
+        # brevitas/nn/quant_eltwise.py). Int8ActPerTensorFloat's default
+        # scaling_impl_type is PARAMETER_FROM_STATS -- one learnable
+        # nn.Parameter shared by the module, NOT recomputed per call -- so
+        # both operands are forced through an IDENTICAL scale by
+        # construction, every forward pass, regardless of what scale either
+        # operand carried on entry. This residual join can never hit FINN's
+        # "two independently-scaled int8 streams meeting at an Add" problem.
+        # That problem DID occur in the separate FINN-export mirror
+        # hardware/finn_export_s13_leaky_frozen.py, whose hand-rolled
+        # residual blocks do a raw `+` with no shared quantizer at the join
+        # at all (fixed there with an explicit CONST-scale shared
+        # QuantIdentity: `_ConstScaleInt8Act`/`_requant_factory`). That fix is
+        # NOT needed here -- this comment exists so a future agent doesn't
+        # try to re-apply it to QuantENet.py's own residual_add sites (this
+        # one and the 3 others in this file, which just reference this note).
         self.residual_add = qnn.QuantEltwiseAdd(bit_width=bit_width, input_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
         self.out_act = _quant_block_act(channels, bit_width, negative_slope)
 
@@ -259,6 +278,10 @@ class QuantDSCNoProjectionBottleneck(nn.Module):
             nn.BatchNorm2d(channels),
         )
         self.dropout = nn.Dropout2d(p=dropout_p)
+        # See QuantRegularBottleneck.residual_add's note above: QuantEltwiseAdd
+        # shares one input_quant instance (learned PARAMETER_FROM_STATS scale)
+        # across both operands by construction, so this join is already
+        # FINN-safe -- no CONST-scale fix needed here.
         self.residual_add = qnn.QuantEltwiseAdd(bit_width=bit_width, input_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
         self.out_act = _quant_block_act(channels, bit_width, negative_slope)
 
@@ -298,6 +321,10 @@ class QuantDownsamplingBottleneck(nn.Module):
             nn.BatchNorm2d(out_channels),
         )
         self.dropout = nn.Dropout2d(p=dropout_p)
+        # See QuantRegularBottleneck.residual_add's note above: QuantEltwiseAdd
+        # shares one input_quant instance (learned PARAMETER_FROM_STATS scale)
+        # across both operands by construction, so this join is already
+        # FINN-safe -- no CONST-scale fix needed here.
         self.residual_add = qnn.QuantEltwiseAdd(bit_width=bit_width, input_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
         self.out_act = _quant_block_act(out_channels, bit_width, negative_slope)
         self.out_channels = out_channels
@@ -345,6 +372,10 @@ class QuantUpsamplingBottleneck(nn.Module):
             nn.BatchNorm2d(out_channels),
         )
         self.dropout = nn.Dropout2d(p=0.1)
+        # See QuantRegularBottleneck.residual_add's note above: QuantEltwiseAdd
+        # shares one input_quant instance (learned PARAMETER_FROM_STATS scale)
+        # across both operands by construction, so this join is already
+        # FINN-safe -- no CONST-scale fix needed here.
         self.residual_add = qnn.QuantEltwiseAdd(bit_width=bit_width, input_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
         self.out_act = _quant_act(bit_width)
 
