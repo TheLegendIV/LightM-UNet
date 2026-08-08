@@ -1,0 +1,160 @@
+#!/bin/bash
+#SBATCH --job-name=stage_19_reginterleaved_separable_nonneg_block_double_mid
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# Stage 19 -- identical to Stage 18 (S10 + prelu_variant=nonneg_block, cold
+# start), EXCEPT context_pattern swaps to "dense_dilation_reg_interleaved_
+# double_mid": the one truly-interior reg bookend (the one genuinely
+# sandwiched between a stage's own two dilation cycles, not the leading or
+# trailing one) is doubled into two consecutive RegularBottlenecks. Stage2/
+# stage3 bottleneck depth grows 11 -> 12 to fit the extra slot; the stage2/
+# 3 seam (stage2's own trailing reg next to stage3's own leading reg) is
+# left exactly as S10/S18 already have it -- untouched, per explicit user
+# confirmation this run should NOT touch that seam.
+#
+# THIS IS THE FINAL TEST in this line of investigation. Directly follow-up
+# to the stage2/3-asymmetry discussion: S16 already showed the stage3-
+# leading-reg-next-to-stage2-trailing-reg seam carries real signal (post-
+# hoc ablation -0.0157 dice; from-scratch removal -0.018 dice -- two
+# independent measurement methods landing within 0.002 of each other). This
+# tests whether a SECOND consolidation block at the other, genuinely-
+# interior reg position (one per stage, mid-cycle) is a similarly real and
+# GENERALIZABLE contributor -- i.e. is "double reg between dilation cycles"
+# a general architectural principle worth extending everywhere it recurs,
+# or was S16's finding specific to that one seam? Compare this run's dice
+# directly against Stage 18's (same architecture, single mid reg) to
+# isolate the doubled block's own contribution, holding activation/cold-
+# start/every other axis fixed.
+#
+# Structurally verified in ENet.py's own self-test ("Stage-17
+# dense_dilation_reg_interleaved_double_mid self-test"): 12-slot pattern
+# per stage, exactly 4 reg-bookend slots (leading, doubled-mid pair,
+# trailing) confirmed as plain dense 3x3 Conv2d (not depthwise/DSC), the 8
+# dilated slots confirmed as dense (non-depthwise) (3,1)+(1,3) Sequentials
+# with the correct 2,4,8,16 order preserved on both sides of the doubled
+# mid pair, forward pass checked. Confirmed via local docker smoke test
+# (nnUNetv2_train, 1 epoch/2 iterations against Dataset509_ARCADE_1x1_4c)
+# to build and train (forward+backward+optimizer) without error.
+#
+# Single run, not an array -- one architecture, one pattern change.
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+
+RUN_NAME="19_reginterleaved_separable_nonneg_block_double_mid"
+TRAINER_CLASS="nnUNetTrainerENet"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- ENet trainer knobs -- S18's recipe, double-mid-reg pattern, stage2/3
+#    bottleneck depth 11 -> 12 -------------------------------------------
+export ENET_CHANNELS="4,16,32,16,4"
+export ENET_BOTTLENECKS="4,12,12,2,1"
+export ENET_CONTEXT_PATTERN="dense_dilation_reg_interleaved_double_mid"
+export ENET_DECODER_TYPE="upsample_conv"
+export ENET_USE_PRELU=1
+export ENET_PRELU_VARIANT="nonneg_block"
+export ENET_USE_DILATED=1
+export ENET_USE_ASYMMETRIC=0
+export ENET_USE_STRIDED=1
+export ENET_USE_DSC=0
+export ENET_SEPARABLE_DILATED=1
+export ENET_DSC_NO_PROJECTION=0
+export ENET_EPOCHS=150
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Run: ${RUN_NAME}"
+echo "ENET_CONTEXT_PATTERN=${ENET_CONTEXT_PATTERN} ENET_BOTTLENECKS=${ENET_BOTTLENECKS}"
+echo "Output folder: ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Checking for a COMPLETED checkpoint for ${RUN_NAME} ==="
+# Only checkpoint_final.pth (written once, at the very end of a finished
+# num_epochs-epoch run) counts as "already trained" -- checkpoint_best.pth
+# gets written as early as epoch 0, see stage_8's own job file for the
+# incident this guards against.
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    echo "checkpoint_final.pth already exists at ${ENET_OUTPUT_FOLDER} -- skipping training, going straight to collect_results.py."
+else
+    echo "=== Start training: ${RUN_NAME} (cold start, no pretrained weights) ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+    echo "Training finished for ${RUN_NAME}."
+
+    echo "=== Archiving checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+fi
+
+echo "=== Collecting results into compression/results.csv (structural nonneg_block dice, block-tied but not yet frozen to leaky) ==="
+cd "$HOME/LightM-UNet"
+python compression/collect_results.py \
+    --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+    --stage 19_reginterleaved_separable_nonneg_block_double_mid \
+    --dataset-name "${DATASET_NAME}" \
+    --dataset-id "${DATASET_ID}" \
+    --channels "${ENET_CHANNELS}" \
+    --bottlenecks "${ENET_BOTTLENECKS}" \
+    --decoder-type "${ENET_DECODER_TYPE}" \
+    --use-dilated "${ENET_USE_DILATED}" \
+    --use-asymmetric "${ENET_USE_ASYMMETRIC}" \
+    --use-strided "${ENET_USE_STRIDED}" \
+    --use-dsc "${ENET_USE_DSC}" \
+    --separable-dilated "${ENET_SEPARABLE_DILATED}" \
+    --context-pattern "${ENET_CONTEXT_PATTERN}" \
+    --use-prelu "${ENET_USE_PRELU}" \
+    --prelu-variant "${ENET_PRELU_VARIANT}" \
+    --dsc-no-projection "${ENET_DSC_NO_PROJECTION}" \
+    --trainer-class "${TRAINER_CLASS}"
+
+echo "Done: ${RUN_NAME}. Compare directly against Stage 18's dice to isolate the doubled mid-reg's own contribution."
