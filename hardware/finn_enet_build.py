@@ -198,15 +198,30 @@ def _streamline_nonlinear(model: ModelWrapper, cfg: DataflowBuildConfig):
 
 
 def step_enet_streamline(model: ModelWrapper, cfg: DataflowBuildConfig):
-    """4-pass alternating linear + non-linear streamlining (same as resnet50).
+    """8-pass alternating linear + non-linear streamlining (same as resnet50,
+    but with double the iteration count -- see below).
 
     Also lowers Conv→MatMul here (like standard step_streamline) so that
     Im2Col output tensors are typed as integer by InferDataTypes *before*
     step_enet_convert_to_hw runs InferQuantizedMatrixVectorActivation.
     Without this, Im2Col outputs default to FLOAT32 and MVAU conversion
     is skipped for all lowered convolutions.
+
+    Iteration count bumped from 4 to 8 (diagnosed on
+    quantEnet_s13_leaky_frozen_int8): some deeper/more-complex fork+affine
+    chains (Mul AND Add both present, not just a bare Mul, on a residual
+    shortcut branch) need more than 4 alternating passes of
+    MoveLinearPastFork/MoveLinearPastEltwiseAdd to fully cancel out before
+    reaching step_enet_convert_to_hw -- leaving a leftover generic Mul/Add
+    stranded in front of a residual join that InferAddStreamsLayer then
+    refuses to convert (both inputs must already be "pure"/scale-free
+    streams), which cascades into a non-HW island large enough to trip
+    step_create_dataflow_partition's cycle-free assertion ("partition
+    depends on itself"). Extra iterations on already-converged configs
+    (E1/O8/S5) are safe no-ops since the transforms are idempotent once
+    nothing more can be pushed/absorbed.
     """
-    for _iter in range(4):
+    for _iter in range(8):
         model = _streamline_linear(model, cfg)
         model = _streamline_nonlinear(model, cfg)
         # tidy after each iteration — intentionally NO GiveReadableTensorNames here:

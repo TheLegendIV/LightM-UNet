@@ -611,8 +611,21 @@ def step_fuse_forked_dequant_into_duplicate_threshold(model: ModelWrapper, cfg: 
         if walk is None:
             continue
         mt, scale, bias, transposes, chain_nodes = walk
-        if not model.is_fork_node(mt):
-            continue  # non-fork cases are already handled by Absorb*IntoMultiThreshold/the Move* transforms
+        # NOTE: previously restricted to model.is_fork_node(mt) only (the
+        # residual-adjacent case this was first written for), on the
+        # assumption that non-fork cases are already handled by
+        # Absorb*IntoMultiThreshold/the Move* transforms in
+        # step_absorb_leftover_scale_before_matmul. That assumption is
+        # FALSE for FMPadding_Pixel specifically: that loop only has
+        # Move*PastIm2Col/Move*PastMaxPoolNHWC/Move*PastMatMul variants --
+        # no Move*PastFMPaddingPixel at all -- so a stranded dequant
+        # Mul(+Add) directly in front of an FMPadding_Pixel from a
+        # (non-residual, e.g. the network's own final) ConvTranspose lowering
+        # never gets pushed forward regardless of iteration count, even when
+        # its MultiThreshold producer isn't forked. The duplicate-threshold
+        # splitting technique below (integer bias -> out_bias, float scale
+        # relocated after the blocking op) is equally valid whether mt is
+        # forked or not, so no is_fork_node gate is needed here at all.
         if consumer.op_type == "MaxPoolNHWC" and scale <= 0:
             continue  # max() only commutes with a positive scale
 
