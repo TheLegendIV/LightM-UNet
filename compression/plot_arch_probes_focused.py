@@ -46,6 +46,7 @@ STAGE_COLORS = {
     "17_separable_dense_nonneg_block_coldstart": "#d81b60",
     "18_reginterleaved_separable_nonneg_block": "#00695c",
     "19_reginterleaved_separable_nonneg_block_double_mid": "#f4511e",
+    "20_reginterleaved_separable_double_mid_relu": "#6d4c41",
 }
 U4_LINE_COLOR = "#2a78d6"
 
@@ -117,6 +118,7 @@ def main() -> int:
         | (df["stage"] == "17_separable_dense_nonneg_block_coldstart")
         | (df["stage"] == "18_reginterleaved_separable_nonneg_block")
         | (df["stage"] == "19_reginterleaved_separable_nonneg_block_double_mid")
+        | (df["stage"] == "20_reginterleaved_separable_double_mid_relu")
     ].dropna(subset=["params", "dice"]).copy()
     if focused.empty:
         print("No U4/stage_4/.../stage_13 rows found in results.csv yet.")
