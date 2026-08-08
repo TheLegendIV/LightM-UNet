@@ -176,6 +176,44 @@ D16_REG_INTERLEAVED_PATTERN: tuple[dict, ...] = (
     {"reg_bottleneck": True},
 )
 
+# S19's own pattern: DENSE_DILATION_REG_INTERLEAVED_PATTERN with its ONE
+# truly-interior reg slot (the one sandwiched between a stage's own two
+# dilation cycles, index 5 of the 11-slot pattern) doubled into two
+# consecutive RegularBottlenecks -- reg,2,4,8,16,reg,reg,2,4,8,16,reg (12
+# slots). The leading slot (index 0, only adjacent to the FOLLOWING cycle)
+# and trailing slot (index 11, only adjacent to the PRECEDING cycle) stay
+# single -- neither sits "between" two cycles from its own stage's
+# perspective, so this pattern leaves the stage2/3 seam exactly as
+# DENSE_DILATION_REG_INTERLEAVED_PATTERN already has it (stage2's own
+# single trailing reg next to stage3's own single leading reg -- untouched,
+# not something this pattern changes).
+#
+# Directly motivated by the pruning sweep's finding that stage3's leading
+# reg (S16's merge_reg_boundary target) carries real, reproducible signal
+# (post-hoc ablation: -0.0157 dice; S16's from-scratch retrain without it:
+# -0.018 dice) -- this tests whether a SECOND consolidation block at the
+# other, genuinely-interior reg position is a similarly real, general
+# contributor (worth doubling everywhere it recurs) or specific to that one
+# seam. Only meaningful under dsc_no_projection=False (S10's own recipe --
+# DSC WITH projection kept, or no DSC at all): the {"reg_bottleneck": True}
+# sentinel's handling in both the dsc_no_projection branch AND the plain
+# (projected) loop of _make_context_stage already covers this pattern with
+# zero new code there.
+DENSE_DILATION_REG_INTERLEAVED_DOUBLE_MID_PATTERN: tuple[dict, ...] = (
+    {"reg_bottleneck": True},
+    {"padding": 2, "dilation": 2},
+    {"padding": 4, "dilation": 4},
+    {"padding": 8, "dilation": 8},
+    {"padding": 16, "dilation": 16},
+    {"reg_bottleneck": True},
+    {"reg_bottleneck": True},
+    {"padding": 2, "dilation": 2},
+    {"padding": 4, "dilation": 4},
+    {"padding": 8, "dilation": 8},
+    {"padding": 16, "dilation": 16},
+    {"reg_bottleneck": True},
+)
+
 # Stage 4.4.1's shallow-stage pattern: alternating regular/dilated(16), for
 # stage1 and regular4 -- both stages currently have NO dilation mechanism at
 # all (only stage2/3's context pattern does). Same max dilation rate (16) as
@@ -853,7 +891,7 @@ class ENet(nn.Module):
         super().__init__()
         valid_context_patterns = (
             "default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_reg_interleaved",
-            "dense_dilation_reg_trailing", "d16_reg_interleaved",
+            "dense_dilation_reg_trailing", "d16_reg_interleaved", "dense_dilation_reg_interleaved_double_mid",
         )
         if context_pattern not in valid_context_patterns:
             raise ValueError(f"context_pattern must be one of {valid_context_patterns}, got {context_pattern!r}.")
@@ -1067,7 +1105,14 @@ class ENet(nn.Module):
         DENSE_DILATION_REG_INTERLEAVED_PATTERN when context_pattern=
         "dense_dilation_reg_interleaved" (11 slots: reg,2,4,8,16,reg,2,4,8,
         16,reg -- only meaningful under dsc_no_projection, see that
-        pattern's own module comment); DENSE_DILATION_REG_TRAILING_PATTERN
+        pattern's own module comment); DENSE_DILATION_REG_INTERLEAVED_DOUBLE_MID_PATTERN
+        when context_pattern="dense_dilation_reg_interleaved_double_mid"
+        (same 11-slot shape, but the one truly-interior reg -- index 5,
+        sandwiched between a stage's own two dilation cycles -- doubled
+        into two consecutive RegularBottlenecks, 12 slots total; the
+        leading/trailing bookends stay single, so the stage2/3 seam is
+        untouched -- see that pattern's own module comment);
+        DENSE_DILATION_REG_TRAILING_PATTERN
         when context_pattern="dense_dilation_reg_trailing" (5-slot cycle:
         2,4,8,16,reg -- reg trails each dilation cycle instead of leading
         it, meant for dsc_no_projection=False so use_dsc keeps the dilated
@@ -1106,6 +1151,8 @@ class ENet(nn.Module):
             pattern = DENSE_DILATION_REG_TRAILING_PATTERN
         elif self.context_pattern == "d16_reg_interleaved":
             pattern = D16_REG_INTERLEAVED_PATTERN
+        elif self.context_pattern == "dense_dilation_reg_interleaved_double_mid":
+            pattern = DENSE_DILATION_REG_INTERLEAVED_DOUBLE_MID_PATTERN
         else:
             pattern = CONTEXT_STAGE_PATTERN
 
@@ -2492,3 +2539,46 @@ if __name__ == "__main__":
         pass
 
     print("ENet Stage-16 merge_reg_boundary self-test PASSED: stage2 untouched, stage3's leading reg correctly dropped with exact dilation-order preserved, validation checked.")
+
+    # Stage 17 -- S19's own pattern: dense_dilation_reg_interleaved with its
+    # one truly-interior reg (index 5 of 11) doubled into two consecutive
+    # RegularBottlenecks (index 5 AND 6 of the new 12-slot pattern), leading
+    # (index 0) and trailing (index 11) bookends left single. Composed the
+    # same way Stage 10's hybrid was (dsc_no_projection=False, use_dsc=False,
+    # separable_dilated=True -- S10's own recipe): every dilated slot is a
+    # dense (non-depthwise) (3,1)+(1,3) Sequential, every reg-bookend slot
+    # (now FOUR of them per stage: 0, 5, 6, 11) is a plain dense 3x3 Conv2d.
+    double_mid = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=(4, 12, 12, 2, 1),
+        decoder_type="upsample_conv", use_prelu=False, use_asymmetric=False,
+        use_dsc=False, separable_dilated=True, dsc_no_projection=False,
+        context_pattern="dense_dilation_reg_interleaved_double_mid",
+    )
+    with torch.no_grad():
+        assert double_mid(dummy).shape == (1, 5, 512, 512)
+    for stage_name, stage in (("stage2", double_mid.stage2), ("stage3", double_mid.stage3)):
+        assert len(stage) == 12, f"17: {stage_name} has {len(stage)} blocks, expected 12"
+        for i, block in enumerate(stage):
+            assert type(block) is RegularBottleneck, f"17: {stage_name}[{i}] is {type(block).__name__}, expected RegularBottleneck"
+            assert hasattr(block, "reduce"), f"17: {stage_name}[{i}] missing its reduce/expand projection"
+            conv = block.conv
+            if i in (0, 5, 6, 11):  # reg-bookend slots -- 4 now, the mid pair doubled
+                assert isinstance(conv, nn.Conv2d) and conv.kernel_size == (3, 3), (
+                    f"17: {stage_name}[{i}] (bookend) is {type(conv).__name__}, expected a plain dense 3x3 Conv2d"
+                )
+                assert conv.groups == 1, f"17: {stage_name}[{i}] (bookend) unexpectedly grouped/depthwise"
+            else:  # dilated slots -- dense (k,1)+(1,k), NOT depthwise
+                assert isinstance(conv, nn.Sequential) and conv[0].kernel_size == (3, 1), (
+                    f"17: {stage_name}[{i}] (dilated) is {type(conv).__name__}, expected a separable-factored Sequential starting (3,1)"
+                )
+                assert conv[0].groups == 1, f"17: {stage_name}[{i}] (dilated) unexpectedly depthwise -- should stay dense like S10, not DSC"
+        # Exact dilation order for both cycles (confirms the doubled mid slot
+        # didn't shift the surrounding cycles' own rates out of place).
+        expected_dilations = {1: 2, 2: 4, 3: 8, 4: 16, 7: 2, 8: 4, 9: 8, 10: 16}
+        for i, expected_dilation in expected_dilations.items():
+            dilated_conv = stage[i].conv[0]
+            assert dilated_conv.dilation == (expected_dilation, expected_dilation), (
+                f"17: {stage_name}[{i}] expected dilation={expected_dilation}, got {dilated_conv.dilation}"
+            )
+
+    print("ENet Stage-17 dense_dilation_reg_interleaved_double_mid self-test PASSED: 12-slot pattern verified (4 reg bookends incl. doubled mid pair, exact dilation order preserved), forward pass checked.")
