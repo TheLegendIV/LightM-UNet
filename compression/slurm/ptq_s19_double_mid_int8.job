@@ -43,12 +43,27 @@ set -e
 # sensitivity, unrelated to quantization -- see ptq.py's own calibrate()
 # docstring), calibrated checkpoint saved, QuantENet.py's own self-test
 # suite (including the new S19@INT8 check) passes.
+#
+# CRITICAL, not optional: S19 is prelu_variant="nonneg_block" (a real
+# learnable per-block negative-slope activation), not plain ReLU -- an
+# earlier version of this job ran ptq.py/collect_results.py with NO
+# --leaky-slope-map at all, which silently builds plain QuantReLU
+# everywhere (see QuantENet.py's own docstring: "blocks not covered by the
+# map fall back to plain QuantReLU"). That is a genuine architecture
+# mismatch on top of quantization, not honest quantization noise -- it
+# measured dice=0.4383, catastrophically worse than the real number.
+# extract_leaky_slope_map.py (a thin CLI wrapper around ENet.py's own
+# collect_prelu_block_means, which already handles NonNegativePReLU the
+# same way it handles a real per-channel PReLU checkpoint) pulls S19's
+# actual per-block slopes from its trained FP32 checkpoint FIRST, and both
+# ptq.py and collect_results.py below are passed that real slope map.
 
 DATASET_ID=509
 DATASET_NAME="Dataset509_ARCADE_1x1_4c"
 
 SOURCE_NET_NAME="nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid"
 OUT_NET_NAME="nnUNetTrainerENetQuant_19_double_mid_ptq_int8"
+SLOPE_MAP_FILE="compression/post-quantization/slope_maps/19_reginterleaved_separable_nonneg_block_double_mid.json"
 
 mkdir -p logs
 
@@ -92,6 +107,20 @@ if [ ! -f "$SOURCE_CKPT" ]; then
     exit 1
 fi
 
+echo "=== Extracting S19's real per-block leaky slope map (nonneg_block -- see note above) ==="
+if [ -f "$SLOPE_MAP_FILE" ]; then
+    echo "$SLOPE_MAP_FILE already exists -- skipping extraction."
+else
+    python compression/post-quantization/extract_leaky_slope_map.py \
+        --net-name "${SOURCE_NET_NAME}" \
+        --dataset-name "${DATASET_NAME}" \
+        --channels 4,16,32,16,4 --bottlenecks 4,12,12,2,1 --decoder-type upsample_conv \
+        --use-asymmetric 0 --context-pattern dense_dilation_reg_interleaved_double_mid \
+        --separable-dilated 1 --dsc-no-projection 0 \
+        --checkpoint-name checkpoint_final.pth \
+        --out-file "$SLOPE_MAP_FILE"
+fi
+
 echo "=== Checking for an already-calibrated PTQ checkpoint ==="
 OUT_CKPT="$nnUNet_results/${DATASET_NAME}/${OUT_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
 if [ -f "$OUT_CKPT" ]; then
@@ -105,11 +134,13 @@ else
         --channels 4,16,32,16,4 --bottlenecks 4,12,12,2,1 --decoder-type upsample_conv \
         --use-asymmetric 0 --context-pattern dense_dilation_reg_interleaved_double_mid \
         --separable-dilated 1 --dsc-no-projection 0 \
+        --leaky-slope-map-file "$SLOPE_MAP_FILE" \
         --quant-bits 8 \
         --source-checkpoint-name checkpoint_final.pth
 fi
 
 echo "=== Collecting results into compression/results.csv ==="
+SLOPE_MAP_JSON=$(python -c "import json; print(json.dumps(json.load(open('${SLOPE_MAP_FILE}'))))")
 python compression/collect_results.py \
     --net-name "${OUT_NET_NAME}" \
     --stage experiment_s19_ptq_int8 \
@@ -125,6 +156,7 @@ python compression/collect_results.py \
     --separable-dilated 1 \
     --context-pattern dense_dilation_reg_interleaved_double_mid \
     --dsc-no-projection 0 \
+    --leaky-slope-map "$SLOPE_MAP_JSON" \
     --quant-bits 8 \
     --trainer-class nnUNetTrainerENetQuant
 
