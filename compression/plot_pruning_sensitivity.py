@@ -65,6 +65,14 @@ STAGE_COLORS = {"stage2": "#2a78d6", "stage3": "#eb6834"}
 
 INDIVIDUAL_RE = re.compile(r"^stage([23])_(\d+)$")
 PAIR_RE = re.compile(r"^stage([23])_(\d+)_(\d+)_(consec|skip)$")
+# The one real forward-pass-adjacent pair that crosses the stage2/stage3
+# boundary itself -- stage2's own trailing slot immediately followed by
+# stage3's own leading slot (the exact seam S16's merge_reg_boundary
+# architecture change targeted, here as a post-hoc ablation instead of a
+# redesign). Named "seam_<kind>" rather than "stage2_..._stage3_..." since
+# it doesn't belong to either stage's own within-stage PAIR_RE naming.
+SEAM_RE = re.compile(r"^seam_(consec|skip)$")
+SEAM_COLOR = "#8e44ad"
 
 # Per-model config: prefix (results_pruning.csv's config_name prefix to
 # filter on), the model's own real trained FP32 dice (unpruned baseline,
@@ -214,10 +222,23 @@ def _plot_pairs(df: pd.DataFrame, cfg: dict, kind: str, out_name: str, title: st
         depth = _depth(stage, min(a, b), n_slots)
         content_label = f"{position_label[a]}+{position_label[b]}"
         records.append((stage, depth, content_label, row["dice"]))
-    if not records:
+    # The cross-stage seam pair (stage2's own last slot + stage3's own
+    # first slot) doesn't belong to either stage's PAIR_RE naming -- lives
+    # right at the stage2/3 boundary depth, plotted as its own marker
+    # rather than folded into either line.
+    seam_records = []
+    for _, row in df.iterrows():
+        m = SEAM_RE.match(row["suffix"])
+        if not m or m.group(1) != kind:
+            continue
+        depth = n_slots - 0.5
+        content_label = f"{position_label[n_slots - 1]}+{position_label[0]}"
+        seam_records.append((depth, content_label, row["dice"]))
+    if not records and not seam_records:
         print(f"[{cfg['title_prefix']}] No {kind}-pair pruning rows found yet -- skipping.")
         return
     data = pd.DataFrame(records, columns=["stage", "depth", "content", "dice"])
+    seam_data = pd.DataFrame(seam_records, columns=["depth", "content", "dice"])
 
     fig, ax = plt.subplots(figsize=(13, 6), facecolor=SURFACE)
     _style_axes(ax)
@@ -229,12 +250,18 @@ def _plot_pairs(df: pd.DataFrame, cfg: dict, kind: str, out_name: str, title: st
         ax.plot(subset["depth"], subset["dice"], color=color, linewidth=2, marker="o",
                  markersize=7, markeredgecolor="black", markeredgewidth=0.5, zorder=3,
                  label=stage)
+    if not seam_data.empty:
+        ax.scatter(seam_data["depth"], seam_data["dice"], color=SEAM_COLOR, s=140, zorder=4,
+                   marker="*", edgecolors="black", linewidths=0.7, label="stage2->stage3 seam")
     if (data["stage"] == "stage2").any() and (data["stage"] == "stage3").any():
         boundary = n_slots - 0.5
         ax.axvline(boundary, color=GRID, linewidth=1.5, zorder=1)
         ax.annotate("stage2 -> stage3", (boundary, ax.get_ylim()[0]), color=MUTED, fontsize=8,
                     ha="center", va="bottom", xytext=(0, 4), textcoords="offset points")
-    all_rows = data.sort_values("depth")[["depth", "content"]].drop_duplicates()
+    pair_frames = [data[["depth", "content"]]]
+    if not seam_data.empty:
+        pair_frames.append(seam_data[["depth", "content"]])
+    all_rows = pd.concat(pair_frames, ignore_index=True).sort_values("depth").drop_duplicates()
     ax.set_xticks(all_rows["depth"])
     ax.set_xticklabels([f"{d}\n{c}" for d, c in zip(all_rows["depth"], all_rows["content"])], fontsize=8)
     ax.set_xlabel("Pruned pair's depth (anchored at its lower-position block) -- "
@@ -246,7 +273,7 @@ def _plot_pairs(df: pd.DataFrame, cfg: dict, kind: str, out_name: str, title: st
     out_path = out_dir / out_name
     fig.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=SURFACE)
     plt.close(fig)
-    print(f"Wrote {out_path} ({len(data)} points)")
+    print(f"Wrote {out_path} ({len(data) + len(seam_data)} points, {len(seam_data)} seam)")
 
 
 def main() -> int:
