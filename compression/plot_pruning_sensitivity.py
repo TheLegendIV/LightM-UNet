@@ -5,19 +5,29 @@ grouped into three line charts per model:
 
   1. Individual blocks, one line per stage (stage2, stage3), x-axis walking
      each stage's own positions in order.
-  2. Skip pairs (e.g. d=2+8, d=4+16 pruned together within one dilation
-     cycle), one line per (stage, cycle) -- 4 series.
-  3. Consecutive pairs (e.g. d=2+4, d=4+8, d=8+16), same 4 series.
+  2. Consecutive pairs (i, i+1) -- EVERY adjacent pair within a stage, not
+     just ones sitting inside a dilation cycle (2+4, 4+8, 8+16): also
+     covers pairs touching a reg-bookend slot (e.g. 0+2, 16+0) and pairs
+     straddling the two dilation cycles.
+  3. Skip pairs (i, i+2) -- same full-range coverage, one gap apart.
+
+One line per stage (stage2, stage3), matching plot_individual's own
+depth-ordered-walk style -- NOT grouped by dilation "cycle" (that grouping
+only made sense when pairs were restricted to within-cycle positions; once
+every pair is included, reg-bookend-involving pairs don't belong to either
+cycle).
 
 Supports multiple source models via MODEL_CONFIGS below (currently
 S8-ReLU's 11-slot dense_dilation_reg_interleaved pattern and S19's 12-slot
 dense_dilation_reg_interleaved_double_mid pattern -- the doubled mid-cycle
-reg bookend shifts cycle B from positions 6-9 to 7-10 and adds bookend
-slots at 5 AND 6). Each model gets its own three PNGs (S19's carry an
-"_s19" suffix; S8-ReLU's keep their original unsuffixed names for
-backward compatibility) -- deliberately NOT overlaid on a shared axis,
-since the two patterns have different slot counts and the same x-position
-would mean different content between them.
+reg bookend adds a second bookend slot at 5/6). Each model gets its own
+three PNGs (S19's carry an "_s19" suffix; S8-ReLU's keep their original
+unsuffixed names for backward compatibility) -- deliberately NOT overlaid
+on a shared axis, since the two patterns have different slot counts and
+the same x-position would mean different content between them. S8-ReLU's
+own results_pruning.csv rows still only cover the original within-cycle
+pairs (not backfilled to all-pairs) -- its plots will just show fewer
+points in the same style, no code changes needed either way.
 
 Block naming on the x-axis matches ENet.py's actual content at each
 position, not the raw slot index: "0" = the reg-bookend RegularBottleneck
@@ -52,10 +62,6 @@ INK, SECONDARY_INK, MUTED, GRID, SURFACE = (
 BASELINE_COLOR = "#c3392b"
 
 STAGE_COLORS = {"stage2": "#2a78d6", "stage3": "#eb6834"}
-CYCLE_COLORS = {
-    ("stage2", "A"): "#2a78d6", ("stage2", "B"): "#7cb342",
-    ("stage3", "A"): "#eb6834", ("stage3", "B"): "#8e44ad",
-}
 
 INDIVIDUAL_RE = re.compile(r"^stage([23])_(\d+)$")
 PAIR_RE = re.compile(r"^stage([23])_(\d+)_(\d+)_(consec|skip)$")
@@ -63,9 +69,9 @@ PAIR_RE = re.compile(r"^stage([23])_(\d+)_(\d+)_(consec|skip)$")
 # Per-model config: prefix (results_pruning.csv's config_name prefix to
 # filter on), the model's own real trained FP32 dice (unpruned baseline,
 # for the dashed reference line), how many slots its context pattern has
-# per stage, and the position->content-label / position->dilation-cycle
-# maps (both keyed by raw slot index, matching ENet.py's own pattern
-# definition -- see DENSE_DILATION_REG_INTERLEAVED_PATTERN /
+# per stage, and the position->content-label map (keyed by raw slot index,
+# matching ENet.py's own pattern definition -- see
+# DENSE_DILATION_REG_INTERLEAVED_PATTERN /
 # DENSE_DILATION_REG_INTERLEAVED_DOUBLE_MID_PATTERN).
 MODEL_CONFIGS = {
     "s8relu": {
@@ -74,7 +80,6 @@ MODEL_CONFIGS = {
         "n_slots": 11,
         "position_label": {0: "0", 1: "2", 2: "4", 3: "8", 4: "16",
                             5: "0", 6: "2", 7: "4", 8: "8", 9: "16", 10: "0"},
-        "position_cycle": {1: "A", 2: "A", 3: "A", 4: "A", 6: "B", 7: "B", 8: "B", 9: "B"},
         "title_prefix": "S8-ReLU",
         "out_suffix": "",
     },
@@ -84,7 +89,6 @@ MODEL_CONFIGS = {
         "n_slots": 12,
         "position_label": {0: "0", 1: "2", 2: "4", 3: "8", 4: "16",
                             5: "0", 6: "0", 7: "2", 8: "4", 9: "8", 10: "16", 11: "0"},
-        "position_cycle": {1: "A", 2: "A", 3: "A", 4: "A", 7: "B", 8: "B", 9: "B", 10: "B"},
         "title_prefix": "S19",
         "out_suffix": "_s19",
     },
@@ -192,46 +196,50 @@ def _plot_pairs(df: pd.DataFrame, cfg: dict, kind: str, out_name: str, title: st
     """x-axis is the SAME real depth index plot_individual uses -- anchored
     at the pair's lower-position block -- not an artificial shared category
     that aligns e.g. stage2's "2+4" with stage3's "2+4" at the same x
-    regardless of how far apart they actually sit in the network. Each
-    (stage, cycle) line therefore occupies its own true depth range,
-    exactly like the individual-block plot."""
+    regardless of how far apart they actually sit in the network. One line
+    per STAGE (not per dilation cycle -- covers every within-stage pair,
+    including ones touching a reg-bookend slot or straddling both dilation
+    cycles, so "cycle" no longer cleanly partitions the data), matching
+    plot_individual's own depth-ordered-walk style."""
     import matplotlib.pyplot as plt
 
     n_slots = cfg["n_slots"]
     position_label = cfg["position_label"]
-    position_cycle = cfg["position_cycle"]
     records = []
     for _, row in df.iterrows():
         m = PAIR_RE.match(row["suffix"])
         if not m or m.group(4) != kind:
             continue
         stage, a, b = f"stage{m.group(1)}", int(m.group(2)), int(m.group(3))
-        cycle = position_cycle.get(a)
-        if cycle is None or position_cycle.get(b) != cycle:
-            continue
         depth = _depth(stage, min(a, b), n_slots)
         content_label = f"{position_label[a]}+{position_label[b]}"
-        records.append((stage, cycle, depth, content_label, row["dice"]))
+        records.append((stage, depth, content_label, row["dice"]))
     if not records:
         print(f"[{cfg['title_prefix']}] No {kind}-pair pruning rows found yet -- skipping.")
         return
-    data = pd.DataFrame(records, columns=["stage", "cycle", "depth", "content", "dice"])
+    data = pd.DataFrame(records, columns=["stage", "depth", "content", "dice"])
 
-    fig, ax = plt.subplots(figsize=(11, 6), facecolor=SURFACE)
+    fig, ax = plt.subplots(figsize=(13, 6), facecolor=SURFACE)
     _style_axes(ax)
     _add_baseline(ax, cfg["baseline_dice"])
-    for (stage, cycle), color in CYCLE_COLORS.items():
-        subset = data[(data["stage"] == stage) & (data["cycle"] == cycle)].sort_values("depth")
+    for stage, color in STAGE_COLORS.items():
+        subset = data[data["stage"] == stage].sort_values("depth")
         if subset.empty:
             continue
         ax.plot(subset["depth"], subset["dice"], color=color, linewidth=2, marker="o",
                  markersize=7, markeredgecolor="black", markeredgewidth=0.5, zorder=3,
-                 label=f"{stage} cycle {cycle}")
+                 label=stage)
+    if (data["stage"] == "stage2").any() and (data["stage"] == "stage3").any():
+        boundary = n_slots - 0.5
+        ax.axvline(boundary, color=GRID, linewidth=1.5, zorder=1)
+        ax.annotate("stage2 -> stage3", (boundary, ax.get_ylim()[0]), color=MUTED, fontsize=8,
+                    ha="center", va="bottom", xytext=(0, 4), textcoords="offset points")
     all_rows = data.sort_values("depth")[["depth", "content"]].drop_duplicates()
     ax.set_xticks(all_rows["depth"])
     ax.set_xticklabels([f"{d}\n{c}" for d, c in zip(all_rows["depth"], all_rows["content"])], fontsize=8)
     ax.set_xlabel("Pruned pair's depth (anchored at its lower-position block) -- "
-                  "top=depth index, bottom=dilation rates pruned", color=SECONDARY_INK, fontsize=10)
+                  "top=depth index, bottom=content codes pruned (0=reg 3x3, 2/4/8/16=dilation rate)",
+                  color=SECONDARY_INK, fontsize=10)
     ax.set_title(title, color=INK, fontsize=12)
     ax.legend(frameon=False, fontsize=9, labelcolor=SECONDARY_INK, loc="best")
     fig.tight_layout()
@@ -259,10 +267,10 @@ def main() -> int:
         plot_individual(df, cfg, args.out_dir)
         _plot_pairs(df, cfg, "consec",
                     f"pruning_sensitivity_consecutive_pairs{cfg['out_suffix']}.png",
-                    f"{cfg['title_prefix']} sensitivity: consecutive dilation-pair pruning", args.out_dir)
+                    f"{cfg['title_prefix']} sensitivity: consecutive-pair pruning (all pairs)", args.out_dir)
         _plot_pairs(df, cfg, "skip",
                     f"pruning_sensitivity_skip_pairs{cfg['out_suffix']}.png",
-                    f"{cfg['title_prefix']} sensitivity: skip dilation-pair pruning", args.out_dir)
+                    f"{cfg['title_prefix']} sensitivity: skip-pair pruning (all pairs)", args.out_dir)
     return 0 if any_written else 1
 
 
