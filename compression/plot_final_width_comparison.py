@@ -35,12 +35,14 @@ considered (excludes pruning-grid rows, which live in results_pruning.csv
 entirely, and quantization/experiment rows, which mix in a different axis
 -- bit-width -- not directly comparable to an FP32 architecture sweep).
 
-Front X markers are colored by activation legality: green for plain ReLU
-or prelu_variant="nonneg_block" (NONNEG_BLOCK_CONFIGS -- one learnable
+Only FINN-legal activations are considered at all: plain ReLU or
+prelu_variant="nonneg_block" (NONNEG_BLOCK_CONFIGS -- one learnable
 negative slope per bottleneck BLOCK, foldable into that block's FINN
-thresholds at ~zero extra cost), red for standard per-channel PReLU (one
-learnable slope per CHANNEL -- not something FINN supports cheaply, so a
-red point's dice is an upper bound, not something directly deployable).
+thresholds at ~zero extra cost). Standard per-channel PReLU configs (one
+learnable slope per CHANNEL -- not something FINN supports cheaply) are
+excluded from pareto_eligible entirely, not just recolored -- their dice is
+an upper bound achieved with an activation that can't actually be deployed,
+so they don't belong on a "what's achievable" frontier.
 
 Usage:
     python compression/plot_final_width_comparison.py
@@ -97,7 +99,7 @@ UNFAITHFUL_TRAINING_CONFIGS = {
 # with use_prelu=1 uses the DEFAULT "standard" variant -- one learnable
 # slope PER CHANNEL, which is not something FINN supports as a cheap
 # per-channel op. Confirmed by grepping every stage_*.job for
-# ENET_PRELU_VARIANT="nonneg_block" -- only these six configs set it.
+# ENET_PRELU_VARIANT="nonneg_block".
 NONNEG_BLOCK_CONFIGS = {
     "nnUNetTrainerENet_13_separable_dense_nonneg_block_warmstart",
     "nnUNetTrainerENet_13_separable_dense_nonneg_block_leaky_frozen",
@@ -107,8 +109,10 @@ NONNEG_BLOCK_CONFIGS = {
     "nnUNetTrainerENet_21_1_u2",
     "nnUNetTrainerENet_21_2_u8",
     "nnUNetTrainerENet_21_3_original",
+    "nnUNetTrainerENet_22_1_dsc_projected_nonneg_block",
+    "nnUNetTrainerENet_22_2_dsc_projected_reginterleaved_nonneg_block",
+    "nnUNetTrainerENet_22_3_dsc_projected_reginterleaved_double_mid_nonneg_block",
 }
-PRELU_STANDARD_COLOR = "#c0392b"
 
 
 def parse_args() -> argparse.Namespace:
@@ -182,20 +186,10 @@ def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, pareto_eligible: pd.D
     diamond_configs = {c: v for c, v in HIGHLIGHTED_CONFIGS.items() if c not in front_configs}
     front_other = front[~front["config_name"].isin(diamond_configs)] if not front.empty else front
     if not front_other.empty:
-        front_prelu = front_other[front_other["prelu_standard"]]
-        front_legal = front_other[~front_other["prelu_standard"]]
         # Lowercase "x" -- matplotlib's thin, unfilled line-cross marker
         # (like a text "X" glyph), not the bold uppercase "X" filled marker.
-        if not front_legal.empty:
-            ax.scatter(front_legal[x_col], front_legal["dice"], color=PARETO_COLOR, s=90, zorder=5,
-                       marker="x", linewidths=1.8, label="Pareto front (this metric)")
-        if not front_prelu.empty:
-            # Red -- standard per-channel PReLU, not FINN-legal (see
-            # NONNEG_BLOCK_CONFIGS' own comment). Same thin "x" marker,
-            # just a different color, so it reads as "still a front point"
-            # but flagged as not directly deployable as trained.
-            ax.scatter(front_prelu[x_col], front_prelu["dice"], color=PRELU_STANDARD_COLOR, s=90, zorder=5,
-                       marker="x", linewidths=1.8, label="Pareto front (standard PReLU -- not FINN-legal)")
+        ax.scatter(front_other[x_col], front_other["dice"], color=PARETO_COLOR, s=90, zorder=5,
+                   marker="x", linewidths=1.8, label="Pareto front (this metric)")
         # Alternate the label offset up/down (and vary horizontal reach a
         # little) so densely-packed Pareto points -- common near the
         # "knee" of the curve where several architectures land close
@@ -254,7 +248,14 @@ def main() -> int:
         print(f"No {NAIVE_STAGE} rows found.")
         return 1
 
-    pareto_eligible = named[~named["config_name"].isin(UNFAITHFUL_TRAINING_CONFIGS)]
+    # Pareto figures only ever show FINN-legal activations: plain ReLU or
+    # nonneg_block. Standard per-channel PReLU points are excluded entirely
+    # here (not just recolored) -- their dice is an upper bound achieved
+    # with an activation FINN can't deploy, so they don't belong on a
+    # "what's actually achievable" cost/accuracy frontier at all.
+    pareto_eligible = named[
+        ~named["config_name"].isin(UNFAITHFUL_TRAINING_CONFIGS) & ~named["prelu_standard"]
+    ]
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
     _plot_metric(named, naive, pareto_eligible, "params", "Parameters",
