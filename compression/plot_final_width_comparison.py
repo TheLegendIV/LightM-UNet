@@ -1,16 +1,28 @@
 """Final proof-of-beat plot: stage_1_naive_baseline's own channel-width
-curve (Base/U2/U4/U8/U16) vs. S21 (S19's dense_dilation_reg_interleaved_
-double_mid architecture swept across the same widths) vs. S19 itself
-(the architecture's own U4-width point) -- for all three cost metrics
-(params, MACs, FINN buffer memory elements). Direct answer to "does S19's
-architecture genuinely beat the naive width-compression curve, not just at
-one param count": stage_21_reginterleaved_separable_nonneg_block_double_mid_width_array.job's
-own motivation.
+curve (Base/U2/U4/U8/U16) vs. the TRUE Pareto front across every named
+config in compression/config_abbreviations.csv -- for all three cost
+metrics (params, MACs, FINN buffer memory elements). Answers "what's the
+best dice actually achievable at any given cost, across the whole sweep,
+and does it beat the naive width-compression curve" -- not just one
+architecture's own width sweep (see plot_all_configs.py for the
+everything-at-once view this is a focused derivative of).
 
-Only includes stage_1_naive_baseline / stage_21_.../ S19 rows -- everything
-else in results.csv (arch probes, quantization experiments, pruning, etc.)
-is deliberately excluded, unlike plot_all_configs.py's everything-at-once
-view.
+Pareto front = the standard efficiency-frontier definition: sort by cost
+ascending, keep a point only if its dice strictly exceeds every
+cheaper-or-equal point's dice seen so far (a "staircase" of non-dominated
+points). Computed separately per metric, since a config Pareto-optimal in
+params need not be Pareto-optimal in MACs or memory elements too.
+
+Both the naive baseline curve and the Pareto front are drawn as plain
+straight-line (piecewise-linear) segments, not a smoothing spline -- see
+plot_all_configs.py's own module comment for why (sparse real points,
+no real underlying smooth function, straight lines are the standard
+convention for this kind of tradeoff figure).
+
+Only rows with a compression/config_abbreviations.csv entry are
+considered (excludes pruning-grid rows, which live in results_pruning.csv
+entirely, and quantization/experiment rows, which mix in a different axis
+-- bit-width -- not directly comparable to an FP32 architecture sweep).
 
 Usage:
     python compression/plot_final_width_comparison.py
@@ -20,39 +32,19 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
-from scipy.interpolate import PchipInterpolator
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+ABBREV_CSV = Path(__file__).resolve().parent / "config_abbreviations.csv"
 
 INK, SECONDARY_INK, MUTED, GRID, SURFACE = (
     "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#fcfcfb",
 )
 NAIVE_COLOR = "#2a78d6"
-CURVE_COLOR = "#c3392b"
-S21_COLOR = "#8e24aa"
-S19_COLOR = "#f4511e"
+PARETO_COLOR = "#1baf7a"
+PARETO_LINE_COLOR = "#0b7a4d"
 
 NAIVE_STAGE = "1_naive_baseline"
-S21_STAGE = "21_reginterleaved_separable_nonneg_block_double_mid_width"
-S19_CONFIG_NAME = "nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid"
-
-NAIVE_ABBREV = {
-    "nnUNetTrainerENet_1_naive_baseline_Baseline": "Base",
-    "nnUNetTrainerENet_1_naive_baseline_U2": "U2",
-    "nnUNetTrainerENet_1_naive_baseline_U3": "U3",
-    "nnUNetTrainerENet_1_naive_baseline_U4": "U4",
-    "nnUNetTrainerENet_1_naive_baseline_U6": "U6",
-    "nnUNetTrainerENet_1_naive_baseline_U8": "U8",
-    "nnUNetTrainerENet_1_naive_baseline_U16": "U16",
-    "nnUNetTrainerENet_1_naive_baseline_E1": "E1",
-}
-S21_ABBREV = {
-    "nnUNetTrainerENet_21_1_u2": "S21-U2",
-    "nnUNetTrainerENet_21_2_u8": "S21-U8",
-    "nnUNetTrainerENet_21_3_original": "S21-Original",
-}
 
 
 def parse_args() -> argparse.Namespace:
@@ -60,6 +52,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--results-csv", type=Path, default=REPO_ROOT / "compression" / "results.csv")
     parser.add_argument("--out-dir", type=Path, default=REPO_ROOT / "compression" / "results")
     return parser.parse_args()
+
+
+def load_abbreviations() -> pd.DataFrame:
+    return pd.read_csv(ABBREV_CSV)
 
 
 def _style_axes(ax) -> None:
@@ -73,56 +69,65 @@ def _style_axes(ax) -> None:
     ax.set_xscale("log")
 
 
-def _plot_metric(naive: pd.DataFrame, s21: pd.DataFrame, s19: pd.DataFrame,
-                  x_col: str, x_label: str, out_path: Path) -> None:
+def pareto_front(df: pd.DataFrame, x_col: str) -> pd.DataFrame:
+    """Standard non-dominated-point staircase: sort by cost ascending, keep
+    a point only if its dice strictly beats every cheaper-or-equal point's
+    dice seen so far."""
+    d = df.dropna(subset=[x_col, "dice"]).sort_values(x_col)
+    keep = []
+    best_dice = -float("inf")
+    for _, row in d.iterrows():
+        if row["dice"] > best_dice:
+            keep.append(row)
+            best_dice = row["dice"]
+    return pd.DataFrame(keep)
+
+
+def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, x_col: str, x_label: str, out_path: Path) -> None:
     import matplotlib.pyplot as plt
 
-    fig, ax = plt.subplots(figsize=(10, 7), facecolor=SURFACE)
+    fig, ax = plt.subplots(figsize=(11, 7.5), facecolor=SURFACE)
     _style_axes(ax)
 
-    # PCHIP curve through the naive baseline's own points, sorted by x --
-    # same monotone-cubic choice as plot_all_configs.py's own curve (never
-    # overshoots the data's own local trend, unlike a raw polynomial fit).
     naive_sorted = naive.dropna(subset=[x_col, "dice"]).sort_values(x_col)
-    if len(naive_sorted) >= 3:
-        log_x = np.log10(naive_sorted[x_col].to_numpy(dtype=float))
-        y = naive_sorted["dice"].to_numpy(dtype=float)
-        interpolator = PchipInterpolator(log_x, y)
-        dense_log_x = np.linspace(log_x.min(), log_x.max(), 200)
-        ax.plot(10 ** dense_log_x, interpolator(dense_log_x), color=CURVE_COLOR, linewidth=1.5,
-                 zorder=2, label="naive width-compression curve (PCHIP)")
+    front = pareto_front(named, x_col)
+    # A naive point that's ALSO Pareto-optimal (e.g. the naive curve's own
+    # cheapest/most-efficient points often are) gets its marker+label drawn
+    # once below, from the Pareto loop -- skip it here so it isn't
+    # double-plotted/double-labeled on top of itself.
+    on_front = set(front["config_name"]) if not front.empty else set()
+    naive_off_front = naive_sorted[~naive_sorted["config_name"].isin(on_front)]
+    if len(naive_sorted) >= 2:
+        ax.plot(naive_sorted[x_col], naive_sorted["dice"], color=NAIVE_COLOR, linewidth=1.5,
+                 zorder=2, label="naive width-compression curve")
+    ax.scatter(naive_off_front[x_col], naive_off_front["dice"], color=NAIVE_COLOR, s=70, zorder=3,
+               edgecolors="black", linewidths=0.5)
+    for _, row in naive_off_front.iterrows():
+        ax.annotate(row["abbrev"], (row[x_col], row["dice"]), fontsize=7.5, color=SECONDARY_INK,
+                   textcoords="offset points", xytext=(5, -10))
 
-    ax.scatter(naive_sorted[x_col], naive_sorted["dice"], color=NAIVE_COLOR, s=90, zorder=3,
-               edgecolors="black", linewidths=0.6, label="1_naive_baseline")
-    for _, row in naive_sorted.iterrows():
-        label = NAIVE_ABBREV.get(row["config_name"], row["config_name"])
-        ax.annotate(label, (row[x_col], row["dice"]), fontsize=8, color=SECONDARY_INK,
-                   textcoords="offset points", xytext=(6, 4))
-
-    s21_sorted = s21.dropna(subset=[x_col, "dice"]).sort_values(x_col)
-    if not s21_sorted.empty:
-        ax.scatter(s21_sorted[x_col], s21_sorted["dice"], color=S21_COLOR, s=110, zorder=4,
-                   marker="D", edgecolors="black", linewidths=0.7, label="S21 (S19 arch, width-swept)")
-        for _, row in s21_sorted.iterrows():
-            label = S21_ABBREV.get(row["config_name"], row["config_name"])
-            ax.annotate(label, (row[x_col], row["dice"]), fontsize=8, color=SECONDARY_INK,
-                       textcoords="offset points", xytext=(6, -12))
-
-    s19_sorted = s19.dropna(subset=[x_col, "dice"])
-    if not s19_sorted.empty:
-        ax.scatter(s19_sorted[x_col], s19_sorted["dice"], color=S19_COLOR, s=180, zorder=5,
-                   marker="*", edgecolors="black", linewidths=0.8, label="S19 (own U4 width)")
-        for _, row in s19_sorted.iterrows():
-            ax.annotate("S19", (row[x_col], row["dice"]), fontsize=8, color=SECONDARY_INK,
-                       textcoords="offset points", xytext=(8, 6))
+    if not front.empty:
+        ax.plot(front[x_col], front["dice"], color=PARETO_LINE_COLOR, linewidth=1.8,
+                 zorder=4, label="Pareto front (all configs)")
+        ax.scatter(front[x_col], front["dice"], color=PARETO_COLOR, s=110, zorder=5,
+                   marker="D", edgecolors="black", linewidths=0.7)
+        # Alternate the label offset up/down (and vary horizontal reach a
+        # little) so densely-packed Pareto points -- common near the
+        # "knee" of the curve where several architectures land close
+        # together -- don't render with fully overlapping text.
+        for i, (_, row) in enumerate(front.iterrows()):
+            y_off = 9 if i % 2 == 0 else -15
+            x_off = 6 + 4 * (i % 3)
+            ax.annotate(row["abbrev"], (row[x_col], row["dice"]), fontsize=8, color=SECONDARY_INK,
+                       fontweight="bold", textcoords="offset points", xytext=(x_off, y_off))
 
     ax.set_xlabel(x_label, color=SECONDARY_INK, fontsize=10)
-    ax.set_title(f"Naive width curve vs. S19/S21: Dice vs. {x_label}", color=INK, fontsize=12)
+    ax.set_title(f"Pareto front vs. naive width-compression curve: Dice vs. {x_label}", color=INK, fontsize=12)
     ax.legend(frameon=False, fontsize=9, labelcolor=SECONDARY_INK, loc="best")
     fig.tight_layout()
     fig.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=SURFACE)
     plt.close(fig)
-    print(f"Wrote {out_path}")
+    print(f"Wrote {out_path} ({len(front)} Pareto-front points)")
 
 
 def main() -> int:
@@ -131,27 +136,24 @@ def main() -> int:
         print(f"{args.results_csv} not found.")
         return 1
     df = pd.read_csv(args.results_csv)
+    abbrev_df = load_abbreviations()
 
-    naive = df[df["stage"] == NAIVE_STAGE]
-    s21 = df[df["stage"] == S21_STAGE]
-    s19 = df[df["config_name"] == S19_CONFIG_NAME]
+    named = df.merge(abbrev_df[["abbrev", "config_name"]], on="config_name", how="inner")
+    if named.empty:
+        print("No results.csv rows matched a config_abbreviations.csv entry.")
+        return 1
+    named = named.copy()
+    named["macs"] = named["flops"] / 2
+
+    naive = named[named["stage"] == NAIVE_STAGE]
     if naive.empty:
         print(f"No {NAIVE_STAGE} rows found.")
         return 1
 
-    df = df.copy()
-    df["macs"] = df["flops"] / 2
-    naive = naive.copy()
-    naive["macs"] = naive["flops"] / 2
-    s21 = s21.copy()
-    s21["macs"] = s21["flops"] / 2
-    s19 = s19.copy()
-    s19["macs"] = s19["flops"] / 2
-
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    _plot_metric(naive, s21, s19, "params", "Parameters", args.out_dir / "dice_vs_params_final.png")
-    _plot_metric(naive, s21, s19, "macs", "MACs", args.out_dir / "dice_vs_macs_final.png")
-    _plot_metric(naive, s21, s19, "mem_elements", "FINN buffer memory (activation elements)",
+    _plot_metric(named, naive, "params", "Parameters", args.out_dir / "dice_vs_params_final.png")
+    _plot_metric(named, naive, "macs", "MACs", args.out_dir / "dice_vs_macs_final.png")
+    _plot_metric(named, naive, "mem_elements", "FINN buffer memory (activation elements)",
                  args.out_dir / "dice_vs_mem_elements_final.png")
     return 0
 

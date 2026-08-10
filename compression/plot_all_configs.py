@@ -1,10 +1,11 @@
 """Dice vs. MACs and Dice vs. Params across EVERY trained config at once
-(not per-stage like plot_stage_results.py), colored by stage, with a smooth
-PCHIP-interpolated curve drawn through stage_1_naive_baseline's own points
-specifically (the channel-width sweep -- Baseline/U2/U4/U8/U16 -- is the one
-series here that forms an actual capacity/accuracy tradeoff curve; every
-other stage is a handful of one-off probes off a single U4 reference point,
-not a swept axis, so a fitted curve through them wouldn't mean anything).
+(not per-stage like plot_stage_results.py), colored by stage, with a
+straight-line (piecewise-linear) curve drawn through stage_1_naive_baseline's
+own points specifically (the channel-width sweep -- Baseline/U2/U4/U8/U16 --
+is the one series here that forms an actual capacity/accuracy tradeoff
+curve; every other stage is a handful of one-off probes off a single U4
+reference point, not a swept axis, so a curve through them wouldn't mean
+anything).
 
 Compact per-config labels come from compression/config_abbreviations.csv
 (abbrev <-> config_name, kept as the source of truth so plot labels and the
@@ -20,9 +21,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
-from scipy.interpolate import PchipInterpolator
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ABBREV_CSV = Path(__file__).resolve().parent / "config_abbreviations.csv"
@@ -72,26 +71,19 @@ def _scatter_all(ax, df: pd.DataFrame, x_col: str, x_label: str, abbrev: dict[st
 
     plotted = df.dropna(subset=[x_col, "dice"])
 
-    # Smooth curve through stage_1_naive_baseline's own points -- sort by x
-    # so the interpolant traces the actual capacity/accuracy tradeoff
-    # instead of zig-zagging in config_name/row order. Fit with PCHIP
-    # (monotonic cubic Hermite interpolation) rather than a raw polynomial:
-    # a degree-4 polynomial forced through only 5 points is prone to Runge's
-    # phenomenon (wild overshoot/oscillation between points), while PCHIP
-    # passes through every point exactly, stays smooth (C1), and never
-    # overshoots the data's own local monotonic trend. Fit in log10(x)
-    # space, not linear x, since the axis itself is log-scaled -- fitting
-    # in linear x and merely plotting on a log axis would NOT look smooth
-    # to the eye; fitting in log-x space makes the rendered curve smooth.
+    # Straight-line curve through stage_1_naive_baseline's own points --
+    # sort by x so the line traces the actual capacity/accuracy tradeoff
+    # instead of zig-zagging in config_name/row order. Deliberately plain
+    # piecewise-linear (not PCHIP or any other smoothing spline): with only
+    # a handful of sparse, real measured points, straight-line segments are
+    # the standard, honest convention for this kind of Pareto/tradeoff
+    # curve -- they don't imply a smooth underlying function of channel
+    # width that doesn't actually exist (you can't have channels=17.3), and
+    # matplotlib draws them correctly on the log-x axis on its own (a
+    # straight segment between two (x,y) points on a log-x/linear-y axis is
+    # already "linear in log-x space" -- no explicit log-x fit needed).
     curve_df = plotted[plotted["stage"] == CURVE_STAGE].sort_values(x_col)
-    if len(curve_df) >= 3:
-        log_x = np.log10(curve_df[x_col].to_numpy(dtype=float))
-        y = curve_df["dice"].to_numpy(dtype=float)
-        interpolator = PchipInterpolator(log_x, y)
-        dense_log_x = np.linspace(log_x.min(), log_x.max(), 200)
-        ax.plot(10 ** dense_log_x, interpolator(dense_log_x), color=CURVE_COLOR, linewidth=1.5,
-                 zorder=2, label=f"{CURVE_STAGE} curve (PCHIP)")
-    elif len(curve_df) == 2:
+    if len(curve_df) >= 2:
         ax.plot(curve_df[x_col], curve_df["dice"], color=CURVE_COLOR, linewidth=1.5,
                  zorder=2, label=f"{CURVE_STAGE} curve")
 
