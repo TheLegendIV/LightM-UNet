@@ -10,14 +10,9 @@ everything-at-once view this is a focused derivative of).
 Pareto front = the standard efficiency-frontier definition: sort by cost
 ascending, keep a point only if its dice strictly exceeds every
 cheaper-or-equal point's dice seen so far (a "staircase" of non-dominated
-points). Computed separately per metric (a config Pareto-optimal in params
-need not be Pareto-optimal in MACs or memory elements too), then the SAME
-markers -- the UNION of all three per-metric fronts, i.e. every config
-that's Pareto-optimal on params OR macs OR mem_elements -- are drawn in all
-three figures. A point that only wins on one axis still shows up
-(off-frontier on the other two), so the same shortlist of contenders can be
-visually tracked across all three figures instead of a different, disjoint
-set of markers silently appearing/disappearing per figure.
+points). Computed independently PER FIGURE/metric -- a config
+Pareto-optimal in params need not be Pareto-optimal in MACs or memory
+elements too, and each figure only shows its own front.
 
 The naive baseline curve is drawn as plain straight-line (piecewise-linear)
 segments, not a smoothing spline -- see plot_all_configs.py's own module
@@ -29,7 +24,7 @@ architectures with no shared axis between them (channel width), so a
 connecting line would visually imply a continuous tradeoff that doesn't
 exist between e.g. S9.4 and S13.1. Front markers are an X. Configs in
 HIGHLIGHTED_CONFIGS (currently S19 and S5.3) get their own colored diamond
-drawn on top, but ONLY when they're not already part of the (union)
+drawn on top, but ONLY when they're not already part of THAT figure's own
 Pareto front -- the whole point of the diamond is to force a look at a
 config the front left out; a config that genuinely IS on the front already
 gets a normal X like everyone else, not a redundant second marker on top
@@ -128,26 +123,16 @@ def pareto_front(df: pd.DataFrame, x_col: str) -> pd.DataFrame:
     return pd.DataFrame(keep)
 
 
-def union_pareto_configs(pareto_eligible: pd.DataFrame, metric_cols: tuple[str, ...]) -> set[str]:
-    """Every config that's Pareto-optimal on AT LEAST ONE of metric_cols --
-    the union, not the intersection, of the per-metric fronts. This is the
-    shortlist drawn (consistently) across all three figures."""
-    union: set[str] = set()
-    for col in metric_cols:
-        union |= set(pareto_front(pareto_eligible, col)["config_name"])
-    return union
-
-
 def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, pareto_eligible: pd.DataFrame,
-                  front_configs: set[str], x_col: str, x_label: str, out_path: Path) -> None:
+                  x_col: str, x_label: str, out_path: Path) -> None:
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(11, 7.5), facecolor=SURFACE)
     _style_axes(ax)
 
     naive_sorted = naive.dropna(subset=[x_col, "dice"]).sort_values(x_col)
-    front = (pareto_eligible[pareto_eligible["config_name"].isin(front_configs)]
-              .dropna(subset=[x_col, "dice"]).sort_values(x_col))
+    front = pareto_front(pareto_eligible, x_col)
+    front_configs = set(front["config_name"]) if not front.empty else set()
     # A naive point that's ALSO Pareto-optimal (e.g. the naive curve's own
     # cheapest/most-efficient points often are) gets its marker+label drawn
     # once below, from the Pareto loop -- skip it here so it isn't
@@ -165,18 +150,18 @@ def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, pareto_eligible: pd.D
 
     # Highlighted configs (HIGHLIGHTED_CONFIGS) get their own colored
     # diamond, on top of every other layer -- but only for configs that
-    # actually NEED forcing, i.e. aren't already in the (union) Pareto
-    # front. A highlighted config that's already Pareto-optimal on at
-    # least one metric has nothing to force -- it already gets a normal X
-    # marker below, and drawing a redundant diamond on top of its own X
-    # would just be double-marking the same point.
+    # actually NEED forcing, i.e. aren't already on this figure's own
+    # Pareto front. A highlighted config that's genuinely Pareto-optimal on
+    # this metric has nothing to force -- it already gets a normal X marker
+    # below, and drawing a redundant diamond on top of its own X would just
+    # be double-marking the same point.
     diamond_configs = {c: v for c, v in HIGHLIGHTED_CONFIGS.items() if c not in front_configs}
     front_other = front[~front["config_name"].isin(diamond_configs)] if not front.empty else front
     if not front_other.empty:
         # Lowercase "x" -- matplotlib's thin, unfilled line-cross marker
         # (like a text "X" glyph), not the bold uppercase "X" filled marker.
         ax.scatter(front_other[x_col], front_other["dice"], color=PARETO_COLOR, s=90, zorder=5,
-                   marker="x", linewidths=1.8, label="Pareto front (union of all 3 metrics)")
+                   marker="x", linewidths=1.8, label="Pareto front (this metric)")
         # Alternate the label offset up/down (and vary horizontal reach a
         # little) so densely-packed Pareto points -- common near the
         # "knee" of the curve where several architectures land close
@@ -231,16 +216,13 @@ def main() -> int:
         return 1
 
     pareto_eligible = named[~named["config_name"].isin(UNFAITHFUL_TRAINING_CONFIGS)]
-    metric_cols = ("params", "macs", "mem_elements")
-    front_configs = union_pareto_configs(pareto_eligible, metric_cols)
-    print(f"Pareto front (union of {metric_cols}): {len(front_configs)} configs")
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    _plot_metric(named, naive, pareto_eligible, front_configs, "params", "Parameters",
+    _plot_metric(named, naive, pareto_eligible, "params", "Parameters",
                  args.out_dir / "dice_vs_params_final.png")
-    _plot_metric(named, naive, pareto_eligible, front_configs, "macs", "MACs",
+    _plot_metric(named, naive, pareto_eligible, "macs", "MACs",
                  args.out_dir / "dice_vs_macs_final.png")
-    _plot_metric(named, naive, pareto_eligible, front_configs, "mem_elements",
+    _plot_metric(named, naive, pareto_eligible, "mem_elements",
                  "FINN buffer memory (activation elements)", args.out_dir / "dice_vs_mem_elements_final.png")
     return 0
 
