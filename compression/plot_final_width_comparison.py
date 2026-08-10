@@ -35,6 +35,13 @@ considered (excludes pruning-grid rows, which live in results_pruning.csv
 entirely, and quantization/experiment rows, which mix in a different axis
 -- bit-width -- not directly comparable to an FP32 architecture sweep).
 
+Front X markers are colored by activation legality: green for plain ReLU
+or prelu_variant="nonneg_block" (NONNEG_BLOCK_CONFIGS -- one learnable
+negative slope per bottleneck BLOCK, foldable into that block's FINN
+thresholds at ~zero extra cost), red for standard per-channel PReLU (one
+learnable slope per CHANNEL -- not something FINN supports cheaply, so a
+red point's dice is an upper bound, not something directly deployable).
+
 Usage:
     python compression/plot_final_width_comparison.py
 """
@@ -85,6 +92,25 @@ UNFAITHFUL_TRAINING_CONFIGS = {
     "nnUNetTrainerENet_13_separable_dense_nonneg_block_warmstart",
     "nnUNetTrainerENet_13_separable_dense_nonneg_block_leaky_frozen",
 }
+
+# Configs trained with prelu_variant="nonneg_block" (one learnable negative
+# slope shared per bottleneck block -- foldable into that block's FINN
+# MultiThreshold thresholds at ~zero extra hardware cost). Everything else
+# with use_prelu=1 uses the DEFAULT "standard" variant -- one learnable
+# slope PER CHANNEL, which is not something FINN supports as a cheap
+# per-channel op. Confirmed by grepping every stage_*.job for
+# ENET_PRELU_VARIANT="nonneg_block" -- only these six configs set it.
+NONNEG_BLOCK_CONFIGS = {
+    "nnUNetTrainerENet_13_separable_dense_nonneg_block_warmstart",
+    "nnUNetTrainerENet_13_separable_dense_nonneg_block_leaky_frozen",
+    "nnUNetTrainerENet_17_separable_dense_nonneg_block_coldstart",
+    "nnUNetTrainerENet_18_reginterleaved_separable_nonneg_block",
+    "nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid",
+    "nnUNetTrainerENet_21_1_u2",
+    "nnUNetTrainerENet_21_2_u8",
+    "nnUNetTrainerENet_21_3_original",
+}
+PRELU_STANDARD_COLOR = "#c0392b"
 
 
 def parse_args() -> argparse.Namespace:
@@ -158,10 +184,20 @@ def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, pareto_eligible: pd.D
     diamond_configs = {c: v for c, v in HIGHLIGHTED_CONFIGS.items() if c not in front_configs}
     front_other = front[~front["config_name"].isin(diamond_configs)] if not front.empty else front
     if not front_other.empty:
+        front_prelu = front_other[front_other["prelu_standard"]]
+        front_legal = front_other[~front_other["prelu_standard"]]
         # Lowercase "x" -- matplotlib's thin, unfilled line-cross marker
         # (like a text "X" glyph), not the bold uppercase "X" filled marker.
-        ax.scatter(front_other[x_col], front_other["dice"], color=PARETO_COLOR, s=90, zorder=5,
-                   marker="x", linewidths=1.8, label="Pareto front (this metric)")
+        if not front_legal.empty:
+            ax.scatter(front_legal[x_col], front_legal["dice"], color=PARETO_COLOR, s=90, zorder=5,
+                       marker="x", linewidths=1.8, label="Pareto front (this metric)")
+        if not front_prelu.empty:
+            # Red -- standard per-channel PReLU, not FINN-legal (see
+            # NONNEG_BLOCK_CONFIGS' own comment). Same thin "x" marker,
+            # just a different color, so it reads as "still a front point"
+            # but flagged as not directly deployable as trained.
+            ax.scatter(front_prelu[x_col], front_prelu["dice"], color=PRELU_STANDARD_COLOR, s=90, zorder=5,
+                       marker="x", linewidths=1.8, label="Pareto front (standard PReLU -- not FINN-legal)")
         # Alternate the label offset up/down (and vary horizontal reach a
         # little) so densely-packed Pareto points -- common near the
         # "knee" of the curve where several architectures land close
@@ -203,12 +239,17 @@ def main() -> int:
     df = pd.read_csv(args.results_csv)
     abbrev_df = load_abbreviations()
 
-    named = df.merge(abbrev_df[["abbrev", "config_name"]], on="config_name", how="inner")
+    named = df.merge(abbrev_df[["abbrev", "config_name", "use_prelu"]], on="config_name", how="inner")
     if named.empty:
         print("No results.csv rows matched a config_abbreviations.csv entry.")
         return 1
     named = named.copy()
     named["macs"] = named["flops"] / 2
+    # Standard (per-channel) PReLU -- use_prelu=1 and NOT one of the
+    # nonneg_block configs -- is not FINN-legal the way nonneg_block or
+    # plain ReLU are. Flagged so it's visually distinguishable everywhere
+    # it appears, rather than looking like just another normal front point.
+    named["prelu_standard"] = (named["use_prelu"] == 1) & ~named["config_name"].isin(NONNEG_BLOCK_CONFIGS)
 
     naive = named[named["stage"] == NAIVE_STAGE]
     if naive.empty:
