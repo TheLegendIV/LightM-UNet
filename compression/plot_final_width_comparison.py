@@ -23,12 +23,9 @@ line -- unlike the naive curve, its points come from entirely different
 architectures with no shared axis between them (channel width), so a
 connecting line would visually imply a continuous tradeoff that doesn't
 exist between e.g. S9.4 and S13.1. Front markers are an X. Configs in
-HIGHLIGHTED_CONFIGS (currently S19 and S5.3) get their own colored diamond
-drawn on top, but ONLY when they're not already part of THAT figure's own
-Pareto front -- the whole point of the diamond is to force a look at a
-config the front left out; a config that genuinely IS on the front already
-gets a normal X like everyone else, not a redundant second marker on top
-of itself.
+HIGHLIGHTED_CONFIGS (currently just S19) always get their own colored
+diamond, drawn on top of every other layer in every figure, regardless of
+whether they're actually on that figure's own Pareto front.
 
 Only rows with a compression/config_abbreviations.csv entry are
 considered (excludes pruning-grid rows, which live in results_pruning.csv
@@ -160,7 +157,6 @@ def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, pareto_eligible: pd.D
 
     naive_sorted = naive.dropna(subset=[x_col, "dice"]).sort_values(x_col)
     front = pareto_front(pareto_eligible, x_col)
-    front_configs = set(front["config_name"]) if not front.empty else set()
     # A naive point that's ALSO Pareto-optimal (e.g. the naive curve's own
     # cheapest/most-efficient points often are) gets its marker+label drawn
     # once below, from the Pareto loop -- skip it here so it isn't
@@ -176,14 +172,12 @@ def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, pareto_eligible: pd.D
         ax.annotate(row["abbrev"], (row[x_col], row["dice"]), fontsize=7.5, color=SECONDARY_INK,
                    textcoords="offset points", xytext=(5, -10))
 
-    # Highlighted configs (HIGHLIGHTED_CONFIGS) get their own colored
-    # diamond, on top of every other layer -- but only for configs that
-    # actually NEED forcing, i.e. aren't already on this figure's own
-    # Pareto front. A highlighted config that's genuinely Pareto-optimal on
-    # this metric has nothing to force -- it already gets a normal X marker
-    # below, and drawing a redundant diamond on top of its own X would just
-    # be double-marking the same point.
-    diamond_configs = {c: v for c, v in HIGHLIGHTED_CONFIGS.items() if c not in front_configs}
+    # Highlighted configs (HIGHLIGHTED_CONFIGS) always get their own colored
+    # diamond, on top of every other layer, in every figure -- regardless of
+    # whether they're actually on this figure's own Pareto front. Excluded
+    # from the front's own X-marker set unconditionally so they're never
+    # drawn twice.
+    diamond_configs = dict(HIGHLIGHTED_CONFIGS)
     front_other = front[~front["config_name"].isin(diamond_configs)] if not front.empty else front
     if not front_other.empty:
         # Lowercase "x" -- matplotlib's thin, unfilled line-cross marker
