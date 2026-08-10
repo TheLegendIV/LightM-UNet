@@ -51,6 +51,7 @@ INK, SECONDARY_INK, MUTED, GRID, SURFACE = (
 )
 NAIVE_COLOR = "#2a78d6"
 PARETO_COLOR = "#1baf7a"
+S19_COLOR = "#d6272a"
 
 NAIVE_STAGE = "1_naive_baseline"
 # S19 (cold start) -- nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid,
@@ -128,8 +129,10 @@ def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, x_col: str, x_label: 
     s19_row = named[named["config_name"] == S19_COLDSTART_CONFIG].dropna(subset=[x_col, "dice"])
     front_other = front[front["config_name"] != S19_COLDSTART_CONFIG] if not front.empty else front
     if not front_other.empty:
-        ax.scatter(front_other[x_col], front_other["dice"], color=PARETO_COLOR, s=110, zorder=5,
-                   marker="X", edgecolors="black", linewidths=0.7, label="Pareto front (all configs)")
+        # Lowercase "x" -- matplotlib's thin, unfilled line-cross marker
+        # (like a text "X" glyph), not the bold uppercase "X" filled marker.
+        ax.scatter(front_other[x_col], front_other["dice"], color=PARETO_COLOR, s=90, zorder=5,
+                   marker="x", linewidths=1.8, label="Pareto front (all configs)")
         # Alternate the label offset up/down (and vary horizontal reach a
         # little) so densely-packed Pareto points -- common near the
         # "knee" of the curve where several architectures land close
@@ -140,7 +143,7 @@ def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, x_col: str, x_label: 
             ax.annotate(row["abbrev"], (row[x_col], row["dice"]), fontsize=8, color=SECONDARY_INK,
                        fontweight="bold", textcoords="offset points", xytext=(x_off, y_off))
     if not s19_row.empty:
-        ax.scatter(s19_row[x_col], s19_row["dice"], color=PARETO_COLOR, s=140, zorder=6,
+        ax.scatter(s19_row[x_col], s19_row["dice"], color=S19_COLOR, s=140, zorder=6,
                    marker="D", edgecolors="black", linewidths=0.9, label="S19 (cold start)")
         for _, row in s19_row.iterrows():
             ax.annotate(row["abbrev"], (row[x_col], row["dice"]), fontsize=8, color=SECONDARY_INK,
