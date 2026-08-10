@@ -10,8 +10,14 @@ everything-at-once view this is a focused derivative of).
 Pareto front = the standard efficiency-frontier definition: sort by cost
 ascending, keep a point only if its dice strictly exceeds every
 cheaper-or-equal point's dice seen so far (a "staircase" of non-dominated
-points). Computed separately per metric, since a config Pareto-optimal in
-params need not be Pareto-optimal in MACs or memory elements too.
+points). Computed separately per metric (a config Pareto-optimal in params
+need not be Pareto-optimal in MACs or memory elements too), then the SAME
+markers -- the strict INTERSECTION of all three per-metric fronts, i.e.
+only configs Pareto-optimal on params AND macs AND mem_elements at once --
+are drawn in all three figures. A config that's cheap on one axis but not
+the others isn't a genuine all-around win, so it's left off; the same,
+narrower shortlist of true all-around contenders is what's shown
+consistently across all three figures.
 
 The naive baseline curve is drawn as plain straight-line (piecewise-linear)
 segments, not a smoothing spline -- see plot_all_configs.py's own module
@@ -120,15 +126,27 @@ def pareto_front(df: pd.DataFrame, x_col: str) -> pd.DataFrame:
     return pd.DataFrame(keep)
 
 
-def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, x_col: str, x_label: str, out_path: Path) -> None:
+def intersection_pareto_configs(pareto_eligible: pd.DataFrame, metric_cols: tuple[str, ...]) -> set[str]:
+    """Configs that are Pareto-optimal on EVERY one of metric_cols
+    simultaneously -- the strict intersection, not the union, of the
+    per-metric fronts. This is the shortlist drawn (consistently) across
+    all three figures. A config missing any of the metrics can't be
+    verified Pareto-optimal on it, so it's excluded from the intersection
+    by construction (pareto_front's own dropna)."""
+    fronts = [set(pareto_front(pareto_eligible, col)["config_name"]) for col in metric_cols]
+    return set.intersection(*fronts) if fronts else set()
+
+
+def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, pareto_eligible: pd.DataFrame,
+                  front_configs: set[str], x_col: str, x_label: str, out_path: Path) -> None:
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(11, 7.5), facecolor=SURFACE)
     _style_axes(ax)
 
     naive_sorted = naive.dropna(subset=[x_col, "dice"]).sort_values(x_col)
-    pareto_eligible = named[~named["config_name"].isin(UNFAITHFUL_TRAINING_CONFIGS)]
-    front = pareto_front(pareto_eligible, x_col)
+    front = (pareto_eligible[pareto_eligible["config_name"].isin(front_configs)]
+              .dropna(subset=[x_col, "dice"]).sort_values(x_col))
     # A naive point that's ALSO Pareto-optimal (e.g. the naive curve's own
     # cheapest/most-efficient points often are) gets its marker+label drawn
     # once below, from the Pareto loop -- skip it here so it isn't
@@ -156,7 +174,7 @@ def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, x_col: str, x_label: 
         # Lowercase "x" -- matplotlib's thin, unfilled line-cross marker
         # (like a text "X" glyph), not the bold uppercase "X" filled marker.
         ax.scatter(front_other[x_col], front_other["dice"], color=PARETO_COLOR, s=90, zorder=5,
-                   marker="x", linewidths=1.8, label="Pareto front (all configs)")
+                   marker="x", linewidths=1.8, label="Pareto front (intersection of all 3 metrics)")
         # Alternate the label offset up/down (and vary horizontal reach a
         # little) so densely-packed Pareto points -- common near the
         # "knee" of the curve where several architectures land close
@@ -210,11 +228,18 @@ def main() -> int:
         print(f"No {NAIVE_STAGE} rows found.")
         return 1
 
+    pareto_eligible = named[~named["config_name"].isin(UNFAITHFUL_TRAINING_CONFIGS)]
+    metric_cols = ("params", "macs", "mem_elements")
+    front_configs = intersection_pareto_configs(pareto_eligible, metric_cols)
+    print(f"Pareto front (intersection of {metric_cols}): {len(front_configs)} configs")
+
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    _plot_metric(named, naive, "params", "Parameters", args.out_dir / "dice_vs_params_final.png")
-    _plot_metric(named, naive, "macs", "MACs", args.out_dir / "dice_vs_macs_final.png")
-    _plot_metric(named, naive, "mem_elements", "FINN buffer memory (activation elements)",
-                 args.out_dir / "dice_vs_mem_elements_final.png")
+    _plot_metric(named, naive, pareto_eligible, front_configs, "params", "Parameters",
+                 args.out_dir / "dice_vs_params_final.png")
+    _plot_metric(named, naive, pareto_eligible, front_configs, "macs", "MACs",
+                 args.out_dir / "dice_vs_macs_final.png")
+    _plot_metric(named, naive, pareto_eligible, front_configs, "mem_elements",
+                 "FINN buffer memory (activation elements)", args.out_dir / "dice_vs_mem_elements_final.png")
     return 0
 
 
