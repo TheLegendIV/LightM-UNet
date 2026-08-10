@@ -21,10 +21,12 @@ figure). The Pareto front is markers only, deliberately NOT connected by a
 line -- unlike the naive curve, its points come from entirely different
 architectures with no shared axis between them (channel width), so a
 connecting line would visually imply a continuous tradeoff that doesn't
-exist between e.g. S9.4 and S13.1. Front markers are an X, except S19 (cold
-start) -- the architecture-probe config singled out by name elsewhere in the
-paper (the comparison table) -- which keeps a diamond so it stays visually
-distinct from the rest of the front.
+exist between e.g. S9.4 and S13.1. Front markers are an X. S19 (cold start,
+nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid -- the
+architecture-probe config singled out by name elsewhere in the paper's
+comparison table) is always drawn on top as its own diamond, regardless of
+whether it's actually Pareto-optimal on that particular metric -- the point
+is to show where it lands, not just whether it wins.
 
 Only rows with a compression/config_abbreviations.csv entry are
 considered (excludes pruning-grid rows, which live in results_pruning.csv
@@ -117,24 +119,32 @@ def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, x_col: str, x_label: 
         ax.annotate(row["abbrev"], (row[x_col], row["dice"]), fontsize=7.5, color=SECONDARY_INK,
                    textcoords="offset points", xytext=(5, -10))
 
-    if not front.empty:
-        front_s19 = front[front["config_name"] == S19_COLDSTART_CONFIG]
-        front_other = front[front["config_name"] != S19_COLDSTART_CONFIG]
-        if not front_other.empty:
-            ax.scatter(front_other[x_col], front_other["dice"], color=PARETO_COLOR, s=110, zorder=5,
-                       marker="X", edgecolors="black", linewidths=0.7, label="Pareto front (all configs)")
-        if not front_s19.empty:
-            ax.scatter(front_s19[x_col], front_s19["dice"], color=PARETO_COLOR, s=130, zorder=5,
-                       marker="D", edgecolors="black", linewidths=0.7, label="S19 (cold start)")
+    # S19 (cold start) is drawn as its own diamond unconditionally -- on top
+    # of every other layer (highest zorder) -- regardless of whether it's
+    # actually Pareto-optimal on this metric, since the point of showing it
+    # is "where does this specific config land", not "is it on the front".
+    # Pulled straight from `named` (not `front`), and excluded from the
+    # front's own X-marker set below so it's never drawn twice.
+    s19_row = named[named["config_name"] == S19_COLDSTART_CONFIG].dropna(subset=[x_col, "dice"])
+    front_other = front[front["config_name"] != S19_COLDSTART_CONFIG] if not front.empty else front
+    if not front_other.empty:
+        ax.scatter(front_other[x_col], front_other["dice"], color=PARETO_COLOR, s=110, zorder=5,
+                   marker="X", edgecolors="black", linewidths=0.7, label="Pareto front (all configs)")
         # Alternate the label offset up/down (and vary horizontal reach a
         # little) so densely-packed Pareto points -- common near the
         # "knee" of the curve where several architectures land close
         # together -- don't render with fully overlapping text.
-        for i, (_, row) in enumerate(front.iterrows()):
+        for i, (_, row) in enumerate(front_other.iterrows()):
             y_off = 9 if i % 2 == 0 else -15
             x_off = 6 + 4 * (i % 3)
             ax.annotate(row["abbrev"], (row[x_col], row["dice"]), fontsize=8, color=SECONDARY_INK,
                        fontweight="bold", textcoords="offset points", xytext=(x_off, y_off))
+    if not s19_row.empty:
+        ax.scatter(s19_row[x_col], s19_row["dice"], color=PARETO_COLOR, s=140, zorder=6,
+                   marker="D", edgecolors="black", linewidths=0.9, label="S19 (cold start)")
+        for _, row in s19_row.iterrows():
+            ax.annotate(row["abbrev"], (row[x_col], row["dice"]), fontsize=8, color=SECONDARY_INK,
+                       fontweight="bold", textcoords="offset points", xytext=(8, 9))
 
     ax.set_xlabel(x_label, color=SECONDARY_INK, fontsize=10)
     ax.set_title(f"Pareto front vs. naive width-compression curve: Dice vs. {x_label}", color=INK, fontsize=12)
@@ -142,7 +152,8 @@ def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, x_col: str, x_label: 
     fig.tight_layout()
     fig.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=SURFACE)
     plt.close(fig)
-    print(f"Wrote {out_path} ({len(front)} Pareto-front points)")
+    s19_note = " +S19 cold start" if not s19_row.empty else ""
+    print(f"Wrote {out_path} ({len(front_other)} Pareto-front points{s19_note})")
 
 
 def main() -> int:
