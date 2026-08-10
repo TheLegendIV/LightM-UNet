@@ -28,10 +28,12 @@ line -- unlike the naive curve, its points come from entirely different
 architectures with no shared axis between them (channel width), so a
 connecting line would visually imply a continuous tradeoff that doesn't
 exist between e.g. S9.4 and S13.1. Front markers are an X. Configs in
-HIGHLIGHTED_CONFIGS (currently S19 and S5.3) are always drawn on top as
-their own colored diamond, regardless of whether they're actually
-Pareto-optimal on that particular metric -- the point is to show where they
-land, not just whether they win.
+HIGHLIGHTED_CONFIGS (currently S19 and S5.3) get their own colored diamond
+drawn on top, but ONLY when they're not already part of the (intersection)
+Pareto front -- the whole point of the diamond is to force a look at a
+config that the strict front left out; a config that genuinely IS on the
+front already gets a normal X like everyone else, not a redundant second
+marker on top of itself.
 
 Only rows with a compression/config_abbreviations.csv entry are
 considered (excludes pruning-grid rows, which live in results_pruning.csv
@@ -162,14 +164,15 @@ def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, pareto_eligible: pd.D
         ax.annotate(row["abbrev"], (row[x_col], row["dice"]), fontsize=7.5, color=SECONDARY_INK,
                    textcoords="offset points", xytext=(5, -10))
 
-    # Highlighted configs (HIGHLIGHTED_CONFIGS) are drawn as their own
-    # colored diamond unconditionally -- on top of every other layer
-    # (highest zorder) -- regardless of whether they're actually
-    # Pareto-optimal on this metric, since the point is "where does this
-    # specific config land", not "is it on the front". Pulled straight from
-    # `named` (not `front`), and excluded from the front's own X-marker set
-    # below so none of them are ever drawn twice.
-    front_other = front[~front["config_name"].isin(HIGHLIGHTED_CONFIGS)] if not front.empty else front
+    # Highlighted configs (HIGHLIGHTED_CONFIGS) get their own colored
+    # diamond, on top of every other layer -- but only for configs that
+    # actually NEED forcing, i.e. aren't already in the (intersection)
+    # Pareto front. A highlighted config that genuinely IS Pareto-optimal
+    # on all 3 metrics has nothing to force -- it already gets a normal X
+    # marker below, and drawing a redundant diamond on top of its own X
+    # would just be double-marking the same point.
+    diamond_configs = {c: v for c, v in HIGHLIGHTED_CONFIGS.items() if c not in front_configs}
+    front_other = front[~front["config_name"].isin(diamond_configs)] if not front.empty else front
     if not front_other.empty:
         # Lowercase "x" -- matplotlib's thin, unfilled line-cross marker
         # (like a text "X" glyph), not the bold uppercase "X" filled marker.
@@ -184,7 +187,7 @@ def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, pareto_eligible: pd.D
             x_off = 6 + 4 * (i % 3)
             ax.annotate(row["abbrev"], (row[x_col], row["dice"]), fontsize=8, color=SECONDARY_INK,
                        fontweight="bold", textcoords="offset points", xytext=(x_off, y_off))
-    for i, (config_name, (color, legend_label)) in enumerate(HIGHLIGHTED_CONFIGS.items()):
+    for i, (config_name, (color, legend_label)) in enumerate(diamond_configs.items()):
         highlight_row = named[named["config_name"] == config_name].dropna(subset=[x_col, "dice"])
         if highlight_row.empty:
             continue
@@ -202,7 +205,7 @@ def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, pareto_eligible: pd.D
     fig.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=SURFACE)
     plt.close(fig)
     highlighted_present = [named[named["config_name"] == c]["abbrev"].iloc[0]
-                            for c in HIGHLIGHTED_CONFIGS
+                            for c in diamond_configs
                             if not named[named["config_name"] == c].dropna(subset=[x_col, "dice"]).empty]
     highlight_note = f" +{'/'.join(highlighted_present)}" if highlighted_present else ""
     print(f"Wrote {out_path} ({len(front_other)} Pareto-front points{highlight_note})")
