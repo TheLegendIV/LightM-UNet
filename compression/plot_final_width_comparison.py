@@ -13,11 +13,15 @@ cheaper-or-equal point's dice seen so far (a "staircase" of non-dominated
 points). Computed separately per metric, since a config Pareto-optimal in
 params need not be Pareto-optimal in MACs or memory elements too.
 
-Both the naive baseline curve and the Pareto front are drawn as plain
-straight-line (piecewise-linear) segments, not a smoothing spline -- see
-plot_all_configs.py's own module comment for why (sparse real points,
-no real underlying smooth function, straight lines are the standard
-convention for this kind of tradeoff figure).
+The naive baseline curve is drawn as plain straight-line (piecewise-linear)
+segments, not a smoothing spline -- see plot_all_configs.py's own module
+comment for why (sparse real points, no real underlying smooth function,
+straight lines are the standard convention for this kind of tradeoff
+figure). The Pareto front is markers only, deliberately NOT connected by a
+line -- unlike the naive curve, its points come from entirely different
+architectures with no shared axis between them (channel width), so a
+connecting line would visually imply a continuous tradeoff that doesn't
+exist between e.g. S9.4 and S13.1.
 
 Only rows with a compression/config_abbreviations.csv entry are
 considered (excludes pruning-grid rows, which live in results_pruning.csv
@@ -42,7 +46,6 @@ INK, SECONDARY_INK, MUTED, GRID, SURFACE = (
 )
 NAIVE_COLOR = "#2a78d6"
 PARETO_COLOR = "#1baf7a"
-PARETO_LINE_COLOR = "#0b7a4d"
 
 NAIVE_STAGE = "1_naive_baseline"
 
@@ -107,10 +110,8 @@ def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, x_col: str, x_label: 
                    textcoords="offset points", xytext=(5, -10))
 
     if not front.empty:
-        ax.plot(front[x_col], front["dice"], color=PARETO_LINE_COLOR, linewidth=1.8,
-                 zorder=4, label="Pareto front (all configs)")
         ax.scatter(front[x_col], front["dice"], color=PARETO_COLOR, s=110, zorder=5,
-                   marker="D", edgecolors="black", linewidths=0.7)
+                   marker="D", edgecolors="black", linewidths=0.7, label="Pareto front (all configs)")
         # Alternate the label offset up/down (and vary horizontal reach a
         # little) so densely-packed Pareto points -- common near the
         # "knee" of the curve where several architectures land close
