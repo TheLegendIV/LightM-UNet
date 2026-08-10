@@ -58,6 +58,20 @@ NAIVE_STAGE = "1_naive_baseline"
 # the one architecture-probe config the user calls out by name in the paper
 # comparison table -- keeps its own diamond marker on the Pareto front;
 # every other non-baseline front point is an X instead.
+
+# Runs trained via nnU-Net's own -pretrained_weights transfer (warm-started
+# from an already-trained checkpoint) rather than from scratch, so their
+# dice reflects head-start training, not the architecture alone -- not an
+# apples-to-apples comparison against the rest of the from-scratch sweep.
+# Excluded from the Pareto front entirely (all three: S3.1 warm-starts from
+# the old binary Dataset501 checkpoint; S13.1/S13.2 warm-start from
+# 5_6_separable_dense_dilation's checkpoint, S13.2 additionally freezing the
+# transferred leaky-slope scalars for part of training).
+UNFAITHFUL_TRAINING_CONFIGS = {
+    "nnUNetTrainerENet_3_transfer_original",
+    "nnUNetTrainerENet_13_separable_dense_nonneg_block_warmstart",
+    "nnUNetTrainerENet_13_separable_dense_nonneg_block_leaky_frozen",
+}
 S19_COLDSTART_CONFIG = "nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid"
 
 
@@ -104,7 +118,8 @@ def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, x_col: str, x_label: 
     _style_axes(ax)
 
     naive_sorted = naive.dropna(subset=[x_col, "dice"]).sort_values(x_col)
-    front = pareto_front(named, x_col)
+    pareto_eligible = named[~named["config_name"].isin(UNFAITHFUL_TRAINING_CONFIGS)]
+    front = pareto_front(pareto_eligible, x_col)
     # A naive point that's ALSO Pareto-optimal (e.g. the naive curve's own
     # cheapest/most-efficient points often are) gets its marker+label drawn
     # once below, from the Pareto loop -- skip it here so it isn't
