@@ -21,12 +21,11 @@ figure). The Pareto front is markers only, deliberately NOT connected by a
 line -- unlike the naive curve, its points come from entirely different
 architectures with no shared axis between them (channel width), so a
 connecting line would visually imply a continuous tradeoff that doesn't
-exist between e.g. S9.4 and S13.1. Front markers are an X. S19 (cold start,
-nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid -- the
-architecture-probe config singled out by name elsewhere in the paper's
-comparison table) is always drawn on top as its own diamond, regardless of
-whether it's actually Pareto-optimal on that particular metric -- the point
-is to show where it lands, not just whether it wins.
+exist between e.g. S9.4 and S13.1. Front markers are an X. Configs in
+HIGHLIGHTED_CONFIGS (currently S19 and S5.3) are always drawn on top as
+their own colored diamond, regardless of whether they're actually
+Pareto-optimal on that particular metric -- the point is to show where they
+land, not just whether they win.
 
 Only rows with a compression/config_abbreviations.csv entry are
 considered (excludes pruning-grid rows, which live in results_pruning.csv
@@ -54,10 +53,21 @@ PARETO_COLOR = "#1baf7a"
 S19_COLOR = "#d6272a"
 
 NAIVE_STAGE = "1_naive_baseline"
-# S19 (cold start) -- nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid,
-# the one architecture-probe config the user calls out by name in the paper
-# comparison table -- keeps its own diamond marker on the Pareto front;
-# every other non-baseline front point is an X instead.
+
+# Configs called out by name elsewhere (the paper's comparison table, or
+# just worth pointing at directly) -- each gets its own always-shown
+# diamond, drawn on top of every other layer regardless of whether it's
+# actually Pareto-optimal on that particular metric, in a color that
+# distinguishes it from the rest of the front and from every other
+# highlighted config.
+S19_COLDSTART_CONFIG = "nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid"
+S5_3_CONFIG = "nnUNetTrainerENet_5_3_dense_dilation_merge_pairs"
+# value = (marker color, legend label override -- None falls back to the
+# config's own config_abbreviations.csv abbrev, e.g. S5.3's "S5.3").
+HIGHLIGHTED_CONFIGS = {
+    S19_COLDSTART_CONFIG: (S19_COLOR, "S19"),
+    S5_3_CONFIG: ("#e6a817", None),
+}
 
 # Runs trained via nnU-Net's own -pretrained_weights transfer (warm-started
 # from an already-trained checkpoint) rather than from scratch, so their
@@ -72,7 +82,6 @@ UNFAITHFUL_TRAINING_CONFIGS = {
     "nnUNetTrainerENet_13_separable_dense_nonneg_block_warmstart",
     "nnUNetTrainerENet_13_separable_dense_nonneg_block_leaky_frozen",
 }
-S19_COLDSTART_CONFIG = "nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid"
 
 
 def parse_args() -> argparse.Namespace:
@@ -135,14 +144,14 @@ def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, x_col: str, x_label: 
         ax.annotate(row["abbrev"], (row[x_col], row["dice"]), fontsize=7.5, color=SECONDARY_INK,
                    textcoords="offset points", xytext=(5, -10))
 
-    # S19 (cold start) is drawn as its own diamond unconditionally -- on top
-    # of every other layer (highest zorder) -- regardless of whether it's
-    # actually Pareto-optimal on this metric, since the point of showing it
-    # is "where does this specific config land", not "is it on the front".
-    # Pulled straight from `named` (not `front`), and excluded from the
-    # front's own X-marker set below so it's never drawn twice.
-    s19_row = named[named["config_name"] == S19_COLDSTART_CONFIG].dropna(subset=[x_col, "dice"])
-    front_other = front[front["config_name"] != S19_COLDSTART_CONFIG] if not front.empty else front
+    # Highlighted configs (HIGHLIGHTED_CONFIGS) are drawn as their own
+    # colored diamond unconditionally -- on top of every other layer
+    # (highest zorder) -- regardless of whether they're actually
+    # Pareto-optimal on this metric, since the point is "where does this
+    # specific config land", not "is it on the front". Pulled straight from
+    # `named` (not `front`), and excluded from the front's own X-marker set
+    # below so none of them are ever drawn twice.
+    front_other = front[~front["config_name"].isin(HIGHLIGHTED_CONFIGS)] if not front.empty else front
     if not front_other.empty:
         # Lowercase "x" -- matplotlib's thin, unfilled line-cross marker
         # (like a text "X" glyph), not the bold uppercase "X" filled marker.
@@ -157,12 +166,16 @@ def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, x_col: str, x_label: 
             x_off = 6 + 4 * (i % 3)
             ax.annotate(row["abbrev"], (row[x_col], row["dice"]), fontsize=8, color=SECONDARY_INK,
                        fontweight="bold", textcoords="offset points", xytext=(x_off, y_off))
-    if not s19_row.empty:
-        ax.scatter(s19_row[x_col], s19_row["dice"], color=S19_COLOR, s=140, zorder=6,
-                   marker="D", edgecolors="black", linewidths=0.9, label="S19")
-        for _, row in s19_row.iterrows():
+    for i, (config_name, (color, legend_label)) in enumerate(HIGHLIGHTED_CONFIGS.items()):
+        highlight_row = named[named["config_name"] == config_name].dropna(subset=[x_col, "dice"])
+        if highlight_row.empty:
+            continue
+        label = legend_label or highlight_row.iloc[0]["abbrev"]
+        ax.scatter(highlight_row[x_col], highlight_row["dice"], color=color, s=140, zorder=6,
+                   marker="D", edgecolors="black", linewidths=0.9, label=label)
+        for _, row in highlight_row.iterrows():
             ax.annotate(row["abbrev"], (row[x_col], row["dice"]), fontsize=8, color=SECONDARY_INK,
-                       fontweight="bold", textcoords="offset points", xytext=(8, 9))
+                       fontweight="bold", textcoords="offset points", xytext=(8, 9 - 14 * i))
 
     ax.set_xlabel(x_label, color=SECONDARY_INK, fontsize=10)
     ax.set_title(f"Pareto front vs. naive width-compression curve: Dice vs. {x_label}", color=INK, fontsize=12)
@@ -170,8 +183,11 @@ def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, x_col: str, x_label: 
     fig.tight_layout()
     fig.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=SURFACE)
     plt.close(fig)
-    s19_note = " +S19 cold start" if not s19_row.empty else ""
-    print(f"Wrote {out_path} ({len(front_other)} Pareto-front points{s19_note})")
+    highlighted_present = [named[named["config_name"] == c]["abbrev"].iloc[0]
+                            for c in HIGHLIGHTED_CONFIGS
+                            if not named[named["config_name"] == c].dropna(subset=[x_col, "dice"]).empty]
+    highlight_note = f" +{'/'.join(highlighted_present)}" if highlighted_present else ""
+    print(f"Wrote {out_path} ({len(front_other)} Pareto-front points{highlight_note})")
 
 
 def main() -> int:
