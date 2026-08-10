@@ -144,7 +144,7 @@ def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, x_col: str, x_label: 
                        fontweight="bold", textcoords="offset points", xytext=(x_off, y_off))
     if not s19_row.empty:
         ax.scatter(s19_row[x_col], s19_row["dice"], color=S19_COLOR, s=140, zorder=6,
-                   marker="D", edgecolors="black", linewidths=0.9, label="S19 (cold start)")
+                   marker="D", edgecolors="black", linewidths=0.9, label="S19")
         for _, row in s19_row.iterrows():
             ax.annotate(row["abbrev"], (row[x_col], row["dice"]), fontsize=8, color=SECONDARY_INK,
                        fontweight="bold", textcoords="offset points", xytext=(8, 9))
