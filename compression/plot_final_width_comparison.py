@@ -71,18 +71,10 @@ NAIVE_STAGE = "1_naive_baseline"
 # distinguishes it from the rest of the front and from every other
 # highlighted config.
 S19_COLDSTART_CONFIG = "nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid"
-S5_3_CONFIG = "nnUNetTrainerENet_5_3_dense_dilation_merge_pairs"
-S17_CONFIG = "nnUNetTrainerENet_17_separable_dense_nonneg_block_coldstart"
-S9_4_CONFIG = "nnUNetTrainerENet_9_4_dense_dilation_dsc_projected_relu"
-S9_1_CONFIG = "nnUNetTrainerENet_9_1_dense_dilation_dsc_projected"
 # value = (marker color, legend label override -- None falls back to the
 # config's own config_abbreviations.csv abbrev, e.g. S5.3's "S5.3").
 HIGHLIGHTED_CONFIGS = {
     S19_COLDSTART_CONFIG: (S19_COLOR, "S19"),
-    S5_3_CONFIG: ("#e6a817", None),
-    S17_CONFIG: ("#e67e22", "S17"),
-    S9_4_CONFIG: ("#8e44ad", None),
-    S9_1_CONFIG: ("#c2185b", None),
 }
 
 # Runs trained via nnU-Net's own -pretrained_weights transfer (warm-started
