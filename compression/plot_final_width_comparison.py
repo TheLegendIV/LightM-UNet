@@ -21,7 +21,10 @@ figure). The Pareto front is markers only, deliberately NOT connected by a
 line -- unlike the naive curve, its points come from entirely different
 architectures with no shared axis between them (channel width), so a
 connecting line would visually imply a continuous tradeoff that doesn't
-exist between e.g. S9.4 and S13.1.
+exist between e.g. S9.4 and S13.1. Front markers are an X, except S19 (cold
+start) -- the architecture-probe config singled out by name elsewhere in the
+paper (the comparison table) -- which keeps a diamond so it stays visually
+distinct from the rest of the front.
 
 Only rows with a compression/config_abbreviations.csv entry are
 considered (excludes pruning-grid rows, which live in results_pruning.csv
@@ -48,6 +51,11 @@ NAIVE_COLOR = "#2a78d6"
 PARETO_COLOR = "#1baf7a"
 
 NAIVE_STAGE = "1_naive_baseline"
+# S19 (cold start) -- nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid,
+# the one architecture-probe config the user calls out by name in the paper
+# comparison table -- keeps its own diamond marker on the Pareto front;
+# every other non-baseline front point is an X instead.
+S19_COLDSTART_CONFIG = "nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid"
 
 
 def parse_args() -> argparse.Namespace:
@@ -110,8 +118,14 @@ def _plot_metric(named: pd.DataFrame, naive: pd.DataFrame, x_col: str, x_label: 
                    textcoords="offset points", xytext=(5, -10))
 
     if not front.empty:
-        ax.scatter(front[x_col], front["dice"], color=PARETO_COLOR, s=110, zorder=5,
-                   marker="D", edgecolors="black", linewidths=0.7, label="Pareto front (all configs)")
+        front_s19 = front[front["config_name"] == S19_COLDSTART_CONFIG]
+        front_other = front[front["config_name"] != S19_COLDSTART_CONFIG]
+        if not front_other.empty:
+            ax.scatter(front_other[x_col], front_other["dice"], color=PARETO_COLOR, s=110, zorder=5,
+                       marker="X", edgecolors="black", linewidths=0.7, label="Pareto front (all configs)")
+        if not front_s19.empty:
+            ax.scatter(front_s19[x_col], front_s19["dice"], color=PARETO_COLOR, s=130, zorder=5,
+                       marker="D", edgecolors="black", linewidths=0.7, label="S19 (cold start)")
         # Alternate the label offset up/down (and vary horizontal reach a
         # little) so densely-packed Pareto points -- common near the
         # "knee" of the curve where several architectures land close
