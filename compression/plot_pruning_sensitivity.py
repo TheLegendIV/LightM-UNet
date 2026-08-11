@@ -123,6 +123,20 @@ def _style_axes(ax) -> None:
     ax.set_ylabel("Dice (mean of LAD/RCA/LCX/LM)", color=SECONDARY_INK, fontsize=10)
 
 
+# S19's three plots (individual/consec/skip) previously landed on different
+# auto-chosen y-tick spacings (0.02/0.05/0.025) purely because matplotlib
+# picks locators from each plot's own data range -- made the three harder
+# to visually compare side by side. Forced to the same 0.05 step on all
+# three (S8-ReLU's plots are untouched, still auto-spaced).
+S19_Y_TICK_STEP = 0.05
+
+
+def _apply_y_tick_step(ax, cfg: dict) -> None:
+    if cfg["out_suffix"] == "_s19":
+        from matplotlib.ticker import MultipleLocator
+        ax.yaxis.set_major_locator(MultipleLocator(S19_Y_TICK_STEP))
+
+
 def _add_baseline(ax, baseline_dice: float) -> None:
     ax.axhline(baseline_dice, color=BASELINE_COLOR, linewidth=1.2, linestyle="--",
                 zorder=2, label=f"unpruned baseline (dice={baseline_dice:.4f})")
@@ -162,6 +176,7 @@ def plot_individual(df: pd.DataFrame, cfg: dict, out_dir: Path) -> None:
 
     fig, ax = plt.subplots(figsize=(13, 6), facecolor=SURFACE)
     _style_axes(ax)
+    _apply_y_tick_step(ax, cfg)
     _add_baseline(ax, cfg["baseline_dice"])
     # One continuous connecting line across the full depth-ordered walk
     # (neutral color -- stage identity is carried by the marker color
@@ -247,6 +262,7 @@ def _plot_pairs(df: pd.DataFrame, cfg: dict, kind: str, out_name: str, title: st
 
     fig, ax = plt.subplots(figsize=(13, 6), facecolor=SURFACE)
     _style_axes(ax)
+    _apply_y_tick_step(ax, cfg)
     _add_baseline(ax, cfg["baseline_dice"])
     for stage, color in STAGE_COLORS.items():
         subset = data[data["stage"] == stage].sort_values("depth")
