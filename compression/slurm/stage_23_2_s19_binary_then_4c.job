@@ -1,0 +1,180 @@
+#!/bin/bash
+#SBATCH --job-name=stage_23_2_s19_binary_then_4c
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=08:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# Stage 23, strategy 2 of 3 -- transfer-training strategy comparison for
+# S19's own architecture (see stage_23_1's own header for the full context;
+# this is strategy 2, "150 epochs on the old binary Dataset501 problem,
+# then 150 epochs on Dataset509 4c").
+#
+# Phase A: S19's exact architecture (context_pattern=dense_dilation_reg_
+# interleaved_double_mid, separable_dilated=1), prelu_variant=nonneg_block
+# throughout (unlike strategy 3, which uses standard PReLU for this phase),
+# cold start, 150 epochs on Dataset501_ARCADE (binary foreground/background
+# -- a 2-class head auto-derived by nnU-Net's own label_manager, same
+# mechanism as every other stage here, no explicit --out-channels needed).
+# This is a NEW checkpoint -- S19's own architecture never existed during
+# the binary-era sweep (double_mid was invented well after the 4c pivot),
+# so there is no pre-existing Dataset501 checkpoint for it to reuse.
+#
+# Phase B: same architecture and prelu_variant, -pretrained_weights from
+# Phase A's checkpoint_final.pth, 150 more epochs on Dataset509 4c. Every
+# key matches by name AND shape except the final 1x1 conv's weight/bias
+# (2-class head vs. 5-class head) -- nnU-Net's own -pretrained_weights
+# loader auto-skips only those two keys (see stage_3's own header for the
+# same mechanism), so this transfers everything else including the
+# nonneg_block shared_act scalars, cleanly, no manual slope-map step needed
+# (that's only required when the SOURCE and TARGET prelu_variant differ, as
+# in strategy 3/stage_23_3).
+#
+# Single run, not an array -- one architecture, two sequential training
+# phases in one job (phase B's -pretrained_weights source is phase A's own
+# output, so they must run in this order, not as independent array tasks).
+
+DATASET_ID_A=501
+DATASET_NAME_A="Dataset501_ARCADE"
+DATASET_ID_B=509
+DATASET_NAME_B="Dataset509_ARCADE_1x1_4c"
+
+RUN_NAME_A="23_2a_s19_binary_nonneg_block"
+RUN_NAME_B="23_2_s19_binary_then_4c"
+TRAINER_CLASS="nnUNetTrainerENet"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- ENet trainer knobs -- S19's exact recipe, shared by both phases --------
+export ENET_CHANNELS="4,16,32,16,4"
+export ENET_BOTTLENECKS="4,12,12,2,1"
+export ENET_CONTEXT_PATTERN="dense_dilation_reg_interleaved_double_mid"
+export ENET_DECODER_TYPE="upsample_conv"
+export ENET_USE_PRELU=1
+export ENET_PRELU_VARIANT="nonneg_block"
+export ENET_USE_DILATED=1
+export ENET_USE_ASYMMETRIC=0
+export ENET_USE_STRIDED=1
+export ENET_USE_DSC=0
+export ENET_SEPARABLE_DILATED=1
+export ENET_DSC_NO_PROJECTION=0
+export ENET_EPOCHS=150
+
+OUTPUT_FOLDER_A="$nnUNet_results/${DATASET_NAME_A}/${TRAINER_CLASS}_${RUN_NAME_A}__nnUNetPlans__2d/fold_0"
+OUTPUT_FOLDER_B="$nnUNet_results/${DATASET_NAME_B}/${TRAINER_CLASS}_${RUN_NAME_B}__nnUNetPlans__2d/fold_0"
+PRETRAINED_CKPT="${OUTPUT_FOLDER_A}/checkpoint_final.pth"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Phase A: ${RUN_NAME_A} on ${DATASET_NAME_A}"
+echo "Phase B: ${RUN_NAME_B} on ${DATASET_NAME_B} (warm-started from Phase A)"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Phase A: plan + preprocess Dataset501 (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME_A}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID_A}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+
+echo "=== Phase A: checking for a COMPLETED checkpoint for ${RUN_NAME_A} ==="
+export ENET_OUTPUT_FOLDER="${OUTPUT_FOLDER_A}"
+if [ -f "${OUTPUT_FOLDER_A}/checkpoint_final.pth" ]; then
+    echo "checkpoint_final.pth already exists at ${OUTPUT_FOLDER_A} -- skipping Phase A training."
+else
+    echo "=== Phase A: start training: ${RUN_NAME_A} (cold start, no pretrained weights) ==="
+    nnUNetv2_train "${DATASET_NAME_A}" 2d 0 -tr "${TRAINER_CLASS}"
+    echo "Phase A training finished for ${RUN_NAME_A}."
+
+    echo "=== Archiving Phase A checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME_A}" "${TRAINER_CLASS}_${RUN_NAME_A}" 2d 0
+fi
+
+echo "=== Phase B: plan + preprocess Dataset509 (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME_B}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID_B}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME_B}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME_B}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME_B}/splits_final.json"
+fi
+
+echo "=== Phase B: checking Phase A checkpoint exists ==="
+if [ ! -f "${PRETRAINED_CKPT}" ]; then
+    echo "ERROR: Phase A checkpoint not found at ${PRETRAINED_CKPT}" >&2
+    exit 1
+fi
+
+echo "=== Phase B: checking for a COMPLETED checkpoint for ${RUN_NAME_B} ==="
+export ENET_OUTPUT_FOLDER="${OUTPUT_FOLDER_B}"
+if [ -f "${OUTPUT_FOLDER_B}/checkpoint_final.pth" ]; then
+    echo "checkpoint_final.pth already exists at ${OUTPUT_FOLDER_B} -- skipping Phase B training, going straight to collect_results.py."
+else
+    echo "=== Phase B: start training: ${RUN_NAME_B} (warm-started from ${PRETRAINED_CKPT}) ==="
+    nnUNetv2_train "${DATASET_NAME_B}" 2d 0 -tr "${TRAINER_CLASS}" -pretrained_weights "${PRETRAINED_CKPT}"
+    echo "Phase B training finished for ${RUN_NAME_B}."
+
+    echo "=== Archiving Phase B checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME_B}" "${TRAINER_CLASS}_${RUN_NAME_B}" 2d 0
+fi
+
+echo "=== Collecting Phase B results into compression/results.csv ==="
+cd "$HOME/LightM-UNet"
+python compression/collect_results.py \
+    --net-name "${TRAINER_CLASS}_${RUN_NAME_B}" \
+    --stage 23_s19_transfer_strategies \
+    --dataset-name "${DATASET_NAME_B}" \
+    --dataset-id "${DATASET_ID_B}" \
+    --channels "${ENET_CHANNELS}" \
+    --bottlenecks "${ENET_BOTTLENECKS}" \
+    --decoder-type "${ENET_DECODER_TYPE}" \
+    --use-dilated "${ENET_USE_DILATED}" \
+    --use-asymmetric "${ENET_USE_ASYMMETRIC}" \
+    --use-strided "${ENET_USE_STRIDED}" \
+    --use-dsc "${ENET_USE_DSC}" \
+    --separable-dilated "${ENET_SEPARABLE_DILATED}" \
+    --context-pattern "${ENET_CONTEXT_PATTERN}" \
+    --use-prelu "${ENET_USE_PRELU}" \
+    --prelu-variant "${ENET_PRELU_VARIANT}" \
+    --dsc-no-projection "${ENET_DSC_NO_PROJECTION}" \
+    --trainer-class "${TRAINER_CLASS}"
+
+echo "Done: ${RUN_NAME_B} (via ${RUN_NAME_A})."

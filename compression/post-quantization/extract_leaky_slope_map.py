@@ -18,6 +18,13 @@ NonNegativePReLU (S19's activation class) the same way it handles a
 real per-channel PReLU checkpoint -- this script is a thin CLI wrapper
 around it, nothing new algorithmically.
 
+--prelu-variant controls which variant the LOADER model is built with
+(default "nonneg_block", matching every prior use of this script) --
+"standard" lets it load a real per-channel PReLU checkpoint instead (e.g.
+a binary-dataset-pretrained source model for a warm-start recipe), since
+collect_prelu_block_means already averages per-channel slopes down to one
+mean-per-block value regardless of which variant produced them.
+
 Usage (S19):
     python compression/post-quantization/extract_leaky_slope_map.py \
         --net-name nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid \
@@ -64,6 +71,9 @@ def main() -> None:
     parser.add_argument("--context-pattern", default="default")
     parser.add_argument("--dsc-no-projection", type=int, default=0, choices=[0, 1])
     parser.add_argument("--separable-dilated", type=int, default=0, choices=[0, 1])
+    parser.add_argument("--prelu-variant", default="nonneg_block", choices=["standard", "nonneg_block"],
+                         help="Which variant the checkpoint being loaded was actually trained with -- "
+                              "'standard' for a real per-channel PReLU source checkpoint.")
     parser.add_argument("--in-channels", type=int, default=1)
     parser.add_argument("--out-channels", type=int, default=5)
     parser.add_argument("--plans-name", default="nnUNetPlans")
@@ -80,7 +90,7 @@ def main() -> None:
         use_strided=bool(args.use_strided), use_dsc=bool(args.use_dsc),
         context_pattern=args.context_pattern, dsc_no_projection=bool(args.dsc_no_projection),
         separable_dilated=bool(args.separable_dilated),
-        use_prelu=True, prelu_variant="nonneg_block",
+        use_prelu=True, prelu_variant=args.prelu_variant,
     )
     ckpt_path = (NNUNET_RESULTS / args.dataset_name
                  / f"{args.net_name}__{args.plans_name}__{args.configuration}"
