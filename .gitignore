@@ -30,9 +30,11 @@ data/nnUNet_preprocessed/*
 # compression/README.md's top note) -- and even within it, drop any
 # inference-output labelsPr_* dirs a preview notebook may have written;
 # only the ground-truth raw pngs are pushed.
-data/nnUNet_raw/*
+# data/nnUNet_raw/*
 !data/nnUNet_raw/Dataset509_ARCADE_1x1_4c/
 data/nnUNet_raw/Dataset509_ARCADE_1x1_4c/labelsPr_*/
+
+data/nnUNet_raw/Dataset501_ARCADE/labelsPr_*/
 
 logs/*
 
