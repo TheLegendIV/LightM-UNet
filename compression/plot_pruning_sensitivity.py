@@ -243,6 +243,8 @@ def _plot_pairs(df: pd.DataFrame, cfg: dict, kind: str, out_name: str, title: st
     data = pd.DataFrame(records, columns=["stage", "depth", "content", "dice"])
     seam_data = pd.DataFrame(seam_records, columns=["depth", "content", "dice"])
 
+    is_s19_consec = cfg["out_suffix"] == "_s19" and kind == "consec"
+
     fig, ax = plt.subplots(figsize=(13, 6), facecolor=SURFACE)
     _style_axes(ax)
     _add_baseline(ax, cfg["baseline_dice"])
@@ -254,8 +256,14 @@ def _plot_pairs(df: pd.DataFrame, cfg: dict, kind: str, out_name: str, title: st
                  markersize=7, markeredgecolor="black", markeredgewidth=0.5, zorder=3,
                  label=stage)
     if not seam_data.empty:
-        ax.scatter(seam_data["depth"], seam_data["dice"], color=SEAM_COLOR, s=140, zorder=4,
-                   marker="*", edgecolors="black", linewidths=0.7, label="stage2->stage3 seam")
+        # Same "o" marker as the stage lines above (not a star) on the S19
+        # consec plot -- distinct color still carries the seam's own
+        # identity in the legend, it just isn't visually special-shaped
+        # anymore.
+        seam_marker = "o" if is_s19_consec else "*"
+        seam_size = 70 if is_s19_consec else 140
+        ax.scatter(seam_data["depth"], seam_data["dice"], color=SEAM_COLOR, s=seam_size, zorder=4,
+                   marker=seam_marker, edgecolors="black", linewidths=0.7, label="stage2->stage3 seam")
     if (data["stage"] == "stage2").any() and (data["stage"] == "stage3").any():
         boundary = n_slots - 0.5
         ax.axvline(boundary, color=GRID, linewidth=1.5, zorder=1)
@@ -267,9 +275,12 @@ def _plot_pairs(df: pd.DataFrame, cfg: dict, kind: str, out_name: str, title: st
     all_rows = pd.concat(pair_frames, ignore_index=True).sort_values("depth").drop_duplicates()
     ax.set_xticks(all_rows["depth"])
     ax.set_xticklabels([f"{d}\n{c}" for d, c in zip(all_rows["depth"], all_rows["content"])], fontsize=8)
-    ax.set_xlabel("Pruned pair's depth (anchored at its lower-position block) -- "
-                  "top=depth index, bottom=content codes pruned (0=reg 3x3, 2/4/8/16=dilation rate)",
-                  color=SECONDARY_INK, fontsize=10)
+    if is_s19_consec:
+        ax.set_xlabel("Block Depth", color=SECONDARY_INK, fontsize=10)
+    else:
+        ax.set_xlabel("Pruned pair's depth (anchored at its lower-position block) -- "
+                      "top=depth index, bottom=content codes pruned (0=reg 3x3, 2/4/8/16=dilation rate)",
+                      color=SECONDARY_INK, fontsize=10)
     ax.set_title(title, color=INK, fontsize=12)
     ax.legend(frameon=False, fontsize=9, labelcolor=SECONDARY_INK, loc="best")
     fig.tight_layout()
