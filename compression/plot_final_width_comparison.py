@@ -72,12 +72,14 @@ NAIVE_STAGE = "1_naive_baseline"
 S19_COLDSTART_CONFIG = "nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid"
 S22_2_CONFIG = "nnUNetTrainerENet_22_2_dsc_projected_reginterleaved_nonneg_block"
 S8_2_CONFIG = "nnUNetTrainerENet_8_2_relu"
+S22_1_CONFIG = "nnUNetTrainerENet_22_1_dsc_projected_nonneg_block"
 # value = (marker color, legend label override -- None falls back to the
 # config's own config_abbreviations.csv abbrev, e.g. S5.3's "S5.3").
 HIGHLIGHTED_CONFIGS = {
     S19_COLDSTART_CONFIG: (S19_COLOR, "S19"),
     S22_2_CONFIG: ("#e67e22", None),
     S8_2_CONFIG: ("#8e44ad", None),
+    S22_1_CONFIG: ("#c2185b", None),
 }
 
 # Runs trained via nnU-Net's own -pretrained_weights transfer (warm-started
