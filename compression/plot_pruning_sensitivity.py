@@ -184,9 +184,12 @@ def plot_individual(df: pd.DataFrame, cfg: dict, out_dir: Path) -> None:
     # axis genuinely linear-in-depth, not just categorical position-in-
     # stage), content-type code underneath.
     ax.set_xticklabels([f"{d}\n{position_label[d if d < n_slots else d - n_slots]}" for d in all_depths], fontsize=8)
-    ax.set_xlabel(f"Pruned block depth (0-{2 * n_slots - 1}, stage2.0..{n_slots - 1} then stage3.0..{n_slots - 1}) -- "
-                  "top=depth index, bottom=content (0=reg 3x3, 2/4/8/16=dilation rate)",
-                  color=SECONDARY_INK, fontsize=10)
+    if cfg["out_suffix"] == "_s19":
+        ax.set_xlabel("Block Depth", color=SECONDARY_INK, fontsize=10)
+    else:
+        ax.set_xlabel(f"Pruned block depth (0-{2 * n_slots - 1}, stage2.0..{n_slots - 1} then stage3.0..{n_slots - 1}) -- "
+                      "top=depth index, bottom=content (0=reg 3x3, 2/4/8/16=dilation rate)",
+                      color=SECONDARY_INK, fontsize=10)
     ax.set_title(f"{cfg['title_prefix']} sensitivity: single-block pruning, by depth", color=INK, fontsize=12)
     ax.legend(frameon=False, fontsize=9, labelcolor=SECONDARY_INK, loc="best")
     fig.tight_layout()
