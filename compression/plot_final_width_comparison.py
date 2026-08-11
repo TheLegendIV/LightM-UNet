@@ -23,9 +23,10 @@ line -- unlike the naive curve, its points come from entirely different
 architectures with no shared axis between them (channel width), so a
 connecting line would visually imply a continuous tradeoff that doesn't
 exist between e.g. S9.4 and S13.1. Front markers are an X. Configs in
-HIGHLIGHTED_CONFIGS (currently just S19) always get their own colored
-diamond, drawn on top of every other layer in every figure, regardless of
-whether they're actually on that figure's own Pareto front.
+HIGHLIGHTED_CONFIGS (currently empty -- no config called out) would get
+their own colored diamond, drawn on top of every other layer in every
+figure, regardless of whether they're actually on that figure's own Pareto
+front.
 
 Only rows with a compression/config_abbreviations.csv entry are
 considered (excludes pruning-grid rows, which live in results_pruning.csv
@@ -59,7 +60,6 @@ INK, SECONDARY_INK, MUTED, GRID, SURFACE = (
 )
 NAIVE_COLOR = "#2a78d6"
 PARETO_COLOR = "#1baf7a"
-S19_COLOR = "#d6272a"
 
 NAIVE_STAGE = "1_naive_baseline"
 
@@ -69,18 +69,9 @@ NAIVE_STAGE = "1_naive_baseline"
 # actually Pareto-optimal on that particular metric, in a color that
 # distinguishes it from the rest of the front and from every other
 # highlighted config.
-S19_COLDSTART_CONFIG = "nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid"
-S22_2_CONFIG = "nnUNetTrainerENet_22_2_dsc_projected_reginterleaved_nonneg_block"
-S8_2_CONFIG = "nnUNetTrainerENet_8_2_relu"
-S22_1_CONFIG = "nnUNetTrainerENet_22_1_dsc_projected_nonneg_block"
 # value = (marker color, legend label override -- None falls back to the
 # config's own config_abbreviations.csv abbrev, e.g. S5.3's "S5.3").
-HIGHLIGHTED_CONFIGS = {
-    S19_COLDSTART_CONFIG: (S19_COLOR, "S19"),
-    S22_2_CONFIG: ("#e67e22", None),
-    S8_2_CONFIG: ("#8e44ad", None),
-    S22_1_CONFIG: ("#c2185b", None),
-}
+HIGHLIGHTED_CONFIGS: dict[str, tuple[str, str | None]] = {}
 
 # Runs trained via nnU-Net's own -pretrained_weights transfer (warm-started
 # from an already-trained checkpoint) rather than from scratch, so their
