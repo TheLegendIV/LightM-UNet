@@ -259,7 +259,8 @@ def _plot_pairs(df: pd.DataFrame, cfg: dict, kind: str, out_name: str, title: st
     data = pd.DataFrame(records, columns=["stage", "depth", "content", "dice"])
     seam_data = pd.DataFrame(seam_records, columns=["depth", "content", "dice"])
 
-    is_s19_consec = cfg["out_suffix"] == "_s19" and kind == "consec"
+    is_s19 = cfg["out_suffix"] == "_s19"
+    is_s19_consec = is_s19 and kind == "consec"
 
     fig, ax = plt.subplots(figsize=(13, 6), facecolor=SURFACE)
     _style_axes(ax)
@@ -292,7 +293,7 @@ def _plot_pairs(df: pd.DataFrame, cfg: dict, kind: str, out_name: str, title: st
     all_rows = pd.concat(pair_frames, ignore_index=True).sort_values("depth").drop_duplicates()
     ax.set_xticks(all_rows["depth"])
     ax.set_xticklabels([f"{d}\n{c}" for d, c in zip(all_rows["depth"], all_rows["content"])], fontsize=8)
-    if is_s19_consec:
+    if is_s19:
         ax.set_xlabel("Block Depth", color=SECONDARY_INK, fontsize=10)
     else:
         ax.set_xlabel("Pruned pair's depth (anchored at its lower-position block) -- "
