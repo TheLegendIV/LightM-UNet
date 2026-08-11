@@ -30,12 +30,13 @@ pairs (not backfilled to all-pairs) -- its plots will just show fewer
 points in the same style, no code changes needed either way.
 
 Block naming on the x-axis matches ENet.py's actual content at each
-position, not the raw slot index: "0" = the reg-bookend RegularBottleneck
-(a real 3x3 conv, full-rank, no dilation), "2"/"4"/"8"/"16" = the dilated
-bottleneck at that rate. ("d" = a channel-changing Downsampling/Upsampling
-bottleneck -- never pruned by this grid, since apply_block_pruning's own
-docstring flags those as unsafe to Identity-out; included here only for
-completeness of the naming legend.)
+position, not the raw slot index: "1" = the reg-bookend RegularBottleneck
+(a real 3x3 conv, full-rank, dilation=1 -- RegularBottleneck's own default,
+since reg-bookend pattern slots never set a "dilation" key), "2"/"4"/"8"/"16"
+= the dilated bottleneck at that rate. ("d" = a channel-changing
+Downsampling/Upsampling bottleneck -- never pruned by this grid, since
+apply_block_pruning's own docstring flags those as unsafe to Identity-out;
+included here only for completeness of the naming legend.)
 
 This is a companion to compression/post-quantization/ptq.py in spirit
 (reusable, re-run any time collect_results.py adds more prune_* rows) but
@@ -86,8 +87,8 @@ MODEL_CONFIGS = {
         "prefix": "nnUNetTrainerENet_8_2_relu_prune_",
         "baseline_dice": 0.8218291109668183,
         "n_slots": 11,
-        "position_label": {0: "0", 1: "2", 2: "4", 3: "8", 4: "16",
-                            5: "0", 6: "2", 7: "4", 8: "8", 9: "16", 10: "0"},
+        "position_label": {0: "1", 1: "2", 2: "4", 3: "8", 4: "16",
+                            5: "1", 6: "2", 7: "4", 8: "8", 9: "16", 10: "1"},
         "title_prefix": "S8-ReLU",
         "out_suffix": "",
     },
@@ -95,8 +96,8 @@ MODEL_CONFIGS = {
         "prefix": "nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid_prune_",
         "baseline_dice": 0.793139270492374,
         "n_slots": 12,
-        "position_label": {0: "0", 1: "2", 2: "4", 3: "8", 4: "16",
-                            5: "0", 6: "0", 7: "2", 8: "4", 9: "8", 10: "16", 11: "0"},
+        "position_label": {0: "1", 1: "2", 2: "4", 3: "8", 4: "16",
+                            5: "1", 6: "1", 7: "2", 8: "4", 9: "8", 10: "16", 11: "1"},
         "title_prefix": "S19",
         "out_suffix": "_s19",
     },
@@ -203,7 +204,7 @@ def plot_individual(df: pd.DataFrame, cfg: dict, out_dir: Path) -> None:
         ax.set_xlabel("Block Depth", color=SECONDARY_INK, fontsize=10)
     else:
         ax.set_xlabel(f"Pruned block depth (0-{2 * n_slots - 1}, stage2.0..{n_slots - 1} then stage3.0..{n_slots - 1}) -- "
-                      "top=depth index, bottom=content (0=reg 3x3, 2/4/8/16=dilation rate)",
+                      "top=depth index, bottom=content (1=reg 3x3, 2/4/8/16=dilation rate)",
                       color=SECONDARY_INK, fontsize=10)
     ax.set_title(f"{cfg['title_prefix']} sensitivity: single-block pruning, by depth", color=INK, fontsize=12)
     ax.legend(frameon=False, fontsize=9, labelcolor=SECONDARY_INK, loc="best")
@@ -295,7 +296,7 @@ def _plot_pairs(df: pd.DataFrame, cfg: dict, kind: str, out_name: str, title: st
         ax.set_xlabel("Block Depth", color=SECONDARY_INK, fontsize=10)
     else:
         ax.set_xlabel("Pruned pair's depth (anchored at its lower-position block) -- "
-                      "top=depth index, bottom=content codes pruned (0=reg 3x3, 2/4/8/16=dilation rate)",
+                      "top=depth index, bottom=content codes pruned (1=reg 3x3, 2/4/8/16=dilation rate)",
                       color=SECONDARY_INK, fontsize=10)
     ax.set_title(title, color=INK, fontsize=12)
     ax.legend(frameon=False, fontsize=9, labelcolor=SECONDARY_INK, loc="best")
