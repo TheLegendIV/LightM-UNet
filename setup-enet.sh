@@ -44,7 +44,8 @@ python -m pip install \
     qonnx \
     onnx \
     onnxscript \
-    onnxoptimizer
+    onnxoptimizer \ zigzag-dse
+
 
 echo "=== Installing OpenCV headless ==="
 python -m pip uninstall -y opencv-python opencv-python-headless || true
