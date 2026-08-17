@@ -323,6 +323,14 @@ def _move_scalar_op_past_im2col(model: ModelWrapper, op_type: str):
         scalar_name = n.input[1]
         middle_name = n.output[0]
         end_name = consumer.output[0]
+        # Capture the ALREADY-CORRECT post-Im2Col shape (consumer's own
+        # output, annotated before this swap) so we can transplant it onto
+        # middle_name below -- qonnx's InferShapes() silently no-ops on
+        # Im2Col (a non-standard-ONNX custom op it can't shape-infer),
+        # so without this fixup middle_name is left with its STALE
+        # pre-swap shape (the old Mul's output, i.e. Im2Col's INPUT shape,
+        # not its real patch-expanded output shape) after the reorder.
+        correct_out_shape = model.get_tensor_shape(end_name)
         attrs = {a.name: get_attribute_value(a) for a in consumer.attribute}
         new_im2col = oh.make_node(
             "Im2Col", [start_name], [middle_name], name=consumer.name, domain=consumer.domain, **attrs
@@ -333,6 +341,7 @@ def _move_scalar_op_past_im2col(model: ModelWrapper, op_type: str):
         graph.node.remove(consumer)
         graph.node.insert(node_ind, new_im2col)
         graph.node.insert(node_ind + 1, new_scalar_op)
+        model.set_tensor_shape(middle_name, correct_out_shape)
         graph_modified = True
     if graph_modified:
         model = model.transform(InferShapes())
@@ -380,6 +389,13 @@ def _move_scalar_op_past_maxpoolnhwc(model: ModelWrapper, op_type: str):
         scalar_name = n.input[1]
         middle_name = n.output[0]
         end_name = consumer.output[0]
+        # Same fixup as _move_scalar_op_past_im2col: capture the
+        # ALREADY-CORRECT post-pool shape before the swap and transplant it
+        # onto middle_name afterward -- qonnx's InferShapes() silently
+        # no-ops on MaxPoolNHWC too, so middle_name would otherwise keep its
+        # stale pre-pool shape (the old Mul's output shape, i.e. this node's
+        # INPUT shape) instead of the correct pooled (halved H/W) shape.
+        correct_out_shape = model.get_tensor_shape(end_name)
         attrs = {a.name: get_attribute_value(a) for a in consumer.attribute}
         new_maxpool = oh.make_node(
             "MaxPoolNHWC", [start_name], [middle_name], name=consumer.name, domain=consumer.domain, **attrs
@@ -390,6 +406,7 @@ def _move_scalar_op_past_maxpoolnhwc(model: ModelWrapper, op_type: str):
         graph.node.remove(consumer)
         graph.node.insert(node_ind, new_maxpool)
         graph.node.insert(node_ind + 1, new_scalar_op)
+        model.set_tensor_shape(middle_name, correct_out_shape)
         graph_modified = True
     if graph_modified:
         model = model.transform(InferShapes())
