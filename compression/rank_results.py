@@ -2,28 +2,27 @@
 cost-vs-accuracy score, for the 4-class objective (LAD/RCA/LCX/LM on
 Dataset509_ARCADE_1x1_4c).
 
-score = alpha*macs_ratio + beta*params_ratio - gamma*dice_ratio, alpha=beta=
-gamma=1/3 (equal weighting) when a row has a real Dice value; alpha=beta=1/2
-(no Dice term at all, not just weight=0) when it doesn't yet -- e.g. a row
-collected before training finished, or an architecture-only cost-table entry
-with no trained checkpoint behind it. Dice term is SUBTRACTED, not added, so
-higher relative Dice pulls the score down/better (minimize = best).
-
-Simplified from the binary-run version of this script (still available in
-git history / compression/slurm/archive's era): activation memory is DROPPED
-as a factor entirely, per this session's instruction -- only parameter
-count, MACs, and Dice feed the score now. (Activation-memory's own table
-still exists at generate_cost_tables.py's discretion for anyone who wants
-it separately; it's just no longer part of this ranking.)
+score = 0.25*macs_ratio + 0.25*params_ratio + 0.25*mem_ratio - 0.25*dice_ratio,
+each ratio taken against U4 (nnUNetTrainerENet_1_naive_baseline_U4-- the
+compressed reference every downstream architecture probe is actually built
+off of, not the full-width Baseline). Equal 0.25 weighting across all four
+metrics when a row has real values for all of them; any metric missing for
+a given row (no Dice yet, no mem_elements backfilled, etc.) drops OUT of
+the formula entirely for that row and the remaining metrics are reweighted
+to split 1.0 equally among themselves -- a genuinely different (and
+correct) formula for that row, not a placeholder value standing in. Dice
+term is SUBTRACTED, not added, so higher relative Dice pulls the score
+down/better (minimize = best) -- consistent with the cost terms, where
+lower/cheaper is also better.
 
 MACs proxy: results.csv's `flops` column is proportional to MACs (flops =
 2*macs, from utils.count_flops), so macs_ratio = flops_ratio identically --
 no need to recompute MACs.
 
-Baseline: nnUNetTrainerENet_1_naive_baseline_Baseline (stage
-1_naive_baseline's full-width config, ENet-paper channels 16,64,128,64,16 --
-the same anchor stage_1's own grid and every downstream stage's probes are
-built off of).
+Baseline: nnUNetTrainerENet_1_naive_baseline_U4 (stage 1_naive_baseline's
+own U4-width config, channels=4,16,32,16,4 -- the actual shared reference
+point every arch-probe stage from stage_4 onward is built off of; see
+plot_arch_probes_focused.py's own U4-anchored framing).
 
 Usage:
     python compression/rank_results.py
@@ -36,11 +35,11 @@ import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_CSV = REPO_ROOT / "compression" / "results.csv"
+ABBREV_CSV = REPO_ROOT / "compression" / "config_abbreviations.csv"
 OUT_DIR = REPO_ROOT / "compression" / "results"
 
-EQUAL_WEIGHT_3 = 1 / 3  # macs, params, dice -- when dice is available
-EQUAL_WEIGHT_2 = 1 / 2  # macs, params only -- when dice is not (yet) available
-BASELINE_CONFIG = "nnUNetTrainerENet_1_naive_baseline_Baseline"
+METRIC_COLS = ("macs_ratio", "params_ratio", "mem_ratio", "dice_ratio")
+BASELINE_CONFIG = "nnUNetTrainerENet_1_naive_baseline_U4"
 
 STAGE_COLORS = {
     "1_naive_baseline": "#2a78d6", "2_special_ops": "#eb6834",
@@ -49,26 +48,39 @@ STAGE_COLORS = {
 
 # Display-only renames (results.csv's config_name is untouched).
 DISPLAY_NAME_OVERRIDES = {
-    "nnUNetTrainerENet_1_naive_baseline_Baseline": "Baseline",
-    "nnUNetTrainerENet_1_naive_baseline_U4": "U4 (compressed baseline)",
+    "nnUNetTrainerENet_1_naive_baseline_Baseline": "Baseline (full width)",
+    "nnUNetTrainerENet_1_naive_baseline_U4": "U4 (reference)",
 }
 
 
-def display_name(config_name: str) -> str:
+def load_abbreviations() -> dict[str, str]:
+    if not ABBREV_CSV.exists():
+        return {}
+    abbrev_df = pd.read_csv(ABBREV_CSV)
+    return dict(zip(abbrev_df["config_name"], abbrev_df["abbrev"]))
+
+
+def display_name(config_name: str, abbrev: dict[str, str]) -> str:
     if config_name in DISPLAY_NAME_OVERRIDES:
         return DISPLAY_NAME_OVERRIDES[config_name]
+    if config_name in abbrev:
+        return abbrev[config_name]
     return config_name.replace("nnUNetTrainerENet_", "")
 
 
-def row_score(macs_ratio: float, params_ratio: float, dice_ratio: float | None) -> float:
-    """dice_ratio=None (no real Dice for this row yet) drops the Dice term
-    from the formula entirely and reweights macs/params to 1/2 each, rather
-    than leaving it at 1/3 with an implicit zero contribution -- a genuinely
-    different (and correct) formula for that row, not a placeholder value
-    standing in for Dice."""
-    if dice_ratio is None:
-        return EQUAL_WEIGHT_2 * macs_ratio + EQUAL_WEIGHT_2 * params_ratio
-    return EQUAL_WEIGHT_3 * macs_ratio + EQUAL_WEIGHT_3 * params_ratio - EQUAL_WEIGHT_3 * dice_ratio
+def row_score(ratios: dict[str, float | None]) -> tuple[float, int]:
+    """Any ratio that's None (metric unavailable for this row) drops out of
+    the formula entirely -- the remaining ones split weight 1.0 equally
+    among themselves, not 0.25 each with an implicit zero. dice_ratio is
+    SUBTRACTED (higher relative dice = lower/better score); the three cost
+    ratios are ADDED (lower/cheaper = lower/better score). Returns
+    (score, n_metrics_used) so callers can flag partially-scored rows."""
+    present = {k: v for k, v in ratios.items() if v is not None}
+    if not present:
+        return float("nan"), 0
+    weight = 1.0 / len(present)
+    score = sum((-v if k == "dice_ratio" else v) * weight for k, v in present.items())
+    return score, len(present)
 
 
 def main() -> int:
@@ -91,37 +103,55 @@ def main() -> int:
     baseline = baseline_rows.iloc[0]
     baseline_macs = baseline["flops"]
     baseline_params = baseline["params"]
+    baseline_mem = baseline["mem_elements"] if "mem_elements" in baseline and pd.notna(baseline["mem_elements"]) else None
     baseline_dice = baseline["dice"] if pd.notna(baseline["dice"]) else None
     if baseline_dice is None:
         print(f"WARNING: baseline {BASELINE_CONFIG} itself has no Dice yet -- every row's dice_ratio "
               "will be treated as unavailable (no baseline to ratio against) until it does.")
+    if baseline_mem is None:
+        print(f"WARNING: baseline {BASELINE_CONFIG} itself has no mem_elements yet -- every row's mem_ratio "
+              "will be treated as unavailable until it does.")
 
     df["macs_ratio"] = df["flops"] / baseline_macs
     df["params_ratio"] = df["params"] / baseline_params
-    has_dice = df["dice"].notna() & (baseline_dice is not None)
+    df["mem_ratio"] = pd.NA
+    if baseline_mem is not None and "mem_elements" in df.columns:
+        has_mem = df["mem_elements"].notna()
+        df.loc[has_mem, "mem_ratio"] = df.loc[has_mem, "mem_elements"] / baseline_mem
     df["dice_ratio"] = pd.NA
-    df.loc[has_dice, "dice_ratio"] = df.loc[has_dice, "dice"] / baseline_dice
-    df["dice_is_placeholder"] = ~has_dice
+    if baseline_dice is not None:
+        has_dice = df["dice"].notna()
+        df.loc[has_dice, "dice_ratio"] = df.loc[has_dice, "dice"] / baseline_dice
 
-    df["score"] = [
-        row_score(row.macs_ratio, row.params_ratio, None if pd.isna(row.dice_ratio) else row.dice_ratio)
+    scores = [
+        row_score({
+            "macs_ratio": row.macs_ratio,
+            "params_ratio": row.params_ratio,
+            "mem_ratio": None if pd.isna(row.mem_ratio) else row.mem_ratio,
+            "dice_ratio": None if pd.isna(row.dice_ratio) else row.dice_ratio,
+        })
         for row in df.itertuples()
     ]
+    df["score"] = [s for s, _ in scores]
+    df["n_metrics_used"] = [n for _, n in scores]
+    df["score_is_partial"] = df["n_metrics_used"] < 4
 
     df = df.sort_values("score", ignore_index=True)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out_csv = OUT_DIR / "ranking.csv"
-    cols = ["config_name", "stage", "params", "flops", "dice", "dice_LAD", "dice_RCA", "dice_LCX", "dice_LM",
-            "macs_ratio", "params_ratio", "dice_ratio", "dice_is_placeholder", "score"]
+    cols = ["config_name", "stage", "params", "flops", "mem_elements", "dice",
+            "dice_LAD", "dice_RCA", "dice_LCX", "dice_LM",
+            "macs_ratio", "params_ratio", "mem_ratio", "dice_ratio",
+            "n_metrics_used", "score_is_partial", "score"]
     cols = [c for c in cols if c in df.columns]
     df[cols].to_csv(out_csv, index=False)
-    print(f"Wrote {out_csv} ({len(df)} configs, equal-weighted macs/params/dice -- "
-          f"{EQUAL_WEIGHT_3:.3f} each when dice present, {EQUAL_WEIGHT_2:.3f} macs/params when not)")
-    print(df[["config_name", "stage", "macs_ratio", "params_ratio", "dice_ratio", "dice_is_placeholder", "score"]]
-          .to_string(index=False))
-    if df["dice_is_placeholder"].any():
-        print(f"\nNOTE: {df['dice_is_placeholder'].sum()}/{len(df)} rows have no Dice yet -- scored on "
-              "macs_ratio/params_ratio 50/50 only. Re-run after those configs finish training/collecting.")
+    print(f"Wrote {out_csv} ({len(df)} configs, 0.25 each of macs/params/mem/dice ratio vs. {BASELINE_CONFIG} "
+          f"when all 4 are present; missing metrics drop out and the rest reweight equally per-row)")
+    print(df[["config_name", "stage", "macs_ratio", "params_ratio", "mem_ratio", "dice_ratio",
+              "n_metrics_used", "score"]].to_string(index=False))
+    if df["score_is_partial"].any():
+        print(f"\nNOTE: {df['score_is_partial'].sum()}/{len(df)} rows scored on fewer than all 4 metrics "
+              "(missing dice and/or mem_elements) -- see n_metrics_used per row.")
 
     plot_ranking(df)
     return 0
@@ -141,7 +171,8 @@ def plot_ranking(df: pd.DataFrame) -> None:
         spine.set_color(baseline_color)
     ax.tick_params(colors=muted, labelsize=8)
 
-    labels = [display_name(row.config_name) for row in df.itertuples()]
+    abbrev = load_abbreviations()
+    labels = [display_name(row.config_name, abbrev) for row in df.itertuples()]
     colors = [STAGE_COLORS.get(row.stage, "#666666") for row in df.itertuples()]
     y_pos = range(len(df))
     ax.barh(y_pos, df["score"], color=colors, zorder=3, height=0.7)
@@ -150,18 +181,19 @@ def plot_ranking(df: pd.DataFrame) -> None:
     ax.invert_yaxis()  # best (lowest score) at top
     ax.axvline(0, color=baseline_color, linewidth=1)
 
-    placeholder_note = " (dashed label = no Dice yet, macs/params 50/50 only)" if df["dice_is_placeholder"].any() else ""
-    for y, is_placeholder in zip(y_pos, df["dice_is_placeholder"]):
-        if is_placeholder:
+    placeholder_note = " (italic label = fewer than 4 metrics available, see n_metrics_used)" if df["score_is_partial"].any() else ""
+    for y, is_partial in zip(y_pos, df["score_is_partial"]):
+        if is_partial:
             ax.get_yticklabels()[y].set_fontstyle("italic")
 
     ax.set_xlabel(
-        f"score = {EQUAL_WEIGHT_3:.2f}·MACs_ratio + {EQUAL_WEIGHT_3:.2f}·params_ratio − {EQUAL_WEIGHT_3:.2f}·Dice_ratio "
-        f"(50/50 macs/params if no Dice yet) -- lower = cheaper vs. Baseline, weighted against accuracy loss"
+        "score = 0.25·MACs_ratio + 0.25·params_ratio + 0.25·mem_ratio − 0.25·Dice_ratio, each vs. U4 "
+        "(equal reweight among available metrics if any are missing for a row) -- "
+        "lower = cheaper/less-memory vs. U4, weighted against accuracy loss"
         + placeholder_note,
         color=secondary_ink, fontsize=9,
     )
-    ax.set_title("4-class objective: cost-vs-accuracy ranking (vs. Baseline)", color=ink, fontsize=12)
+    ax.set_title("4-class objective: cost-vs-accuracy ranking (vs. U4)", color=ink, fontsize=12)
 
     present_stages = [s for s in STAGE_COLORS if s in df["stage"].unique()]
     handles = [Patch(facecolor=STAGE_COLORS[s], label=s) for s in present_stages]

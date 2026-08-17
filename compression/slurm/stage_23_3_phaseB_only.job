@@ -1,0 +1,168 @@
+#!/bin/bash
+#SBATCH --job-name=stage_23_3_phaseB_only
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# Stage 23, strategy 3, PHASE B ONLY -- stage_23_3_s19_binary_prelu_then_4c_
+# nonneg.job's original combined job packed both 150-epoch phases (plus the
+# slope-extraction step in between) into one 8h SLURM allocation; Phase A
+# (binary Dataset501, standard PReLU) completed -- checkpoint_final.pth
+# confirmed present -- but Phase B (Dataset509 4c, nonneg_block) never
+# produced one, most likely because the combined job ran past its own
+# --time=08:00:00 limit partway through or right after Phase A. Rather than
+# re-run Phase A too, this picks up exactly where the combined job left
+# off: extracts Phase A's per-block PReLU slope means (if not already
+# extracted), then runs Phase B alone with a full fresh 4h budget (matching
+# stage_23_1's own single-phase job, which needed under 4h for one
+# 150-epoch run).
+#
+# Everything else (architecture, dataset, output naming, extraction args,
+# collect_results.py call) is byte-identical to stage_23_3_s19_binary_
+# prelu_then_4c_nonneg.job's own Phase A-checkpoint-exists-onward section --
+# see that file for the full strategy rationale.
+
+DATASET_ID_B=509
+DATASET_NAME_B="Dataset509_ARCADE_1x1_4c"
+
+RUN_NAME_A="23_3a_s19_binary_prelu"
+RUN_NAME_B="23_3_s19_binary_prelu_then_4c_nonneg"
+TRAINER_CLASS="nnUNetTrainerENet"
+SLOPE_MAP_FILE="compression/post-quantization/slope_maps/23_3a_s19_binary_prelu.json"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- ENet trainer knobs -- S19's exact recipe --------------------------------
+export ENET_CHANNELS="4,16,32,16,4"
+export ENET_BOTTLENECKS="4,12,12,2,1"
+export ENET_CONTEXT_PATTERN="dense_dilation_reg_interleaved_double_mid"
+export ENET_DECODER_TYPE="upsample_conv"
+export ENET_USE_PRELU=1
+export ENET_USE_DILATED=1
+export ENET_USE_ASYMMETRIC=0
+export ENET_USE_STRIDED=1
+export ENET_USE_DSC=0
+export ENET_SEPARABLE_DILATED=1
+export ENET_DSC_NO_PROJECTION=0
+export ENET_EPOCHS=150
+
+OUTPUT_FOLDER_A="$nnUNet_results/Dataset501_ARCADE/${TRAINER_CLASS}_${RUN_NAME_A}__nnUNetPlans__2d/fold_0"
+OUTPUT_FOLDER_B="$nnUNet_results/${DATASET_NAME_B}/${TRAINER_CLASS}_${RUN_NAME_B}__nnUNetPlans__2d/fold_0"
+PRETRAINED_CKPT="${OUTPUT_FOLDER_A}/checkpoint_final.pth"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Phase B only: ${RUN_NAME_B} on ${DATASET_NAME_B} (nonneg_block, warm-started from Phase A: ${PRETRAINED_CKPT})"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+echo "=== Checking Phase A checkpoint exists ==="
+if [ ! -f "${PRETRAINED_CKPT}" ]; then
+    echo "ERROR: Phase A checkpoint not found at ${PRETRAINED_CKPT} -- Phase A needs to complete first "\
+         "(this job does NOT run Phase A -- see stage_23_3_s19_binary_prelu_then_4c_nonneg.job for the combined version)." >&2
+    exit 1
+fi
+
+echo "=== Extracting Phase A's real per-block leaky slope map (standard PReLU source) ==="
+cd "$HOME/LightM-UNet"
+if [ -f "$SLOPE_MAP_FILE" ]; then
+    echo "$SLOPE_MAP_FILE already exists -- skipping extraction."
+else
+    python compression/post-quantization/extract_leaky_slope_map.py \
+        --net-name "${TRAINER_CLASS}_${RUN_NAME_A}" \
+        --dataset-name "Dataset501_ARCADE" \
+        --channels "${ENET_CHANNELS}" --bottlenecks "${ENET_BOTTLENECKS}" --decoder-type "${ENET_DECODER_TYPE}" \
+        --use-asymmetric "${ENET_USE_ASYMMETRIC}" --context-pattern "${ENET_CONTEXT_PATTERN}" \
+        --separable-dilated "${ENET_SEPARABLE_DILATED}" --dsc-no-projection "${ENET_DSC_NO_PROJECTION}" \
+        --prelu-variant standard --out-channels 2 \
+        --checkpoint-name checkpoint_final.pth \
+        --out-file "$SLOPE_MAP_FILE"
+fi
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess Dataset509 (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME_B}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID_B}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME_B}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME_B}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME_B}/splits_final.json"
+fi
+
+echo "=== Checking for a COMPLETED checkpoint for ${RUN_NAME_B} ==="
+export ENET_OUTPUT_FOLDER="${OUTPUT_FOLDER_B}"
+export ENET_PRELU_VARIANT="nonneg_block"  # Phase B: switch to nonneg_block
+export ENET_NONNEG_BLOCK_INIT_MAP="$(cd "$HOME/LightM-UNet" && python -c "import json; print(json.dumps(json.load(open('${SLOPE_MAP_FILE}'))))")"
+if [ -f "${OUTPUT_FOLDER_B}/checkpoint_final.pth" ]; then
+    echo "checkpoint_final.pth already exists at ${OUTPUT_FOLDER_B} -- skipping training, going straight to collect_results.py."
+else
+    echo "=== Start training: ${RUN_NAME_B} (warm-started from ${PRETRAINED_CKPT}, nonneg_block init from Phase A's slope map) ==="
+    nnUNetv2_train "${DATASET_NAME_B}" 2d 0 -tr "${TRAINER_CLASS}" -pretrained_weights "${PRETRAINED_CKPT}"
+    echo "Training finished for ${RUN_NAME_B}."
+
+    echo "=== Archiving checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME_B}" "${TRAINER_CLASS}_${RUN_NAME_B}" 2d 0
+fi
+
+echo "=== Collecting results into compression/results.csv ==="
+# No --leaky-slope-map here -- that flag only has an effect on
+# prelu_variant="leaky", not nonneg_block. Phase B's checkpoint already has
+# its own trained NonNegativePReLU per-block scalars baked in.
+cd "$HOME/LightM-UNet"
+python compression/collect_results.py \
+    --net-name "${TRAINER_CLASS}_${RUN_NAME_B}" \
+    --stage 23_s19_transfer_strategies \
+    --dataset-name "${DATASET_NAME_B}" \
+    --dataset-id "${DATASET_ID_B}" \
+    --channels "${ENET_CHANNELS}" \
+    --bottlenecks "${ENET_BOTTLENECKS}" \
+    --decoder-type "${ENET_DECODER_TYPE}" \
+    --use-dilated "${ENET_USE_DILATED}" \
+    --use-asymmetric "${ENET_USE_ASYMMETRIC}" \
+    --use-strided "${ENET_USE_STRIDED}" \
+    --use-dsc "${ENET_USE_DSC}" \
+    --separable-dilated "${ENET_SEPARABLE_DILATED}" \
+    --context-pattern "${ENET_CONTEXT_PATTERN}" \
+    --use-prelu "${ENET_USE_PRELU}" \
+    --prelu-variant "${ENET_PRELU_VARIANT}" \
+    --dsc-no-projection "${ENET_DSC_NO_PROJECTION}" \
+    --trainer-class "${TRAINER_CLASS}"
+
+echo "Done: ${RUN_NAME_B} (Phase B only, via existing ${RUN_NAME_A})."

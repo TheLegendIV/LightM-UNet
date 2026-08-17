@@ -30,12 +30,13 @@ pairs (not backfilled to all-pairs) -- its plots will just show fewer
 points in the same style, no code changes needed either way.
 
 Block naming on the x-axis matches ENet.py's actual content at each
-position, not the raw slot index: "0" = the reg-bookend RegularBottleneck
-(a real 3x3 conv, full-rank, no dilation), "2"/"4"/"8"/"16" = the dilated
-bottleneck at that rate. ("d" = a channel-changing Downsampling/Upsampling
-bottleneck -- never pruned by this grid, since apply_block_pruning's own
-docstring flags those as unsafe to Identity-out; included here only for
-completeness of the naming legend.)
+position, not the raw slot index: "1" = the reg-bookend RegularBottleneck
+(a real 3x3 conv, full-rank, dilation=1 -- RegularBottleneck's own default,
+since reg-bookend pattern slots never set a "dilation" key), "2"/"4"/"8"/"16"
+= the dilated bottleneck at that rate. ("d" = a channel-changing
+Downsampling/Upsampling bottleneck -- never pruned by this grid, since
+apply_block_pruning's own docstring flags those as unsafe to Identity-out;
+included here only for completeness of the naming legend.)
 
 This is a companion to compression/post-quantization/ptq.py in spirit
 (reusable, re-run any time collect_results.py adds more prune_* rows) but
@@ -86,8 +87,8 @@ MODEL_CONFIGS = {
         "prefix": "nnUNetTrainerENet_8_2_relu_prune_",
         "baseline_dice": 0.8218291109668183,
         "n_slots": 11,
-        "position_label": {0: "0", 1: "2", 2: "4", 3: "8", 4: "16",
-                            5: "0", 6: "2", 7: "4", 8: "8", 9: "16", 10: "0"},
+        "position_label": {0: "1", 1: "2", 2: "4", 3: "8", 4: "16",
+                            5: "1", 6: "2", 7: "4", 8: "8", 9: "16", 10: "1"},
         "title_prefix": "S8-ReLU",
         "out_suffix": "",
     },
@@ -95,8 +96,8 @@ MODEL_CONFIGS = {
         "prefix": "nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid_prune_",
         "baseline_dice": 0.793139270492374,
         "n_slots": 12,
-        "position_label": {0: "0", 1: "2", 2: "4", 3: "8", 4: "16",
-                            5: "0", 6: "0", 7: "2", 8: "4", 9: "8", 10: "16", 11: "0"},
+        "position_label": {0: "1", 1: "2", 2: "4", 3: "8", 4: "16",
+                            5: "1", 6: "1", 7: "2", 8: "4", 9: "8", 10: "16", 11: "1"},
         "title_prefix": "S19",
         "out_suffix": "_s19",
     },
@@ -121,6 +122,20 @@ def _style_axes(ax) -> None:
         spine.set_color("#c3c2b7")
     ax.tick_params(colors=MUTED, labelsize=9)
     ax.set_ylabel("Dice (mean of LAD/RCA/LCX/LM)", color=SECONDARY_INK, fontsize=10)
+
+
+# S19's three plots (individual/consec/skip) previously landed on different
+# auto-chosen y-tick spacings (0.02/0.05/0.025) purely because matplotlib
+# picks locators from each plot's own data range -- made the three harder
+# to visually compare side by side. Forced to the same 0.05 step on all
+# three (S8-ReLU's plots are untouched, still auto-spaced).
+S19_Y_TICK_STEP = 0.05
+
+
+def _apply_y_tick_step(ax, cfg: dict) -> None:
+    if cfg["out_suffix"] == "_s19":
+        from matplotlib.ticker import MultipleLocator
+        ax.yaxis.set_major_locator(MultipleLocator(S19_Y_TICK_STEP))
 
 
 def _add_baseline(ax, baseline_dice: float) -> None:
@@ -162,6 +177,7 @@ def plot_individual(df: pd.DataFrame, cfg: dict, out_dir: Path) -> None:
 
     fig, ax = plt.subplots(figsize=(13, 6), facecolor=SURFACE)
     _style_axes(ax)
+    _apply_y_tick_step(ax, cfg)
     _add_baseline(ax, cfg["baseline_dice"])
     # One continuous connecting line across the full depth-ordered walk
     # (neutral color -- stage identity is carried by the marker color
@@ -184,9 +200,12 @@ def plot_individual(df: pd.DataFrame, cfg: dict, out_dir: Path) -> None:
     # axis genuinely linear-in-depth, not just categorical position-in-
     # stage), content-type code underneath.
     ax.set_xticklabels([f"{d}\n{position_label[d if d < n_slots else d - n_slots]}" for d in all_depths], fontsize=8)
-    ax.set_xlabel(f"Pruned block depth (0-{2 * n_slots - 1}, stage2.0..{n_slots - 1} then stage3.0..{n_slots - 1}) -- "
-                  "top=depth index, bottom=content (0=reg 3x3, 2/4/8/16=dilation rate)",
-                  color=SECONDARY_INK, fontsize=10)
+    if cfg["out_suffix"] == "_s19":
+        ax.set_xlabel("Block Depth", color=SECONDARY_INK, fontsize=10)
+    else:
+        ax.set_xlabel(f"Pruned block depth (0-{2 * n_slots - 1}, stage2.0..{n_slots - 1} then stage3.0..{n_slots - 1}) -- "
+                      "top=depth index, bottom=content (1=reg 3x3, 2/4/8/16=dilation rate)",
+                      color=SECONDARY_INK, fontsize=10)
     ax.set_title(f"{cfg['title_prefix']} sensitivity: single-block pruning, by depth", color=INK, fontsize=12)
     ax.legend(frameon=False, fontsize=9, labelcolor=SECONDARY_INK, loc="best")
     fig.tight_layout()
@@ -240,8 +259,12 @@ def _plot_pairs(df: pd.DataFrame, cfg: dict, kind: str, out_name: str, title: st
     data = pd.DataFrame(records, columns=["stage", "depth", "content", "dice"])
     seam_data = pd.DataFrame(seam_records, columns=["depth", "content", "dice"])
 
+    is_s19 = cfg["out_suffix"] == "_s19"
+    is_s19_consec = is_s19 and kind == "consec"
+
     fig, ax = plt.subplots(figsize=(13, 6), facecolor=SURFACE)
     _style_axes(ax)
+    _apply_y_tick_step(ax, cfg)
     _add_baseline(ax, cfg["baseline_dice"])
     for stage, color in STAGE_COLORS.items():
         subset = data[data["stage"] == stage].sort_values("depth")
@@ -251,8 +274,14 @@ def _plot_pairs(df: pd.DataFrame, cfg: dict, kind: str, out_name: str, title: st
                  markersize=7, markeredgecolor="black", markeredgewidth=0.5, zorder=3,
                  label=stage)
     if not seam_data.empty:
-        ax.scatter(seam_data["depth"], seam_data["dice"], color=SEAM_COLOR, s=140, zorder=4,
-                   marker="*", edgecolors="black", linewidths=0.7, label="stage2->stage3 seam")
+        # Same "o" marker as the stage lines above (not a star) on the S19
+        # consec plot -- distinct color still carries the seam's own
+        # identity in the legend, it just isn't visually special-shaped
+        # anymore.
+        seam_marker = "o" if is_s19_consec else "*"
+        seam_size = 70 if is_s19_consec else 140
+        ax.scatter(seam_data["depth"], seam_data["dice"], color=SEAM_COLOR, s=seam_size, zorder=4,
+                   marker=seam_marker, edgecolors="black", linewidths=0.7, label="stage2->stage3 seam")
     if (data["stage"] == "stage2").any() and (data["stage"] == "stage3").any():
         boundary = n_slots - 0.5
         ax.axvline(boundary, color=GRID, linewidth=1.5, zorder=1)
@@ -264,9 +293,12 @@ def _plot_pairs(df: pd.DataFrame, cfg: dict, kind: str, out_name: str, title: st
     all_rows = pd.concat(pair_frames, ignore_index=True).sort_values("depth").drop_duplicates()
     ax.set_xticks(all_rows["depth"])
     ax.set_xticklabels([f"{d}\n{c}" for d, c in zip(all_rows["depth"], all_rows["content"])], fontsize=8)
-    ax.set_xlabel("Pruned pair's depth (anchored at its lower-position block) -- "
-                  "top=depth index, bottom=content codes pruned (0=reg 3x3, 2/4/8/16=dilation rate)",
-                  color=SECONDARY_INK, fontsize=10)
+    if is_s19:
+        ax.set_xlabel("Block Depth", color=SECONDARY_INK, fontsize=10)
+    else:
+        ax.set_xlabel("Pruned pair's depth (anchored at its lower-position block) -- "
+                      "top=depth index, bottom=content codes pruned (1=reg 3x3, 2/4/8/16=dilation rate)",
+                      color=SECONDARY_INK, fontsize=10)
     ax.set_title(title, color=INK, fontsize=12)
     ax.legend(frameon=False, fontsize=9, labelcolor=SECONDARY_INK, loc="best")
     fig.tight_layout()
