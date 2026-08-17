@@ -50,6 +50,10 @@ def step_reapply_unique_names(model: ModelWrapper, cfg: DataflowBuildConfig):
     return model.transform(GiveUniqueNodeNames())
 
 ENET_DIR = "/home/thelegendiv/finn/notebooks/enet"
+# 2026-08-17: corrected-width (16,64,128,64,16) re-export at 512x512 input
+# (finn_export_original_enet_int8.py), confirmed via node/op-histogram
+# inspection -- Conv/BatchNormalization/ConvTranspose/MaxPool/Quant/Relu only,
+# no Resize/Upsample/MaxUnpool/PRelu -- FINN-compatible as-is.
 MODEL_NAME = "quantEnet_original_int8"
 MODEL_FILE = os.path.join(ENET_DIR, f"{MODEL_NAME}.onnx")
 
