@@ -1,0 +1,191 @@
+[2026-08-17 19:39:08,839] Running step: step_qonnx_to_finn [1/9]
+[2026-08-17 19:42:41,696] Running step: step_enet_tidy [2/9]
+[2026-08-17 19:43:03,013] Running step: step_enet_streamline [3/9]
+[2026-08-17 19:44:58,389] /home/thelegendiv/finn/deps/qonnx/src/qonnx/transformation/infer_data_layouts.py:127: UserWarning: Assuming 4D input is NCHW
+[2026-08-17 19:44:58,389]   warnings.warn("Assuming 4D input is NCHW")
+[2026-08-17 19:45:00,820] Running step: step_enet_convert_to_hw [4/9]
+[2026-08-17 19:45:08,221] /home/thelegendiv/finn/src/finn/transformation/fpgadataflow/convert_to_hw_layers.py:668: UserWarning: Broadcasting Mul(Mul_0)
+[2026-08-17 19:45:08,221]   warnings.warn("Broadcasting " + str(node.op_type) + "(" + node.name + ")")
+[2026-08-17 19:45:40,405] Running step: step_create_dataflow_partition [5/9]
+[2026-08-17 19:45:41,455] Running step: step_specialize_layers [6/9]
+[2026-08-17 19:45:42,493] Running step: step_reapply_unique_names [7/9]
+[2026-08-17 19:45:42,615] Running step: step_minimize_bit_width [8/9]
+[2026-08-17 19:45:42,761] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_0: INT32 -> INT18
+[2026-08-17 19:45:42,761]   warnings.warn(warn_str)
+[2026-08-17 19:45:44,064] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_1: INT32 -> INT21
+[2026-08-17 19:45:44,064]   warnings.warn(warn_str)
+[2026-08-17 19:45:44,970] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_2: INT32 -> INT20
+[2026-08-17 19:45:44,970]   warnings.warn(warn_str)
+[2026-08-17 19:45:46,949] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_3: INT32 -> INT22
+[2026-08-17 19:45:46,949]   warnings.warn(warn_str)
+[2026-08-17 19:45:48,294] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_4: INT32 -> INT19
+[2026-08-17 19:45:48,294]   warnings.warn(warn_str)
+[2026-08-17 19:45:50,305] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_6: INT32 -> INT21
+[2026-08-17 19:45:50,305]   warnings.warn(warn_str)
+[2026-08-17 19:45:51,782] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_7: INT32 -> INT22
+[2026-08-17 19:45:51,782]   warnings.warn(warn_str)
+[2026-08-17 19:45:53,056] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_8: INT32 -> INT19
+[2026-08-17 19:45:53,056]   warnings.warn(warn_str)
+[2026-08-17 19:45:55,095] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_10: INT32 -> INT21
+[2026-08-17 19:45:55,096]   warnings.warn(warn_str)
+[2026-08-17 19:45:56,448] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_11: INT32 -> INT22
+[2026-08-17 19:45:56,448]   warnings.warn(warn_str)
+[2026-08-17 19:45:57,954] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_12: INT32 -> INT20
+[2026-08-17 19:45:57,954]   warnings.warn(warn_str)
+[2026-08-17 19:46:00,069] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_14: INT32 -> INT21
+[2026-08-17 19:46:00,069]   warnings.warn(warn_str)
+[2026-08-17 19:46:01,713] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_15: INT32 -> INT22
+[2026-08-17 19:46:01,713]   warnings.warn(warn_str)
+[2026-08-17 19:46:03,110] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_16: INT32 -> INT20
+[2026-08-17 19:46:03,110]   warnings.warn(warn_str)
+[2026-08-17 19:46:04,927] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_18: INT32 -> INT21
+[2026-08-17 19:46:04,927]   warnings.warn(warn_str)
+[2026-08-17 19:46:06,195] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_19: INT32 -> INT22
+[2026-08-17 19:46:06,195]   warnings.warn(warn_str)
+[2026-08-17 19:46:07,526] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_20: INT32 -> INT19
+[2026-08-17 19:46:07,526]   warnings.warn(warn_str)
+[2026-08-17 19:46:09,493] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_22: INT32 -> INT23
+[2026-08-17 19:46:09,493]   warnings.warn(warn_str)
+[2026-08-17 19:46:10,282] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_23: INT32 -> INT21
+[2026-08-17 19:46:10,282]   warnings.warn(warn_str)
+[2026-08-17 19:46:12,240] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_24: INT32 -> INT23
+[2026-08-17 19:46:12,241]   warnings.warn(warn_str)
+[2026-08-17 19:46:13,484] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_25: INT32 -> INT20
+[2026-08-17 19:46:13,484]   warnings.warn(warn_str)
+[2026-08-17 19:46:15,170] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_27: INT32 -> INT22
+[2026-08-17 19:46:15,170]   warnings.warn(warn_str)
+[2026-08-17 19:46:16,604] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_28: INT32 -> INT23
+[2026-08-17 19:46:16,604]   warnings.warn(warn_str)
+[2026-08-17 19:46:17,911] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_29: INT32 -> INT20
+[2026-08-17 19:46:17,911]   warnings.warn(warn_str)
+[2026-08-17 19:46:19,801] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_31: INT32 -> INT22
+[2026-08-17 19:46:19,801]   warnings.warn(warn_str)
+[2026-08-17 19:46:21,060] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_32: INT32 -> INT23
+[2026-08-17 19:46:21,060]   warnings.warn(warn_str)
+[2026-08-17 19:46:22,450] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_33: INT32 -> INT20
+[2026-08-17 19:46:22,451]   warnings.warn(warn_str)
+[2026-08-17 19:46:24,248] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_35: INT32 -> INT22
+[2026-08-17 19:46:24,248]   warnings.warn(warn_str)
+[2026-08-17 19:46:25,569] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_36: INT32 -> INT23
+[2026-08-17 19:46:25,569]   warnings.warn(warn_str)
+[2026-08-17 19:46:26,925] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_37: INT32 -> INT20
+[2026-08-17 19:46:26,925]   warnings.warn(warn_str)
+[2026-08-17 19:46:28,716] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_39: INT32 -> INT22
+[2026-08-17 19:46:28,716]   warnings.warn(warn_str)
+[2026-08-17 19:46:30,033] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_40: INT32 -> INT23
+[2026-08-17 19:46:30,033]   warnings.warn(warn_str)
+[2026-08-17 19:46:31,362] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_41: INT32 -> INT20
+[2026-08-17 19:46:31,362]   warnings.warn(warn_str)
+[2026-08-17 19:46:33,198] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_43: INT32 -> INT22
+[2026-08-17 19:46:33,198]   warnings.warn(warn_str)
+[2026-08-17 19:46:34,457] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_44: INT32 -> INT23
+[2026-08-17 19:46:34,457]   warnings.warn(warn_str)
+[2026-08-17 19:46:35,809] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_45: INT32 -> INT20
+[2026-08-17 19:46:35,809]   warnings.warn(warn_str)
+[2026-08-17 19:46:37,594] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_47: INT32 -> INT22
+[2026-08-17 19:46:37,594]   warnings.warn(warn_str)
+[2026-08-17 19:46:38,941] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_48: INT32 -> INT23
+[2026-08-17 19:46:38,941]   warnings.warn(warn_str)
+[2026-08-17 19:46:40,470] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_49: INT32 -> INT20
+[2026-08-17 19:46:40,470]   warnings.warn(warn_str)
+[2026-08-17 19:46:42,332] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_51: INT32 -> INT22
+[2026-08-17 19:46:42,332]   warnings.warn(warn_str)
+[2026-08-17 19:46:43,535] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_52: INT32 -> INT23
+[2026-08-17 19:46:43,535]   warnings.warn(warn_str)
+[2026-08-17 19:46:44,975] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_53: INT32 -> INT20
+[2026-08-17 19:46:44,975]   warnings.warn(warn_str)
+[2026-08-17 19:46:46,771] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_55: INT32 -> INT22
+[2026-08-17 19:46:46,771]   warnings.warn(warn_str)
+[2026-08-17 19:46:48,030] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_56: INT32 -> INT23
+[2026-08-17 19:46:48,030]   warnings.warn(warn_str)
+[2026-08-17 19:46:49,398] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_57: INT32 -> INT20
+[2026-08-17 19:46:49,398]   warnings.warn(warn_str)
+[2026-08-17 19:46:51,346] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_59: INT32 -> INT22
+[2026-08-17 19:46:51,347]   warnings.warn(warn_str)
+[2026-08-17 19:46:52,614] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_60: INT32 -> INT23
+[2026-08-17 19:46:52,614]   warnings.warn(warn_str)
+[2026-08-17 19:46:53,929] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_61: INT32 -> INT20
+[2026-08-17 19:46:53,929]   warnings.warn(warn_str)
+[2026-08-17 19:46:56,792] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_63: INT32 -> INT22
+[2026-08-17 19:46:56,792]   warnings.warn(warn_str)
+[2026-08-17 19:46:58,292] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_64: INT32 -> INT23
+[2026-08-17 19:46:58,292]   warnings.warn(warn_str)
+[2026-08-17 19:46:59,835] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_65: INT32 -> INT20
+[2026-08-17 19:46:59,835]   warnings.warn(warn_str)
+[2026-08-17 19:47:01,738] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_67: INT32 -> INT22
+[2026-08-17 19:47:01,738]   warnings.warn(warn_str)
+[2026-08-17 19:47:03,172] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_68: INT32 -> INT23
+[2026-08-17 19:47:03,172]   warnings.warn(warn_str)
+[2026-08-17 19:47:04,459] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_69: INT32 -> INT20
+[2026-08-17 19:47:04,459]   warnings.warn(warn_str)
+[2026-08-17 19:47:06,405] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_71: INT32 -> INT22
+[2026-08-17 19:47:06,405]   warnings.warn(warn_str)
+[2026-08-17 19:47:07,780] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_72: INT32 -> INT23
+[2026-08-17 19:47:07,780]   warnings.warn(warn_str)
+[2026-08-17 19:47:09,226] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_73: INT32 -> INT20
+[2026-08-17 19:47:09,226]   warnings.warn(warn_str)
+[2026-08-17 19:47:11,265] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_75: INT32 -> INT22
+[2026-08-17 19:47:11,265]   warnings.warn(warn_str)
+[2026-08-17 19:47:12,687] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_76: INT32 -> INT23
+[2026-08-17 19:47:12,688]   warnings.warn(warn_str)
+[2026-08-17 19:47:14,045] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_77: INT32 -> INT20
+[2026-08-17 19:47:14,045]   warnings.warn(warn_str)
+[2026-08-17 19:47:16,019] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_79: INT32 -> INT22
+[2026-08-17 19:47:16,019]   warnings.warn(warn_str)
+[2026-08-17 19:47:17,322] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_80: INT32 -> INT23
+[2026-08-17 19:47:17,323]   warnings.warn(warn_str)
+[2026-08-17 19:47:18,775] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_81: INT32 -> INT20
+[2026-08-17 19:47:18,775]   warnings.warn(warn_str)
+[2026-08-17 19:47:20,696] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_83: INT32 -> INT22
+[2026-08-17 19:47:20,696]   warnings.warn(warn_str)
+[2026-08-17 19:47:22,009] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_84: INT32 -> INT23
+[2026-08-17 19:47:22,009]   warnings.warn(warn_str)
+[2026-08-17 19:47:23,980] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_85: INT32 -> INT20
+[2026-08-17 19:47:23,980]   warnings.warn(warn_str)
+[2026-08-17 19:47:27,168] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_87: INT32 -> INT22
+[2026-08-17 19:47:27,168]   warnings.warn(warn_str)
+[2026-08-17 19:47:28,524] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_88: INT32 -> INT23
+[2026-08-17 19:47:28,524]   warnings.warn(warn_str)
+[2026-08-17 19:47:30,109] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_89: INT32 -> INT20
+[2026-08-17 19:47:30,109]   warnings.warn(warn_str)
+[2026-08-17 19:47:32,335] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_91: INT32 -> INT22
+[2026-08-17 19:47:32,335]   warnings.warn(warn_str)
+[2026-08-17 19:47:33,767] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_92: INT32 -> INT24
+[2026-08-17 19:47:33,767]   warnings.warn(warn_str)
+[2026-08-17 19:47:35,119] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_93: INT32 -> INT22
+[2026-08-17 19:47:35,119]   warnings.warn(warn_str)
+[2026-08-17 19:47:36,450] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_94: INT32 -> INT20
+[2026-08-17 19:47:36,450]   warnings.warn(warn_str)
+[2026-08-17 19:47:38,464] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_96: INT32 -> INT21
+[2026-08-17 19:47:38,464]   warnings.warn(warn_str)
+[2026-08-17 19:47:39,953] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_97: INT32 -> INT22
+[2026-08-17 19:47:39,953]   warnings.warn(warn_str)
+[2026-08-17 19:47:41,197] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_98: INT32 -> INT19
+[2026-08-17 19:47:41,197]   warnings.warn(warn_str)
+[2026-08-17 19:47:43,157] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_100: INT32 -> INT21
+[2026-08-17 19:47:43,157]   warnings.warn(warn_str)
+[2026-08-17 19:47:44,531] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_101: INT32 -> INT22
+[2026-08-17 19:47:44,531]   warnings.warn(warn_str)
+[2026-08-17 19:47:45,900] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_102: INT32 -> INT20
+[2026-08-17 19:47:45,900]   warnings.warn(warn_str)
+[2026-08-17 19:47:47,647] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_104: INT32 -> INT21
+[2026-08-17 19:47:47,647]   warnings.warn(warn_str)
+[2026-08-17 19:47:49,012] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_105: INT32 -> INT23
+[2026-08-17 19:47:49,012]   warnings.warn(warn_str)
+[2026-08-17 19:47:50,492] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_106: INT32 -> INT21
+[2026-08-17 19:47:50,492]   warnings.warn(warn_str)
+[2026-08-17 19:47:51,899] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_107: INT32 -> INT19
+[2026-08-17 19:47:51,899]   warnings.warn(warn_str)
+[2026-08-17 19:47:53,616] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_109: INT32 -> INT19
+[2026-08-17 19:47:53,616]   warnings.warn(warn_str)
+[2026-08-17 19:47:54,943] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_110: INT32 -> INT20
+[2026-08-17 19:47:54,943]   warnings.warn(warn_str)
+[2026-08-17 19:47:56,322] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_111: INT32 -> INT18
+[2026-08-17 19:47:56,322]   warnings.warn(warn_str)
+[2026-08-17 19:47:59,504] Running step: step_generate_estimate_reports [9/9]
+[2026-08-17 19:47:59,527] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/streamingmaxpool.py:139: UserWarning: Estimated latency for layer StreamingMaxPool_hls_0 can be lower than
+[2026-08-17 19:47:59,527]              actual latency!
+[2026-08-17 19:47:59,527]   warnings.warn(
+[2026-08-17 19:47:59,539] /home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/streamingmaxpool.py:139: UserWarning: Estimated latency for layer StreamingMaxPool_hls_1 can be lower than
+[2026-08-17 19:47:59,540]              actual latency!
+[2026-08-17 19:47:59,540]   warnings.warn(
