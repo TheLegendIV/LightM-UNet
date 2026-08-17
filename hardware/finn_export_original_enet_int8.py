@@ -4,11 +4,24 @@ upsampling, no F.interpolate) -- to QONNX, for a fully-unfolded FINN resource
 estimate (side job, run 2026-08-17; independent of the running S19 partitioned
 IP-build job).
 
-Reuses FINNQuantENet from finn_enet_prod_export.py verbatim (that class is
-already exactly this: default channels=(20,72,144,72,20) [[the ENet-paper-
-scale "original" widths]], bottlenecks_per_stage=(4,8,8,2,1), QuantReLU-only
-activations, ConvTranspose2d-based upsampling bottlenecks -- see that file's
-module docstring for the 6 FINN-compatibility fixes vs QuantENet.py).
+Reuses FINNQuantENet from finn_enet_prod_export.py (that class defaults to
+the E1 sweep-grid widths, NOT the true baseline -- see CHANNELS override
+below), bottlenecks_per_stage=(4,8,8,2,1), QuantReLU-only activations,
+ConvTranspose2d-based upsampling bottlenecks -- see that file's module
+docstring for the 6 FINN-compatibility fixes vs QuantENet.py).
+
+CORRECTED 2026-08-17: this script previously used CHANNELS=(20,72,144,72,20)
+(finn_enet_prod_export.py's DEFAULT_CHANNELS), which is actually the `E1`
+sweep-grid cell from agent_instructions_1.yaml, mislabeled here as the
+"original" ENet-paper widths. The real baseline -- confirmed against
+compression/results.csv's f_i/f1/f2/f3/f4/f5 columns for
+nnUNetTrainerENet_1_naive_baseline_Baseline / _3_transfer_original /
+_25_s19_baseline_width (16,64,128,128,64,16) -- is CHANNELS=(16,64,128,64,16)
+below (f2==f3==128 collapses to one shared c23 value in this 5-tuple
+convention). Every downstream artifact exported/estimated with the old
+tuple (quantEnet_original_int8.onnx and the
+quantEnet_original_int8_unfolded_report/ outputs) is stale and needs
+regenerating -- see regenerate_original_enet_int8.py.
 
 Usage (inside the FINN container):
     python3 finn_export_original_enet_int8.py
@@ -24,10 +37,9 @@ from finn_enet_prod_export import FINNQuantENet, export_model  # noqa: E402
 
 OUT_DIR = Path(__file__).resolve().parent
 
-# "Original" ENet scale (ENet-paper channel widths / bottleneck counts -- the
-# repo's own DEFAULT_CHANNELS/DEFAULT_BNECKS, i.e. NOT one of the compressed
-# sweep configs like S8/S13/S19).
-CHANNELS = (20, 72, 144, 72, 20)
+# True ENet-paper baseline widths (16,64,128,128,64,16 -- f2==f3==128 shares
+# one c23 value here), NOT the E1 sweep-grid cell. See CORRECTED note above.
+CHANNELS = (16, 64, 128, 64, 16)
 BNECKS = (4, 8, 8, 2, 1)
 BIT_WIDTH = 8
 IN_CHANNELS = 1
@@ -53,7 +65,13 @@ def main() -> None:
         out = model(dummy)
     out_t = out.value if hasattr(out, "value") else out
     assert out_t.shape[2:] == INPUT_HW, f"output HxW {tuple(out_t.shape[2:])} != input {INPUT_HW}"
-    print(f"  forward OK: output shape {tuple(out_t.shape)}")
+    # nn.Module/Brevitas layers self-init (reset_parameters()) on construction,
+    # so weights are already non-empty random dummy values -- this just proves
+    # a real forward pass actually ran through them (not NaN/all-zero, which
+    # would indicate a broken/uninitialized layer rather than legitimate init).
+    assert torch.isfinite(out_t).all(), "output contains NaN/Inf -- weights not properly initialized"
+    assert out_t.abs().sum() > 0, "output is all-zero -- weights not properly initialized"
+    print(f"  forward OK: output shape {tuple(out_t.shape)}, finite, non-zero (dummy weights confirmed live)")
 
     global OUT_DIR
     import finn_enet_prod_export as prod_export

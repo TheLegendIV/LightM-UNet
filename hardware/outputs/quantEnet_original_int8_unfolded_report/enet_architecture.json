@@ -1,0 +1,8941 @@
+{
+  "config": {
+    "in_channels": 1,
+    "out_channels": 5,
+    "channels": [
+      16,
+      64,
+      128,
+      64,
+      16
+    ],
+    "bottlenecks_per_stage": [
+      4,
+      8,
+      8,
+      2,
+      1
+    ],
+    "decoder_type": "upsample_conv",
+    "use_prelu": false,
+    "use_dilated": true,
+    "use_asymmetric": true,
+    "use_strided": true,
+    "use_dsc": false,
+    "context_pattern": "default",
+    "internal_ratio": 4,
+    "input_shape_nchw": [
+      1,
+      1,
+      512,
+      512
+    ],
+    "output_shape_nchw": [
+      1,
+      5,
+      512,
+      512
+    ],
+    "note": "encoder half (initial/down1/regular1/down2/stage2/stage3) uses ReLU because use_prelu=False; decoder half (up4/regular4/up5/regular5) is hardcoded to ReLU in the source regardless of use_prelu. decoder_type='upsample_conv' replaces MaxUnpool2d with a bilinear resize on the upsampling-bottleneck main/skip branch only -- the learned ConvTranspose2d branch is unaffected."
+  },
+  "totals": {
+    "params": 365804,
+    "macs_hooked_modules": 1960247296,
+    "macs_nonparametric_interpolation_estimate": 8388608,
+    "elementwise_residual_adds_total_elements": 19398656
+  },
+  "modules": [
+    {
+      "seq": 0,
+      "layer": "initial.conv",
+      "stage": "initial",
+      "block_index": null,
+      "type": "Conv2d",
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        2,
+        2
+      ],
+      "padding": [
+        1,
+        1
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        1,
+        512,
+        512
+      ],
+      "out_shape_chw": [
+        15,
+        256,
+        256
+      ],
+      "params": 135,
+      "macs": 8847360,
+      "is_module": true
+    },
+    {
+      "seq": 1,
+      "layer": "initial.pool",
+      "stage": "initial",
+      "block_index": null,
+      "type": "MaxPool2d",
+      "kernel": [
+        2,
+        2
+      ],
+      "stride": [
+        2,
+        2
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        1,
+        512,
+        512
+      ],
+      "out_shape_chw": [
+        1,
+        256,
+        256
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 2,
+      "layer": "initial.bn",
+      "stage": "initial",
+      "block_index": null,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "out_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "params": 32,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 3,
+      "layer": "initial.act",
+      "stage": "initial",
+      "block_index": null,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "out_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 4,
+      "layer": "down1.pool",
+      "stage": "down1",
+      "block_index": null,
+      "type": "MaxPool2d",
+      "kernel": [
+        2,
+        2
+      ],
+      "stride": [
+        2,
+        2
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 5,
+      "layer": "down1.reduce.0",
+      "stage": "down1",
+      "block_index": null,
+      "type": "Conv2d",
+      "kernel": [
+        2,
+        2
+      ],
+      "stride": [
+        2,
+        2
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 1024,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 6,
+      "layer": "down1.reduce.1",
+      "stage": "down1",
+      "block_index": null,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 32,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 7,
+      "layer": "down1.reduce.2",
+      "stage": "down1",
+      "block_index": null,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 8,
+      "layer": "down1.conv.0",
+      "stage": "down1",
+      "block_index": null,
+      "type": "Conv2d",
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        1,
+        1
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 2304,
+      "macs": 37748736,
+      "is_module": true
+    },
+    {
+      "seq": 9,
+      "layer": "down1.conv.1",
+      "stage": "down1",
+      "block_index": null,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 32,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 10,
+      "layer": "down1.conv.2",
+      "stage": "down1",
+      "block_index": null,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 11,
+      "layer": "down1.expand.0",
+      "stage": "down1",
+      "block_index": null,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 1024,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 12,
+      "layer": "down1.expand.1",
+      "stage": "down1",
+      "block_index": null,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 128,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 13,
+      "layer": "down1.dropout",
+      "stage": "down1",
+      "block_index": null,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 14,
+      "layer": "down1.out_act",
+      "stage": "down1",
+      "block_index": null,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 15,
+      "layer": "regular1.0.reduce.0",
+      "stage": "regular1",
+      "block_index": 0,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 1024,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 16,
+      "layer": "regular1.0.reduce.1",
+      "stage": "regular1",
+      "block_index": 0,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 32,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 17,
+      "layer": "regular1.0.reduce.2",
+      "stage": "regular1",
+      "block_index": 0,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 18,
+      "layer": "regular1.0.conv",
+      "stage": "regular1",
+      "block_index": 0,
+      "type": "Conv2d",
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        1,
+        1
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 2304,
+      "macs": 37748736,
+      "is_module": true
+    },
+    {
+      "seq": 19,
+      "layer": "regular1.0.conv_bn_act.1",
+      "stage": "regular1",
+      "block_index": 0,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 32,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 20,
+      "layer": "regular1.0.conv_bn_act.2",
+      "stage": "regular1",
+      "block_index": 0,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 21,
+      "layer": "regular1.0.expand.0",
+      "stage": "regular1",
+      "block_index": 0,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 1024,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 22,
+      "layer": "regular1.0.expand.1",
+      "stage": "regular1",
+      "block_index": 0,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 128,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 23,
+      "layer": "regular1.0.dropout",
+      "stage": "regular1",
+      "block_index": 0,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 24,
+      "layer": "regular1.0.out_act",
+      "stage": "regular1",
+      "block_index": 0,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 25,
+      "layer": "regular1.1.reduce.0",
+      "stage": "regular1",
+      "block_index": 1,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 1024,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 26,
+      "layer": "regular1.1.reduce.1",
+      "stage": "regular1",
+      "block_index": 1,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 32,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 27,
+      "layer": "regular1.1.reduce.2",
+      "stage": "regular1",
+      "block_index": 1,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 28,
+      "layer": "regular1.1.conv",
+      "stage": "regular1",
+      "block_index": 1,
+      "type": "Conv2d",
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        1,
+        1
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 2304,
+      "macs": 37748736,
+      "is_module": true
+    },
+    {
+      "seq": 29,
+      "layer": "regular1.1.conv_bn_act.1",
+      "stage": "regular1",
+      "block_index": 1,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 32,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 30,
+      "layer": "regular1.1.conv_bn_act.2",
+      "stage": "regular1",
+      "block_index": 1,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 31,
+      "layer": "regular1.1.expand.0",
+      "stage": "regular1",
+      "block_index": 1,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 1024,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 32,
+      "layer": "regular1.1.expand.1",
+      "stage": "regular1",
+      "block_index": 1,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 128,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 33,
+      "layer": "regular1.1.dropout",
+      "stage": "regular1",
+      "block_index": 1,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 34,
+      "layer": "regular1.1.out_act",
+      "stage": "regular1",
+      "block_index": 1,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 35,
+      "layer": "regular1.2.reduce.0",
+      "stage": "regular1",
+      "block_index": 2,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 1024,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 36,
+      "layer": "regular1.2.reduce.1",
+      "stage": "regular1",
+      "block_index": 2,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 32,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 37,
+      "layer": "regular1.2.reduce.2",
+      "stage": "regular1",
+      "block_index": 2,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 38,
+      "layer": "regular1.2.conv",
+      "stage": "regular1",
+      "block_index": 2,
+      "type": "Conv2d",
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        1,
+        1
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 2304,
+      "macs": 37748736,
+      "is_module": true
+    },
+    {
+      "seq": 39,
+      "layer": "regular1.2.conv_bn_act.1",
+      "stage": "regular1",
+      "block_index": 2,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 32,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 40,
+      "layer": "regular1.2.conv_bn_act.2",
+      "stage": "regular1",
+      "block_index": 2,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 41,
+      "layer": "regular1.2.expand.0",
+      "stage": "regular1",
+      "block_index": 2,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 1024,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 42,
+      "layer": "regular1.2.expand.1",
+      "stage": "regular1",
+      "block_index": 2,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 128,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 43,
+      "layer": "regular1.2.dropout",
+      "stage": "regular1",
+      "block_index": 2,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 44,
+      "layer": "regular1.2.out_act",
+      "stage": "regular1",
+      "block_index": 2,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 45,
+      "layer": "regular1.3.reduce.0",
+      "stage": "regular1",
+      "block_index": 3,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 1024,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 46,
+      "layer": "regular1.3.reduce.1",
+      "stage": "regular1",
+      "block_index": 3,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 32,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 47,
+      "layer": "regular1.3.reduce.2",
+      "stage": "regular1",
+      "block_index": 3,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 48,
+      "layer": "regular1.3.conv",
+      "stage": "regular1",
+      "block_index": 3,
+      "type": "Conv2d",
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        1,
+        1
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 2304,
+      "macs": 37748736,
+      "is_module": true
+    },
+    {
+      "seq": 49,
+      "layer": "regular1.3.conv_bn_act.1",
+      "stage": "regular1",
+      "block_index": 3,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 32,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 50,
+      "layer": "regular1.3.conv_bn_act.2",
+      "stage": "regular1",
+      "block_index": 3,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 51,
+      "layer": "regular1.3.expand.0",
+      "stage": "regular1",
+      "block_index": 3,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 1024,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 52,
+      "layer": "regular1.3.expand.1",
+      "stage": "regular1",
+      "block_index": 3,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 128,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 53,
+      "layer": "regular1.3.dropout",
+      "stage": "regular1",
+      "block_index": 3,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 54,
+      "layer": "regular1.3.out_act",
+      "stage": "regular1",
+      "block_index": 3,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 55,
+      "layer": "down2.pool",
+      "stage": "down2",
+      "block_index": null,
+      "type": "MaxPool2d",
+      "kernel": [
+        2,
+        2
+      ],
+      "stride": [
+        2,
+        2
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 56,
+      "layer": "down2.reduce.0",
+      "stage": "down2",
+      "block_index": null,
+      "type": "Conv2d",
+      "kernel": [
+        2,
+        2
+      ],
+      "stride": [
+        2,
+        2
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 8192,
+      "macs": 33554432,
+      "is_module": true
+    },
+    {
+      "seq": 57,
+      "layer": "down2.reduce.1",
+      "stage": "down2",
+      "block_index": null,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 58,
+      "layer": "down2.reduce.2",
+      "stage": "down2",
+      "block_index": null,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 59,
+      "layer": "down2.conv.0",
+      "stage": "down2",
+      "block_index": null,
+      "type": "Conv2d",
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        1,
+        1
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 9216,
+      "macs": 37748736,
+      "is_module": true
+    },
+    {
+      "seq": 60,
+      "layer": "down2.conv.1",
+      "stage": "down2",
+      "block_index": null,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 61,
+      "layer": "down2.conv.2",
+      "stage": "down2",
+      "block_index": null,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 62,
+      "layer": "down2.expand.0",
+      "stage": "down2",
+      "block_index": null,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 63,
+      "layer": "down2.expand.1",
+      "stage": "down2",
+      "block_index": null,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 256,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 64,
+      "layer": "down2.dropout",
+      "stage": "down2",
+      "block_index": null,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 65,
+      "layer": "down2.out_act",
+      "stage": "down2",
+      "block_index": null,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 66,
+      "layer": "stage2.0.reduce.0",
+      "stage": "stage2",
+      "block_index": 0,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 67,
+      "layer": "stage2.0.reduce.1",
+      "stage": "stage2",
+      "block_index": 0,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 68,
+      "layer": "stage2.0.reduce.2",
+      "stage": "stage2",
+      "block_index": 0,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 69,
+      "layer": "stage2.0.conv",
+      "stage": "stage2",
+      "block_index": 0,
+      "type": "Conv2d",
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        1,
+        1
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 9216,
+      "macs": 37748736,
+      "is_module": true
+    },
+    {
+      "seq": 70,
+      "layer": "stage2.0.conv_bn_act.1",
+      "stage": "stage2",
+      "block_index": 0,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 71,
+      "layer": "stage2.0.conv_bn_act.2",
+      "stage": "stage2",
+      "block_index": 0,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 72,
+      "layer": "stage2.0.expand.0",
+      "stage": "stage2",
+      "block_index": 0,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 73,
+      "layer": "stage2.0.expand.1",
+      "stage": "stage2",
+      "block_index": 0,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 256,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 74,
+      "layer": "stage2.0.dropout",
+      "stage": "stage2",
+      "block_index": 0,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 75,
+      "layer": "stage2.0.out_act",
+      "stage": "stage2",
+      "block_index": 0,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 76,
+      "layer": "stage2.1.reduce.0",
+      "stage": "stage2",
+      "block_index": 1,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 77,
+      "layer": "stage2.1.reduce.1",
+      "stage": "stage2",
+      "block_index": 1,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 78,
+      "layer": "stage2.1.reduce.2",
+      "stage": "stage2",
+      "block_index": 1,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 79,
+      "layer": "stage2.1.conv",
+      "stage": "stage2",
+      "block_index": 1,
+      "type": "Conv2d",
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        2,
+        2
+      ],
+      "dilation": [
+        2,
+        2
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 9216,
+      "macs": 37748736,
+      "is_module": true
+    },
+    {
+      "seq": 80,
+      "layer": "stage2.1.conv_bn_act.1",
+      "stage": "stage2",
+      "block_index": 1,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 81,
+      "layer": "stage2.1.conv_bn_act.2",
+      "stage": "stage2",
+      "block_index": 1,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 82,
+      "layer": "stage2.1.expand.0",
+      "stage": "stage2",
+      "block_index": 1,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 83,
+      "layer": "stage2.1.expand.1",
+      "stage": "stage2",
+      "block_index": 1,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 256,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 84,
+      "layer": "stage2.1.dropout",
+      "stage": "stage2",
+      "block_index": 1,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 85,
+      "layer": "stage2.1.out_act",
+      "stage": "stage2",
+      "block_index": 1,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 86,
+      "layer": "stage2.2.reduce.0",
+      "stage": "stage2",
+      "block_index": 2,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 87,
+      "layer": "stage2.2.reduce.1",
+      "stage": "stage2",
+      "block_index": 2,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 88,
+      "layer": "stage2.2.reduce.2",
+      "stage": "stage2",
+      "block_index": 2,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 89,
+      "layer": "stage2.2.conv.0",
+      "stage": "stage2",
+      "block_index": 2,
+      "type": "Conv2d",
+      "kernel": [
+        5,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        2,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 5120,
+      "macs": 20971520,
+      "is_module": true
+    },
+    {
+      "seq": 90,
+      "layer": "stage2.2.conv.1",
+      "stage": "stage2",
+      "block_index": 2,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 91,
+      "layer": "stage2.2.conv.2",
+      "stage": "stage2",
+      "block_index": 2,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 92,
+      "layer": "stage2.2.conv.3",
+      "stage": "stage2",
+      "block_index": 2,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        5
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        2
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 5120,
+      "macs": 20971520,
+      "is_module": true
+    },
+    {
+      "seq": 93,
+      "layer": "stage2.2.conv_bn_act.1",
+      "stage": "stage2",
+      "block_index": 2,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 94,
+      "layer": "stage2.2.conv_bn_act.2",
+      "stage": "stage2",
+      "block_index": 2,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 95,
+      "layer": "stage2.2.expand.0",
+      "stage": "stage2",
+      "block_index": 2,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 96,
+      "layer": "stage2.2.expand.1",
+      "stage": "stage2",
+      "block_index": 2,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 256,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 97,
+      "layer": "stage2.2.dropout",
+      "stage": "stage2",
+      "block_index": 2,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 98,
+      "layer": "stage2.2.out_act",
+      "stage": "stage2",
+      "block_index": 2,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 99,
+      "layer": "stage2.3.reduce.0",
+      "stage": "stage2",
+      "block_index": 3,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 100,
+      "layer": "stage2.3.reduce.1",
+      "stage": "stage2",
+      "block_index": 3,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 101,
+      "layer": "stage2.3.reduce.2",
+      "stage": "stage2",
+      "block_index": 3,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 102,
+      "layer": "stage2.3.conv",
+      "stage": "stage2",
+      "block_index": 3,
+      "type": "Conv2d",
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        4,
+        4
+      ],
+      "dilation": [
+        4,
+        4
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 9216,
+      "macs": 37748736,
+      "is_module": true
+    },
+    {
+      "seq": 103,
+      "layer": "stage2.3.conv_bn_act.1",
+      "stage": "stage2",
+      "block_index": 3,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 104,
+      "layer": "stage2.3.conv_bn_act.2",
+      "stage": "stage2",
+      "block_index": 3,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 105,
+      "layer": "stage2.3.expand.0",
+      "stage": "stage2",
+      "block_index": 3,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 106,
+      "layer": "stage2.3.expand.1",
+      "stage": "stage2",
+      "block_index": 3,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 256,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 107,
+      "layer": "stage2.3.dropout",
+      "stage": "stage2",
+      "block_index": 3,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 108,
+      "layer": "stage2.3.out_act",
+      "stage": "stage2",
+      "block_index": 3,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 109,
+      "layer": "stage2.4.reduce.0",
+      "stage": "stage2",
+      "block_index": 4,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 110,
+      "layer": "stage2.4.reduce.1",
+      "stage": "stage2",
+      "block_index": 4,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 111,
+      "layer": "stage2.4.reduce.2",
+      "stage": "stage2",
+      "block_index": 4,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 112,
+      "layer": "stage2.4.conv",
+      "stage": "stage2",
+      "block_index": 4,
+      "type": "Conv2d",
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        1,
+        1
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 9216,
+      "macs": 37748736,
+      "is_module": true
+    },
+    {
+      "seq": 113,
+      "layer": "stage2.4.conv_bn_act.1",
+      "stage": "stage2",
+      "block_index": 4,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 114,
+      "layer": "stage2.4.conv_bn_act.2",
+      "stage": "stage2",
+      "block_index": 4,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 115,
+      "layer": "stage2.4.expand.0",
+      "stage": "stage2",
+      "block_index": 4,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 116,
+      "layer": "stage2.4.expand.1",
+      "stage": "stage2",
+      "block_index": 4,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 256,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 117,
+      "layer": "stage2.4.dropout",
+      "stage": "stage2",
+      "block_index": 4,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 118,
+      "layer": "stage2.4.out_act",
+      "stage": "stage2",
+      "block_index": 4,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 119,
+      "layer": "stage2.5.reduce.0",
+      "stage": "stage2",
+      "block_index": 5,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 120,
+      "layer": "stage2.5.reduce.1",
+      "stage": "stage2",
+      "block_index": 5,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 121,
+      "layer": "stage2.5.reduce.2",
+      "stage": "stage2",
+      "block_index": 5,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 122,
+      "layer": "stage2.5.conv",
+      "stage": "stage2",
+      "block_index": 5,
+      "type": "Conv2d",
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        8,
+        8
+      ],
+      "dilation": [
+        8,
+        8
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 9216,
+      "macs": 37748736,
+      "is_module": true
+    },
+    {
+      "seq": 123,
+      "layer": "stage2.5.conv_bn_act.1",
+      "stage": "stage2",
+      "block_index": 5,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 124,
+      "layer": "stage2.5.conv_bn_act.2",
+      "stage": "stage2",
+      "block_index": 5,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 125,
+      "layer": "stage2.5.expand.0",
+      "stage": "stage2",
+      "block_index": 5,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 126,
+      "layer": "stage2.5.expand.1",
+      "stage": "stage2",
+      "block_index": 5,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 256,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 127,
+      "layer": "stage2.5.dropout",
+      "stage": "stage2",
+      "block_index": 5,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 128,
+      "layer": "stage2.5.out_act",
+      "stage": "stage2",
+      "block_index": 5,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 129,
+      "layer": "stage2.6.reduce.0",
+      "stage": "stage2",
+      "block_index": 6,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 130,
+      "layer": "stage2.6.reduce.1",
+      "stage": "stage2",
+      "block_index": 6,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 131,
+      "layer": "stage2.6.reduce.2",
+      "stage": "stage2",
+      "block_index": 6,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 132,
+      "layer": "stage2.6.conv.0",
+      "stage": "stage2",
+      "block_index": 6,
+      "type": "Conv2d",
+      "kernel": [
+        5,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        2,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 5120,
+      "macs": 20971520,
+      "is_module": true
+    },
+    {
+      "seq": 133,
+      "layer": "stage2.6.conv.1",
+      "stage": "stage2",
+      "block_index": 6,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 134,
+      "layer": "stage2.6.conv.2",
+      "stage": "stage2",
+      "block_index": 6,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 135,
+      "layer": "stage2.6.conv.3",
+      "stage": "stage2",
+      "block_index": 6,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        5
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        2
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 5120,
+      "macs": 20971520,
+      "is_module": true
+    },
+    {
+      "seq": 136,
+      "layer": "stage2.6.conv_bn_act.1",
+      "stage": "stage2",
+      "block_index": 6,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 137,
+      "layer": "stage2.6.conv_bn_act.2",
+      "stage": "stage2",
+      "block_index": 6,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 138,
+      "layer": "stage2.6.expand.0",
+      "stage": "stage2",
+      "block_index": 6,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 139,
+      "layer": "stage2.6.expand.1",
+      "stage": "stage2",
+      "block_index": 6,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 256,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 140,
+      "layer": "stage2.6.dropout",
+      "stage": "stage2",
+      "block_index": 6,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 141,
+      "layer": "stage2.6.out_act",
+      "stage": "stage2",
+      "block_index": 6,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 142,
+      "layer": "stage2.7.reduce.0",
+      "stage": "stage2",
+      "block_index": 7,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 143,
+      "layer": "stage2.7.reduce.1",
+      "stage": "stage2",
+      "block_index": 7,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 144,
+      "layer": "stage2.7.reduce.2",
+      "stage": "stage2",
+      "block_index": 7,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 145,
+      "layer": "stage2.7.conv",
+      "stage": "stage2",
+      "block_index": 7,
+      "type": "Conv2d",
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        16,
+        16
+      ],
+      "dilation": [
+        16,
+        16
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 9216,
+      "macs": 37748736,
+      "is_module": true
+    },
+    {
+      "seq": 146,
+      "layer": "stage2.7.conv_bn_act.1",
+      "stage": "stage2",
+      "block_index": 7,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 147,
+      "layer": "stage2.7.conv_bn_act.2",
+      "stage": "stage2",
+      "block_index": 7,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 148,
+      "layer": "stage2.7.expand.0",
+      "stage": "stage2",
+      "block_index": 7,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 149,
+      "layer": "stage2.7.expand.1",
+      "stage": "stage2",
+      "block_index": 7,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 256,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 150,
+      "layer": "stage2.7.dropout",
+      "stage": "stage2",
+      "block_index": 7,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 151,
+      "layer": "stage2.7.out_act",
+      "stage": "stage2",
+      "block_index": 7,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 152,
+      "layer": "stage3.0.reduce.0",
+      "stage": "stage3",
+      "block_index": 0,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 153,
+      "layer": "stage3.0.reduce.1",
+      "stage": "stage3",
+      "block_index": 0,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 154,
+      "layer": "stage3.0.reduce.2",
+      "stage": "stage3",
+      "block_index": 0,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 155,
+      "layer": "stage3.0.conv",
+      "stage": "stage3",
+      "block_index": 0,
+      "type": "Conv2d",
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        1,
+        1
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 9216,
+      "macs": 37748736,
+      "is_module": true
+    },
+    {
+      "seq": 156,
+      "layer": "stage3.0.conv_bn_act.1",
+      "stage": "stage3",
+      "block_index": 0,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 157,
+      "layer": "stage3.0.conv_bn_act.2",
+      "stage": "stage3",
+      "block_index": 0,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 158,
+      "layer": "stage3.0.expand.0",
+      "stage": "stage3",
+      "block_index": 0,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 159,
+      "layer": "stage3.0.expand.1",
+      "stage": "stage3",
+      "block_index": 0,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 256,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 160,
+      "layer": "stage3.0.dropout",
+      "stage": "stage3",
+      "block_index": 0,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 161,
+      "layer": "stage3.0.out_act",
+      "stage": "stage3",
+      "block_index": 0,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 162,
+      "layer": "stage3.1.reduce.0",
+      "stage": "stage3",
+      "block_index": 1,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 163,
+      "layer": "stage3.1.reduce.1",
+      "stage": "stage3",
+      "block_index": 1,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 164,
+      "layer": "stage3.1.reduce.2",
+      "stage": "stage3",
+      "block_index": 1,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 165,
+      "layer": "stage3.1.conv",
+      "stage": "stage3",
+      "block_index": 1,
+      "type": "Conv2d",
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        2,
+        2
+      ],
+      "dilation": [
+        2,
+        2
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 9216,
+      "macs": 37748736,
+      "is_module": true
+    },
+    {
+      "seq": 166,
+      "layer": "stage3.1.conv_bn_act.1",
+      "stage": "stage3",
+      "block_index": 1,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 167,
+      "layer": "stage3.1.conv_bn_act.2",
+      "stage": "stage3",
+      "block_index": 1,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 168,
+      "layer": "stage3.1.expand.0",
+      "stage": "stage3",
+      "block_index": 1,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 169,
+      "layer": "stage3.1.expand.1",
+      "stage": "stage3",
+      "block_index": 1,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 256,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 170,
+      "layer": "stage3.1.dropout",
+      "stage": "stage3",
+      "block_index": 1,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 171,
+      "layer": "stage3.1.out_act",
+      "stage": "stage3",
+      "block_index": 1,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 172,
+      "layer": "stage3.2.reduce.0",
+      "stage": "stage3",
+      "block_index": 2,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 173,
+      "layer": "stage3.2.reduce.1",
+      "stage": "stage3",
+      "block_index": 2,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 174,
+      "layer": "stage3.2.reduce.2",
+      "stage": "stage3",
+      "block_index": 2,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 175,
+      "layer": "stage3.2.conv.0",
+      "stage": "stage3",
+      "block_index": 2,
+      "type": "Conv2d",
+      "kernel": [
+        5,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        2,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 5120,
+      "macs": 20971520,
+      "is_module": true
+    },
+    {
+      "seq": 176,
+      "layer": "stage3.2.conv.1",
+      "stage": "stage3",
+      "block_index": 2,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 177,
+      "layer": "stage3.2.conv.2",
+      "stage": "stage3",
+      "block_index": 2,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 178,
+      "layer": "stage3.2.conv.3",
+      "stage": "stage3",
+      "block_index": 2,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        5
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        2
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 5120,
+      "macs": 20971520,
+      "is_module": true
+    },
+    {
+      "seq": 179,
+      "layer": "stage3.2.conv_bn_act.1",
+      "stage": "stage3",
+      "block_index": 2,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 180,
+      "layer": "stage3.2.conv_bn_act.2",
+      "stage": "stage3",
+      "block_index": 2,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 181,
+      "layer": "stage3.2.expand.0",
+      "stage": "stage3",
+      "block_index": 2,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 182,
+      "layer": "stage3.2.expand.1",
+      "stage": "stage3",
+      "block_index": 2,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 256,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 183,
+      "layer": "stage3.2.dropout",
+      "stage": "stage3",
+      "block_index": 2,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 184,
+      "layer": "stage3.2.out_act",
+      "stage": "stage3",
+      "block_index": 2,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 185,
+      "layer": "stage3.3.reduce.0",
+      "stage": "stage3",
+      "block_index": 3,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 186,
+      "layer": "stage3.3.reduce.1",
+      "stage": "stage3",
+      "block_index": 3,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 187,
+      "layer": "stage3.3.reduce.2",
+      "stage": "stage3",
+      "block_index": 3,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 188,
+      "layer": "stage3.3.conv",
+      "stage": "stage3",
+      "block_index": 3,
+      "type": "Conv2d",
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        4,
+        4
+      ],
+      "dilation": [
+        4,
+        4
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 9216,
+      "macs": 37748736,
+      "is_module": true
+    },
+    {
+      "seq": 189,
+      "layer": "stage3.3.conv_bn_act.1",
+      "stage": "stage3",
+      "block_index": 3,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 190,
+      "layer": "stage3.3.conv_bn_act.2",
+      "stage": "stage3",
+      "block_index": 3,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 191,
+      "layer": "stage3.3.expand.0",
+      "stage": "stage3",
+      "block_index": 3,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 192,
+      "layer": "stage3.3.expand.1",
+      "stage": "stage3",
+      "block_index": 3,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 256,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 193,
+      "layer": "stage3.3.dropout",
+      "stage": "stage3",
+      "block_index": 3,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 194,
+      "layer": "stage3.3.out_act",
+      "stage": "stage3",
+      "block_index": 3,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 195,
+      "layer": "stage3.4.reduce.0",
+      "stage": "stage3",
+      "block_index": 4,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 196,
+      "layer": "stage3.4.reduce.1",
+      "stage": "stage3",
+      "block_index": 4,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 197,
+      "layer": "stage3.4.reduce.2",
+      "stage": "stage3",
+      "block_index": 4,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 198,
+      "layer": "stage3.4.conv",
+      "stage": "stage3",
+      "block_index": 4,
+      "type": "Conv2d",
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        1,
+        1
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 9216,
+      "macs": 37748736,
+      "is_module": true
+    },
+    {
+      "seq": 199,
+      "layer": "stage3.4.conv_bn_act.1",
+      "stage": "stage3",
+      "block_index": 4,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 200,
+      "layer": "stage3.4.conv_bn_act.2",
+      "stage": "stage3",
+      "block_index": 4,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 201,
+      "layer": "stage3.4.expand.0",
+      "stage": "stage3",
+      "block_index": 4,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 202,
+      "layer": "stage3.4.expand.1",
+      "stage": "stage3",
+      "block_index": 4,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 256,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 203,
+      "layer": "stage3.4.dropout",
+      "stage": "stage3",
+      "block_index": 4,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 204,
+      "layer": "stage3.4.out_act",
+      "stage": "stage3",
+      "block_index": 4,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 205,
+      "layer": "stage3.5.reduce.0",
+      "stage": "stage3",
+      "block_index": 5,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 206,
+      "layer": "stage3.5.reduce.1",
+      "stage": "stage3",
+      "block_index": 5,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 207,
+      "layer": "stage3.5.reduce.2",
+      "stage": "stage3",
+      "block_index": 5,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 208,
+      "layer": "stage3.5.conv",
+      "stage": "stage3",
+      "block_index": 5,
+      "type": "Conv2d",
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        8,
+        8
+      ],
+      "dilation": [
+        8,
+        8
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 9216,
+      "macs": 37748736,
+      "is_module": true
+    },
+    {
+      "seq": 209,
+      "layer": "stage3.5.conv_bn_act.1",
+      "stage": "stage3",
+      "block_index": 5,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 210,
+      "layer": "stage3.5.conv_bn_act.2",
+      "stage": "stage3",
+      "block_index": 5,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 211,
+      "layer": "stage3.5.expand.0",
+      "stage": "stage3",
+      "block_index": 5,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 212,
+      "layer": "stage3.5.expand.1",
+      "stage": "stage3",
+      "block_index": 5,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 256,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 213,
+      "layer": "stage3.5.dropout",
+      "stage": "stage3",
+      "block_index": 5,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 214,
+      "layer": "stage3.5.out_act",
+      "stage": "stage3",
+      "block_index": 5,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 215,
+      "layer": "stage3.6.reduce.0",
+      "stage": "stage3",
+      "block_index": 6,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 216,
+      "layer": "stage3.6.reduce.1",
+      "stage": "stage3",
+      "block_index": 6,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 217,
+      "layer": "stage3.6.reduce.2",
+      "stage": "stage3",
+      "block_index": 6,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 218,
+      "layer": "stage3.6.conv.0",
+      "stage": "stage3",
+      "block_index": 6,
+      "type": "Conv2d",
+      "kernel": [
+        5,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        2,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 5120,
+      "macs": 20971520,
+      "is_module": true
+    },
+    {
+      "seq": 219,
+      "layer": "stage3.6.conv.1",
+      "stage": "stage3",
+      "block_index": 6,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 220,
+      "layer": "stage3.6.conv.2",
+      "stage": "stage3",
+      "block_index": 6,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 221,
+      "layer": "stage3.6.conv.3",
+      "stage": "stage3",
+      "block_index": 6,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        5
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        2
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 5120,
+      "macs": 20971520,
+      "is_module": true
+    },
+    {
+      "seq": 222,
+      "layer": "stage3.6.conv_bn_act.1",
+      "stage": "stage3",
+      "block_index": 6,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 223,
+      "layer": "stage3.6.conv_bn_act.2",
+      "stage": "stage3",
+      "block_index": 6,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 224,
+      "layer": "stage3.6.expand.0",
+      "stage": "stage3",
+      "block_index": 6,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 225,
+      "layer": "stage3.6.expand.1",
+      "stage": "stage3",
+      "block_index": 6,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 256,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 226,
+      "layer": "stage3.6.dropout",
+      "stage": "stage3",
+      "block_index": 6,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 227,
+      "layer": "stage3.6.out_act",
+      "stage": "stage3",
+      "block_index": 6,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 228,
+      "layer": "stage3.7.reduce.0",
+      "stage": "stage3",
+      "block_index": 7,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 229,
+      "layer": "stage3.7.reduce.1",
+      "stage": "stage3",
+      "block_index": 7,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 230,
+      "layer": "stage3.7.reduce.2",
+      "stage": "stage3",
+      "block_index": 7,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 231,
+      "layer": "stage3.7.conv",
+      "stage": "stage3",
+      "block_index": 7,
+      "type": "Conv2d",
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        16,
+        16
+      ],
+      "dilation": [
+        16,
+        16
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 9216,
+      "macs": 37748736,
+      "is_module": true
+    },
+    {
+      "seq": 232,
+      "layer": "stage3.7.conv_bn_act.1",
+      "stage": "stage3",
+      "block_index": 7,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 233,
+      "layer": "stage3.7.conv_bn_act.2",
+      "stage": "stage3",
+      "block_index": 7,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 234,
+      "layer": "stage3.7.expand.0",
+      "stage": "stage3",
+      "block_index": 7,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 235,
+      "layer": "stage3.7.expand.1",
+      "stage": "stage3",
+      "block_index": 7,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 256,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 236,
+      "layer": "stage3.7.dropout",
+      "stage": "stage3",
+      "block_index": 7,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 237,
+      "layer": "stage3.7.out_act",
+      "stage": "stage3",
+      "block_index": 7,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 238,
+      "layer": "up4.main_proj.0",
+      "stage": "up4",
+      "block_index": null,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        64,
+        64,
+        64
+      ],
+      "params": 8192,
+      "macs": 33554432,
+      "is_module": true
+    },
+    {
+      "seq": 239,
+      "layer": "up4.main_proj.1",
+      "stage": "up4",
+      "block_index": null,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        64,
+        64,
+        64
+      ],
+      "params": 128,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 240,
+      "layer": "up4.reduce.0",
+      "stage": "up4",
+      "block_index": null,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 241,
+      "layer": "up4.reduce.1",
+      "stage": "up4",
+      "block_index": null,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 242,
+      "layer": "up4.reduce.2",
+      "stage": "up4",
+      "block_index": null,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 243,
+      "layer": "up4.up.0",
+      "stage": "up4",
+      "block_index": null,
+      "type": "ConvTranspose2d",
+      "kernel": [
+        2,
+        2
+      ],
+      "stride": [
+        2,
+        2
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        64,
+        64
+      ],
+      "out_shape_chw": [
+        32,
+        128,
+        128
+      ],
+      "params": 4096,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 244,
+      "layer": "up4.up.1",
+      "stage": "up4",
+      "block_index": null,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        32,
+        128,
+        128
+      ],
+      "params": 64,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 245,
+      "layer": "up4.up.2",
+      "stage": "up4",
+      "block_index": null,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        32,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        32,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 246,
+      "layer": "up4.expand.0",
+      "stage": "up4",
+      "block_index": null,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        32,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 2048,
+      "macs": 33554432,
+      "is_module": true
+    },
+    {
+      "seq": 247,
+      "layer": "up4.expand.1",
+      "stage": "up4",
+      "block_index": null,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 128,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 248,
+      "layer": "up4.dropout",
+      "stage": "up4",
+      "block_index": null,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 249,
+      "layer": "up4.out_act",
+      "stage": "up4",
+      "block_index": null,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 250,
+      "layer": "regular4.0.reduce.0",
+      "stage": "regular4",
+      "block_index": 0,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 1024,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 251,
+      "layer": "regular4.0.reduce.1",
+      "stage": "regular4",
+      "block_index": 0,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 32,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 252,
+      "layer": "regular4.0.reduce.2",
+      "stage": "regular4",
+      "block_index": 0,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 253,
+      "layer": "regular4.0.conv",
+      "stage": "regular4",
+      "block_index": 0,
+      "type": "Conv2d",
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        1,
+        1
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 2304,
+      "macs": 37748736,
+      "is_module": true
+    },
+    {
+      "seq": 254,
+      "layer": "regular4.0.conv_bn_act.1",
+      "stage": "regular4",
+      "block_index": 0,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 32,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 255,
+      "layer": "regular4.0.conv_bn_act.2",
+      "stage": "regular4",
+      "block_index": 0,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 256,
+      "layer": "regular4.0.expand.0",
+      "stage": "regular4",
+      "block_index": 0,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 1024,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 257,
+      "layer": "regular4.0.expand.1",
+      "stage": "regular4",
+      "block_index": 0,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 128,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 258,
+      "layer": "regular4.0.dropout",
+      "stage": "regular4",
+      "block_index": 0,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 259,
+      "layer": "regular4.0.out_act",
+      "stage": "regular4",
+      "block_index": 0,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 260,
+      "layer": "regular4.1.reduce.0",
+      "stage": "regular4",
+      "block_index": 1,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 1024,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 261,
+      "layer": "regular4.1.reduce.1",
+      "stage": "regular4",
+      "block_index": 1,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 32,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 262,
+      "layer": "regular4.1.reduce.2",
+      "stage": "regular4",
+      "block_index": 1,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 263,
+      "layer": "regular4.1.conv",
+      "stage": "regular4",
+      "block_index": 1,
+      "type": "Conv2d",
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        1,
+        1
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 2304,
+      "macs": 37748736,
+      "is_module": true
+    },
+    {
+      "seq": 264,
+      "layer": "regular4.1.conv_bn_act.1",
+      "stage": "regular4",
+      "block_index": 1,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 32,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 265,
+      "layer": "regular4.1.conv_bn_act.2",
+      "stage": "regular4",
+      "block_index": 1,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 266,
+      "layer": "regular4.1.expand.0",
+      "stage": "regular4",
+      "block_index": 1,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 1024,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 267,
+      "layer": "regular4.1.expand.1",
+      "stage": "regular4",
+      "block_index": 1,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 128,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 268,
+      "layer": "regular4.1.dropout",
+      "stage": "regular4",
+      "block_index": 1,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 269,
+      "layer": "regular4.1.out_act",
+      "stage": "regular4",
+      "block_index": 1,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 270,
+      "layer": "up5.main_proj.0",
+      "stage": "up5",
+      "block_index": null,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 1024,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 271,
+      "layer": "up5.main_proj.1",
+      "stage": "up5",
+      "block_index": null,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 32,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 272,
+      "layer": "up5.reduce.0",
+      "stage": "up5",
+      "block_index": null,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 1024,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 273,
+      "layer": "up5.reduce.1",
+      "stage": "up5",
+      "block_index": null,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 32,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 274,
+      "layer": "up5.reduce.2",
+      "stage": "up5",
+      "block_index": null,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 275,
+      "layer": "up5.up.0",
+      "stage": "up5",
+      "block_index": null,
+      "type": "ConvTranspose2d",
+      "kernel": [
+        2,
+        2
+      ],
+      "stride": [
+        2,
+        2
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        16,
+        128,
+        128
+      ],
+      "out_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "params": 1024,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 276,
+      "layer": "up5.up.1",
+      "stage": "up5",
+      "block_index": null,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "out_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "params": 32,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 277,
+      "layer": "up5.up.2",
+      "stage": "up5",
+      "block_index": null,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "out_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 278,
+      "layer": "up5.expand.0",
+      "stage": "up5",
+      "block_index": null,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "out_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "params": 256,
+      "macs": 16777216,
+      "is_module": true
+    },
+    {
+      "seq": 279,
+      "layer": "up5.expand.1",
+      "stage": "up5",
+      "block_index": null,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "out_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "params": 32,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 280,
+      "layer": "up5.dropout",
+      "stage": "up5",
+      "block_index": null,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "out_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 281,
+      "layer": "up5.out_act",
+      "stage": "up5",
+      "block_index": null,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "out_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 282,
+      "layer": "regular5.0.reduce.0",
+      "stage": "regular5",
+      "block_index": 0,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "out_shape_chw": [
+        4,
+        256,
+        256
+      ],
+      "params": 64,
+      "macs": 4194304,
+      "is_module": true
+    },
+    {
+      "seq": 283,
+      "layer": "regular5.0.reduce.1",
+      "stage": "regular5",
+      "block_index": 0,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        4,
+        256,
+        256
+      ],
+      "out_shape_chw": [
+        4,
+        256,
+        256
+      ],
+      "params": 8,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 284,
+      "layer": "regular5.0.reduce.2",
+      "stage": "regular5",
+      "block_index": 0,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        4,
+        256,
+        256
+      ],
+      "out_shape_chw": [
+        4,
+        256,
+        256
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 285,
+      "layer": "regular5.0.conv",
+      "stage": "regular5",
+      "block_index": 0,
+      "type": "Conv2d",
+      "kernel": [
+        3,
+        3
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        1,
+        1
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        4,
+        256,
+        256
+      ],
+      "out_shape_chw": [
+        4,
+        256,
+        256
+      ],
+      "params": 144,
+      "macs": 9437184,
+      "is_module": true
+    },
+    {
+      "seq": 286,
+      "layer": "regular5.0.conv_bn_act.1",
+      "stage": "regular5",
+      "block_index": 0,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        4,
+        256,
+        256
+      ],
+      "out_shape_chw": [
+        4,
+        256,
+        256
+      ],
+      "params": 8,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 287,
+      "layer": "regular5.0.conv_bn_act.2",
+      "stage": "regular5",
+      "block_index": 0,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        4,
+        256,
+        256
+      ],
+      "out_shape_chw": [
+        4,
+        256,
+        256
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 288,
+      "layer": "regular5.0.expand.0",
+      "stage": "regular5",
+      "block_index": 0,
+      "type": "Conv2d",
+      "kernel": [
+        1,
+        1
+      ],
+      "stride": [
+        1,
+        1
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": false,
+      "in_shape_chw": [
+        4,
+        256,
+        256
+      ],
+      "out_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "params": 64,
+      "macs": 4194304,
+      "is_module": true
+    },
+    {
+      "seq": 289,
+      "layer": "regular5.0.expand.1",
+      "stage": "regular5",
+      "block_index": 0,
+      "type": "BatchNorm2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "out_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "params": 32,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 290,
+      "layer": "regular5.0.dropout",
+      "stage": "regular5",
+      "block_index": 0,
+      "type": "Dropout2d",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "out_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 291,
+      "layer": "regular5.0.out_act",
+      "stage": "regular5",
+      "block_index": 0,
+      "type": "ReLU",
+      "kernel": null,
+      "stride": null,
+      "padding": null,
+      "dilation": null,
+      "groups": null,
+      "bias": null,
+      "in_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "out_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "params": 0,
+      "macs": 0,
+      "is_module": true
+    },
+    {
+      "seq": 292,
+      "layer": "final",
+      "stage": "final",
+      "block_index": null,
+      "type": "ConvTranspose2d",
+      "kernel": [
+        2,
+        2
+      ],
+      "stride": [
+        2,
+        2
+      ],
+      "padding": [
+        0,
+        0
+      ],
+      "dilation": [
+        1,
+        1
+      ],
+      "groups": 1,
+      "bias": true,
+      "in_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "out_shape_chw": [
+        5,
+        512,
+        512
+      ],
+      "params": 325,
+      "macs": 20971520,
+      "is_module": true
+    }
+  ],
+  "synthetic_ops": [
+    {
+      "stage": "initial",
+      "op": "concat(conv_out[15ch], pool_out[1ch])",
+      "kind": "concat",
+      "out_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "params": 0,
+      "macs": 0
+    },
+    {
+      "stage": "down1",
+      "op": "zero-pad main branch channels 16->64",
+      "kind": "channel_pad",
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0
+    },
+    {
+      "stage": "down1",
+      "op": "add(main, ext)",
+      "kind": "residual_add",
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "elementwise_adds": 1048576
+    },
+    {
+      "stage": "regular1",
+      "op": "add(x, ext) x4 (one per block)",
+      "kind": "residual_add",
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "elementwise_adds": 4194304
+    },
+    {
+      "stage": "down2",
+      "op": "zero-pad main branch channels 64->128",
+      "kind": "channel_pad",
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0
+    },
+    {
+      "stage": "down2",
+      "op": "add(main, ext)",
+      "kind": "residual_add",
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "elementwise_adds": 524288
+    },
+    {
+      "stage": "stage2",
+      "op": "add(x, ext) x8 (one per block)",
+      "kind": "residual_add",
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "elementwise_adds": 4194304
+    },
+    {
+      "stage": "stage3",
+      "op": "add(x, ext) x8 (one per block)",
+      "kind": "residual_add",
+      "out_shape_chw": [
+        128,
+        64,
+        64
+      ],
+      "params": 0,
+      "macs": 0,
+      "elementwise_adds": 4194304
+    },
+    {
+      "stage": "up4",
+      "op": "bilinear interpolate main branch 64x64->128x128",
+      "kind": "interpolate",
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 4194304
+    },
+    {
+      "stage": "up4",
+      "op": "add(main, ext)",
+      "kind": "residual_add",
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "elementwise_adds": 1048576
+    },
+    {
+      "stage": "regular4",
+      "op": "add(x, ext) x2 (one per block)",
+      "kind": "residual_add",
+      "out_shape_chw": [
+        64,
+        128,
+        128
+      ],
+      "params": 0,
+      "macs": 0,
+      "elementwise_adds": 2097152
+    },
+    {
+      "stage": "up5",
+      "op": "bilinear interpolate main branch 128x128->256x256",
+      "kind": "interpolate",
+      "out_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "params": 0,
+      "macs": 4194304
+    },
+    {
+      "stage": "up5",
+      "op": "add(main, ext)",
+      "kind": "residual_add",
+      "out_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "params": 0,
+      "macs": 0,
+      "elementwise_adds": 1048576
+    },
+    {
+      "stage": "regular5",
+      "op": "add(x, ext)",
+      "kind": "residual_add",
+      "out_shape_chw": [
+        16,
+        256,
+        256
+      ],
+      "params": 0,
+      "macs": 0,
+      "elementwise_adds": 1048576
+    }
+  ]
+}
