@@ -19,31 +19,32 @@ straight from compression/hawq/ pipeline's own output JSON files:
     but there is no reason to expect it not to apply -- it's the same
     activation-function mismatch either way).
 
-  ENET23_1_PRETRAINED_CHECKPOINT (optional, unset by default -- see below):
-    warm-starts from a real FP32 ENet checkpoint's conv/BN weights via
-    QuantENet23_1.from_pretrained's own strict=False name+shape transfer.
+  ENET23_1_PRETRAINED_CHECKPOINT (set by default in the real job, see
+    compression/slurm/hawq_23_1_qat_stage_bits.job -- can be unset to force
+    a cold start): warm-starts from a real FP32 ENet checkpoint's conv/BN
+    weights via QuantENet23_1.from_pretrained's own strict=False name+shape
+    transfer.
 
-Cold-started by default: matches every prior QuantENet QAT job in this
-repo's own established precedent (see e.g. compression/slurm/
-stage_14_s8relu_quant_int4.job's header comment -- nnU-Net's generic
--pretrained_weights flag hits a genuine Brevitas scaling_impl.value quirk
-for QuantENet, so every prior QAT job in this repo trains cold instead of
-chasing that). QAT is meant to measure what the network can LEARN to
-compensate for under quantization -- and a real PTQ check on this exact
-per-stage scheme (compression/hawq/eval_dice.py, n=5 val cases) already
-showed naive PTQ collapses catastrophically at the searched context=4bit
-assignment (mean foreground Dice 0.022 vs 0.460 for homogeneous-INT8 PTQ,
-vs 0.569 FP32) -- QAT is the actual test of whether this scheme is viable
-at all, not a refinement on top of an already-working PTQ number.
-
-ENET23_1_PRETRAINED_CHECKPOINT is offered anyway (opt-in) because, unlike
-nnU-Net's own generic -pretrained_weights flag, QuantENet23_1.
-from_pretrained's manual strict=False transfer does NOT hit that Brevitas
-quirk -- confirmed clean (873/1119 keys, 0 shape mismatches) in
-compression/hawq/eval_dice.py -- so warm-starting is safe here if ever
-wanted for a comparison run; the cold-start default just follows this
-repo's own established precedent rather than assuming warm start is
-strictly better for QAT specifically.
+Warm-started by DEFAULT usage (the job script sets this to 23_1's own
+checkpoint_final.pth) -- NOT the cold-start-by-default choice an earlier
+version of this file made. That earlier choice copied
+stage_14_s8relu_quant_int4.job's own precedent (train cold because nnU-Net's
+GENERIC -pretrained_weights flag hits a Brevitas scaling_impl.value quirk)
+without noticing the precedent's actual reason doesn't apply here:
+QuantENet23_1.from_pretrained's manual strict=False transfer sidesteps that
+exact quirk (confirmed clean, 873/1119 keys, 0 shape mismatches, in
+compression/hawq/eval_dice.py) -- there was never a technical reason to
+throw away 23_1's own trained weights. And unlike S8-ReLU (a from-scratch
+FP32 baseline), 23_1 ITSELF is a warm-start continuation of S19
+(-pretrained_weights in its own FP32 job, see
+compression/slurm/stage_23_1_s19_warmstart_4c.job) -- cold-starting its QAT
+would throw away that same lineage on top of an architecture that's already
+far more expensive per iteration than S8-ReLU's (dsc_no_projection=0, no
+depthwise savings, plus QuantDecomposedLeakyAct's 3x quant-op overhead at
+~10 leaky-mapped sites) -- see this file's own real timing numbers: ~21.6s/
+train-iteration regardless of homogeneous-vs-per-stage bit-width, meaning
+the ONLY real lever left for total wall-clock budget is how many epochs QAT
+actually needs to converge, and warm-starting is exactly what shrinks that.
 """
 import json
 import os
