@@ -1,0 +1,327 @@
+{
+  "initial": {
+    "W2_A2": {
+      "total_lut": 1272.8,
+      "total_pe": 3,
+      "total_simd_lanes": 27,
+      "swu_bram18": 10,
+      "wm_bram18": 3
+    },
+    "W2_A4": {
+      "total_lut": 1393.6,
+      "total_pe": 3,
+      "total_simd_lanes": 27,
+      "swu_bram18": 10,
+      "wm_bram18": 3
+    },
+    "W2_A8": {
+      "total_lut": 1635.2,
+      "total_pe": 3,
+      "total_simd_lanes": 27,
+      "swu_bram18": 10,
+      "wm_bram18": 3
+    },
+    "W4_A2": {
+      "total_lut": 1391.6,
+      "total_pe": 3,
+      "total_simd_lanes": 27,
+      "swu_bram18": 10,
+      "wm_bram18": 3
+    },
+    "W4_A4": {
+      "total_lut": 1631.2,
+      "total_pe": 3,
+      "total_simd_lanes": 27,
+      "swu_bram18": 10,
+      "wm_bram18": 3
+    },
+    "W4_A8": {
+      "total_lut": 2110.4,
+      "total_pe": 3,
+      "total_simd_lanes": 27,
+      "swu_bram18": 10,
+      "wm_bram18": 3
+    },
+    "W8_A2": {
+      "total_lut": 1629.2,
+      "total_pe": 3,
+      "total_simd_lanes": 27,
+      "swu_bram18": 10,
+      "wm_bram18": 6
+    },
+    "W8_A4": {
+      "total_lut": 2106.4,
+      "total_pe": 3,
+      "total_simd_lanes": 27,
+      "swu_bram18": 10,
+      "wm_bram18": 6
+    },
+    "W8_A8": {
+      "total_lut": 3060.8,
+      "total_pe": 3,
+      "total_simd_lanes": 27,
+      "swu_bram18": 10,
+      "wm_bram18": 6
+    }
+  },
+  "stage1": {
+    "W2_A2": {
+      "total_lut": 17308.000000000004,
+      "total_pe": 120,
+      "total_simd_lanes": 1360,
+      "swu_bram18": 42,
+      "wm_bram18": 140
+    },
+    "W2_A4": {
+      "total_lut": 23300.000000000007,
+      "total_pe": 120,
+      "total_simd_lanes": 1360,
+      "swu_bram18": 50,
+      "wm_bram18": 140
+    },
+    "W2_A8": {
+      "total_lut": 35284.00000000001,
+      "total_pe": 120,
+      "total_simd_lanes": 1360,
+      "swu_bram18": 66,
+      "wm_bram18": 140
+    },
+    "W4_A2": {
+      "total_lut": 23292.000000000007,
+      "total_pe": 120,
+      "total_simd_lanes": 1360,
+      "swu_bram18": 42,
+      "wm_bram18": 200
+    },
+    "W4_A4": {
+      "total_lut": 35268.00000000001,
+      "total_pe": 120,
+      "total_simd_lanes": 1360,
+      "swu_bram18": 50,
+      "wm_bram18": 200
+    },
+    "W4_A8": {
+      "total_lut": 59220.000000000015,
+      "total_pe": 120,
+      "total_simd_lanes": 1360,
+      "swu_bram18": 66,
+      "wm_bram18": 200
+    },
+    "W8_A2": {
+      "total_lut": 35260.00000000001,
+      "total_pe": 120,
+      "total_simd_lanes": 1360,
+      "swu_bram18": 42,
+      "wm_bram18": 320
+    },
+    "W8_A4": {
+      "total_lut": 59204.000000000015,
+      "total_pe": 120,
+      "total_simd_lanes": 1360,
+      "swu_bram18": 50,
+      "wm_bram18": 320
+    },
+    "W8_A8": {
+      "total_lut": 107092.00000000003,
+      "total_pe": 120,
+      "total_simd_lanes": 1360,
+      "swu_bram18": 66,
+      "wm_bram18": 320
+    }
+  },
+  "context": {
+    "W2_A2": {
+      "total_lut": 173813.59999999977,
+      "total_pe": 1328,
+      "total_simd_lanes": 24384,
+      "swu_bram18": 490,
+      "wm_bram18": 2016
+    },
+    "W2_A4": {
+      "total_lut": 281135.1999999998,
+      "total_pe": 1328,
+      "total_simd_lanes": 24384,
+      "swu_bram18": 590,
+      "wm_bram18": 2016
+    },
+    "W2_A8": {
+      "total_lut": 495778.39999999973,
+      "total_pe": 1328,
+      "total_simd_lanes": 24384,
+      "swu_bram18": 1180,
+      "wm_bram18": 2016
+    },
+    "W4_A2": {
+      "total_lut": 281103.1999999998,
+      "total_pe": 1328,
+      "total_simd_lanes": 24384,
+      "swu_bram18": 490,
+      "wm_bram18": 2976
+    },
+    "W4_A4": {
+      "total_lut": 495714.39999999973,
+      "total_pe": 1328,
+      "total_simd_lanes": 24384,
+      "swu_bram18": 590,
+      "wm_bram18": 2976
+    },
+    "W4_A8": {
+      "total_lut": 924936.7999999996,
+      "total_pe": 1328,
+      "total_simd_lanes": 24384,
+      "swu_bram18": 1180,
+      "wm_bram18": 2976
+    },
+    "W8_A2": {
+      "total_lut": 495682.39999999973,
+      "total_pe": 1328,
+      "total_simd_lanes": 24384,
+      "swu_bram18": 490,
+      "wm_bram18": 5944
+    },
+    "W8_A4": {
+      "total_lut": 924872.7999999996,
+      "total_pe": 1328,
+      "total_simd_lanes": 24384,
+      "swu_bram18": 590,
+      "wm_bram18": 5944
+    },
+    "W8_A8": {
+      "total_lut": 1783253.5999999994,
+      "total_pe": 1328,
+      "total_simd_lanes": 24384,
+      "swu_bram18": 1180,
+      "wm_bram18": 5944
+    }
+  },
+  "stage4": {
+    "W2_A2": {
+      "total_lut": 14722.400000000001,
+      "total_pe": 96,
+      "total_simd_lanes": 1696,
+      "swu_bram18": 29,
+      "wm_bram18": 136
+    },
+    "W2_A4": {
+      "total_lut": 22184.800000000003,
+      "total_pe": 96,
+      "total_simd_lanes": 1696,
+      "swu_bram18": 41,
+      "wm_bram18": 136
+    },
+    "W2_A8": {
+      "total_lut": 37109.600000000006,
+      "total_pe": 96,
+      "total_simd_lanes": 1696,
+      "swu_bram18": 70,
+      "wm_bram18": 136
+    },
+    "W4_A2": {
+      "total_lut": 22184.800000000003,
+      "total_pe": 96,
+      "total_simd_lanes": 1696,
+      "swu_bram18": 29,
+      "wm_bram18": 224
+    },
+    "W4_A4": {
+      "total_lut": 37109.600000000006,
+      "total_pe": 96,
+      "total_simd_lanes": 1696,
+      "swu_bram18": 41,
+      "wm_bram18": 224
+    },
+    "W4_A8": {
+      "total_lut": 66959.20000000001,
+      "total_pe": 96,
+      "total_simd_lanes": 1696,
+      "swu_bram18": 70,
+      "wm_bram18": 224
+    },
+    "W8_A2": {
+      "total_lut": 37109.600000000006,
+      "total_pe": 96,
+      "total_simd_lanes": 1696,
+      "swu_bram18": 29,
+      "wm_bram18": 416
+    },
+    "W8_A4": {
+      "total_lut": 66959.20000000001,
+      "total_pe": 96,
+      "total_simd_lanes": 1696,
+      "swu_bram18": 41,
+      "wm_bram18": 416
+    },
+    "W8_A8": {
+      "total_lut": 126658.40000000004,
+      "total_pe": 96,
+      "total_simd_lanes": 1696,
+      "swu_bram18": 70,
+      "wm_bram18": 416
+    }
+  },
+  "stage5": {
+    "W2_A2": {
+      "total_lut": 7150.000000000001,
+      "total_pe": 27,
+      "total_simd_lanes": 305,
+      "swu_bram18": 23,
+      "wm_bram18": 27
+    },
+    "W2_A4": {
+      "total_lut": 8492.0,
+      "total_pe": 27,
+      "total_simd_lanes": 305,
+      "swu_bram18": 27,
+      "wm_bram18": 27
+    },
+    "W2_A8": {
+      "total_lut": 11176.0,
+      "total_pe": 27,
+      "total_simd_lanes": 305,
+      "swu_bram18": 35,
+      "wm_bram18": 27
+    },
+    "W4_A2": {
+      "total_lut": 8492.0,
+      "total_pe": 27,
+      "total_simd_lanes": 305,
+      "swu_bram18": 23,
+      "wm_bram18": 44
+    },
+    "W4_A4": {
+      "total_lut": 11176.0,
+      "total_pe": 27,
+      "total_simd_lanes": 305,
+      "swu_bram18": 27,
+      "wm_bram18": 44
+    },
+    "W4_A8": {
+      "total_lut": 16544.0,
+      "total_pe": 27,
+      "total_simd_lanes": 305,
+      "swu_bram18": 35,
+      "wm_bram18": 44
+    },
+    "W8_A2": {
+      "total_lut": 11176.0,
+      "total_pe": 27,
+      "total_simd_lanes": 305,
+      "swu_bram18": 23,
+      "wm_bram18": 79
+    },
+    "W8_A4": {
+      "total_lut": 16544.0,
+      "total_pe": 27,
+      "total_simd_lanes": 305,
+      "swu_bram18": 27,
+      "wm_bram18": 79
+    },
+    "W8_A8": {
+      "total_lut": 27279.999999999996,
+      "total_pe": 27,
+      "total_simd_lanes": 305,
+      "swu_bram18": 35,
+      "wm_bram18": 79
+    }
+  }
+}

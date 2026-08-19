@@ -2,6 +2,19 @@
 act_bit_width apply uniformly to every layer -- Stage 4.2's per-layer
 heterogeneous case is a later extension, not built here).
 
+Every block class below (QuantInitialBlock, QuantRegularBottleneck,
+QuantDSCNoProjectionBottleneck, QuantDownsamplingBottleneck,
+QuantUpsamplingBottleneck) and the two _make_*_stage helpers DO already take
+separate weight_bit_width/act_bit_width (weight_bit_width feeds their conv/
+conv-transpose weight quantizers, act_bit_width feeds their activation/
+residual-join quantizers) -- QuantENet.__init__ itself just always calls
+them with its own single weight_bit_width/act_bit_width pair for every
+block, which is what keeps THIS class's behavior homogeneous. The dual
+per-block parameters exist so a separate, per-stage-driven top-level class
+(QuantENet23_1.py, HAWQ per-stage W/A search) can call these same block
+constructors directly with a different (weight_bit_width, act_bit_width)
+pair per stage, without duplicating any block-level Brevitas wiring.
+
 Mirrors ENet.py's topology block-for-block (same constructor signature plus
 bit-width knobs) -- this is deliberately a separate file rather than
 quantization branches threaded through ENet.py, so the FP32 architecture
@@ -92,6 +105,9 @@ def _quant_act(bit_width: int) -> qnn.QuantReLU:
 
 
 class QuantDecomposedLeakyAct(nn.Module):
+    # NOTE: this module has no conv weights at all (pre_quant/act_pos/
+    # out_quant are all activation quantizers) -- its bit-width is an
+    # ACTIVATION bit-width (act_bit_width), never a weight_bit_width.
     """Quantized, FINN-compatible stand-in for a FIXED (non-learnable)
     LeakyReLU/frozen-per-block PReLU slope -- Brevitas has no QuantLeakyReLU/
     QuantPReLU at all (confirmed: neither exists in brevitas.nn), and FINN's
@@ -127,13 +143,13 @@ class QuantDecomposedLeakyAct(nn.Module):
     -shaped buffers, and unnecessary anyway since the slope is fixed, not
     something gradients need to tie together across sites."""
 
-    def __init__(self, channels: int, bit_width: int, negative_slope: float):
+    def __init__(self, channels: int, act_bit_width: int, negative_slope: float):
         super().__init__()
-        self.pre_quant = qnn.QuantIdentity(bit_width=bit_width, act_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
-        self.act_pos = qnn.QuantReLU(bit_width=bit_width, act_quant=Uint8ActPerTensorFloat, return_quant_tensor=True)
+        self.pre_quant = qnn.QuantIdentity(bit_width=act_bit_width, act_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
+        self.act_pos = qnn.QuantReLU(bit_width=act_bit_width, act_quant=Uint8ActPerTensorFloat, return_quant_tensor=True)
         self.register_buffer("alpha", torch.full((1, channels, 1, 1), float(negative_slope)))
         self.register_buffer("one_minus_alpha", torch.full((1, channels, 1, 1), 1.0 - float(negative_slope)))
-        self.out_quant = qnn.QuantIdentity(bit_width=bit_width, act_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
+        self.out_quant = qnn.QuantIdentity(bit_width=act_bit_width, act_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x_q = self.pre_quant(x)
@@ -147,25 +163,25 @@ class QuantDecomposedLeakyAct(nn.Module):
         return self.out_quant(scaled_x + scaled_pos)
 
 
-def _quant_block_act(channels: int, bit_width: int, negative_slope: float | None) -> nn.Module:
+def _quant_block_act(channels: int, act_bit_width: int, negative_slope: float | None) -> nn.Module:
     """Picks plain QuantReLU (negative_slope=None, the default -- matches
     every existing QuantENet config) or the FINN-verified decomposed-leaky
     stand-in (negative_slope set) for one activation site."""
     if negative_slope is None:
-        return _quant_act(bit_width)
-    return QuantDecomposedLeakyAct(channels, bit_width, negative_slope)
+        return _quant_act(act_bit_width)
+    return QuantDecomposedLeakyAct(channels, act_bit_width, negative_slope)
 
 
 class QuantInitialBlock(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, bit_width: int, negative_slope: float | None = None):
+    def __init__(self, in_channels: int, out_channels: int, weight_bit_width: int, act_bit_width: int, negative_slope: float | None = None):
         super().__init__()
         if out_channels <= in_channels:
             raise ValueError("QuantInitialBlock out_channels must exceed in_channels.")
-        self.input_quant = qnn.QuantIdentity(bit_width=bit_width, act_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
-        self.conv = _quant_conv2d(in_channels, out_channels - in_channels, bit_width, kernel_size=3, stride=2, padding=1)
+        self.input_quant = qnn.QuantIdentity(bit_width=act_bit_width, act_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
+        self.conv = _quant_conv2d(in_channels, out_channels - in_channels, weight_bit_width, kernel_size=3, stride=2, padding=1)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
         self.bn = nn.BatchNorm2d(out_channels)
-        self.act = _quant_block_act(out_channels, bit_width, negative_slope)
+        self.act = _quant_block_act(out_channels, act_bit_width, negative_slope)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.input_quant(x)
@@ -174,7 +190,7 @@ class QuantInitialBlock(nn.Module):
 
 class QuantRegularBottleneck(nn.Module):
     def __init__(
-        self, channels: int, bit_width: int, internal_ratio: int = 4,
+        self, channels: int, weight_bit_width: int, act_bit_width: int, internal_ratio: int = 4,
         kernel_size: int = 3, padding: int = 1, dilation: int = 1,
         asymmetric: bool = False, dropout_p: float = 0.1, use_dsc: bool = False,
         separable_dilated: bool = False, negative_slope: float | None = None,
@@ -183,24 +199,24 @@ class QuantRegularBottleneck(nn.Module):
         internal_channels = max(1, channels // internal_ratio)
 
         self.reduce = nn.Sequential(
-            _quant_conv2d(channels, internal_channels, bit_width, kernel_size=1),
+            _quant_conv2d(channels, internal_channels, weight_bit_width, kernel_size=1),
             nn.BatchNorm2d(internal_channels),
-            _quant_block_act(internal_channels, bit_width, negative_slope),
+            _quant_block_act(internal_channels, act_bit_width, negative_slope),
         )
         if asymmetric:
             if use_dsc:
                 raise ValueError("use_dsc is not defined for asymmetric bottlenecks -- see ENet.py's RegularBottleneck.")
             self.conv = nn.Sequential(
-                _quant_conv2d(internal_channels, internal_channels, bit_width, kernel_size=(kernel_size, 1), padding=(padding, 0)),
+                _quant_conv2d(internal_channels, internal_channels, weight_bit_width, kernel_size=(kernel_size, 1), padding=(padding, 0)),
                 nn.BatchNorm2d(internal_channels),
-                _quant_block_act(internal_channels, bit_width, negative_slope),
-                _quant_conv2d(internal_channels, internal_channels, bit_width, kernel_size=(1, kernel_size), padding=(0, padding)),
+                _quant_block_act(internal_channels, act_bit_width, negative_slope),
+                _quant_conv2d(internal_channels, internal_channels, weight_bit_width, kernel_size=(1, kernel_size), padding=(0, padding)),
             )
         elif use_dsc:
             self.conv = nn.Sequential(
-                _quant_conv2d(internal_channels, internal_channels, bit_width, kernel_size=kernel_size,
+                _quant_conv2d(internal_channels, internal_channels, weight_bit_width, kernel_size=kernel_size,
                                padding=padding, dilation=dilation, groups=internal_channels),
-                _quant_conv2d(internal_channels, internal_channels, bit_width, kernel_size=1),
+                _quant_conv2d(internal_channels, internal_channels, weight_bit_width, kernel_size=1),
             )
         elif separable_dilated and dilation != 1:
             # Probe 4.4.2's (k,1)+(1,k) factoring of a dilated conv, mirrored
@@ -208,23 +224,23 @@ class QuantRegularBottleneck(nn.Module):
             # passes, BN+activation between them (a SEPARATE site from
             # conv_bn_act's own trailing activation below).
             self.conv = nn.Sequential(
-                _quant_conv2d(internal_channels, internal_channels, bit_width, kernel_size=(kernel_size, 1),
+                _quant_conv2d(internal_channels, internal_channels, weight_bit_width, kernel_size=(kernel_size, 1),
                                padding=(padding, 0), dilation=dilation),
                 nn.BatchNorm2d(internal_channels),
-                _quant_block_act(internal_channels, bit_width, negative_slope),
-                _quant_conv2d(internal_channels, internal_channels, bit_width, kernel_size=(1, kernel_size),
+                _quant_block_act(internal_channels, act_bit_width, negative_slope),
+                _quant_conv2d(internal_channels, internal_channels, weight_bit_width, kernel_size=(1, kernel_size),
                                padding=(0, padding), dilation=dilation),
             )
         else:
-            self.conv = _quant_conv2d(internal_channels, internal_channels, bit_width, kernel_size=kernel_size, padding=padding, dilation=dilation)
+            self.conv = _quant_conv2d(internal_channels, internal_channels, weight_bit_width, kernel_size=kernel_size, padding=padding, dilation=dilation)
 
         self.conv_bn_act = nn.Sequential(
             self.conv,
             nn.BatchNorm2d(internal_channels),
-            _quant_block_act(internal_channels, bit_width, negative_slope),
+            _quant_block_act(internal_channels, act_bit_width, negative_slope),
         )
         self.expand = nn.Sequential(
-            _quant_conv2d(internal_channels, channels, bit_width, kernel_size=1),
+            _quant_conv2d(internal_channels, channels, weight_bit_width, kernel_size=1),
             nn.BatchNorm2d(channels),
         )
         self.dropout = nn.Dropout2d(p=dropout_p)
@@ -247,8 +263,8 @@ class QuantRegularBottleneck(nn.Module):
         # NOT needed here -- this comment exists so a future agent doesn't
         # try to re-apply it to QuantENet.py's own residual_add sites (this
         # one and the 3 others in this file, which just reference this note).
-        self.residual_add = qnn.QuantEltwiseAdd(bit_width=bit_width, input_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
-        self.out_act = _quant_block_act(channels, bit_width, negative_slope)
+        self.residual_add = qnn.QuantEltwiseAdd(bit_width=act_bit_width, input_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
+        self.out_act = _quant_block_act(channels, act_bit_width, negative_slope)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.reduce(x)
@@ -266,16 +282,16 @@ class QuantDSCNoProjectionBottleneck(nn.Module):
     (same constraint QuantRegularBottleneck's own use_dsc already has)."""
 
     def __init__(
-        self, channels: int, bit_width: int, kernel_size: int = 3, padding: int = 1,
+        self, channels: int, weight_bit_width: int, act_bit_width: int, kernel_size: int = 3, padding: int = 1,
         dilation: int = 1, dropout_p: float = 0.1, negative_slope: float | None = None,
     ):
         super().__init__()
         self.conv = nn.Sequential(
-            _quant_conv2d(channels, channels, bit_width, kernel_size=kernel_size,
+            _quant_conv2d(channels, channels, weight_bit_width, kernel_size=kernel_size,
                           padding=padding, dilation=dilation, groups=channels),
             nn.BatchNorm2d(channels),
-            _quant_block_act(channels, bit_width, negative_slope),
-            _quant_conv2d(channels, channels, bit_width, kernel_size=1),
+            _quant_block_act(channels, act_bit_width, negative_slope),
+            _quant_conv2d(channels, channels, weight_bit_width, kernel_size=1),
             nn.BatchNorm2d(channels),
         )
         self.dropout = nn.Dropout2d(p=dropout_p)
@@ -283,8 +299,8 @@ class QuantDSCNoProjectionBottleneck(nn.Module):
         # shares one input_quant instance (learned PARAMETER_FROM_STATS scale)
         # across both operands by construction, so this join is already
         # FINN-safe -- no CONST-scale fix needed here.
-        self.residual_add = qnn.QuantEltwiseAdd(bit_width=bit_width, input_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
-        self.out_act = _quant_block_act(channels, bit_width, negative_slope)
+        self.residual_add = qnn.QuantEltwiseAdd(bit_width=act_bit_width, input_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
+        self.out_act = _quant_block_act(channels, act_bit_width, negative_slope)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.dropout(self.conv(x))
@@ -293,7 +309,7 @@ class QuantDSCNoProjectionBottleneck(nn.Module):
 
 class QuantDownsamplingBottleneck(nn.Module):
     def __init__(
-        self, in_channels: int, out_channels: int, bit_width: int, internal_ratio: int = 4,
+        self, in_channels: int, out_channels: int, weight_bit_width: int, act_bit_width: int, internal_ratio: int = 4,
         dropout_p: float = 0.01, use_strided: bool = True, negative_slope: float | None = None,
     ):
         super().__init__()
@@ -301,24 +317,24 @@ class QuantDownsamplingBottleneck(nn.Module):
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2, return_indices=True)
         if use_strided:
             self.reduce = nn.Sequential(
-                _quant_conv2d(in_channels, internal_channels, bit_width, kernel_size=2, stride=2),
+                _quant_conv2d(in_channels, internal_channels, weight_bit_width, kernel_size=2, stride=2),
                 nn.BatchNorm2d(internal_channels),
-                _quant_block_act(internal_channels, bit_width, negative_slope),
+                _quant_block_act(internal_channels, act_bit_width, negative_slope),
             )
         else:
             self.reduce = nn.Sequential(
                 nn.MaxPool2d(kernel_size=2, stride=2),
-                _quant_conv2d(in_channels, internal_channels, bit_width, kernel_size=1),
+                _quant_conv2d(in_channels, internal_channels, weight_bit_width, kernel_size=1),
                 nn.BatchNorm2d(internal_channels),
-                _quant_block_act(internal_channels, bit_width, negative_slope),
+                _quant_block_act(internal_channels, act_bit_width, negative_slope),
             )
         self.conv = nn.Sequential(
-            _quant_conv2d(internal_channels, internal_channels, bit_width, kernel_size=3, padding=1),
+            _quant_conv2d(internal_channels, internal_channels, weight_bit_width, kernel_size=3, padding=1),
             nn.BatchNorm2d(internal_channels),
-            _quant_block_act(internal_channels, bit_width, negative_slope),
+            _quant_block_act(internal_channels, act_bit_width, negative_slope),
         )
         self.expand = nn.Sequential(
-            _quant_conv2d(internal_channels, out_channels, bit_width, kernel_size=1),
+            _quant_conv2d(internal_channels, out_channels, weight_bit_width, kernel_size=1),
             nn.BatchNorm2d(out_channels),
         )
         self.dropout = nn.Dropout2d(p=dropout_p)
@@ -326,8 +342,8 @@ class QuantDownsamplingBottleneck(nn.Module):
         # shares one input_quant instance (learned PARAMETER_FROM_STATS scale)
         # across both operands by construction, so this join is already
         # FINN-safe -- no CONST-scale fix needed here.
-        self.residual_add = qnn.QuantEltwiseAdd(bit_width=bit_width, input_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
-        self.out_act = _quant_block_act(out_channels, bit_width, negative_slope)
+        self.residual_add = qnn.QuantEltwiseAdd(bit_width=act_bit_width, input_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
+        self.out_act = _quant_block_act(out_channels, act_bit_width, negative_slope)
         self.out_channels = out_channels
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Size]:
@@ -349,27 +365,27 @@ class QuantDownsamplingBottleneck(nn.Module):
 
 
 class QuantUpsamplingBottleneck(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, bit_width: int, internal_ratio: int = 4):
+    def __init__(self, in_channels: int, out_channels: int, weight_bit_width: int, act_bit_width: int, internal_ratio: int = 4):
         super().__init__()
         internal_channels = max(1, in_channels // internal_ratio)
         self.main_proj = nn.Sequential(
-            _quant_conv2d(in_channels, out_channels, bit_width, kernel_size=1),
+            _quant_conv2d(in_channels, out_channels, weight_bit_width, kernel_size=1),
             nn.BatchNorm2d(out_channels),
         )
         self.unpool = nn.MaxUnpool2d(kernel_size=2, stride=2)
         self.reduce = nn.Sequential(
-            _quant_conv2d(in_channels, internal_channels, bit_width, kernel_size=1),
+            _quant_conv2d(in_channels, internal_channels, weight_bit_width, kernel_size=1),
             nn.BatchNorm2d(internal_channels),
-            _quant_act(bit_width),
+            _quant_act(act_bit_width),
         )
         self.up = nn.Sequential(
             qnn.QuantConvTranspose2d(internal_channels, internal_channels, kernel_size=2, stride=2, bias=False,
-                                      weight_bit_width=bit_width, weight_quant=Int8WeightPerTensorFloat),
+                                      weight_bit_width=weight_bit_width, weight_quant=Int8WeightPerTensorFloat),
             nn.BatchNorm2d(internal_channels),
-            _quant_act(bit_width),
+            _quant_act(act_bit_width),
         )
         self.expand = nn.Sequential(
-            _quant_conv2d(internal_channels, out_channels, bit_width, kernel_size=1),
+            _quant_conv2d(internal_channels, out_channels, weight_bit_width, kernel_size=1),
             nn.BatchNorm2d(out_channels),
         )
         self.dropout = nn.Dropout2d(p=0.1)
@@ -377,8 +393,8 @@ class QuantUpsamplingBottleneck(nn.Module):
         # shares one input_quant instance (learned PARAMETER_FROM_STATS scale)
         # across both operands by construction, so this join is already
         # FINN-safe -- no CONST-scale fix needed here.
-        self.residual_add = qnn.QuantEltwiseAdd(bit_width=bit_width, input_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
-        self.out_act = _quant_act(bit_width)
+        self.residual_add = qnn.QuantEltwiseAdd(bit_width=act_bit_width, input_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
+        self.out_act = _quant_act(act_bit_width)
 
     def forward(self, x: torch.Tensor, output_size: torch.Size, indices: torch.Tensor | None = None) -> torch.Tensor:
         main = self.main_proj(x)
@@ -437,49 +453,48 @@ class QuantENet(nn.Module):
             raise ValueError("dsc_no_projection_context_only narrows dsc_no_projection's scope -- meaningless without dsc_no_projection=True itself.")
 
         self.decoder_type: DecoderType = decoder_type
-        bw = weight_bit_width  # conv weight bit-width; act_bit_width used for _quant_act/input/residual quantizers below
         n_stage1, n_stage2, n_stage3, n_regular4, n_regular5 = bottlenecks_per_stage
         slope_map = leaky_slope_map or {}
 
-        self.initial = QuantInitialBlock(in_channels, initial_channels, act_bit_width, negative_slope=slope_map.get("initial"))
-        self.down1 = QuantDownsamplingBottleneck(initial_channels, stage1_channels, bw, dropout_p=0.01, use_strided=use_strided, negative_slope=slope_map.get("down1"))
+        self.initial = QuantInitialBlock(in_channels, initial_channels, weight_bit_width, act_bit_width, negative_slope=slope_map.get("initial"))
+        self.down1 = QuantDownsamplingBottleneck(initial_channels, stage1_channels, weight_bit_width, act_bit_width, dropout_p=0.01, use_strided=use_strided, negative_slope=slope_map.get("down1"))
         self.regular1 = self._make_shallow_stage(
-            stage1_channels, n_stage1, bw, dropout_p=0.01, use_dsc=use_dsc,
+            stage1_channels, n_stage1, weight_bit_width, act_bit_width, dropout_p=0.01, use_dsc=use_dsc,
             dsc_no_projection=dsc_no_projection, dsc_no_projection_context_only=dsc_no_projection_context_only,
             name_prefix="regular1", leaky_slope_map=slope_map,
         )
 
-        self.down2 = QuantDownsamplingBottleneck(stage1_channels, stage23_channels, bw, dropout_p=0.1, use_strided=use_strided, negative_slope=slope_map.get("down2"))
+        self.down2 = QuantDownsamplingBottleneck(stage1_channels, stage23_channels, weight_bit_width, act_bit_width, dropout_p=0.1, use_strided=use_strided, negative_slope=slope_map.get("down2"))
         self.stage2 = self._make_context_stage(
-            stage23_channels, n_stage2, bw, use_dilated, use_asymmetric, use_dsc,
+            stage23_channels, n_stage2, weight_bit_width, act_bit_width, use_dilated, use_asymmetric, use_dsc,
             context_pattern, dsc_no_projection, separable_dilated, "stage2", slope_map,
         )
         self.stage3 = self._make_context_stage(
-            stage23_channels, n_stage3, bw, use_dilated, use_asymmetric, use_dsc,
+            stage23_channels, n_stage3, weight_bit_width, act_bit_width, use_dilated, use_asymmetric, use_dsc,
             context_pattern, dsc_no_projection, separable_dilated, "stage3", slope_map,
         )
 
-        self.up4 = QuantUpsamplingBottleneck(stage23_channels, stage4_channels, bw)
+        self.up4 = QuantUpsamplingBottleneck(stage23_channels, stage4_channels, weight_bit_width, act_bit_width)
         # Decoder (regular4/regular5/up4/up5) is always plain QuantReLU,
         # regardless of leaky_slope_map -- same rule as ENet.py's prelu_
         # variant (decoder hardcodes relu=True everywhere).
         self.regular4 = self._make_shallow_stage(
-            stage4_channels, n_regular4, bw, dropout_p=0.1, use_dsc=use_dsc,
+            stage4_channels, n_regular4, weight_bit_width, act_bit_width, dropout_p=0.1, use_dsc=use_dsc,
             dsc_no_projection=dsc_no_projection, dsc_no_projection_context_only=dsc_no_projection_context_only,
             name_prefix="regular4", leaky_slope_map=None,
         )
-        self.up5 = QuantUpsamplingBottleneck(stage4_channels, stage5_channels, bw)
+        self.up5 = QuantUpsamplingBottleneck(stage4_channels, stage5_channels, weight_bit_width, act_bit_width)
         self.regular5 = self._make_shallow_stage(
-            stage5_channels, n_regular5, bw, dropout_p=0.1, use_dsc=use_dsc,
+            stage5_channels, n_regular5, weight_bit_width, act_bit_width, dropout_p=0.1, use_dsc=use_dsc,
             dsc_no_projection=dsc_no_projection, dsc_no_projection_context_only=dsc_no_projection_context_only,
             name_prefix="regular5", leaky_slope_map=None,
         )
         self.final = qnn.QuantConvTranspose2d(stage5_channels, out_channels, kernel_size=2, stride=2, bias=True,
-                                               weight_bit_width=bw, weight_quant=Int8WeightPerTensorFloat)
+                                               weight_bit_width=weight_bit_width, weight_quant=Int8WeightPerTensorFloat)
 
     @staticmethod
     def _make_shallow_stage(
-        channels: int, n_ops: int, bit_width: int, dropout_p: float, use_dsc: bool,
+        channels: int, n_ops: int, weight_bit_width: int, act_bit_width: int, dropout_p: float, use_dsc: bool,
         dsc_no_projection: bool, dsc_no_projection_context_only: bool, name_prefix: str,
         leaky_slope_map: dict | None,
     ) -> nn.Sequential:
@@ -491,19 +506,19 @@ class QuantENet(nn.Module):
         slope_map = leaky_slope_map or {}
         if dsc_no_projection and not dsc_no_projection_context_only:
             return nn.Sequential(*[
-                QuantDSCNoProjectionBottleneck(channels, bit_width, dropout_p=dropout_p,
+                QuantDSCNoProjectionBottleneck(channels, weight_bit_width, act_bit_width, dropout_p=dropout_p,
                                                 negative_slope=slope_map.get(f"{name_prefix}.{i}"))
                 for i in range(n_ops)
             ])
         return nn.Sequential(*[
-            QuantRegularBottleneck(channels, bit_width, dropout_p=dropout_p, use_dsc=use_dsc,
+            QuantRegularBottleneck(channels, weight_bit_width, act_bit_width, dropout_p=dropout_p, use_dsc=use_dsc,
                                     negative_slope=slope_map.get(f"{name_prefix}.{i}"))
             for i in range(n_ops)
         ])
 
     @staticmethod
     def _make_context_stage(
-        channels: int, n_ops: int, bit_width: int, use_dilated: bool, use_asymmetric: bool, use_dsc: bool,
+        channels: int, n_ops: int, weight_bit_width: int, act_bit_width: int, use_dilated: bool, use_asymmetric: bool, use_dsc: bool,
         context_pattern: str, dsc_no_projection: bool, separable_dilated: bool, name_prefix: str,
         leaky_slope_map: dict | None,
     ) -> nn.Sequential:
@@ -538,7 +553,7 @@ class QuantENet(nn.Module):
                     # sentinel meaning as ENet.py's own dsc_no_projection
                     # branch.
                     ops.append(QuantRegularBottleneck(
-                        channels, bit_width, dropout_p=0.1, use_dsc=False,
+                        channels, weight_bit_width, act_bit_width, dropout_p=0.1, use_dsc=False,
                         negative_slope=slope_map.get(block_name),
                     ))
                     continue
@@ -550,7 +565,7 @@ class QuantENet(nn.Module):
                 if dilation != 1 and not use_dilated:
                     dilation = 1
                 ops.append(QuantDSCNoProjectionBottleneck(
-                    channels, bit_width, kernel_size=3, padding=dilation, dilation=dilation,
+                    channels, weight_bit_width, act_bit_width, kernel_size=3, padding=dilation, dilation=dilation,
                     dropout_p=0.1, negative_slope=slope_map.get(block_name),
                 ))
             return nn.Sequential(*ops)
@@ -564,7 +579,7 @@ class QuantENet(nn.Module):
             if kwargs.get("asymmetric", False) and not use_asymmetric:
                 kwargs = {}
             ops.append(QuantRegularBottleneck(
-                channels, bit_width, dropout_p=0.1, use_dsc=use_dsc, separable_dilated=separable_dilated,
+                channels, weight_bit_width, act_bit_width, dropout_p=0.1, use_dsc=use_dsc, separable_dilated=separable_dilated,
                 negative_slope=slope_map.get(f"{name_prefix}.{i}"), **kwargs,
             ))
         return nn.Sequential(*ops)
@@ -716,7 +731,7 @@ if __name__ == "__main__":
     # a real QAT training run + collect_results.py's real dice, not a
     # single uncalibrated forward pass here.
     torch.manual_seed(0)
-    decomposed = QuantDecomposedLeakyAct(16, bit_width=8, negative_slope=0.37).eval()
+    decomposed = QuantDecomposedLeakyAct(16, act_bit_width=8, negative_slope=0.37).eval()
     x = torch.randn(2, 16, 8, 8) * 2.0
     with torch.no_grad():
         x_q = decomposed.pre_quant(x)
