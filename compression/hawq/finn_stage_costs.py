@@ -39,7 +39,7 @@ from config_23_1 import (  # noqa: E402
     IN_CHANNELS, OUT_CHANNELS, PRELU_VARIANT, SEPARABLE_DILATED, STAGE_MODULE_ATTRS,
     STAGE_NAMES, USE_ASYMMETRIC,
 )
-from finn_cost_model import LayerGeometry, layer_cost  # noqa: E402
+from finn_cost_model import FOLDING_SERIAL, FOLDING_UNFOLDED, Folding, LayerGeometry, layer_cost  # noqa: E402
 
 INPUT_HW = (512, 512)  # real nnU-Net patch size (see debug.json's configuration_manager.patch_size)
 
@@ -95,13 +95,13 @@ def dump_layer_geometry(model: nn.Module, input_hw: tuple[int, int]) -> list[Lay
     return geometries
 
 
-def build_stage_cost_table(geometries: list[LayerGeometry]) -> dict:
+def build_stage_cost_table(geometries: list[LayerGeometry], folding: Folding) -> dict:
     """{stage: {"W{w}_A{a}": {total_lut, total_pe, total_simd_lanes,
     swu_bram18, wm_bram18}}} for every (weight_bits, act_bits) in
-    CANDIDATE_BITS x CANDIDATE_BITS -- additive-per-layer assumption (each
-    layer's cost computed independently at the stage's chosen bits and
-    summed), same assumption hawq/ILP.ipynb's own per-layer BOPS/size/
-    latency sums already make."""
+    CANDIDATE_BITS x CANDIDATE_BITS, at the given folding config --
+    additive-per-layer assumption (each layer's cost computed independently
+    at the stage's chosen bits and summed), same assumption hawq/ILP.ipynb's
+    own per-layer BOPS/size/latency sums already make."""
     table = {stage: {} for stage in STAGE_NAMES}
     for stage in STAGE_NAMES:
         stage_layers = [g for g in geometries if g.stage == stage]
@@ -109,17 +109,28 @@ def build_stage_cost_table(geometries: list[LayerGeometry]) -> dict:
             for a in CANDIDATE_BITS:
                 totals = {"total_lut": 0, "total_pe": 0, "total_simd_lanes": 0, "swu_bram18": 0, "wm_bram18": 0}
                 for layer in stage_layers:
-                    cost = layer_cost(layer, w, a)
+                    cost = layer_cost(layer, w, a, folding)
                     for k in totals:
                         totals[k] += cost[k]
                 table[stage][f"W{w}_A{a}"] = totals
     return table
 
 
+XCZU7EV = {"LUT": 230_400, "BRAM_18K": 624}  # see hardware/finn_estimate_original_enet_unfolded.py's own numbers
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--out-file", type=Path, default=Path("compression/hawq/finn_stage_costs.json"))
+    parser.add_argument("--folding", choices=["unfolded", "serial"], default="unfolded",
+                         help="'unfolded' (default, matches every existing report in this repo): Q=C_in*K_h*K_w, "
+                              "P=C_out, max resource/min latency. 'serial': Q=P=1, min resource/max latency -- "
+                              "see finn_cost_model.py's own docstring for why SWU BRAM is identical either way.")
+    parser.add_argument("--out-file", type=Path, default=None,
+                         help="Defaults to compression/hawq/finn_stage_costs.json (unfolded) or "
+                              "finn_stage_costs_serial.json (serial).")
     args = parser.parse_args()
+    folding: Folding = FOLDING_SERIAL if args.folding == "serial" else FOLDING_UNFOLDED
+    out_file = args.out_file or Path(f"compression/hawq/finn_stage_costs{'_serial' if folding == FOLDING_SERIAL else ''}.json")
 
     model = ENet(
         in_channels=IN_CHANNELS, out_channels=OUT_CHANNELS, channels=CHANNELS,
@@ -128,20 +139,28 @@ def main() -> None:
         separable_dilated=SEPARABLE_DILATED, use_prelu=True, prelu_variant=PRELU_VARIANT,
     )
     geometries = dump_layer_geometry(model, INPUT_HW)
-    print(f"Traced {len(geometries)} Conv2d/ConvTranspose2d/MaxPool2d layers across {len(STAGE_NAMES)} stages.")
+    print(f"Traced {len(geometries)} Conv2d/ConvTranspose2d/MaxPool2d layers across {len(STAGE_NAMES)} stages. Folding: {folding}")
     for stage in STAGE_NAMES:
         n = sum(1 for g in geometries if g.stage == stage)
         print(f"  {stage}: {n} layers")
 
-    table = build_stage_cost_table(geometries)
-    args.out_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(args.out_file, "w") as f:
+    table = build_stage_cost_table(geometries, folding)
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_file, "w") as f:
         json.dump(table, f, indent=2)
-    print(f"Wrote {args.out_file}")
+    print(f"Wrote {out_file}")
+
+    total_lut = total_bram = 0
     for stage in STAGE_NAMES:
-        lo = table[stage][f"W{CANDIDATE_BITS[0]}_A{CANDIDATE_BITS[0]}"]["total_lut"]
-        hi = table[stage][f"W{CANDIDATE_BITS[-1]}_A{CANDIDATE_BITS[-1]}"]["total_lut"]
-        print(f"  {stage}: total_lut ranges {lo:.0f} (all-{CANDIDATE_BITS[0]}bit) .. {hi:.0f} (all-{CANDIDATE_BITS[-1]}bit)")
+        lo = table[stage][f"W{CANDIDATE_BITS[0]}_A{CANDIDATE_BITS[0]}"]
+        hi = table[stage][f"W{CANDIDATE_BITS[-1]}_A{CANDIDATE_BITS[-1]}"]
+        print(f"  {stage}: total_lut {lo['total_lut']:.0f} (all-{CANDIDATE_BITS[0]}bit) .. {hi['total_lut']:.0f} (all-{CANDIDATE_BITS[-1]}bit)   "
+              f"bram18k {lo['swu_bram18']+lo['wm_bram18']:.0f} .. {hi['swu_bram18']+hi['wm_bram18']:.0f}")
+        total_lut += lo["total_lut"]
+        total_bram += lo["swu_bram18"] + lo["wm_bram18"]
+    print(f"\nCHEAPEST (all-{CANDIDATE_BITS[0]}bit) totals: "
+          f"LUT={total_lut:.0f} ({100*total_lut/XCZU7EV['LUT']:.1f}% of {XCZU7EV['LUT']} budget)  "
+          f"BRAM_18K={total_bram:.0f} ({100*total_bram/XCZU7EV['BRAM_18K']:.1f}% of {XCZU7EV['BRAM_18K']} budget)")
 
 
 if __name__ == "__main__":
