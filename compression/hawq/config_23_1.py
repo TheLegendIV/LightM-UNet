@@ -14,6 +14,7 @@ Stage grouping confirmed against hardware/finn_stage_partition.py's own
 initial/stage1/stage2+3/stage4/stage5 split)."""
 from __future__ import annotations
 
+NET_NAME = "nnUNetTrainerENet_23_1_s19_warmstart_4c"
 IN_CHANNELS = 1
 OUT_CHANNELS = 5  # labels: background, LAD, RCA, LCX, LM
 CHANNELS = (4, 16, 32, 16, 4)  # initial, stage1, stage2/3 (context), stage4, stage5

@@ -21,6 +21,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import sys
 from pathlib import Path
@@ -34,6 +35,13 @@ sys.path.insert(0, str(PACKAGE_ROOT))
 from nnunetv2.nets.ENet import ENet  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+# Static default (config_23_1) -- kept as a real import, not just a
+# load_config() call, so a library-style `from finn_stage_costs import
+# dump_layer_geometry, INPUT_HW` (see folding_ilp.py) still gets working
+# STAGE_MODULE_ATTRS/IN_CHANNELS globals immediately at import time, without
+# needing to run this file's own main()/load_config() first. Running this
+# file directly with --config overrides these via load_config() below,
+# same pattern as sensitivity.py.
 from config_23_1 import (  # noqa: E402
     BOTTLENECKS_PER_STAGE, CANDIDATE_BITS, CHANNELS, CONTEXT_PATTERN, DECODER_TYPE,
     IN_CHANNELS, OUT_CHANNELS, PRELU_VARIANT, SEPARABLE_DILATED, STAGE_MODULE_ATTRS,
@@ -42,6 +50,14 @@ from config_23_1 import (  # noqa: E402
 from finn_cost_model import FOLDING_SERIAL, FOLDING_UNFOLDED, Folding, LayerGeometry, layer_cost  # noqa: E402
 
 INPUT_HW = (512, 512)  # real nnU-Net patch size (see debug.json's configuration_manager.patch_size)
+
+
+def load_config(config_module: str) -> None:
+    """See sensitivity.py's own load_config -- same pattern, injects the
+    named config_*.py's constants into this module's globals, overriding
+    the static config_23_1 default imported above."""
+    cfg = importlib.import_module(config_module)
+    globals().update({k: v for k, v in vars(cfg).items() if not k.startswith("_")})
 
 
 def _pair(v) -> tuple[int, int]:
@@ -121,16 +137,24 @@ XCZU7EV = {"LUT": 230_400, "BRAM_18K": 624}  # see hardware/finn_estimate_origin
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--config", default="config_23_1",
+                         help="Which compression/hawq/config_*.py to load -- e.g. config_23_1 or config_21_2.")
     parser.add_argument("--folding", choices=["unfolded", "serial"], default="unfolded",
                          help="'unfolded' (default, matches every existing report in this repo): Q=C_in*K_h*K_w, "
                               "P=C_out, max resource/min latency. 'serial': Q=P=1, min resource/max latency -- "
                               "see finn_cost_model.py's own docstring for why SWU BRAM is identical either way.")
     parser.add_argument("--out-file", type=Path, default=None,
-                         help="Defaults to compression/hawq/finn_stage_costs.json (unfolded) or "
-                              "finn_stage_costs_serial.json (serial).")
+                         help="Defaults to compression/hawq/finn_stage_costs_<config suffix>[_serial].json.")
     args = parser.parse_args()
+    if args.config != "config_23_1":
+        load_config(args.config)
     folding: Folding = FOLDING_SERIAL if args.folding == "serial" else FOLDING_UNFOLDED
-    out_file = args.out_file or Path(f"compression/hawq/finn_stage_costs{'_serial' if folding == FOLDING_SERIAL else ''}.json")
+    # config_23_1 keeps the original unsuffixed filename (ilp_search.py's
+    # own default --finn-cost-file points there) -- only non-default
+    # configs get a name suffix, so this stays backward compatible.
+    config_suffix = "" if args.config == "config_23_1" else f"_{args.config.removeprefix('config_')}"
+    default_name = f"finn_stage_costs{config_suffix}" + ("_serial" if folding == FOLDING_SERIAL else "")
+    out_file = args.out_file or Path(f"compression/hawq/{default_name}.json")
 
     model = ENet(
         in_channels=IN_CHANNELS, out_channels=OUT_CHANNELS, channels=CHANNELS,

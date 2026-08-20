@@ -53,6 +53,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import random
 import sys
@@ -70,24 +71,24 @@ from nnunetv2.training.loss.compound_losses import DC_and_CE_loss  # noqa: E402
 from nnunetv2.training.loss.dice import MemoryEfficientSoftDiceLoss  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from config_23_1 import (  # noqa: E402
-    BOTTLENECKS_PER_STAGE,
-    CANDIDATE_BITS,
-    CHANNELS,
-    CONTEXT_PATTERN,
-    DECODER_TYPE,
-    IN_CHANNELS,
-    OUT_CHANNELS,
-    PRELU_VARIANT,
-    SEPARABLE_DILATED,
-    STAGE_BOUNDARY_ATTR,
-    STAGE_MODULE_ATTRS,
-    STAGE_NAMES,
-    USE_ASYMMETRIC,
-)
 
 NNUNET_PREPROCESSED = REPO_ROOT / "data" / "nnUNet_preprocessed"
 NNUNET_RESULTS = REPO_ROOT / "data" / "nnUNet_results"
+
+
+def load_config(config_module: str) -> None:
+    """Dynamically imports one of compression/hawq/config_*.py (one per
+    architecture -- e.g. config_23_1 for the S19/23_1 recipe at native
+    width, config_21_2 for the same recipe's U8 width) and injects its
+    constants (CHANNELS, BOTTLENECKS_PER_STAGE, STAGE_NAMES, NET_NAME, ...)
+    into this module's globals -- every function below (build_fp32_model,
+    run_sensitivity, etc.) reads them as bare module-level names, so this
+    only needs to run once, before those functions are first called, not a
+    rewrite of every call site to a cfg.XXX-prefixed lookup. Repeat this
+    pattern (config_<name>.py + this loader) for each new architecture the
+    HAWQ search gets pointed at, rather than duplicating this whole file."""
+    cfg = importlib.import_module(config_module)
+    globals().update({k: v for k, v in vars(cfg).items() if not k.startswith("_")})
 
 
 def build_fp32_model(checkpoint_path: Path) -> ENet:
@@ -307,7 +308,10 @@ def run_sensitivity(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--net-name", default="nnUNetTrainerENet_23_1_s19_warmstart_4c")
+    parser.add_argument("--config", default="config_23_1",
+                         help="Which compression/hawq/config_*.py to load (one per architecture) -- "
+                              "e.g. config_23_1 (S19/23_1 native width) or config_21_2 (same recipe, U8 width).")
+    parser.add_argument("--net-name", default=None, help="Defaults to the loaded config's own NET_NAME.")
     parser.add_argument("--dataset-name", default="Dataset509_ARCADE_1x1_4c")
     parser.add_argument("--plans-name", default="nnUNetPlans")
     parser.add_argument("--configuration", default="2d")
@@ -317,11 +321,16 @@ def main() -> None:
     parser.add_argument("--n-probes", type=int, default=10, help="Rademacher probes per batch (Hutchinson's method).")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
-    parser.add_argument("--out-file", type=Path, default=Path("compression/hawq/sensitivity_23_1.json"))
+    parser.add_argument("--out-file", type=Path, default=None,
+                         help="Defaults to compression/hawq/sensitivity_<config suffix>.json.")
     args = parser.parse_args()
 
+    load_config(args.config)  # populates CHANNELS/BOTTLENECKS_PER_STAGE/STAGE_NAMES/NET_NAME/... as module globals
+    net_name = args.net_name or NET_NAME
+    out_file = args.out_file or Path(f"compression/hawq/sensitivity_{args.config.removeprefix('config_')}.json")
+
     checkpoint_path = (
-        NNUNET_RESULTS / args.dataset_name / f"{args.net_name}__{args.plans_name}__{args.configuration}"
+        NNUNET_RESULTS / args.dataset_name / f"{net_name}__{args.plans_name}__{args.configuration}"
         / f"fold_{args.fold}" / args.checkpoint_name
     )
     if not checkpoint_path.exists():
@@ -329,10 +338,10 @@ def main() -> None:
 
     report = run_sensitivity(checkpoint_path, args.dataset_name, args.n_batches, args.n_probes, args.device, args.seed)
 
-    args.out_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(args.out_file, "w") as f:
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_file, "w") as f:
         json.dump(report, f, indent=2)
-    print(f"Wrote {args.out_file}")
+    print(f"Wrote {out_file}")
     for stage, entry in report.items():
         print(f"  {stage}: trace_w={entry['trace_w']:.4e} trace_a={entry['trace_a']:.4e} "
               f"n_weight_params={entry['n_weight_params']}")
