@@ -1,0 +1,208 @@
+#!/bin/bash
+#SBATCH --job-name=hawq_23_1_qat_stage_bits
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=16:00:00
+# ~21.6s/train-iteration (measured) x 60 iters/epoch x 40 epochs =~ 14.4h
+# train time alone -- see header comment below for why, and for how to
+# adjust EPOCHS/ITERATIONS_PER_EPOCH or --time to your real budget.
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# QAT (quantization-aware training, NOT PTQ) of the HAWQ-searched PER-STAGE
+# W/A quantization scheme (compression/hawq/ilp_search.py's output) on
+# nnUNetTrainerENet_23_1_s19_warmstart_4c's exact architecture, via the new
+# nnUNetTrainerENetQuant23_1 trainer (enet/nnunetv2/training/nnUNetTrainer/
+# nnUNetTrainerENetQuant23_1.py).
+#
+# Why QAT, not PTQ: a real PTQ check on this exact scheme
+# (compression/hawq/eval_dice.py, n=5 held-out val cases) showed naive PTQ
+# collapses catastrophically at the searched context=4bit assignment (mean
+# foreground Dice 0.022 vs 0.460 for homogeneous-INT8 PTQ, vs 0.569 FP32).
+# The Hessian-trace sensitivity signal driving the ILP is a LOCAL/small-
+# perturbation approximation (sensitivity ~ trace * ||delta_W||^2); it
+# correctly ranked context as least sensitive PER PARAMETER, but a jump to
+# 4-bit isn't a small perturbation, and naive PTQ has no way to recover from
+# a bad operating point the way QAT (which lets every weight re-adapt over
+# the full training budget) can. This job is the actual test of whether the
+# per-stage scheme is viable at all.
+#
+# Warm-started from 23_1's OWN trained FP32 weights (ENET23_1_PRETRAINED_
+# CHECKPOINT below) -- 23_1 is itself a warm-start continuation of S19
+# (-pretrained_weights in stage_23_1_s19_warmstart_4c.job), so cold-starting
+# its QAT would throw away that lineage on top of an architecture that's
+# already expensive per iteration (measured ~21.6s/train-iteration in a
+# local docker timing run, IDENTICAL between homogeneous-INT8 and this
+# per-stage scheme -- the bit-width mixing isn't what's expensive, the
+# architecture is: dsc_no_projection=0 means no depthwise savings across the
+# 92-layer context stage, plus QuantDecomposedLeakyAct's 3x quant-op
+# overhead at ~10 leaky-mapped sites for prelu_variant="nonneg_block"). With
+# per-iteration cost fixed by the architecture, warm-starting is the only
+# real lever left to shrink how many epochs QAT actually needs -- see
+# nnUNetTrainerENetQuant23_1.py's own module docstring for the full
+# reasoning (an earlier version of this job cold-started by mistake, copying
+# stage_14_s8relu_quant_int4.job's precedent without noticing that
+# precedent's actual reason -- a Brevitas scaling_impl.value bug in nnU-Net's
+# GENERIC -pretrained_weights flag -- doesn't apply to QuantENet23_1.
+# from_pretrained's own manual strict=False transfer, confirmed clean in
+# compression/hawq/eval_dice.py).
+#
+# ENET_EPOCHS/ENET_ITERATIONS_PER_EPOCH below are cut down from nnU-Net's
+# from-scratch defaults (150 epochs x 250 iters) to fit realistic walltime
+# at ~21.6s/iteration -- 40 epochs x 60 iters x 21.6s =~ 14.4h train time
+# (plus val/overhead) is still a big ask; ADJUST THESE to your actual
+# available walltime/budget rather than trusting these numbers blindly --
+# they're a starting point for a warm-started fine-tune, not a validated
+# convergence budget (this scheme has never been QAT-trained before; the
+# original 150-epoch number was tuned for FP32 training from scratch, not
+# for fine-tuning an already-good checkpoint under quantization noise). If
+# a single job's walltime isn't enough, use nnUNetv2_train's own --c
+# (continue) flag across multiple sequential job submissions -- see
+# resume_3a_quant_O4_int8_no_asym.job for the exact resume pattern this
+# repo already uses elsewhere.
+#
+# Uses checkpoint_final.pth (NOT checkpoint_best.pth) as BOTH the QAT
+# warm-start source AND the source for the leaky slope map -- same
+# rationale as ptq_s19_double_mid_int8.job: this is a warm-start
+# CONTINUATION run (23_1 continues S19's training), so the true
+# end-of-training state is the more representative thing to build from, not
+# whichever earlier epoch happened to have the best EMA dice.
+#
+# CRITICAL, not optional (same as every other nonneg_block QuantENet job in
+# this repo): 23_1 is prelu_variant="nonneg_block", not plain ReLU --
+# skipping ENET23_1_LEAKY_SLOPE_MAP_FILE silently builds plain QuantReLU
+# everywhere, a real architecture mismatch on top of quantization, not
+# honest quantization noise (see extract_leaky_slope_map.py's own docstring
+# for the measured S19 PTQ incident this caused when it was skipped once).
+#
+# Confirmed via local docker smoke test (1 epoch, 2 train + 1 val
+# iteration, ENET_DISABLE_CHECKPOINTING=1): nnUNetv2_train runs end-to-end
+# (forward+backward+optimizer step, real DC_and_CE loss through the
+# per-stage-mixed Brevitas fake-quant graph, warm-started from the real
+# checkpoint via ENET23_1_PRETRAINED_CHECKPOINT) with this exact trainer +
+# stage_bits/slope-map/checkpoint file set.
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+
+RUN_NAME="hawq_23_1_qat_stage_bits"
+TRAINER_CLASS="nnUNetTrainerENetQuant23_1"
+
+SOURCE_NET_NAME="nnUNetTrainerENet_23_1_s19_warmstart_4c"
+STAGE_BITS_FILE="compression/hawq/stage_bits_23_1.json"
+SLOPE_MAP_FILE="compression/post-quantization/slope_maps/23_1_s19_warmstart_4c.json"
+SOURCE_CHECKPOINT="data/nnUNet_results/Dataset509_ARCADE_1x1_4c/${SOURCE_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_final.pth"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- HAWQ per-stage QAT knobs --------------------------------------------------
+export ENET23_1_STAGE_BITS_FILE="$HOME/LightM-UNet/${STAGE_BITS_FILE}"
+export ENET23_1_LEAKY_SLOPE_MAP_FILE="$HOME/LightM-UNet/${SLOPE_MAP_FILE}"
+export ENET23_1_PRETRAINED_CHECKPOINT="$HOME/LightM-UNet/${SOURCE_CHECKPOINT}"
+# See header comment: cut down from nnU-Net's from-scratch defaults
+# (150 epochs x 250 iters) for a warm-started fine-tune -- ADJUST to your
+# actual walltime budget, these are a starting point, not a validated number.
+export ENET_EPOCHS=40
+export ENET_ITERATIONS_PER_EPOCH=60
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Run: ${RUN_NAME}"
+echo "Stage bits file:      ${ENET23_1_STAGE_BITS_FILE}"
+echo "Slope map file:       ${ENET23_1_LEAKY_SLOPE_MAP_FILE}"
+echo "Warm-start checkpoint: ${ENET23_1_PRETRAINED_CHECKPOINT}"
+echo "Output folder:        ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet"
+
+echo "=== Checking required input files exist ==="
+for f in "$ENET23_1_STAGE_BITS_FILE" "$ENET23_1_LEAKY_SLOPE_MAP_FILE" "$ENET23_1_PRETRAINED_CHECKPOINT"; do
+    if [ ! -f "$f" ]; then
+        echo "ERROR: required file not found: $f" >&2
+        echo "  (run compression/hawq/ilp_search.py / extract_leaky_slope_map.py first)" >&2
+        exit 1
+    fi
+done
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Checking for a COMPLETED checkpoint for ${RUN_NAME} ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    echo "checkpoint_final.pth already exists at ${ENET_OUTPUT_FOLDER} -- skipping training."
+else
+    echo "=== Start training (QAT): ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+    echo "Training finished for ${RUN_NAME}."
+
+    echo "=== Archiving checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+fi
+
+echo "=== Post-training Dice check (compression/hawq/eval_dice.py, adapted usage) ==="
+cd "$HOME/LightM-UNet"
+python -c "
+import torch, json
+from nnunetv2.nets.QuantENet23_1 import QuantENet23_1, OUT_CHANNELS
+import sys
+sys.path.insert(0, 'compression/hawq')
+from eval_dice import evaluate
+with open('${STAGE_BITS_FILE}') as f: bits = json.load(f)
+with open('${SLOPE_MAP_FILE}') as f: slope_map = json.load(f)
+ckpt = torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)
+model = QuantENet23_1(bits['stage_weight_bits'], bits['stage_act_bits'], slope_map)
+model.load_state_dict(ckpt['network_weights'], strict=False)
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+model.to(device)
+with open('data/nnUNet_preprocessed/${DATASET_NAME}/splits_final.json') as f:
+    val_cases = json.load(f)[0]['val']
+result = evaluate(model, val_cases, device, OUT_CHANNELS)
+print(json.dumps(result, indent=2))
+"
+
+echo "Done: ${RUN_NAME}."

@@ -44,7 +44,9 @@ python -m pip install \
     qonnx \
     onnx \
     onnxscript \
-    onnxoptimizer \ zigzag-dse
+    onnxoptimizer \
+    pulp \
+    zigzag-dse
 
 
 echo "=== Installing OpenCV headless ==="
