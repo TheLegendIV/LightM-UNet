@@ -865,7 +865,7 @@ class ENet(nn.Module):
         self,
         in_channels: int = 1,
         out_channels: int = 4,
-        channels: tuple[int, ...] = (20, 72, 144, 72, 20),
+        channels: tuple[int, ...] = (16, 64, 128, 64, 16),
         bottlenecks_per_stage: tuple[int, int, int, int, int] = (4, 8, 8, 2, 1),
         decoder_type: DecoderType = "max_unpool",
         use_dilated: bool = True,

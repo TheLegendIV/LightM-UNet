@@ -1,0 +1,28 @@
+{
+  "stage_weight_bits": {
+    "initial": 4,
+    "stage1": 4,
+    "context": 4,
+    "stage4": 4,
+    "stage5": 8
+  },
+  "stage_act_bits": {
+    "initial": 8,
+    "stage1": 8,
+    "context": 4,
+    "stage4": 8,
+    "stage5": 8
+  },
+  "_diagnostics": {
+    "weight_budget_lut": 403299.99999999977,
+    "weight_lo_total_lut": 216599.19999999978,
+    "weight_hi_total_lut": 590000.7999999997,
+    "act_budget_lut": 251394.9999999998,
+    "act_lo_total_lut": 155774.7999999998,
+    "act_hi_total_lut": 347015.1999999998,
+    "total_bram18k": 1816,
+    "xczu7ev_bram18k_budget": 624,
+    "bram_pct_of_budget": 291.02564102564105,
+    "note": "BRAM is a penalty in the objective (bram_weight), NOT a hard constraint -- even the cheapest bit-width choice is well over budget under the fully-unfolded cost model, see ilp_search.py's own module docstring. This number is informational."
+  }
+}
