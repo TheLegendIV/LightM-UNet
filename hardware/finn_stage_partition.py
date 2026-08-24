@@ -150,3 +150,86 @@ def assign_stage_partition_ids(model, cfg=None):
         % (n_initial, n_stage1, n_stage23, n_stage4, n_stage5, len(model.graph.node), n_skipped)
     )
     return model
+
+
+def find_stage23_quarter_boundaries(down2_start, up4_start):
+    """Splits the stage2/3 node-index range [down2_start, up4_start) --
+    the single partition that caused the near-quadratic multi-day
+    CreateStitchedIP blowup, see PARTITIONED_BUILD_LOG.md -- into 4
+    contiguous quarters, as evenly as possible. Any remainder (range
+    length not divisible by 4) is distributed to the EARLIEST quarters,
+    so quarter 1 always starts at down2_start itself, i.e. it always
+    keeps down2's StreamingMaxPool op even if that makes it 1 node
+    bigger than the others (per spec: "first stage2 part may include the
+    downsample even though it breaks symmetry"). Returns the 3 internal
+    cut points (q2_start, q3_start, q4_start)."""
+    total = up4_start - down2_start
+    base, rem = divmod(total, 4)
+    sizes = [base + 1 if i < rem else base for i in range(4)]
+    cuts = []
+    pos = down2_start
+    for sz in sizes[:-1]:
+        pos += sz
+        cuts.append(pos)
+    return cuts
+
+
+def assign_stage_partition_ids_8way(model, cfg=None):
+    """8-way variant of assign_stage_partition_ids: same initial/stage1/
+    stage4/stage5 boundaries as the 5-way split, but stage2/3 is further
+    divided into 4 roughly-equal quarters (partition_id 2..5), so stage4
+    and stage5 shift to partition_id 6 and 7 respectively:
+
+        partition 0  initial
+        partition 1  stage1   = down1 + regular1
+        partition 2  stage2/3 quarter 1 (includes down2's StreamingMaxPool)
+        partition 3  stage2/3 quarter 2
+        partition 4  stage2/3 quarter 3
+        partition 5  stage2/3 quarter 4
+        partition 6  stage4   = up4 + regular4
+        partition 7  stage5   = up5 + regular5 + final
+
+    `cfg` accepted (and ignored) only so this matches the (model, cfg)
+    step-function signature FINN's build_dataflow driver expects (same as
+    assign_stage_partition_ids)."""
+
+    down1_start, down2_start, up4_start, up5_start = find_stage_boundaries(model)
+    q2_start, q3_start, q4_start = find_stage23_quarter_boundaries(down2_start, up4_start)
+
+    counts = [0] * 8
+    n_skipped = 0
+    for idx, node in enumerate(model.graph.node):
+        if idx < down1_start:
+            pid = 0
+        elif idx < down2_start:
+            pid = 1
+        elif idx < q2_start:
+            pid = 2
+        elif idx < q3_start:
+            pid = 3
+        elif idx < q4_start:
+            pid = 4
+        elif idx < up4_start:
+            pid = 5
+        elif idx < up5_start:
+            pid = 6
+        else:
+            pid = 7
+        counts[pid] += 1
+        if not _is_fpgadataflow_node(node):
+            n_skipped += 1
+            continue
+        inst = getCustomOp(node)
+        inst.set_nodeattr("partition_id", pid)
+
+    print(
+        "[assign_stage_partition_ids_8way] boundaries down1=%d down2=%d "
+        "q2=%d q3=%d q4=%d up4=%d up5=%d"
+        % (down1_start, down2_start, q2_start, q3_start, q4_start, up4_start, up5_start)
+    )
+    print(
+        "[assign_stage_partition_ids_8way] node counts per partition (0..7): %s "
+        "(total=%d, skipped non-HW=%d)"
+        % (counts, len(model.graph.node), n_skipped)
+    )
+    return model
