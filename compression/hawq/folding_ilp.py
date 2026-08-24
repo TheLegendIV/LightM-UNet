@@ -70,7 +70,9 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pulp
@@ -84,7 +86,7 @@ from config_23_1 import (  # noqa: E402
 )
 from finn_block_costs import dump_block_layer_geometry  # noqa: E402
 from finn_cost_model import LayerGeometry, divisors, layer_cost_pe_simd, max_pe, max_simd  # noqa: E402
-from finn_stage_costs import INPUT_HW, dump_layer_geometry  # noqa: E402
+import finn_stage_costs  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 PACKAGE_ROOT = REPO_ROOT / "enet"
@@ -106,10 +108,18 @@ def candidate_folds(layer: LayerGeometry) -> list[tuple[int, int]]:
     """Every valid (PE, SIMD) pair for this layer -- MaxPool2d has neither
     (no MVAU, no weights), so it gets the single sentinel (1, 1), which
     layer_cost_pe_simd ignores for that op_type anyway (its cost/cycles
-    don't depend on pe/simd at all -- see maxpool_cost)."""
+    don't depend on pe/simd/ram_style at all -- see maxpool_cost). Conv2d/
+    ConvTranspose2d get BOTH ram_style options per (PE, SIMD) -- the ILP
+    picks whichever (block=BRAM vs ultra=URAM) fits/minimizes cycles per
+    layer, since real FINN's LUT/cycle cost is identical either way (only
+    the BRAM_18K vs URAM resource ledger differs, see finn_cost_model.py's
+    conv_cost_pe_simd docstring)."""
     if layer.op_type == "MaxPool2d":
-        return [(1, 1)]
-    return [(pe, simd) for pe in divisors(max_pe(layer)) for simd in divisors(max_simd(layer))]
+        return [(1, 1, "block")]
+    return [
+        (pe, simd, ram_style)
+        for pe in divisors(max_pe(layer)) for simd in divisors(max_simd(layer)) for ram_style in RAM_STYLES
+    ]
 
 
 def layer_bits(layer: LayerGeometry, stage_bits: dict | None, weight_bits: int, act_bits: int) -> tuple[int, int]:
@@ -233,6 +243,9 @@ def main() -> None:
     parser.add_argument("--bram-weight", type=float, default=1.0, help="Same as --lut-weight, for BRAM_18K.")
     parser.add_argument("--out-file", type=Path, default=Path("compression/hawq/folding_23_1_w8a8.json"))
     args = parser.parse_args()
+    if args.out_file is None:
+        suffix = args.config.removeprefix("config_")
+        args.out_file = Path(f"compression/hawq/folding_{suffix}_w8a8.json")
 
     if args.config != "config_23_1":
         load_config(args.config)
@@ -243,10 +256,10 @@ def main() -> None:
             stage_bits = json.load(f)
 
     model = ENet(
-        in_channels=IN_CHANNELS, out_channels=OUT_CHANNELS, channels=CHANNELS,
-        bottlenecks_per_stage=BOTTLENECKS_PER_STAGE, decoder_type=DECODER_TYPE,
-        use_asymmetric=USE_ASYMMETRIC, context_pattern=CONTEXT_PATTERN,
-        separable_dilated=SEPARABLE_DILATED, use_prelu=True, prelu_variant=PRELU_VARIANT,
+        in_channels=cfg.IN_CHANNELS, out_channels=cfg.OUT_CHANNELS, channels=cfg.CHANNELS,
+        bottlenecks_per_stage=cfg.BOTTLENECKS_PER_STAGE, decoder_type=cfg.DECODER_TYPE,
+        use_asymmetric=cfg.USE_ASYMMETRIC, context_pattern=cfg.CONTEXT_PATTERN,
+        separable_dilated=cfg.SEPARABLE_DILATED, use_prelu=True, prelu_variant=cfg.PRELU_VARIANT,
     )
     if args.granularity == "block":
         geometries, _block_names = dump_block_layer_geometry(model, INPUT_HW)

@@ -56,6 +56,17 @@ Folding = Literal["unfolded", "serial"]
 FOLDING_UNFOLDED: Folding = "unfolded"
 FOLDING_SERIAL: Folding = "serial"
 
+# Weight-memory FPGA resource choice for the MVU's weight tile (FINN's own
+# "ram_style" nodeattr, see matrixvectoractivation.py: block=BRAM, ultra=
+# URAM; mutually exclusive, real FINN's bram_estimation()/uram_estimation()
+# return 0 for the style not selected). "distributed" (LUTRAM) is not
+# modeled here -- real FINN's lut_estimation() adds an extra c2 LUT term
+# for that style only, which this closed-form model doesn't (yet) carry;
+# not needed for the block-vs-ultra BRAM/URAM trade this file supports.
+RamStyle = Literal["block", "ultra"]
+RAM_STYLE_BLOCK: RamStyle = "block"
+RAM_STYLE_ULTRA: RamStyle = "ultra"
+
 
 @dataclass
 class LayerGeometry:
@@ -107,7 +118,9 @@ def divisors(n: int) -> list[int]:
     return [d for d in range(1, n + 1) if n % d == 0]
 
 
-def conv_cost_pe_simd(layer: LayerGeometry, weight_bits: int, act_bits: int, pe: int, simd: int) -> dict:
+def conv_cost_pe_simd(
+    layer: LayerGeometry, weight_bits: int, act_bits: int, pe: int, simd: int, ram_style: RamStyle = RAM_STYLE_BLOCK,
+) -> dict:
     """The general per-layer cost, given EXPLICIT PE/SIMD (the actual
     folding decision variables a folding search chooses over) instead of
     just the two folding-preset endpoints. conv_cost/_pq_for_folding above
@@ -122,7 +135,18 @@ def conv_cost_pe_simd(layer: LayerGeometry, weight_bits: int, act_bits: int, pe:
     per SIMD-group of the reduction. Using ceil() rather than requiring
     PE/SIMD to be exact divisors keeps this usable for arbitrary values,
     though every caller in this codebase only ever passes divisors (see
-    `divisors()` above), where ceil reduces to exact division anyway."""
+    `divisors()` above), where ceil reduces to exact division anyway.
+
+    ram_style picks which FPGA memory holds the weight tile (wm_bram18 vs
+    wm_uram18), mirroring real FINN's mutually-exclusive bram_estimation()/
+    uram_estimation() (see matrixvectoractivation.py): "block" (default,
+    unchanged behavior) puts weights in BRAM, wm_uram18=0; "ultra" puts them
+    in URAM instead (wm_uram18 = ceil(mem_width/72) * ceil(omega/4096), the
+    exact formula real FINN's uram_estimation() uses), wm_bram18=0. LUT cost
+    is IDENTICAL either way (confirmed via direct FINN source read: real
+    FINN's lut_estimation() only adds an extra term for ram_style=
+    "distributed", not "ultra") -- URAM is a free swap in this cost model
+    other than needing its own separate resource budget."""
     W, A = weight_bits, act_bits
     P, Q = pe, simd
     M = 1  # spatial replication -- already minimal in every convention this file implements
@@ -132,7 +156,13 @@ def conv_cost_pe_simd(layer: LayerGeometry, weight_bits: int, act_bits: int, pe:
     # i.e. NOT on folding. Identical across every (PE, SIMD) choice.
     swu_bram18 = M * (math.ceil(k_eff / layer.sh) + 1) * math.ceil(layer.sh * layer.win / 512) * math.ceil(layer.cin * A / 36)
     omega = (layer.kh * layer.kw * layer.cin * layer.cout) / (Q * P)
-    wm_bram18 = P * math.ceil(omega / 512) * math.ceil(Q * W / 36)
+    mem_width = Q * W * P
+    if ram_style == RAM_STYLE_ULTRA:
+        wm_bram18 = 0
+        wm_uram18 = math.ceil(mem_width / 72) * math.ceil(omega / 4096)
+    else:
+        wm_bram18 = P * math.ceil(omega / 512) * math.ceil(Q * W / 36)
+        wm_uram18 = 0
     swu_lut = M * 426
     mvu_lut = 300 + 1.1 * M * (P * Q) * (W * A)
     total_lut = swu_lut + mvu_lut
@@ -142,7 +172,7 @@ def conv_cost_pe_simd(layer: LayerGeometry, weight_bits: int, act_bits: int, pe:
     cycles = math.ceil(layer.hout * layer.wout / M) * math.ceil(max_pe(layer) / P) * math.ceil(max_simd(layer) / Q)
     return {
         "total_pe": total_pe, "total_simd_lanes": total_simd_lanes,
-        "swu_bram18": swu_bram18, "wm_bram18": wm_bram18,
+        "swu_bram18": swu_bram18, "wm_bram18": wm_bram18, "wm_uram18": wm_uram18,
         "swu_lut": swu_lut, "mvu_lut": mvu_lut, "mp_lut": 0,
         "total_lut": total_lut, "cycles": cycles,
     }
@@ -203,7 +233,7 @@ def maxpool_cost(layer: LayerGeometry, act_bits: int) -> dict:
     cycles = math.ceil(layer.hout * layer.wout / M)
     return {
         "total_pe": 0, "total_simd_lanes": 0,
-        "swu_bram18": swu_bram18, "wm_bram18": 0,
+        "swu_bram18": swu_bram18, "wm_bram18": 0, "wm_uram18": 0,
         "swu_lut": swu_lut, "mvu_lut": 0, "mp_lut": mp_lut,
         "total_lut": total_lut, "cycles": cycles,
     }
@@ -219,15 +249,17 @@ def layer_cost(layer: LayerGeometry, weight_bits: int, act_bits: int, folding: F
     raise ValueError(f"Unknown op_type {layer.op_type!r} for layer {layer.name}")
 
 
-def layer_cost_pe_simd(layer: LayerGeometry, weight_bits: int, act_bits: int, pe: int, simd: int) -> dict:
+def layer_cost_pe_simd(
+    layer: LayerGeometry, weight_bits: int, act_bits: int, pe: int, simd: int, ram_style: RamStyle = RAM_STYLE_BLOCK,
+) -> dict:
     """Like layer_cost, but for an explicit (PE, SIMD) folding choice
     (what a real folding search sweeps over) instead of one of the two
-    presets. MaxPool2d has no PE/SIMD/weights at all -- pe/simd are ignored
-    for it (asserted to be the sentinel max_pe/max_simd=1 by the caller's
-    own candidate enumeration, see folding_ilp.py's PoolCost, so this never
-    silently drops a real folding choice)."""
+    presets. MaxPool2d has no PE/SIMD/weights at all -- pe/simd/ram_style
+    are ignored for it (asserted to be the sentinel max_pe/max_simd=1 by
+    the caller's own candidate enumeration, see folding_ilp.py's PoolCost,
+    so this never silently drops a real folding choice)."""
     if layer.op_type == "Conv2d":
-        return conv_cost_pe_simd(layer, weight_bits, act_bits, pe, simd)
+        return conv_cost_pe_simd(layer, weight_bits, act_bits, pe, simd, ram_style)
     if layer.op_type == "ConvTranspose2d":
         n_eff_h = (layer.hin - 1) * layer.sh + 1 + 2 * (layer.kh - 1)
         n_eff_w = (layer.win - 1) * layer.sw + 1 + 2 * (layer.kw - 1)
@@ -236,7 +268,7 @@ def layer_cost_pe_simd(layer: LayerGeometry, weight_bits: int, act_bits: int, pe
             cin=layer.cin, hin=n_eff_h, win=n_eff_w, cout=layer.cout, hout=layer.hout, wout=layer.wout,
             kh=layer.kh, kw=layer.kw, sh=1, sw=1, dh=1, dw=1,
         )
-        return conv_cost_pe_simd(equivalent, weight_bits, act_bits, pe, simd)
+        return conv_cost_pe_simd(equivalent, weight_bits, act_bits, pe, simd, ram_style)
     if layer.op_type == "MaxPool2d":
         return maxpool_cost(layer, act_bits)
     raise ValueError(f"Unknown op_type {layer.op_type!r} for layer {layer.name}")
