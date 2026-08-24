@@ -5,13 +5,16 @@ stage_8_reginterleaved_isolation, stage_9_dsc_projected_dense_dilation,
 stage_10_reginterleaved_separable_projected, stage_12_separable_dense_relu,
 stage_13_separable_dense_nonneg_block_warmstart, stage_15_d16_reg_interleaved,
 stage_16_merge_reg_boundary, stage_17_separable_dense_nonneg_block_coldstart,
-stage_18_reginterleaved_separable_nonneg_block, and
-stage_19_reginterleaved_separable_nonneg_block_double_mid config -- i.e.
-everything actually built off that one reference point, with the rest of
-the sweep (Base/U2/U3/U6/U8/U16/E1, stage_2_special_ops,
-stage_3_transfer_original) filtered out as noise for this comparison. A
-horizontal dashed line at U4's own dice marks the bar every probe is trying
-to clear.
+stage_18_reginterleaved_separable_nonneg_block,
+stage_19_reginterleaved_separable_nonneg_block_double_mid, and
+stage_26_s5_6_probe_family config -- i.e. everything actually built off that
+one reference point, with the rest of the sweep (Base/U2/U3/U6/U8/U16/E1,
+stage_2_special_ops, stage_3_transfer_original) filtered out as noise for
+this comparison. stage_26 is two hops removed (U4 -> S5.6 -> the 8 stage_26
+variants), not a direct U4 probe, but it's still the same lineage -- see
+compression/finn_cost_s5_6_variants.py/stage_26_s5_6_probe_family_array.job
+for how those 8 configs were derived from S5.6. A horizontal dashed line at
+U4's own dice marks the bar every probe is trying to clear.
 
 Usage:
     python compression/plot_arch_probes_focused.py
@@ -47,6 +50,7 @@ STAGE_COLORS = {
     "18_reginterleaved_separable_nonneg_block": "#00695c",
     "19_reginterleaved_separable_nonneg_block_double_mid": "#f4511e",
     "20_reginterleaved_separable_double_mid_relu": "#6d4c41",
+    "26_s5_6_probe_family": "#ff7043",
 }
 U4_LINE_COLOR = "#2a78d6"
 
@@ -119,6 +123,7 @@ def main() -> int:
         | (df["stage"] == "18_reginterleaved_separable_nonneg_block")
         | (df["stage"] == "19_reginterleaved_separable_nonneg_block_double_mid")
         | (df["stage"] == "20_reginterleaved_separable_double_mid_relu")
+        | (df["stage"] == "26_s5_6_probe_family")
     ].dropna(subset=["params", "dice"]).copy()
     if focused.empty:
         print("No U4/stage_4/.../stage_13 rows found in results.csv yet.")
@@ -133,7 +138,7 @@ def main() -> int:
 
     fig, ax = plt.subplots(figsize=(11, 8), facecolor=SURFACE)
     _plot(ax, focused, "params", "Parameters", abbrev, u4_dice)
-    ax.set_title("U4 reference + all U4-lineage architecture probes (stages 4-19): Dice vs. Parameters",
+    ax.set_title("U4 reference + all U4-lineage architecture probes (stages 4-20, 26): Dice vs. Parameters",
                  color=INK, fontsize=12)
     fig.tight_layout()
     out_path = args.out_dir / "arch_probes_focused_dice_vs_params.png"
@@ -144,7 +149,7 @@ def main() -> int:
     focused["macs"] = focused["flops"] / 2
     fig, ax = plt.subplots(figsize=(11, 8), facecolor=SURFACE)
     _plot(ax, focused, "macs", "MACs", abbrev, u4_dice)
-    ax.set_title("U4 reference + all U4-lineage architecture probes (stages 4-19): Dice vs. MACs",
+    ax.set_title("U4 reference + all U4-lineage architecture probes (stages 4-20, 26): Dice vs. MACs",
                  color=INK, fontsize=12)
     fig.tight_layout()
     out_path = args.out_dir / "arch_probes_focused_dice_vs_macs.png"
@@ -157,7 +162,7 @@ def main() -> int:
         if not mem_focused.empty:
             fig, ax = plt.subplots(figsize=(11, 8), facecolor=SURFACE)
             _plot(ax, mem_focused, "mem_elements", "FINN buffer memory (activation elements)", abbrev, u4_dice)
-            ax.set_title("U4 reference + all U4-lineage architecture probes (stages 4-19): Dice vs. FINN buffer memory",
+            ax.set_title("U4 reference + all U4-lineage architecture probes (stages 4-20, 26): Dice vs. FINN buffer memory",
                          color=INK, fontsize=12)
             fig.tight_layout()
             out_path = args.out_dir / "arch_probes_focused_dice_vs_mem_elements.png"

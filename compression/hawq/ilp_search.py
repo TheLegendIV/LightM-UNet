@@ -44,25 +44,41 @@ search toward the LOWER end of that still-infeasible range, it does not
 still needs a real folding step downstream of whatever bit-width comes out
 of this ILP.
 
-Usage:
+Usage (per-STAGE, the original 5-group search):
     python compression/hawq/ilp_search.py \\
         --sensitivity-file compression/hawq/sensitivity_23_1.json \\
         --finn-cost-file compression/hawq/finn_stage_costs.json \\
         --weight-budget-fraction 0.5 --act-budget-fraction 0.5 \\
         --bram-weight 1.0 \\
         --out-file compression/hawq/stage_bits_23_1.json
+
+Usage (per-BLOCK -- one independent choice per ENet bottleneck instead of
+one shared choice per 5-way stage group; --sensitivity-file/--finn-cost-file
+just need to point at block_sensitivity.py/finn_block_costs.py's own output
+instead of sensitivity.py/finn_stage_costs.py's):
+    python compression/hawq/ilp_search.py \\
+        --sensitivity-file compression/hawq/block_sensitivity_26_5_w24.json \\
+        --finn-cost-file compression/hawq/finn_block_costs_26_5_w24.json \\
+        --out-file compression/hawq/block_bits_26_5_w24.json
+
+The set of names being solved over (stages or blocks) is NOT hardcoded --
+it's read directly from --sensitivity-file's own top-level keys (which must
+match --finn-cost-file's own keys 1:1), so this one script transparently
+handles either granularity. CANDIDATE_BITS=(2,4,8) IS still a fixed
+constant (architecture- and granularity-invariant -- every config_*.py and
+both sensitivity/cost scripts agree on the same 3 candidates), no longer
+imported from config_23_1 (removes an unnecessary cross-architecture
+coupling this file never actually needed).
 """
 from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
 import pulp
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from config_23_1 import CANDIDATE_BITS, STAGE_NAMES  # noqa: E402
+CANDIDATE_BITS = (2, 4, 8)
 
 
 def _finn_cost(finn_costs: dict, stage: str, weight_bits: int, act_bits: int, metric: str) -> float:
@@ -102,7 +118,7 @@ def _normalize(values: dict[tuple[str, int], float]) -> dict[tuple[str, int], fl
 
 
 def solve_axis(
-    sensitivity: dict, finn_costs: dict, axis: str, other_bits: dict[str, int],
+    sensitivity: dict, finn_costs: dict, stage_names: tuple[str, ...], axis: str, other_bits: dict[str, int],
     budget_fraction: float, bram_weight: float,
 ) -> dict[str, int]:
     """One MIP: pick a bit-width per stage on `axis` ('weight' or 'act'),
@@ -118,16 +134,16 @@ def solve_axis(
     sens_key = "sensitivity_w" if axis == "weight" else "sensitivity_a"
     lo_bit, hi_bit = CANDIDATE_BITS[0], CANDIDATE_BITS[-1]
 
-    lo_total = sum(stage_costs_for_axis(finn_costs, s, lo_bit, axis, other_bits) for s in STAGE_NAMES)
-    hi_total = sum(stage_costs_for_axis(finn_costs, s, hi_bit, axis, other_bits) for s in STAGE_NAMES)
+    lo_total = sum(stage_costs_for_axis(finn_costs, s, lo_bit, axis, other_bits) for s in stage_names)
+    hi_total = sum(stage_costs_for_axis(finn_costs, s, hi_bit, axis, other_bits) for s in stage_names)
     budget = lo_total + (hi_total - lo_total) * budget_fraction
 
     raw_sensitivity = {
-        (s, b): sensitivity[s][sens_key][str(b)] for s in STAGE_NAMES for b in CANDIDATE_BITS
+        (s, b): sensitivity[s][sens_key][str(b)] for s in stage_names for b in CANDIDATE_BITS
     }
     raw_bram = {
         (s, b): stage_costs_for_axis(finn_costs, s, b, axis, other_bits, metric="bram18k")
-        for s in STAGE_NAMES for b in CANDIDATE_BITS
+        for s in stage_names for b in CANDIDATE_BITS
     }
     sens_norm = _normalize(raw_sensitivity)
     bram_norm = _normalize(raw_bram)
@@ -135,18 +151,18 @@ def solve_axis(
     prob = pulp.LpProblem(f"HAWQ_stage_bits_{axis}", pulp.LpMinimize)
     x = {
         (s, b): pulp.LpVariable(f"x_{axis}_{s}_{b}", cat=pulp.LpBinary)
-        for s in STAGE_NAMES for b in CANDIDATE_BITS
+        for s in stage_names for b in CANDIDATE_BITS
     }
-    for s in STAGE_NAMES:
+    for s in stage_names:
         prob += pulp.lpSum(x[(s, b)] for b in CANDIDATE_BITS) == 1, f"one_bit_per_stage_{axis}_{s}"
 
     prob += pulp.lpSum(
         x[(s, b)] * (sens_norm[(s, b)] + bram_weight * bram_norm[(s, b)])
-        for s in STAGE_NAMES for b in CANDIDATE_BITS
+        for s in stage_names for b in CANDIDATE_BITS
     )
     prob += pulp.lpSum(
         x[(s, b)] * stage_costs_for_axis(finn_costs, s, b, axis, other_bits)
-        for s in STAGE_NAMES for b in CANDIDATE_BITS
+        for s in stage_names for b in CANDIDATE_BITS
     ) <= budget, "lut_budget"
 
     status = prob.solve(pulp.PULP_CBC_CMD(msg=0))
@@ -157,11 +173,11 @@ def solve_axis(
             f"lo_total={lo_total:.0f}); try a higher --{axis}-budget-fraction."
         )
     result = {}
-    for s in STAGE_NAMES:
+    for s in stage_names:
         chosen = [b for b in CANDIDATE_BITS if pulp.value(x[(s, b)]) > 0.5]
         assert len(chosen) == 1, f"stage {s} ({axis}): expected exactly one bit chosen, got {chosen}"
         result[s] = chosen[0]
-    chosen_bram_total = sum(raw_bram[(s, result[s])] for s in STAGE_NAMES)
+    chosen_bram_total = sum(raw_bram[(s, result[s])] for s in stage_names)
     return result, budget, lo_total, hi_total, chosen_bram_total
 
 
@@ -169,8 +185,8 @@ XCZU7EV_BRAM_18K = 624  # real chip budget, see finn_cost_model.py's own docstri
 
 
 def solve_stage_bits(
-    sensitivity: dict, finn_costs: dict, weight_budget_fraction: float, act_budget_fraction: float,
-    bram_weight: float,
+    sensitivity: dict, finn_costs: dict, stage_names: tuple[str, ...],
+    weight_budget_fraction: float, act_budget_fraction: float, bram_weight: float,
 ) -> dict:
     """Two-pass: solve weights first holding activations at the highest
     candidate bit (a conservative "don't let an unsolved activation choice
@@ -178,13 +194,17 @@ def solve_stage_bits(
     default), then solve activations holding weights at the just-solved
     result. Not a true joint optimum (see module docstring's note on
     finn_cost_model.py's W*A coupling), but keeps two simple independent
-    MIPs instead of one combined (stage, w, a) triple-indexed ILP."""
-    default_act = {s: CANDIDATE_BITS[-1] for s in STAGE_NAMES}
+    MIPs instead of one combined (stage, w, a) triple-indexed ILP.
+
+    `stage_names` may be 5 stage-group names or dozens of individual
+    bottleneck-block names -- this function has no idea which, and doesn't
+    need to (see module docstring)."""
+    default_act = {s: CANDIDATE_BITS[-1] for s in stage_names}
     stage_weight_bits, w_budget, w_lo, w_hi, w_bram = solve_axis(
-        sensitivity, finn_costs, "weight", default_act, weight_budget_fraction, bram_weight,
+        sensitivity, finn_costs, stage_names, "weight", default_act, weight_budget_fraction, bram_weight,
     )
     stage_act_bits, a_budget, a_lo, a_hi, a_bram = solve_axis(
-        sensitivity, finn_costs, "act", stage_weight_bits, act_budget_fraction, bram_weight,
+        sensitivity, finn_costs, stage_names, "act", stage_weight_bits, act_budget_fraction, bram_weight,
     )
     # NOT w_bram + a_bram -- those are partial sums computed under two
     # DIFFERENT "other axis" assumptions (w_bram assumed act=8 everywhere
@@ -192,7 +212,7 @@ def solve_stage_bits(
     # adding them double-counts under inconsistent bit assumptions. The
     # real combined BRAM at the actual final (w,a) pair per stage:
     total_bram = sum(
-        _finn_cost(finn_costs, s, stage_weight_bits[s], stage_act_bits[s], "bram18k") for s in STAGE_NAMES
+        _finn_cost(finn_costs, s, stage_weight_bits[s], stage_act_bits[s], "bram18k") for s in stage_names
     )
     return {
         "stage_weight_bits": stage_weight_bits,
@@ -231,8 +251,21 @@ def main() -> None:
     with open(args.finn_cost_file) as f:
         finn_costs = json.load(f)
 
+    # The set of names solved over -- 5 stage groups or dozens of individual
+    # bottleneck blocks -- comes straight from the sensitivity file's own
+    # top-level keys (see module docstring), not a hardcoded import.
+    stage_names = tuple(sensitivity.keys())
+    missing_in_costs = set(stage_names) - set(finn_costs.keys())
+    if missing_in_costs:
+        raise ValueError(
+            f"--finn-cost-file is missing entries for: {sorted(missing_in_costs)} -- "
+            f"--sensitivity-file and --finn-cost-file must cover the exact same names "
+            f"(both from sensitivity.py+finn_stage_costs.py, or both from "
+            f"block_sensitivity.py+finn_block_costs.py, not a mix of the two granularities)."
+        )
+
     result = solve_stage_bits(
-        sensitivity, finn_costs, args.weight_budget_fraction, args.act_budget_fraction, args.bram_weight,
+        sensitivity, finn_costs, stage_names, args.weight_budget_fraction, args.act_budget_fraction, args.bram_weight,
     )
 
     args.out_file.parent.mkdir(parents=True, exist_ok=True)
