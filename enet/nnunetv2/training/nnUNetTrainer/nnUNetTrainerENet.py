@@ -104,8 +104,9 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
         decoder_type = os.environ.get("ENET_DECODER_TYPE", "max_unpool")
         context_pattern = os.environ.get("ENET_CONTEXT_PATTERN", "default")
         valid_context_patterns = (
-            "default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_reg_interleaved",
-            "dense_dilation_reg_trailing", "d16_reg_interleaved", "dense_dilation_reg_interleaved_double_mid",
+            "default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_lead1",
+            "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing", "d16_reg_interleaved",
+            "dense_dilation_reg_interleaved_double_mid",
         )
         if context_pattern not in valid_context_patterns:
             raise ValueError(f"ENET_CONTEXT_PATTERN must be one of {valid_context_patterns}, got {context_pattern!r}.")

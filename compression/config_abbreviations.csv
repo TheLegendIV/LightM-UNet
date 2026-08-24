@@ -61,3 +61,11 @@ S22.1,nnUNetTrainerENet_22_1_dsc_projected_nonneg_block,22_dsc_projected_nonneg_
 S22.2,nnUNetTrainerENet_22_2_dsc_projected_reginterleaved_nonneg_block,22_dsc_projected_nonneg_block,"4,16,32,16,4",upsample_conv,1,1,0
 S22.3,nnUNetTrainerENet_22_3_dsc_projected_reginterleaved_double_mid_nonneg_block,22_dsc_projected_nonneg_block,"4,16,32,16,4",upsample_conv,1,1,0
 S25.1,nnUNetTrainerENet_25_s19_baseline_width,25_s19_baseline_width,"16,64,128,64,16",upsample_conv,1,1,0
+S26.1,nnUNetTrainerENet_26_1_u8style,26_s5_6_probe_family,"4,8,16,8,4",upsample_conv,1,1,0
+S26.2,nnUNetTrainerENet_26_2_d1leadin,26_s5_6_probe_family,"4,16,32,16,4",upsample_conv,1,1,0
+S26.3,nnUNetTrainerENet_26_3_no_stage3,26_s5_6_probe_family,"4,16,32,16,4",upsample_conv,1,1,0
+S26.4,nnUNetTrainerENet_26_4_d1leadin_no_stage3,26_s5_6_probe_family,"4,16,32,16,4",upsample_conv,1,1,0
+S26.5,nnUNetTrainerENet_26_5_w24,26_s5_6_probe_family,"4,8,24,8,4",upsample_conv,1,1,0
+S26.6,nnUNetTrainerENet_26_6_w24_no_stage3,26_s5_6_probe_family,"4,8,24,8,4",upsample_conv,1,1,0
+S26.7,nnUNetTrainerENet_26_7_w24_no_stage3_d1leadin,26_s5_6_probe_family,"4,8,24,8,4",upsample_conv,1,1,0
+S26.8,nnUNetTrainerENet_26_8_w24_no_stage3_d1leadin_halved,26_s5_6_probe_family,"4,4,12,4,4",upsample_conv,1,1,0

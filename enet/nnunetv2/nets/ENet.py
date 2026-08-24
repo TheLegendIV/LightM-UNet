@@ -8,8 +8,8 @@ import torch.nn.functional as F
 
 DecoderType = Literal["max_unpool", "upsample_conv"]
 ContextPattern = Literal[
-    "default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_reg_interleaved",
-    "dense_dilation_reg_trailing",
+    "default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_lead1",
+    "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing",
 ]
 
 # The ENet-native context-stage pattern (Paszke et al.): regular, dilated x2,
@@ -90,6 +90,31 @@ DENSE_DILATION_SCHEDULE_A_PATTERN: tuple[dict, ...] = (
     {"padding": 5, "dilation": 5},
     {"padding": 7, "dilation": 7},
     {"padding": 17, "dilation": 17},
+)
+
+# DENSE_DILATION_PATTERN's (2,4,8,16) schedule with a plain dilation=1 slot
+# PREPENDED to each cycle -- 1,2,4,8,16,1,2,4,8,16 (10 slots vs. the native
+# 8). Unlike DENSE_DILATION_REG_INTERLEAVED_PATTERN's {"reg_bottleneck":
+# True} sentinel (a DIFFERENT bottleneck class, only meaningful under
+# dsc_no_projection=True), the d=1 slot here is built through the exact
+# same code path as every other slot in this pattern (a RegularBottleneck,
+# separable_dilated-factored when that flag is set) -- dilation=1 is simply
+# the smallest rate in an otherwise ordinary dilated-conv loop, so it needs
+# no special-casing in _make_context_stage at all. Meant to run with
+# bottlenecks_per_stage's stage2/stage3 entries widened to 10 (from
+# dense_dilation's native 8) to fit one full two-cycle repeat without
+# truncation, e.g. ENET_BOTTLENECKS="4,10,10,2,1".
+DENSE_DILATION_LEAD1_PATTERN: tuple[dict, ...] = (
+    {"padding": 1, "dilation": 1},
+    {"padding": 2, "dilation": 2},
+    {"padding": 4, "dilation": 4},
+    {"padding": 8, "dilation": 8},
+    {"padding": 16, "dilation": 16},
+    {"padding": 1, "dilation": 1},
+    {"padding": 2, "dilation": 2},
+    {"padding": 4, "dilation": 4},
+    {"padding": 8, "dilation": 8},
+    {"padding": 16, "dilation": 16},
 )
 
 # DENSE_DILATION_PATTERN's (2,4,8,16) schedule, but with a full (non-DSC,
@@ -890,8 +915,9 @@ class ENet(nn.Module):
     ):
         super().__init__()
         valid_context_patterns = (
-            "default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_reg_interleaved",
-            "dense_dilation_reg_trailing", "d16_reg_interleaved", "dense_dilation_reg_interleaved_double_mid",
+            "default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_lead1",
+            "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing", "d16_reg_interleaved",
+            "dense_dilation_reg_interleaved_double_mid",
         )
         if context_pattern not in valid_context_patterns:
             raise ValueError(f"context_pattern must be one of {valid_context_patterns}, got {context_pattern!r}.")
@@ -1102,6 +1128,10 @@ class ENet(nn.Module):
         Also: DENSE_DILATION_SCHEDULE_A_PATTERN when context_pattern=
         "dense_dilation_a" (same shape as dense_dilation but the gridding-
         investigation's coprime (1,5,7,17) rates instead of (2,4,8,16));
+        DENSE_DILATION_LEAD1_PATTERN when context_pattern="dense_dilation_lead1"
+        (dense_dilation with a plain dilation=1 slot prepended to each cycle:
+        1,2,4,8,16,1,2,4,8,16, 10 slots -- widen bottlenecks_per_stage's
+        stage2/stage3 entries to 10 to fit one full two-cycle repeat);
         DENSE_DILATION_REG_INTERLEAVED_PATTERN when context_pattern=
         "dense_dilation_reg_interleaved" (11 slots: reg,2,4,8,16,reg,2,4,8,
         16,reg -- only meaningful under dsc_no_projection, see that
@@ -1145,6 +1175,8 @@ class ENet(nn.Module):
             pattern = DENSE_DILATION_PATTERN
         elif self.context_pattern == "dense_dilation_a":
             pattern = DENSE_DILATION_SCHEDULE_A_PATTERN
+        elif self.context_pattern == "dense_dilation_lead1":
+            pattern = DENSE_DILATION_LEAD1_PATTERN
         elif self.context_pattern == "dense_dilation_reg_interleaved":
             pattern = DENSE_DILATION_REG_INTERLEAVED_PATTERN
         elif self.context_pattern == "dense_dilation_reg_trailing":
@@ -2582,3 +2614,41 @@ if __name__ == "__main__":
             )
 
     print("ENet Stage-17 dense_dilation_reg_interleaved_double_mid self-test PASSED: 12-slot pattern verified (4 reg bookends incl. doubled mid pair, exact dilation order preserved), forward pass checked.")
+
+    # dense_dilation_lead1 self-test (S5.6-derived HPC probe family): a
+    # plain dilation=1 slot prepended to each (2,4,8,16) cycle -- no new
+    # bottleneck class needed (unlike the reg-bookend patterns' {"reg_
+    # bottleneck": True} sentinel), the d=1 slot is built through the exact
+    # same RegularBottleneck/separable_dilated code path as every other
+    # slot. Also checks it composes cleanly with stage3 removed
+    # (bottlenecks_per_stage[2]=0, same div4 mechanism as the sparse-pattern
+    # self-test above) -- the combination the V4/V7/V8 HPC variants use.
+    lead1 = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=(4, 10, 10, 2, 1),
+        decoder_type="upsample_conv", use_prelu=True, use_asymmetric=False,
+        use_dsc=False, separable_dilated=True, context_pattern="dense_dilation_lead1",
+    ).eval()
+    with torch.no_grad():
+        assert lead1(dummy).shape == (1, 5, 512, 512)
+    for stage_name, stage in (("stage2", lead1.stage2), ("stage3", lead1.stage3)):
+        assert len(stage) == 10, f"lead1: {stage_name} has {len(stage)} blocks, expected 10"
+        expected_dilations = [1, 2, 4, 8, 16, 1, 2, 4, 8, 16]
+        for i, expected_dilation in enumerate(expected_dilations):
+            block = stage[i]
+            assert type(block) is RegularBottleneck, f"lead1: {stage_name}[{i}] is {type(block).__name__}, expected RegularBottleneck"
+            dilated_conv = block.conv[0] if isinstance(block.conv, nn.Sequential) else block.conv
+            assert dilated_conv.dilation == (expected_dilation, expected_dilation), (
+                f"lead1: {stage_name}[{i}] expected dilation={expected_dilation}, got {dilated_conv.dilation}"
+            )
+
+    lead1_no_stage3 = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=(4, 10, 0, 2, 1),
+        decoder_type="upsample_conv", use_prelu=True, use_asymmetric=False,
+        use_dsc=False, separable_dilated=True, context_pattern="dense_dilation_lead1",
+    ).eval()
+    with torch.no_grad():
+        assert lead1_no_stage3(dummy).shape == (1, 5, 512, 512)
+    assert len(lead1_no_stage3.stage2) == 10, f"lead1+no-stage3: stage2 has {len(lead1_no_stage3.stage2)} blocks, expected 10"
+    assert len(lead1_no_stage3.stage3) == 0, f"lead1+no-stage3: stage3 has {len(lead1_no_stage3.stage3)} blocks, expected 0"
+
+    print("ENet dense_dilation_lead1 self-test PASSED: 10-slot pattern verified (d=1 lead-in, exact dilation order preserved), forward pass checked, composes cleanly with stage3 removed.")
