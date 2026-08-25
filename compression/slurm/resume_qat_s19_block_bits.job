@@ -49,6 +49,9 @@ DATASET_NAME="Dataset509_ARCADE_1x1_4c"
 RUN_NAME="s19_qat_block_bits"
 TRAINER_CLASS="nnUNetTrainerENetQuantS19Block"
 
+# NOTE (2026-08-25): the historical bit assignment this resume actually
+# used is preserved at compression/hawq/block_bits_s19_validated.json -- the
+# live block_bits_s19.json has since been overwritten by later ILP reruns.
 BLOCK_BITS_FILE="compression/hawq/block_bits_s19.json"
 SLOPE_MAP_FILE="compression/post-quantization/slope_maps/19_reginterleaved_separable_nonneg_block_double_mid.json"
 

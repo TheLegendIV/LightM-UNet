@@ -54,7 +54,7 @@ from sensitivity import (  # noqa: E402
 
 NNUNET_RESULTS = REPO_ROOT / "data" / "nnUNet_results"
 
-CANDIDATE_BITS = (2, 4, 8)
+CANDIDATE_BITS = (2, 4, 8, 16)
 # quantization_deltas (imported above) is a closure over sensitivity.py's OWN
 # module globals, not this file's -- it reads a bare `CANDIDATE_BITS` name
 # resolved in sensitivity.py's __globals__, which normally only gets
