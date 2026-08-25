@@ -17,18 +17,70 @@ def count_params(model: torch.nn.Module) -> tuple[int, int]:
 def count_flops(
     model: torch.nn.Module, in_channels: int, input_hw: tuple[int, int]
 ) -> tuple[float, float] | tuple[None, None]:
-    """Returns (macs, flops) via thop, or (None, None) if thop isn't
-    installed. FLOPs = 2*MACs, the usual multiply-accumulate convention."""
-    try:
-        from thop import profile
-    except ImportError:
-        print("thop not installed -- skipping FLOPs (pip install thop, or see requirements-enet-base.txt)")
-        return None, None
+    """Returns (macs, flops). FLOPs = 2*MACs, the usual multiply-accumulate
+    convention.
+
+    In-house forward-hook counter (registered via model.named_modules(),
+    the same de-duplication-safe pattern count_buffer_elements already
+    uses below) -- NOT thop, which was found (2026-08-25) to systematically
+    DOUBLE-COUNT on this codebase's own ENet/QuantENet architectures.
+    ENet.py's RegularBottleneck deliberately aliases self.conv inside
+    self.conv_bn_act = nn.Sequential(self.conv, BN, act) -- kept as a real,
+    separately-named attribute on purpose (e.g. ENet.py's own self-tests and
+    QuantENet*.py's bit-width checks read block.conv.dilation / block.conv[0]
+    directly), not a bug in the model. thop's own internal module traversal,
+    unlike named_modules()'s default de-duplication, visits and hooks this
+    SAME shared module object under both its ".conv" and ".conv_bn_act.0"
+    name-paths -- so the one real forward() call that module makes gets
+    counted twice in thop's running total.
+
+    Confirmed empirically on the S19/23_1 architecture family: thop reported
+    394,330,112 MACs where the correct count (this function, and
+    independently, compression/hawq/finn_block_costs.py's own layer-geometry
+    tracer used for every FINN cost estimate in this repo -- both agree
+    exactly) is 171,704,320, a ~2.3x inflation. This affected every
+    `flops`/derived-`bops` value previously recorded via this function for
+    any separable_dilated/nonneg_block-style ENet config (i.e. most of
+    compression/results.csv's own history, not just S19) -- rows recorded
+    before 2026-08-25 should be treated as using the old, inflated
+    convention until recomputed.
+
+    MACs = cout * hout * wout * (cin/groups) * kh * kw for both Conv2d and
+    ConvTranspose2d -- verified against compression/hawq/finn_cost_model.py's
+    own conv_transpose_cost: the zero-insertion adjustment it applies for a
+    transposed conv only changes SWU/BRAM buffer sizing (which depends on
+    input width), never the MAC/cycle formulas, which depend only on
+    (cin, cout, kh, kw, hout, wout) read from the real output tensor."""
     model = model.eval()
+    hooks = []
+    total_macs = 0.0
+
+    def make_hook():
+        def hook(module, inputs, output):
+            nonlocal total_macs
+            x = inputs[0]
+            out = output[0] if isinstance(output, tuple) else output
+            cin = x.shape[1]
+            cout = out.shape[1]
+            hout, wout = out.shape[2], out.shape[3]
+            kh, kw = _to_pair(module.kernel_size)
+            groups = getattr(module, "groups", 1)
+            total_macs += cout * hout * wout * (cin / groups) * kh * kw
+        return hook
+
+    for _, module in model.named_modules():
+        if isinstance(module, (torch.nn.Conv2d, torch.nn.ConvTranspose2d)):
+            hooks.append(module.register_forward_hook(make_hook()))
+
     dummy = torch.zeros(1, in_channels, *input_hw)
-    with torch.no_grad():
-        macs, _ = profile(model, inputs=(dummy,), verbose=False)
-    return float(macs), float(macs * 2)
+    try:
+        with torch.no_grad():
+            model(dummy)
+    finally:
+        for h in hooks:
+            h.remove()
+
+    return float(total_macs), float(total_macs * 2)
 
 
 def _to_pair(value) -> tuple[int, int]:
