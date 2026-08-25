@@ -70,9 +70,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
-import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 import pulp
@@ -85,8 +83,10 @@ from config_23_1 import (  # noqa: E402
     OUT_CHANNELS, PRELU_VARIANT, SEPARABLE_DILATED, USE_ASYMMETRIC,
 )
 from finn_block_costs import dump_block_layer_geometry  # noqa: E402
-from finn_cost_model import LayerGeometry, divisors, layer_cost_pe_simd, max_pe, max_simd  # noqa: E402
-import finn_stage_costs  # noqa: E402
+from finn_cost_model import (  # noqa: E402
+    RAM_STYLE_BLOCK, RAM_STYLE_ULTRA, LayerGeometry, divisors, layer_cost_pe_simd, max_pe, max_simd,
+)
+from finn_stage_costs import INPUT_HW, dump_layer_geometry  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 PACKAGE_ROOT = REPO_ROOT / "enet"
@@ -94,6 +94,12 @@ sys.path.insert(0, str(PACKAGE_ROOT))
 from nnunetv2.nets.ENet import ENet  # noqa: E402
 
 XCZU7EV = {"LUT": 230_400, "BRAM_18K": 624}
+# No established URAM_18K budget constant for the XCZU7EV yet (unlike LUT/
+# BRAM_18K above) -- total_uram18 is still reported in solve_folding's own
+# _diagnostics, just without a "% of budget" figure until a real number is
+# sourced (see finn_cost_model.py's own RAM_STYLE_ULTRA docstring for the
+# wm_uram18 formula this is summing).
+RAM_STYLES = (RAM_STYLE_BLOCK, RAM_STYLE_ULTRA)
 
 
 def load_config(config_module: str) -> None:
@@ -104,7 +110,7 @@ def load_config(config_module: str) -> None:
     globals().update({k: v for k, v in vars(cfg).items() if not k.startswith("_")})
 
 
-def candidate_folds(layer: LayerGeometry) -> list[tuple[int, int]]:
+def candidate_folds(layer: LayerGeometry) -> list[tuple[int, int, str]]:
     """Every valid (PE, SIMD) pair for this layer -- MaxPool2d has neither
     (no MVAU, no weights), so it gets the single sentinel (1, 1), which
     layer_cost_pe_simd ignores for that op_type anyway (its cost/cycles
@@ -150,22 +156,33 @@ def solve_folding(
     lut_weight: float, bram_weight: float,
 ) -> dict:
     x = {}
-    layer_costs: dict[str, dict[tuple[int, int], dict]] = {}
-    raw_cycles: dict[tuple[str, int, int], float] = {}
-    raw_lut: dict[tuple[str, int, int], float] = {}
-    raw_bram: dict[tuple[str, int, int], float] = {}
+    layer_costs: dict[str, dict[tuple[int, int, str], dict]] = {}
+    raw_cycles: dict[tuple[str, int, int, str], float] = {}
+    raw_lut: dict[tuple[str, int, int, str], float] = {}
+    raw_bram: dict[tuple[str, int, int, str], float] = {}
 
     for layer in geometries:
         w_bits, a_bits = layer_bits(layer, stage_bits, weight_bits, act_bits)
         folds = candidate_folds(layer)
-        costs = {(pe, simd): layer_cost_pe_simd(layer, w_bits, a_bits, pe, simd) for pe, simd in folds}
+        costs = {
+            (pe, simd, ram_style): layer_cost_pe_simd(layer, w_bits, a_bits, pe, simd, ram_style)
+            for pe, simd, ram_style in folds
+        }
         layer_costs[layer.name] = costs
-        for pe, simd in folds:
-            key = (layer.name, pe, simd)
-            raw_cycles[key] = costs[(pe, simd)]["cycles"]
-            raw_lut[key] = costs[(pe, simd)]["total_lut"]
-            raw_bram[key] = costs[(pe, simd)]["swu_bram18"] + costs[(pe, simd)]["wm_bram18"]
-            x[key] = pulp.LpVariable(f"x_{layer.name}_{pe}_{simd}", cat=pulp.LpBinary)
+        for pe, simd, ram_style in folds:
+            fold_key = (pe, simd, ram_style)
+            key = (layer.name, pe, simd, ram_style)
+            # URAM (wm_uram18) is a separate FPGA resource from BRAM_18K --
+            # deliberately NOT folded into raw_bram (would misreport a
+            # ram_style="ultra" choice as costing BRAM it doesn't actually
+            # use). See module docstring: no established URAM budget
+            # constant yet, so it's summed in _diagnostics without a "% of
+            # budget" figure, same honesty-over-fabrication choice as
+            # everywhere else in this file.
+            raw_cycles[key] = costs[fold_key]["cycles"]
+            raw_lut[key] = costs[fold_key]["total_lut"]
+            raw_bram[key] = costs[fold_key]["swu_bram18"] + costs[fold_key]["wm_bram18"]
+            x[key] = pulp.LpVariable(f"x_{layer.name}_{pe}_{simd}_{ram_style}", cat=pulp.LpBinary)
 
     cycles_norm = _normalize(raw_cycles)
     lut_norm = _normalize(raw_lut)
@@ -174,7 +191,7 @@ def solve_folding(
     prob = pulp.LpProblem("HAWQ_folding", pulp.LpMinimize)
     for layer in geometries:
         folds = candidate_folds(layer)
-        prob += pulp.lpSum(x[(layer.name, pe, simd)] for pe, simd in folds) == 1, f"one_fold_{layer.name}"
+        prob += pulp.lpSum(x[(layer.name, pe, simd, ram_style)] for pe, simd, ram_style in folds) == 1, f"one_fold_{layer.name}"
 
     # LUT/BRAM are a PENALTY here, not a hard `<=budget` constraint -- see
     # module docstring for why (fully-unfolded LUT/BRAM is often over budget
@@ -190,18 +207,19 @@ def solve_folding(
     result_per_layer = {}
     if status_name == "Optimal":
         for layer in geometries:
-            for pe, simd in candidate_folds(layer):
-                if pulp.value(x[(layer.name, pe, simd)]) > 0.5:
+            for pe, simd, ram_style in candidate_folds(layer):
+                if pulp.value(x[(layer.name, pe, simd, ram_style)]) > 0.5:
                     w_bits, a_bits = layer_bits(layer, stage_bits, weight_bits, act_bits)
                     result_per_layer[layer.name] = {
-                        "stage": layer.stage, "pe": pe, "simd": simd,
+                        "stage": layer.stage, "pe": pe, "simd": simd, "ram_style": ram_style,
                         "weight_bits": w_bits, "act_bits": a_bits,
-                        **layer_costs[layer.name][(pe, simd)],
+                        **layer_costs[layer.name][(pe, simd, ram_style)],
                     }
                     break
 
     total_lut = sum(v["total_lut"] for v in result_per_layer.values())
     total_bram = sum(v["swu_bram18"] + v["wm_bram18"] for v in result_per_layer.values())
+    total_uram = sum(v.get("wm_uram18", 0) for v in result_per_layer.values())
     total_cycles = sum(v["cycles"] for v in result_per_layer.values())
     return {
         "status": status_name,
@@ -209,6 +227,7 @@ def solve_folding(
         "_diagnostics": {
             "total_lut": total_lut, "lut_pct_of_budget": 100 * total_lut / XCZU7EV["LUT"],
             "total_bram18k": total_bram, "bram_pct_of_budget": 100 * total_bram / XCZU7EV["BRAM_18K"],
+            "total_uram18": total_uram,
             "total_cycles": total_cycles,
             "note": "LUT/BRAM are informational only here (penalty in the objective via "
                     "--lut-weight/--bram-weight, NOT a hard constraint) -- see this file's own "
@@ -256,10 +275,10 @@ def main() -> None:
             stage_bits = json.load(f)
 
     model = ENet(
-        in_channels=cfg.IN_CHANNELS, out_channels=cfg.OUT_CHANNELS, channels=cfg.CHANNELS,
-        bottlenecks_per_stage=cfg.BOTTLENECKS_PER_STAGE, decoder_type=cfg.DECODER_TYPE,
-        use_asymmetric=cfg.USE_ASYMMETRIC, context_pattern=cfg.CONTEXT_PATTERN,
-        separable_dilated=cfg.SEPARABLE_DILATED, use_prelu=True, prelu_variant=cfg.PRELU_VARIANT,
+        in_channels=IN_CHANNELS, out_channels=OUT_CHANNELS, channels=CHANNELS,
+        bottlenecks_per_stage=BOTTLENECKS_PER_STAGE, decoder_type=DECODER_TYPE,
+        use_asymmetric=USE_ASYMMETRIC, context_pattern=CONTEXT_PATTERN,
+        separable_dilated=SEPARABLE_DILATED, use_prelu=True, prelu_variant=PRELU_VARIANT,
     )
     if args.granularity == "block":
         geometries, _block_names = dump_block_layer_geometry(model, INPUT_HW)
