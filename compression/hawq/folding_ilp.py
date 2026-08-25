@@ -43,22 +43,37 @@ first calibration point:
     BRAM_18K:     906 real  vs.   1,495 this-model-at-FOLDING_SERIAL -> 0.606x (under, whole design)
 A SECOND real data point (hardware/results.csv's
 `s19_hawq_block_partition_2_ooc_synth` row) is a real per-block HAWQ bit
-assignment (compression/hawq/block_bits_s19.json) on the largest 8-way
-partition, which happened to land on uniform W2A2 across every block in it
--- a controlled same-partition, same-layers, bit-width-only comparison
-against that partition's own uniform-W8A8 baseline row showed the derating
-factor is NOT constant with bit-width: it falls sharply at low bit-width
-(LUT ~7.6x at W8A8 down to ~1.3x at W2A2; BRAM ~0.50x down to ~0.18x -- see
-finn_cost_model.py's own `_LUT_ANCHOR_FACTORS`/`_BRAM_ANCHOR_FACTORS`
-comment for the exact numbers and reasoning). `calibrated_lut`/
-`calibrated_bram18k` in finn_cost_model.py are now BIT-WIDTH-DEPENDENT
-(linear interpolation between the W2A2/W8A8 anchors at
-avg_bits=(weight_bits+act_bits)/2), applied HERE at each layer's own
-resolved bits (both when building the objective's lut_norm/bram_norm below,
-and again in `_diagnostics`) -- NOT a flat multiplier applied to an
-aggregate sum. This is still only two calibration points (nothing verified
-at 4-bit, nothing verified at a finer per-partition granularity), so treat
-calibrated totals as a steering signal, not a guarantee. cycles/LUT/BRAM
+assignment (the actual historical compression/hawq/block_bits_s19.json used
+for that build, NOT necessarily whatever the file on disk holds now -- this
+repo's own ILP has been rerun/recalibrated multiple times since, so the
+bits/folding a real hardware build was synthesized with have to be pulled
+from that build's own saved artifacts, not assumed from the current repo
+state) on the largest 8-way partition (down2 + stage2.0-2.5.reduce.0, 23
+real layers), evaluated at its own real per-layer folding
+(hardware/outputs/s19_hawq_block_partition_2_ooc_synth_20260824_220316/
+hawq_folding_config_partition2.json -- PE=1, SIMD in {4,6,8,12}, NOT
+FOLDING_SERIAL). An EARLIER version of this note got both of those wrong
+(assumed the partition's real bits were uniform W2A2, and evaluated this
+model at the CURRENT/regenerated folding_block_s19.json instead of the
+real historical folding) -- recomputing directly from this model's own
+layer_cost_pe_simd(), fed the real per-block bits and real per-layer
+(PE, SIMD) for all 23 layers, gives a LUT-weighted mean avg_bits=3.52
+(NOT 2) for that partition, and a genuine second calibration anchor there.
+A controlled comparison against that same partition's own uniform-W8A8
+baseline row showed the derating factor is NOT constant with bit-width: it
+falls sharply at lower bit-width (LUT ~8.2x at avg_bits=8 down to ~1.2x at
+avg_bits=3.52; BRAM ~0.61x down to ~0.13x -- see finn_cost_model.py's own
+`_LUT_ANCHOR_FACTORS`/`_BRAM_ANCHOR_FACTORS` comment for the exact numbers
+and reasoning). `calibrated_lut`/`calibrated_bram18k` in finn_cost_model.py
+are now BIT-WIDTH-DEPENDENT (linear interpolation between the avg_bits=3.52
+and avg_bits=8 anchors at avg_bits=(weight_bits+act_bits)/2, CLAMPED to
+[3.52, 8] -- no extrapolation below the real lower anchor), applied HERE at
+each layer's own resolved bits (both when building the objective's
+lut_norm/bram_norm below, and again in `_diagnostics`) -- NOT a flat
+multiplier applied to an aggregate sum. This is still only two calibration
+points (nothing verified at 4-bit, nothing verified below avg_bits=3.52, or
+at a finer per-partition granularity), so treat calibrated totals as a
+steering signal, not a guarantee. cycles/LUT/BRAM
 are on wildly different scales (cycles range from ~1e2 to ~1e8 per
 candidate depending on folding; LUT ~1e2-1e5; BRAM ~1e0-1e3), so each is
 independently min-max normalized to [0,1] over the FULL (layer, pe, simd)
@@ -71,13 +86,23 @@ sensitivity/BRAM, just extended to a 3rd term here:
     minimize sum_{l,pe,simd} x[l,pe,simd] * (cycles_norm[l,pe,simd]
                                               + lut_weight * lut_norm[l,pe,simd]
                                               + bram_weight * bram_norm[l,pe,simd])
-Constraint (the only hard one): sum_{pe,simd} x[layer,pe,simd] == 1 per layer
--- exactly one folding choice per layer. No LUT/BRAM `<=` constraint at all.
+Constraint (the only hard one, by default): sum_{pe,simd} x[layer,pe,simd]
+== 1 per layer -- exactly one folding choice per layer. No LUT/BRAM `<=`
+constraint by default -- pass --hard-lut/--hard-bram to add one anyway (a
+real `<= FRACTION * XCZU7EV['LUT'/'BRAM_18K']` constraint on the same
+per-layer CALIBRATED totals used everywhere else in this file). Bare
+--hard-lut/--hard-bram (no value) means FRACTION=1.0 (the full nominal
+budget); pass e.g. --hard-lut 0.7 --hard-bram 0.8 to cap under 100%,
+reserving headroom for DSP/FF -- resources this cost model does NOT
+estimate at all (see "Not covered here" below) -- since there's currently
+no way to constrain those directly. Off by default; may report Infeasible
+(a real answer, not an error).
 
 Chosen LUT/BRAM/cycles totals (both raw and calibrated) are still computed
 and reported after solving (both on stdout and in the output JSON's
-"_diagnostics") -- informational, not a pass/fail gate, per the module's own
-reasoning above.
+"_diagnostics") -- informational unless --hard-lut/--hard-bram was passed,
+in which case an Optimal result's totals are a guarantee, not just a
+steering signal, per the module's own reasoning above.
 
 Usage (per-STAGE bits, the original 5-group W8A8/mixed case):
     python compression/hawq/folding_ilp.py --out-file compression/hawq/folding_23_1_w8a8.json
@@ -186,8 +211,16 @@ def _normalize(values: dict) -> dict:
 
 def solve_folding(
     geometries: list[LayerGeometry], stage_bits: dict | None, weight_bits: int, act_bits: int,
-    lut_weight: float, bram_weight: float,
+    lut_weight: float, bram_weight: float, hard_lut: float | None = None, hard_bram: float | None = None,
 ) -> dict:
+    """hard_lut/hard_bram: None (default) = no hard constraint, matching
+    this file's original soft-penalty-only behavior. A float `f` in (0, 1]
+    adds a hard `<= f * XCZU7EV[...]` constraint -- e.g. hard_lut=0.7 caps
+    calibrated total LUT at 70% of the real chip budget, not 100%. Lets a
+    caller reserve headroom for resources this cost model doesn't estimate
+    at all (DSP, FF -- see module docstring's own "Not covered here" list)
+    by under-capping the ones it DOES estimate, rather than only being able
+    to ask for the full nominal LUT/BRAM budget."""
     x = {}
     layer_costs: dict[str, dict[tuple[int, int, str], dict]] = {}
     raw_cycles: dict[tuple[str, int, int, str], float] = {}
@@ -215,11 +248,11 @@ def solve_folding(
             raw_cycles[key] = costs[fold_key]["cycles"]
             # Calibrated at THIS layer's own (w_bits, a_bits) -- calibrated_lut/
             # calibrated_bram18k are bit-width-dependent (interpolated between
-            # real W2A2/W8A8 synthesis anchors, see finn_cost_model.py), so
-            # unlike the old flat-factor version, applying this per layer
-            # BEFORE normalizing actually changes the relative normalized
-            # magnitudes across layers with different bit-widths -- no longer
-            # a normalization-invariant no-op.
+            # real avg_bits=3.52/avg_bits=8 synthesis anchors, see
+            # finn_cost_model.py), so unlike the old flat-factor version,
+            # applying this per layer BEFORE normalizing actually changes the
+            # relative normalized magnitudes across layers with different
+            # bit-widths -- no longer a normalization-invariant no-op.
             raw_lut[key] = calibrated_lut(costs[fold_key]["total_lut"], w_bits, a_bits)
             raw_bram[key] = calibrated_bram18k(costs[fold_key]["swu_bram18"] + costs[fold_key]["wm_bram18"], w_bits, a_bits)
             x[key] = pulp.LpVariable(f"x_{layer.name}_{pe}_{simd}_{ram_style}", cat=pulp.LpBinary)
@@ -233,20 +266,48 @@ def solve_folding(
         folds = candidate_folds(layer)
         prob += pulp.lpSum(x[(layer.name, pe, simd, ram_style)] for pe, simd, ram_style in folds) == 1, f"one_fold_{layer.name}"
 
-    # LUT/BRAM are a PENALTY here, not a hard `<=budget` constraint -- see
-    # module docstring for why (fully-unfolded LUT/BRAM is often over budget
-    # regardless of folding choice, and a hard constraint on a still-only-
-    # two-point-calibrated, bit-width-dependent estimate risks false
-    # infeasibility either direction -- calibration shows this model
-    # UNDER-shoots LUT and OVER-shoots BRAM at every bit-width checked so
-    # far, W2A2 through W8A8, just by very different margins depending on
-    # bit-width).
+    # LUT/BRAM are a PENALTY here by default, not a hard `<=budget`
+    # constraint -- see module docstring for why (fully-unfolded LUT/BRAM is
+    # often over budget regardless of folding choice, and a hard constraint
+    # on a still-only-two-point-calibrated, bit-width-dependent estimate
+    # risks false infeasibility either direction -- calibration shows this
+    # model UNDER-shoots LUT and OVER-shoots BRAM at every bit-width checked
+    # so far, avg_bits=3.52 through avg_bits=8, just by very different
+    # margins depending on bit-width). hard_lut/hard_bram (opt-in, see
+    # ilp_search.py's own solve_joint_bits docstring for the same rationale
+    # applied there) add a real `<=` constraint on top instead of just
+    # steering the objective -- raw_lut/raw_bram here are already the
+    # per-layer CALIBRATED values (see above), so this constrains the same
+    # bit-width-aware totals reported in "_diagnostics", not the raw model
+    # output. May report Infeasible -- handled below like any other status,
+    # not treated as an error.
+    if hard_lut is not None:
+        prob += pulp.lpSum(x[key] * raw_lut[key] for key in x) <= hard_lut * XCZU7EV["LUT"], "hard_lut_budget"
+    if hard_bram is not None:
+        prob += pulp.lpSum(x[key] * raw_bram[key] for key in x) <= hard_bram * XCZU7EV["BRAM_18K"], "hard_bram_budget"
+
     prob += pulp.lpSum(
         x[key] * (cycles_norm[key] + lut_weight * lut_norm[key] + bram_weight * bram_norm[key])
         for key in x
     )
 
-    status = prob.solve(pulp.PULP_CBC_CMD(msg=0))
+    # timeLimit/gapRel: a real, permanent safety net -- a hard_lut/hard_bram
+    # constraint sitting close to the true optimum (rather than comfortably
+    # slack, as the unconstrained-at-100%-cap cases were) makes CBC's
+    # branch-and-bound tree MUCH harder to fully close out: confirmed
+    # empirically, a --hard-lut 0.70 --hard-bram 0.80 S19 block-granularity
+    # solve ran over an hour of real CPU time with no plain PULP_CBC_CMD()
+    # call ever returning. gapRel=0.01 (accept anything CBC can PROVE is
+    # within 1% of the true optimum) plus a 300s hard wall-clock cap fixes
+    # this -- CBC almost always finds a very-near-optimal incumbent within
+    # seconds, the remaining time is normally spent proving no better
+    # solution exists, which this exploratory HAWQ search doesn't need.
+    # status still comes back "Optimal" if the gap or time limit is what
+    # stopped it (not a genuine proof) -- PuLP/CBC doesn't distinguish that
+    # in LpStatus, so a result here is "very likely optimal, not certified,"
+    # not literally provably exact whenever a hard_lut/hard_bram constraint
+    # is anywhere close to binding.
+    status = prob.solve(pulp.PULP_CBC_CMD(msg=0, timeLimit=300, gapRel=0.01))
     status_name = pulp.LpStatus[status]
     result_per_layer = {}
     if status_name == "Optimal":
@@ -291,8 +352,17 @@ def solve_folding(
             "bram_pct_of_budget": 100 * total_bram / XCZU7EV["BRAM_18K"],
             "total_uram18": total_uram,
             "total_cycles": total_cycles,
-            "note": "LUT/BRAM are informational only here (penalty in the objective via "
-                    "--lut-weight/--bram-weight, NOT a hard constraint), AND already calibrated "
+            "hard_lut": hard_lut,
+            "hard_bram": hard_bram,
+            "note": ("hard_lut/hard_bram constraints were ENFORCED (see those fields, each either null "
+                     "or the fraction of XCZU7EV's nominal budget actually capped at) -- if status is "
+                     "Optimal, this folding is GUARANTEED to fit those (possibly fractional) budgets "
+                     "under this cost model's own calibration; if Infeasible, no folding choice can "
+                     "satisfy the requested constraint(s) for this bit assignment. "
+                     if (hard_lut is not None or hard_bram is not None) else
+                     "LUT/BRAM are informational only here (penalty in the objective via "
+                     "--lut-weight/--bram-weight, NOT a hard constraint), ")
+                    + "already calibrated "
                     "PER LAYER at its own bit-width against this repo's real synthesis data points -- "
                     "see finn_cost_model.py's own _LUT_ANCHOR_FACTORS/_BRAM_ANCHOR_FACTORS comment and "
                     "this file's own module docstring. Over 100% does not mean the search failed; "
@@ -325,6 +395,16 @@ def main() -> None:
                               "(both in [0,1] per-candidate) -- 0 disables the LUT penalty entirely (pure "
                               "latency minimization).")
     parser.add_argument("--bram-weight", type=float, default=1.0, help="Same as --lut-weight, for BRAM_18K.")
+    parser.add_argument("--hard-lut", type=float, nargs="?", const=1.0, default=None, metavar="FRACTION",
+                         help="Add a hard `<= FRACTION * XCZU7EV['LUT']` constraint (calibrated, per-layer "
+                              "bit-width-aware) on top of the objective, instead of only a soft penalty. "
+                              "Bare --hard-lut (no value) means FRACTION=1.0 (the full nominal budget) -- "
+                              "pass e.g. --hard-lut 0.7 to cap at 70% instead, reserving headroom for "
+                              "resources this cost model doesn't estimate at all (DSP, FF -- see module "
+                              "docstring). May report Infeasible -- that's a real answer, not a bug, and "
+                              "gets written to --out-file same as an Optimal result would.")
+    parser.add_argument("--hard-bram", type=float, nargs="?", const=1.0, default=None, metavar="FRACTION",
+                         help="Same as --hard-lut, for calibrated BRAM_18K.")
     parser.add_argument("--out-file", type=Path, default=Path("compression/hawq/folding_23_1_w8a8.json"))
     args = parser.parse_args()
     if args.out_file is None:
@@ -354,7 +434,10 @@ def main() -> None:
           f"(layer, PE, SIMD) candidates. "
           f"Bits: {'per-' + args.granularity + ' from ' + str(args.stage_bits_file) if stage_bits else f'uniform W{args.weight_bits}A{args.act_bits}'}. Solving...")
 
-    result = solve_folding(geometries, stage_bits, args.weight_bits, args.act_bits, args.lut_weight, args.bram_weight)
+    result = solve_folding(
+        geometries, stage_bits, args.weight_bits, args.act_bits, args.lut_weight, args.bram_weight,
+        hard_lut=args.hard_lut, hard_bram=args.hard_bram,
+    )
     print(f"ILP status: {result['status']}")
     if result["status"] == "Optimal":
         diag = result["_diagnostics"]
@@ -363,8 +446,16 @@ def main() -> None:
         print(f"Total BRAM_18K: {diag['total_bram18k_calibrated']:.0f} calibrated, {diag['total_bram18k_raw']:.0f} raw "
               f"({diag['bram_pct_of_budget']:.1f}% of {XCZU7EV['BRAM_18K']} budget)")
         print(f"Total cycles (sum, ~= per-image latency): {diag['total_cycles']:.0f}")
-        print("(LUT/BRAM are calibrated soft penalties in the objective -- see module docstring -- "
-              "no hard budget was enforced.)")
+        if args.hard_lut is not None or args.hard_bram is not None:
+            print(f"(hard_lut={args.hard_lut}, hard_bram={args.hard_bram} (fraction of nominal budget, "
+                  f"None = no hard constraint) -- this folding is GUARANTEED to fit the requested "
+                  f"budget(s) under this cost model's own calibration.)")
+        else:
+            print("(LUT/BRAM are calibrated soft penalties in the objective -- see module docstring -- "
+                  "no hard budget was enforced.)")
+    else:
+        print(f"No folding choice satisfies the requested hard constraint(s) for this bit assignment -- "
+              f"see {args.out_file}'s own _diagnostics.note.")
 
     args.out_file.parent.mkdir(parents=True, exist_ok=True)
     with open(args.out_file, "w") as f:

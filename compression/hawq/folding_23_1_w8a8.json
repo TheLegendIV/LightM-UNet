@@ -2307,12 +2307,12 @@
     }
   },
   "_diagnostics": {
-    "total_lut_calibrated": 1021613.197997114,
+    "total_lut_calibrated": 1105731.9735831136,
     "total_lut_raw": 134436.0000000002,
-    "lut_pct_of_budget": 443.4085060751363,
-    "total_bram18k_calibrated": 685.2256944444451,
+    "lut_pct_of_budget": 479.9183913121153,
+    "total_bram18k_calibrated": 824.7933110367898,
     "total_bram18k_raw": 1361,
-    "bram_pct_of_budget": 109.81181000712262,
+    "bram_pct_of_budget": 132.17841523025479,
     "total_uram18": 127,
     "total_cycles": 32198656,
     "note": "LUT/BRAM are informational only here (penalty in the objective via --lut-weight/--bram-weight, NOT a hard constraint), AND already calibrated PER LAYER at its own bit-width against this repo's real synthesis data points -- see finn_cost_model.py's own _LUT_ANCHOR_FACTORS/_BRAM_ANCHOR_FACTORS comment and this file's own module docstring. Over 100% does not mean the search failed; _raw fields are the uncalibrated model output, for reference."

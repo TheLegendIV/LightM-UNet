@@ -29,6 +29,12 @@ resource cost, at 3x the variable count per unit (9 vs. 3+3) -- CBC solves
 either in well under a second even at ~35 blocks, so this isn't a
 performance tradeoff, just an accuracy one.
 
+--joint also accepts --hard-lut/--hard-bram: add a real `<= XCZU7EV budget`
+constraint instead of only the soft objective penalty described below (see
+solve_joint_bits's own docstring for why this is --joint-only). Off by
+default -- the objective-penalty formulation below remains the default
+behavior for both --joint and the two-pass method.
+
 Objective -- LUT AND BRAM are BOTH a PENALTY, NOT a hard constraint (changed
 2026-08-25, see below for why LUT's own hard constraint was dropped):
     minimize sum_s sum_b x[s,b] * (sensitivity_norm[s][b]
@@ -45,20 +51,24 @@ term, interpolated between the all-lowest-bit and all-highest-bit LUT total
 by --weight/act-budget-fraction): calibrated 2026-08-25 against this
 repo's real Vivado synthesis data points (see finn_cost_model.py's own
 _LUT_ANCHOR_FACTORS/_BRAM_ANCHOR_FACTORS module comment for the full
-derivation and real scope limits). At uniform W8A8, real LUT usage was
-~7.6-8.2x this model's own raw estimate -- badly infeasible as a hard
-constraint. But a SECOND real data point (a real per-block HAWQ bit
-assignment's largest partition, which landed on uniform W2A2 across every
-block in it) showed the derating factor falls sharply at low bit-width --
-only ~1.3x at W2A2, not ~8x -- so a heavily 2/4-bit HAWQ assignment is NOT
-nearly as chronically over-budget as the old flat-8.2x calibration made it
-look (this file's own calibrated_lut/calibrated_bram18k calls are now bit-
+derivation, including a same-day correction of an initial mistake -- read
+that comment, not just this summary). At avg_bits=8 (uniform W8A8, the
+whole real 8-way design), real LUT usage was ~8.2x this model's own raw
+estimate -- badly infeasible as a hard constraint. But a SECOND real data
+point (partition_2 of a real per-block HAWQ build, using its own REAL
+per-block bits AND real per-layer folding, LUT-weighted avg_bits=3.52 --
+NOT uniform W2A2, an earlier version of this note got that wrong) showed
+the derating factor falls sharply at lower bit-width -- only ~1.2x at
+avg_bits=3.52, not ~8x -- so a low-bit-heavy HAWQ assignment is NOT nearly
+as chronically over-budget as the old flat-8.2x calibration made it look
+(this file's own calibrated_lut/calibrated_bram18k calls are now bit-
 width-dependent, via avg_bits=(weight_bits+act_bits)/2 per unit, not a
-single global multiplier). Still kept as a PENALTY rather than a hard
+single global multiplier -- clamped to [3.52, 8], the real measured range,
+no extrapolation below it). Still kept as a PENALTY rather than a hard
 constraint though, for a different reason now: this is genuinely only two
-calibration points (avg_bits=2 and 8, nothing verified at 4, nothing
-verified at a mixed-bits-in-one-partition granularity finer than "every
-block in this partition happened to land on the same bits"), so treating
+calibration points (avg_bits=3.52 and 8, nothing verified at 4 or below
+3.52, nothing verified at a mixed-bits-in-one-partition granularity finer
+than "one real per-block assignment on one real partition"), so treating
 calibrated totals as a hard wall would bet the search's feasibility on an
 interpolated curve shape that hasn't been checked, rather than as the
 steering signal it actually is. Both resources are treated consistently:
@@ -243,6 +253,7 @@ def solve_stage_bits(
         _finn_cost(finn_costs, s, stage_weight_bits[s], stage_act_bits[s], "bram18k") for s in stage_names
     )
     return {
+        "status": "Optimal",
         "stage_weight_bits": stage_weight_bits,
         "stage_act_bits": stage_act_bits,
         "_diagnostics": {
@@ -253,16 +264,20 @@ def solve_stage_bits(
             "xczu7ev_bram18k_budget": XCZU7EV_BRAM_18K,
             "bram_pct_of_budget": 100 * total_bram / XCZU7EV_BRAM_18K,
             "note": "LUT and BRAM are BOTH a penalty in the objective (lut_weight/bram_weight), NOT a "
-                    "hard constraint. Calibrated bit-width-aware (avg_bits-interpolated between real "
-                    "W2A2/W8A8 synthesis anchors, not a flat factor) -- see ilp_search.py's own module "
-                    "docstring and finn_cost_model.py's _LUT_ANCHOR_FACTORS/_BRAM_ANCHOR_FACTORS comment. "
-                    "These numbers are informational, already calibrated (not raw model output).",
+                    "hard constraint -- solve_stage_bits (the two-pass method) doesn't support a hard "
+                    "constraint at all, see solve_joint_bits's own docstring for why; pass --joint "
+                    "--hard-lut/--hard-bram for that. Calibrated bit-width-aware (avg_bits-interpolated "
+                    "between real avg_bits=3.52/avg_bits=8 synthesis anchors, not a flat factor) -- see "
+                    "ilp_search.py's own module docstring and finn_cost_model.py's "
+                    "_LUT_ANCHOR_FACTORS/_BRAM_ANCHOR_FACTORS comment. These numbers are informational, "
+                    "already calibrated (not raw model output).",
         },
     }
 
 
 def solve_joint_bits(
     sensitivity: dict, finn_costs: dict, stage_names: tuple[str, ...], lut_weight: float, bram_weight: float,
+    hard_lut: bool = False, hard_bram: bool = False,
 ) -> dict:
     """One combined MIP: pick a (weight_bit, act_bit) PAIR per stage jointly,
     instead of solve_stage_bits's two independent per-axis passes
@@ -290,6 +305,23 @@ def solve_joint_bits(
     now EXACT on the LUT/BRAM side and still APPROXIMATE on the sensitivity
     side -- strictly better than the two-pass method (which was approximate
     on BOTH sides), not a full joint solution.
+
+    hard_lut/hard_bram: opt-in hard `<= XCZU7EV budget` constraints (default
+    both off, matching this file's own soft-penalty-only history -- see
+    module docstring for why that was the original choice). Only supported
+    HERE, not in the two-pass solve_stage_bits: a hard constraint needs a
+    real, non-approximated per-candidate cost to constrain against, and
+    solve_joint_bits is the only one of the two that has that (the two-pass
+    method's per-axis raw_lut/raw_bram are evaluated holding the OTHER axis
+    at a default/already-decided value, not the final combination -- a hard
+    constraint built on that would silently under- or over-constrain
+    depending on how far the final act/weight choice drifts from the
+    assumption). Now that finn_cost_model.py's calibration is bit-width-
+    aware (see its own module comment), a hard constraint is no longer
+    guaranteed-infeasible the way the original flat-8.225x calibration made
+    it -- this is genuinely worth trying, PuLP/CBC will just report
+    "Infeasible" if it isn't achievable, not silently produce a wrong
+    answer.
 
     `stage_names` may be 5 stage-group names or dozens of individual
     bottleneck-block names, same as solve_stage_bits."""
@@ -319,14 +351,37 @@ def solve_joint_bits(
     for s in stage_names:
         prob += pulp.lpSum(x[(s, w, a)] for w, a in candidate_pairs) == 1, f"one_pair_per_stage_{s}"
 
+    if hard_lut:
+        prob += pulp.lpSum(
+            x[(s, w, a)] * raw_lut[(s, w, a)] for s in stage_names for w, a in candidate_pairs
+        ) <= XCZU7EV_LUT, "hard_lut_budget"
+    if hard_bram:
+        prob += pulp.lpSum(
+            x[(s, w, a)] * raw_bram[(s, w, a)] for s in stage_names for w, a in candidate_pairs
+        ) <= XCZU7EV_BRAM_18K, "hard_bram_budget"
+
     prob += pulp.lpSum(
         x[(s, w, a)] * (sens_norm[(s, w, a)] + lut_weight * lut_norm[(s, w, a)] + bram_weight * bram_norm[(s, w, a)])
         for s in stage_names for w, a in candidate_pairs
     )
 
     status = prob.solve(pulp.PULP_CBC_CMD(msg=0))
-    if pulp.LpStatus[status] != "Optimal":
-        raise RuntimeError(f"joint ILP did not solve to optimality (status={pulp.LpStatus[status]}).")
+    status_name = pulp.LpStatus[status]
+    if status_name not in ("Optimal", "Infeasible"):
+        raise RuntimeError(f"joint ILP hit an unexpected solver status: {status_name!r}.")
+
+    if status_name != "Optimal":
+        return {
+            "status": status_name,
+            "stage_weight_bits": {},
+            "stage_act_bits": {},
+            "_diagnostics": {
+                "note": f"Solver status {status_name!r} -- hard_lut={hard_lut}, hard_bram={hard_bram}. "
+                        "No bit assignment can satisfy the hard constraint(s) requested; see "
+                        "XCZU7EV_LUT/XCZU7EV_BRAM_18K for the budgets and finn_cost_model.py's own "
+                        "calibration comment for the cost model this was checked against.",
+            },
+        }
 
     stage_weight_bits: dict[str, int] = {}
     stage_act_bits: dict[str, int] = {}
@@ -338,6 +393,7 @@ def solve_joint_bits(
     total_lut = sum(raw_lut[(s, stage_weight_bits[s], stage_act_bits[s])] for s in stage_names)
     total_bram = sum(raw_bram[(s, stage_weight_bits[s], stage_act_bits[s])] for s in stage_names)
     return {
+        "status": status_name,
         "stage_weight_bits": stage_weight_bits,
         "stage_act_bits": stage_act_bits,
         "_diagnostics": {
@@ -347,10 +403,15 @@ def solve_joint_bits(
             "total_bram18k_calibrated": total_bram,
             "xczu7ev_bram18k_budget": XCZU7EV_BRAM_18K,
             "bram_pct_of_budget": 100 * total_bram / XCZU7EV_BRAM_18K,
+            "hard_lut": hard_lut,
+            "hard_bram": hard_bram,
             "note": "JOINT (w,a)-pair search (--joint): LUT/BRAM looked up at the exact chosen (w,a) "
                     "pair (no two-pass approximation), sensitivity is the additive sensitivity_w+"
-                    "sensitivity_a approximation (see solve_joint_bits docstring). Both a penalty in "
-                    "the objective, NOT a hard constraint -- same as the two-pass solve_stage_bits.",
+                    "sensitivity_a approximation (see solve_joint_bits docstring). "
+                    + ("hard_lut/hard_bram constraints were ENFORCED (see those fields) -- this "
+                       "assignment is guaranteed to fit, under this cost model's own calibration."
+                       if (hard_lut or hard_bram) else
+                       "LUT/BRAM are a soft penalty in the objective, NOT a hard constraint."),
         },
     }
 
@@ -373,8 +434,18 @@ def main() -> None:
                               "no more two-pass 'hold the other axis at a default' approximation on "
                               "the resource-cost side. See solve_joint_bits's own docstring for what's "
                               "still approximate (the sensitivity side, additive by necessity).")
+    parser.add_argument("--hard-lut", action="store_true",
+                         help="Add a hard `<= XCZU7EV_LUT` constraint (calibrated LUT) instead of only a "
+                              "soft penalty. Requires --joint (see solve_joint_bits's own docstring for "
+                              "why the two-pass method can't support this). May report Infeasible -- "
+                              "that's a real answer, not a bug, and gets written to --out-file same as "
+                              "an Optimal result would.")
+    parser.add_argument("--hard-bram", action="store_true", help="Same as --hard-lut, for calibrated BRAM_18K.")
     parser.add_argument("--out-file", type=Path, default=Path("compression/hawq/stage_bits_23_1.json"))
     args = parser.parse_args()
+
+    if (args.hard_lut or args.hard_bram) and not args.joint:
+        raise ValueError("--hard-lut/--hard-bram require --joint -- see solve_joint_bits's own docstring for why.")
 
     with open(args.sensitivity_file) as f:
         sensitivity = json.load(f)
@@ -395,7 +466,10 @@ def main() -> None:
         )
 
     if args.joint:
-        result = solve_joint_bits(sensitivity, finn_costs, stage_names, args.lut_weight, args.bram_weight)
+        result = solve_joint_bits(
+            sensitivity, finn_costs, stage_names, args.lut_weight, args.bram_weight,
+            hard_lut=args.hard_lut, hard_bram=args.hard_bram,
+        )
     else:
         result = solve_stage_bits(sensitivity, finn_costs, stage_names, args.lut_weight, args.bram_weight)
 
@@ -403,11 +477,17 @@ def main() -> None:
     with open(args.out_file, "w") as f:
         json.dump(result, f, indent=2)
     print(f"Wrote {args.out_file}")
+    print(f"ILP status: {result['status']}")
+    if result["status"] != "Optimal":
+        print(f"No bit assignment satisfies the requested hard constraint(s) -- see {args.out_file}'s "
+              f"own _diagnostics.note.")
+        return
     print(f"stage_weight_bits: {result['stage_weight_bits']}")
     print(f"stage_act_bits:    {result['stage_act_bits']}")
     diag = result["_diagnostics"]
-    print(f"LUT used (calibrated): {diag['total_lut_calibrated']:.0f} ({diag['lut_pct_of_budget']:.1f}% of {XCZU7EV_LUT} budget) -- informational.")
-    print(f"BRAM_18K used (calibrated): {diag['total_bram18k_calibrated']:.0f} ({diag['bram_pct_of_budget']:.1f}% of {XCZU7EV_BRAM_18K} budget) -- informational.")
+    budget_word = "guaranteed (hard constraint)" if (args.hard_lut or args.hard_bram) else "informational"
+    print(f"LUT used (calibrated): {diag['total_lut_calibrated']:.0f} ({diag['lut_pct_of_budget']:.1f}% of {XCZU7EV_LUT} budget) -- {budget_word}.")
+    print(f"BRAM_18K used (calibrated): {diag['total_bram18k_calibrated']:.0f} ({diag['bram_pct_of_budget']:.1f}% of {XCZU7EV_BRAM_18K} budget) -- {budget_word}.")
 
 
 if __name__ == "__main__":

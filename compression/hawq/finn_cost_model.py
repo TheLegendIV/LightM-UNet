@@ -60,34 +60,45 @@ FOLDING_SERIAL: Folding = "serial"
 # synthesis / this_model's_own_estimate). Originally (2026-08-25) a single
 # flat factor calibrated against ONE real data point (S19 at uniform W8A8,
 # hardware/results.csv's "s19_double_mid_8way_partitioned_ooc_synth_TOTAL"
-# row, vs. this model evaluated at FOLDING_SERIAL matching the real build's
-# own resolved per-layer PE/SIMD -- see git history for that version). A
-# SECOND real data point (same day) proved the flat-factor assumption
+# row, vs. this model evaluated at the real build's own resolved per-layer
+# PE/SIMD -- hardware/outputs/s19_8way_partitioned_ooc_20260820_101224/
+# final_hw_config.json, PE=SIMD=1 on effectively every MVAU node, i.e.
+# avg_bits=8 uniform):
+#     LUT:      830,689 real  vs. 100,996 this-model raw -> 8.225x
+#     BRAM_18K:     906 real  vs.   1,495 this-model raw -> 0.606x
+# A SECOND real data point (same day) proved the flat-factor assumption
 # wrong: hardware/results.csv's "s19_hawq_block_partition_2_ooc_synth" row
-# is a real OOC synthesis of partition_id=2 (down2 + stage2.0-2.4, the
-# largest of the 8-way S19 partitions) built at compression/hawq/
-# block_bits_s19.json's real per-block HAWQ bits -- which landed on a
-# uniform W2A2 for every block in that exact partition (see
-# compression/hawq/block_bits_s19.json's own down2/stage2.0-2.4 entries),
-# letting it serve as a clean SECOND single-bit-width anchor:
-#     avg_bits=8 (W8A8, this same partition's own uniform-INT8 baseline row
-#       "s19_double_mid_partition_2_ooc_synth"): LUT 179,084 real vs. 23,566
-#       this-model raw -> 7.599x.  BRAM_18K 145 real vs. 288 raw -> 0.503x.
-#       (close to, not identical to, the original whole-8-partition-design
-#       factors of 8.225x/0.606x above -- same ballpark, different exact
-#       layer mix, cross-checks the methodology.)
-#     avg_bits=2 (W2A2, "s19_hawq_block_partition_2_ooc_synth", the SAME
-#       physical layers, only the bit-width differs -- a controlled
-#       comparison): LUT 22,436 real vs. 17,143 this-model raw -> 1.309x.
-#       BRAM_18K 22 real vs. 120 raw -> 0.183x.
-# Both resources' derating factor falls sharply at lower bit-width (LUT
-# ~7.6x at W8A8 down to ~1.3x at W2A2; BRAM ~0.50x down to ~0.18x) -- this
+# is a real OOC synthesis of partition_id=2 (down2 + stage2.0-2.4 +
+# stage2.5.reduce.0 -- the largest of the 8-way S19 partitions, 23 real
+# MVAU nodes) built at a REAL per-block HAWQ bit assignment AND its own
+# REAL resolved per-layer folding (hardware/outputs/
+# s19_hawq_block_partition_2_ooc_synth_20260824_220316/
+# hawq_folding_config_partition2.json, PE=1 but SIMD in {4,6,8,12} --
+# NOT FOLDING_SERIAL). IMPORTANT CORRECTION (2026-08-25, later same day):
+# this anchor was FIRST computed wrong twice over -- (a) assuming that
+# partition's real per-block bits were uniform W2A2 (they weren't: the real
+# per-block assignment mixed W2/W4 weights and mostly W4A4/some W8 acts
+# across down2/stage2.0-2.5, average (weight+act)/2 per layer, LUT-weighted
+# across the partition's own 23 layers, is ~3.52, not 2), and (b) evaluating
+# this model at the CURRENT (since-regenerated-by-this-session's-own-ILP-
+# reruns) folding_block_s19.json instead of the REAL folding FINN actually
+# built with (the hawq_folding_config_partition2.json file above). Both
+# fixed by recomputing raw_total_lut/raw_total_bram18 directly from this
+# model's own layer_cost_pe_simd(), fed the REAL per-block bits AND REAL
+# per-layer (PE, SIMD) for all 23 layers, RAM_STYLE_BLOCK (BRAM_36K=0,
+# URAM=0 in the real synthesis row, confirming no distributed/ultra RAM was
+# used):
+#     avg_bits=3.52 (LUT-weighted mean of (w+a)/2 across the partition's 23
+#       real layers): LUT 22,436 real vs. 18,352 this-model raw -> 1.223x.
+#       BRAM_18K 22 real vs. 171 this-model raw -> 0.129x.
+# The derating factor still falls sharply at lower bit-width (LUT ~8.2x at
+# avg_bits=8 down to ~1.2x at avg_bits=3.52; BRAM ~0.61x down to ~0.13x) --
 # lines up with the real synthesis notes for that row: FINN's own resType
 # heuristic packs narrow (2/4-bit) MACs into DSP48E2 slices instead of
 # LUTs, and per-layer control/glue-logic overhead (the dominant term in why
 # real LUT exceeds this closed-form model at all) doesn't scale down with
 # bit-width the way raw arithmetic LUT usage does. A single flat factor
-# (the original version of this module) applies the W8A8-calibrated
+# (the original version of this module) applies the avg_bits=8-calibrated
 # multiplier uniformly regardless of the ACTUAL bits chosen -- for a
 # low-bit-heavy HAWQ assignment (which is exactly the common case: see
 # ilp_search.py's own bit-search results, mostly 2/4-bit) that means
@@ -98,30 +109,34 @@ FOLDING_SERIAL: Folding = "serial"
 # ACTUALLY cheap, it can't reward that choice).
 #
 # Model: linear interpolation of the derating factor between the two real
-# anchors, using avg_bits = (weight_bits + act_bits) / 2 for whatever unit
-# (stage/block/layer) is being costed, clamped to [2, 8] (CANDIDATE_BITS'
-# own range -- this model is not asked to extrapolate outside it). The
-# avg_bits=4 midpoint is UNVERIFIED (no real synthesis at 4-bit yet) --
-# linear interpolation is the simplest defensible guess between two real
-# points, not a validated curve shape; revisit if a real W4A4 (or mixed
-# W4/W8, W2/W8, etc.) data point ever shows up.
+# anchors (avg_bits=3.52 and avg_bits=8 -- NOT [2, 8]: there is no real
+# data point at avg_bits=2, see the correction above), using
+# avg_bits = (weight_bits + act_bits) / 2 for whatever unit (stage/block/
+# layer) is being costed, CLAMPED to [3.52, 8] -- this model has no basis
+# to extrapolate below its lower real anchor (a genuinely all-2-bit
+# assignment, avg_bits=2, would be extrapolating past the measured range,
+# not interpolating; clamping to the avg_bits=3.52 factor is the
+# conservative choice, i.e. probably still somewhat over-penalizing an
+# even-lower-bit design, not under). Revisit the moment a real avg_bits<3.52
+# or a real uniform-low-bit (e.g. true W2A2 across a whole real partition)
+# data point exists.
 #
 # CAVEAT (same as before, now for TWO points instead of one): one
 # architecture (S19), one folding regime each (the real build's own
 # resolved PE/SIMD), a sum-of-independent-partitions build rather than a
 # unified design. Two points fix the "is this even bit-width-dependent"
 # question (clearly yes) but not the true curve shape -- treat interpolated
-# values, especially at avg_bits=4, as a steering signal, not a guarantee.
-_LUT_ANCHOR_BITS = (2, 8)
-_LUT_ANCHOR_FACTORS = (22_436 / 17_142.8, 179_084 / 23_566)  # (~1.309 at W2A2, ~7.599 at W8A8)
-_BRAM_ANCHOR_FACTORS = (22 / 120, 145 / 288)  # (~0.183 at W2A2, ~0.503 at W8A8)
+# values as a steering signal, not a guarantee.
+_LUT_ANCHOR_BITS = (3.5245744425797163, 8)  # (avg_bits=3.52 real partition-2 HAWQ anchor, avg_bits=8 real whole-design anchor)
+_LUT_ANCHOR_FACTORS = (22_436 / 18_352.4, 830_689 / 100_996)  # (~1.223 at avg_bits=3.52, ~8.225 at avg_bits=8)
+_BRAM_ANCHOR_FACTORS = (22 / 171, 906 / 1_495)  # (~0.129 at avg_bits=3.52, ~0.606 at avg_bits=8)
 
 
 def _interpolate_derating(avg_bits: float, anchor_factors: tuple[float, float]) -> float:
-    """Linear interpolation between the W2A2 and W8A8 real-synthesis anchor
-    factors (see module comment above), clamped to CANDIDATE_BITS' own
-    [2, 8] range -- this calibration has no basis to extrapolate beyond the
-    bit-widths it was actually measured at."""
+    """Linear interpolation between the avg_bits=3.52 and avg_bits=8
+    real-synthesis anchor factors (see module comment above), clamped to
+    [3.52, 8] -- this calibration has no basis to extrapolate below its
+    lower real anchor (see module comment's correction note)."""
     lo_bits, hi_bits = _LUT_ANCHOR_BITS
     lo_factor, hi_factor = anchor_factors
     clamped = max(lo_bits, min(hi_bits, avg_bits))
@@ -131,9 +146,10 @@ def _interpolate_derating(avg_bits: float, anchor_factors: tuple[float, float]) 
 
 def calibrated_lut(raw_total_lut: float, weight_bits: float, act_bits: float) -> float:
     """This model's own raw total_lut, corrected by a derating factor
-    interpolated between the W2A2/W8A8 real-synthesis anchors at
-    avg_bits=(weight_bits+act_bits)/2 -- see the module-level comment above
-    for the calibration this is based on and its real scope limits."""
+    interpolated between the avg_bits=3.52/avg_bits=8 real-synthesis
+    anchors at avg_bits=(weight_bits+act_bits)/2 -- see the module-level
+    comment above for the calibration this is based on and its real scope
+    limits."""
     avg_bits = (weight_bits + act_bits) / 2
     return raw_total_lut * _interpolate_derating(avg_bits, _LUT_ANCHOR_FACTORS)
 

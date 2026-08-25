@@ -183,6 +183,17 @@ python compression/collect_results.py \
 # cost path, so this row's params/flops/bops columns are an FP32 stand-in,
 # NOT the real per-block-quantized cost. Real numbers live in
 # compression/hawq/finn_block_costs_23_1.json / block_bits_s19_joint.json /
-# folding_block_s19_joint.json.
+# folding_block_s19_joint.json -- as of 2026-08-25's bit-width-aware
+# recalibration (finn_cost_model.py's own _LUT_ANCHOR_FACTORS/
+# _BRAM_ANCHOR_FACTORS comment), folding_block_s19_joint.json's own
+# hard-capped (--hard-lut 0.70 --hard-bram 0.80), pure-latency
+# (--lut-weight 0 --bram-weight 0) folding result: LUT 70.0% (AT the cap,
+# the binding constraint), BRAM_18K 22.7% (well under its own 80% cap,
+# non-binding), 9,744,384 total cycles (~= per-image latency). See
+# compression/hawq/folding_block_s19.json's own two-pass counterpart for
+# comparison -- same bit-width-family, non-joint search, 6,819,840 cycles
+# at the same 70%/80% caps (~43% faster for the same resource budget,
+# because the two-pass bits spend fewer total bits on average -- see
+# session notes, not yet written up in a doc file).
 
 echo "Done: ${RUN_NAME}."
