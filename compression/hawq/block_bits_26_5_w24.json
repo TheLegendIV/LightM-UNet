@@ -27,16 +27,16 @@
     "regular4.0": 2,
     "regular4.1": 4,
     "up5": 4,
-    "regular5.0": 4,
+    "regular5.0": 2,
     "final": 4
   },
   "stage_act_bits": {
-    "initial": 8,
+    "initial": 4,
     "down1": 4,
-    "regular1.0": 4,
-    "regular1.1": 4,
-    "regular1.2": 4,
-    "regular1.3": 4,
+    "regular1.0": 2,
+    "regular1.1": 2,
+    "regular1.2": 2,
+    "regular1.3": 2,
     "down2": 2,
     "stage2.0": 2,
     "stage2.1": 2,
@@ -55,19 +55,19 @@
     "stage3.6": 2,
     "stage3.7": 2,
     "up4": 2,
-    "regular4.0": 4,
-    "regular4.1": 4,
+    "regular4.0": 2,
+    "regular4.1": 2,
     "up5": 4,
-    "regular5.0": 8,
-    "final": 8
+    "regular5.0": 4,
+    "final": 4
   },
   "_diagnostics": {
-    "total_lut_calibrated": 1061396.099037586,
+    "total_lut_calibrated": 203755.6910439507,
     "xczu7ev_lut_budget": 230400,
-    "lut_pct_of_budget": 460.6753902072856,
-    "total_bram18k_calibrated": 916.9083612040134,
+    "lut_pct_of_budget": 88.43562979338138,
+    "total_bram18k_calibrated": 292.1097222222222,
     "xczu7ev_bram18k_budget": 624,
-    "bram_pct_of_budget": 146.9404425006432,
-    "note": "LUT and BRAM are BOTH a penalty in the objective (lut_weight/bram_weight), NOT a hard constraint -- even the cheapest bit-width choice is well over budget on both, once calibrated against this repo's real synthesis data point. See ilp_search.py's own module docstring and finn_cost_model.py's LUT_DERATING_FACTOR/BRAM_DERATING_FACTOR comment. These numbers are informational, already calibrated (not raw model output)."
+    "bram_pct_of_budget": 46.812455484330485,
+    "note": "LUT and BRAM are BOTH a penalty in the objective (lut_weight/bram_weight), NOT a hard constraint. Calibrated bit-width-aware (avg_bits-interpolated between real W2A2/W8A8 synthesis anchors, not a flat factor) -- see ilp_search.py's own module docstring and finn_cost_model.py's _LUT_ANCHOR_FACTORS/_BRAM_ANCHOR_FACTORS comment. These numbers are informational, already calibrated (not raw model output)."
   }
 }

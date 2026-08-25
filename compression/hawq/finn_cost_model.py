@@ -56,60 +56,93 @@ Folding = Literal["unfolded", "serial"]
 FOLDING_UNFOLDED: Folding = "unfolded"
 FOLDING_SERIAL: Folding = "serial"
 
-# Empirical LUT/BRAM_18K derating factors (real_synthesis / this_model's_own
-# estimate), calibrated 2026-08-25 against the ONE real data point this repo
-# has: S19 (nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_
-# double_mid) at uniform W8A8, real Vivado OOC synthesis
-# (hardware/results.csv's "s19_double_mid_8way_partitioned_ooc_synth_TOTAL"
-# row -- sum of 8 independently-synthesized StreamingDataflowPartitions, no
-# unified/merged bitstream was ever built, see that row's own notes) against
-# THIS model evaluated at FOLDING_SERIAL (the real build's own resolved
-# per-layer PE/SIMD, hardware/outputs/s19_8way_partitioned_ooc_20260820_101224/
-# final_hw_config.json, landed at PE=SIMD=1 on effectively every MVAU node --
-# i.e. already FOLDING_SERIAL in this model's own terms, not FOLDING_UNFOLDED):
-#     LUT:      830,689 real  vs. 100,996 this-model estimate  -> 8.225x
-#     BRAM_18K:     906 real  vs.   1,495 this-model estimate  -> 0.606x
+# Empirical, BIT-WIDTH-DEPENDENT LUT/BRAM_18K derating factors (real_
+# synthesis / this_model's_own_estimate). Originally (2026-08-25) a single
+# flat factor calibrated against ONE real data point (S19 at uniform W8A8,
+# hardware/results.csv's "s19_double_mid_8way_partitioned_ooc_synth_TOTAL"
+# row, vs. this model evaluated at FOLDING_SERIAL matching the real build's
+# own resolved per-layer PE/SIMD -- see git history for that version). A
+# SECOND real data point (same day) proved the flat-factor assumption
+# wrong: hardware/results.csv's "s19_hawq_block_partition_2_ooc_synth" row
+# is a real OOC synthesis of partition_id=2 (down2 + stage2.0-2.4, the
+# largest of the 8-way S19 partitions) built at compression/hawq/
+# block_bits_s19.json's real per-block HAWQ bits -- which landed on a
+# uniform W2A2 for every block in that exact partition (see
+# compression/hawq/block_bits_s19.json's own down2/stage2.0-2.4 entries),
+# letting it serve as a clean SECOND single-bit-width anchor:
+#     avg_bits=8 (W8A8, this same partition's own uniform-INT8 baseline row
+#       "s19_double_mid_partition_2_ooc_synth"): LUT 179,084 real vs. 23,566
+#       this-model raw -> 7.599x.  BRAM_18K 145 real vs. 288 raw -> 0.503x.
+#       (close to, not identical to, the original whole-8-partition-design
+#       factors of 8.225x/0.606x above -- same ballpark, different exact
+#       layer mix, cross-checks the methodology.)
+#     avg_bits=2 (W2A2, "s19_hawq_block_partition_2_ooc_synth", the SAME
+#       physical layers, only the bit-width differs -- a controlled
+#       comparison): LUT 22,436 real vs. 17,143 this-model raw -> 1.309x.
+#       BRAM_18K 22 real vs. 120 raw -> 0.183x.
+# Both resources' derating factor falls sharply at lower bit-width (LUT
+# ~7.6x at W8A8 down to ~1.3x at W2A2; BRAM ~0.50x down to ~0.18x) -- this
+# lines up with the real synthesis notes for that row: FINN's own resType
+# heuristic packs narrow (2/4-bit) MACs into DSP48E2 slices instead of
+# LUTs, and per-layer control/glue-logic overhead (the dominant term in why
+# real LUT exceeds this closed-form model at all) doesn't scale down with
+# bit-width the way raw arithmetic LUT usage does. A single flat factor
+# (the original version of this module) applies the W8A8-calibrated
+# multiplier uniformly regardless of the ACTUAL bits chosen -- for a
+# low-bit-heavy HAWQ assignment (which is exactly the common case: see
+# ilp_search.py's own bit-search results, mostly 2/4-bit) that means
+# systematically OVER-penalizing LUT/BRAM well beyond what real hardware
+# would show, making the ILP overly conservative exactly where it matters
+# most (a per-block search's whole point is to spend more bits only where
+# sensitivity demands it -- if the cost model can't see that cheap bits are
+# ACTUALLY cheap, it can't reward that choice).
 #
-# Two things this rules out, both worth stating plainly:
-#   1. This model does NOT track FINN's OWN native analytical estimator
-#      either -- at the SAME real folding, FINN's own pre-synthesis estimate
-#      (hardware/outputs/.../report/estimate_layer_resources.json, summed)
-#      was LUT=400,434 / BRAM_18K=252 -- ~4x different from THIS model's own
-#      100,996 / 1,495, in OPPOSITE directions per resource. The "verified by
-#      hand against a real FINN report" claim this module's own top-of-file
-#      docstring makes was only checked at FOLDING_UNFOLDED, not generally.
-#   2. The (now-corrected) prior assumption in this codebase -- that real
-#      synthesis comes in UNDER this closed-form estimate, used to justify
-#      treating LUT/BRAM as a soft steering signal rather than a hard
-#      constraint -- is WRONG for LUT specifically: real LUT usage is
-#      ~8.2x OVER this model's estimate, not under. BRAM is the only
-#      resource where the old "overshoots" framing happens to hold (this
-#      model over-predicts BRAM by ~1.65x here).
+# Model: linear interpolation of the derating factor between the two real
+# anchors, using avg_bits = (weight_bits + act_bits) / 2 for whatever unit
+# (stage/block/layer) is being costed, clamped to [2, 8] (CANDIDATE_BITS'
+# own range -- this model is not asked to extrapolate outside it). The
+# avg_bits=4 midpoint is UNVERIFIED (no real synthesis at 4-bit yet) --
+# linear interpolation is the simplest defensible guess between two real
+# points, not a validated curve shape; revisit if a real W4A4 (or mixed
+# W4/W8, W2/W8, etc.) data point ever shows up.
 #
-# CAVEAT: exactly one calibration point (one architecture, one bit-width,
-# one folding regime, a sum-of-independent-partitions build rather than a
-# unified design -- likely somewhat pessimistic vs. a real merged
-# bitstream's shared control/routing logic). Treating these as universal
-# multipliers across every architecture/bit-width/folding this repo
-# considers is a real extrapolation risk, not a general calibration curve --
-# revisit the moment a second real synthesis data point exists (ideally at a
-# different bit-width and/or folding point, to check whether the factor is
-# even roughly constant or itself folding/bit-width-dependent).
-LUT_DERATING_FACTOR = 830_689 / 100_996  # ~8.225 -- multiply this model's raw total_lut by this before comparing to a real LUT budget
-BRAM_DERATING_FACTOR = 906 / 1_495  # ~0.606 -- multiply this model's raw BRAM_18K total by this before comparing to a real BRAM budget
+# CAVEAT (same as before, now for TWO points instead of one): one
+# architecture (S19), one folding regime each (the real build's own
+# resolved PE/SIMD), a sum-of-independent-partitions build rather than a
+# unified design. Two points fix the "is this even bit-width-dependent"
+# question (clearly yes) but not the true curve shape -- treat interpolated
+# values, especially at avg_bits=4, as a steering signal, not a guarantee.
+_LUT_ANCHOR_BITS = (2, 8)
+_LUT_ANCHOR_FACTORS = (22_436 / 17_142.8, 179_084 / 23_566)  # (~1.309 at W2A2, ~7.599 at W8A8)
+_BRAM_ANCHOR_FACTORS = (22 / 120, 145 / 288)  # (~0.183 at W2A2, ~0.503 at W8A8)
 
 
-def calibrated_lut(raw_total_lut: float) -> float:
-    """This model's own raw total_lut, corrected by LUT_DERATING_FACTOR --
-    see that constant's own module-level comment for the calibration this
-    is based on and its real scope limits."""
-    return raw_total_lut * LUT_DERATING_FACTOR
+def _interpolate_derating(avg_bits: float, anchor_factors: tuple[float, float]) -> float:
+    """Linear interpolation between the W2A2 and W8A8 real-synthesis anchor
+    factors (see module comment above), clamped to CANDIDATE_BITS' own
+    [2, 8] range -- this calibration has no basis to extrapolate beyond the
+    bit-widths it was actually measured at."""
+    lo_bits, hi_bits = _LUT_ANCHOR_BITS
+    lo_factor, hi_factor = anchor_factors
+    clamped = max(lo_bits, min(hi_bits, avg_bits))
+    t = (clamped - lo_bits) / (hi_bits - lo_bits)
+    return lo_factor + t * (hi_factor - lo_factor)
 
 
-def calibrated_bram18k(raw_total_bram18k: float) -> float:
-    """This model's own raw BRAM_18K total, corrected by
-    BRAM_DERATING_FACTOR -- see that constant's own module-level comment."""
-    return raw_total_bram18k * BRAM_DERATING_FACTOR
+def calibrated_lut(raw_total_lut: float, weight_bits: float, act_bits: float) -> float:
+    """This model's own raw total_lut, corrected by a derating factor
+    interpolated between the W2A2/W8A8 real-synthesis anchors at
+    avg_bits=(weight_bits+act_bits)/2 -- see the module-level comment above
+    for the calibration this is based on and its real scope limits."""
+    avg_bits = (weight_bits + act_bits) / 2
+    return raw_total_lut * _interpolate_derating(avg_bits, _LUT_ANCHOR_FACTORS)
+
+
+def calibrated_bram18k(raw_total_bram18k: float, weight_bits: float, act_bits: float) -> float:
+    """This model's own raw BRAM_18K total, corrected the same way as
+    calibrated_lut -- see that function's and the module-level comment."""
+    avg_bits = (weight_bits + act_bits) / 2
+    return raw_total_bram18k * _interpolate_derating(avg_bits, _BRAM_ANCHOR_FACTORS)
 
 # Weight-memory FPGA resource choice for the MVU's weight tile (FINN's own
 # "ram_style" nodeattr, see matrixvectoractivation.py: block=BRAM, ultra=

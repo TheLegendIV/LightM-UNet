@@ -43,25 +43,36 @@ constraint at all -- see below.
 WHY LUT LOST ITS HARD CONSTRAINT (previously the one hard `<= lut_budget`
 term, interpolated between the all-lowest-bit and all-highest-bit LUT total
 by --weight/act-budget-fraction): calibrated 2026-08-25 against this
-repo's one real Vivado synthesis data point (S19 @ uniform W8A8, see
-finn_cost_model.py's own LUT_DERATING_FACTOR/BRAM_DERATING_FACTOR module
-comment for the full derivation and its real scope limits -- one
-architecture, one bit-width, one folding regime, a sum-of-independent-
-partitions build). Real LUT usage was ~8.2x THIS model's own raw estimate --
-once that correction is applied, LUT becomes exactly as chronically
-infeasible as BRAM already was (even the cheapest all-2-bit assignment is
-still way over budget), so a hard LUT constraint would make the ILP
-infeasible at every budget_fraction, the same reason BRAM was already a
-penalty rather than a constraint. Both resources are now treated
-consistently: penalties in the objective, using the CALIBRATED (derated)
+repo's real Vivado synthesis data points (see finn_cost_model.py's own
+_LUT_ANCHOR_FACTORS/_BRAM_ANCHOR_FACTORS module comment for the full
+derivation and real scope limits). At uniform W8A8, real LUT usage was
+~7.6-8.2x this model's own raw estimate -- badly infeasible as a hard
+constraint. But a SECOND real data point (a real per-block HAWQ bit
+assignment's largest partition, which landed on uniform W2A2 across every
+block in it) showed the derating factor falls sharply at low bit-width --
+only ~1.3x at W2A2, not ~8x -- so a heavily 2/4-bit HAWQ assignment is NOT
+nearly as chronically over-budget as the old flat-8.2x calibration made it
+look (this file's own calibrated_lut/calibrated_bram18k calls are now bit-
+width-dependent, via avg_bits=(weight_bits+act_bits)/2 per unit, not a
+single global multiplier). Still kept as a PENALTY rather than a hard
+constraint though, for a different reason now: this is genuinely only two
+calibration points (avg_bits=2 and 8, nothing verified at 4, nothing
+verified at a mixed-bits-in-one-partition granularity finer than "every
+block in this partition happened to land on the same bits"), so treating
+calibrated totals as a hard wall would bet the search's feasibility on an
+interpolated curve shape that hasn't been checked, rather than as the
+steering signal it actually is. Both resources are treated consistently:
+penalties in the objective, using the CALIBRATED (derated, bit-width-aware)
 totals so --lut-weight/--bram-weight steer toward genuinely cheaper designs
-rather than an uncorrected estimate that gets the two resources' relative
-scale wrong. This also makes this file's own formulation consistent with
-compression/hawq/folding_ilp.py's (which already treats both as penalties).
-Neither weight "guarantees" fitting the real FPGA -- see finn_cost_model.py's
-own derating-factor comment for why that claim can't be made from one
-calibration point, and because folding (a separate axis, see folding_ilp.py)
-is the real lever for actually reducing resource use, not bit-width alone.
+rather than an estimate that both gets the two resources' relative scale
+wrong AND treats every bit-width the same. This also makes this file's own
+formulation consistent with compression/hawq/folding_ilp.py's (which
+already treats both as penalties, and is now also bit-width-aware the same
+way). Neither weight "guarantees" fitting the real FPGA -- see
+finn_cost_model.py's own calibration comment for why that claim can't be
+made from two calibration points, and because folding (a separate axis,
+see folding_ilp.py) is the real lever for actually reducing resource use,
+not bit-width alone.
 
 Usage (per-STAGE, the original 5-group search):
     python compression/hawq/ilp_search.py \\
@@ -106,9 +117,9 @@ CANDIDATE_BITS = (2, 4, 8)
 def _finn_cost(finn_costs: dict, stage: str, weight_bits: int, act_bits: int, metric: str) -> float:
     entry = finn_costs[stage][f"W{weight_bits}_A{act_bits}"]
     if metric == "bram18k":
-        return calibrated_bram18k(entry["swu_bram18"] + entry["wm_bram18"])
+        return calibrated_bram18k(entry["swu_bram18"] + entry["wm_bram18"], weight_bits, act_bits)
     if metric == "total_lut":
-        return calibrated_lut(entry["total_lut"])
+        return calibrated_lut(entry["total_lut"], weight_bits, act_bits)
     return entry[metric]
 
 
@@ -242,10 +253,10 @@ def solve_stage_bits(
             "xczu7ev_bram18k_budget": XCZU7EV_BRAM_18K,
             "bram_pct_of_budget": 100 * total_bram / XCZU7EV_BRAM_18K,
             "note": "LUT and BRAM are BOTH a penalty in the objective (lut_weight/bram_weight), NOT a "
-                    "hard constraint -- even the cheapest bit-width choice is well over budget on both, "
-                    "once calibrated against this repo's real synthesis data point. See ilp_search.py's "
-                    "own module docstring and finn_cost_model.py's LUT_DERATING_FACTOR/BRAM_DERATING_FACTOR "
-                    "comment. These numbers are informational, already calibrated (not raw model output).",
+                    "hard constraint. Calibrated bit-width-aware (avg_bits-interpolated between real "
+                    "W2A2/W8A8 synthesis anchors, not a flat factor) -- see ilp_search.py's own module "
+                    "docstring and finn_cost_model.py's _LUT_ANCHOR_FACTORS/_BRAM_ANCHOR_FACTORS comment. "
+                    "These numbers are informational, already calibrated (not raw model output).",
         },
     }
 

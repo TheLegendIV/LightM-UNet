@@ -74,16 +74,16 @@
     "regular4.0": 2,
     "regular4.1": 2,
     "up5": 4,
-    "regular5.0": 8,
+    "regular5.0": 4,
     "final": 4
   },
   "_diagnostics": {
-    "total_lut_calibrated": 1968156.1951522834,
+    "total_lut_calibrated": 416999.59565046185,
     "xczu7ev_lut_budget": 230400,
-    "lut_pct_of_budget": 854.2344597015118,
-    "total_bram18k_calibrated": 1863.5117056856184,
+    "lut_pct_of_budget": 180.98940783440185,
+    "total_bram18k_calibrated": 609.3164351851851,
     "xczu7ev_bram18k_budget": 624,
-    "bram_pct_of_budget": 298.63969642397734,
-    "note": "LUT and BRAM are BOTH a penalty in the objective (lut_weight/bram_weight), NOT a hard constraint -- even the cheapest bit-width choice is well over budget on both, once calibrated against this repo's real synthesis data point. See ilp_search.py's own module docstring and finn_cost_model.py's LUT_DERATING_FACTOR/BRAM_DERATING_FACTOR comment. These numbers are informational, already calibrated (not raw model output)."
+    "bram_pct_of_budget": 97.64686461301044,
+    "note": "LUT and BRAM are BOTH a penalty in the objective (lut_weight/bram_weight), NOT a hard constraint. Calibrated bit-width-aware (avg_bits-interpolated between real W2A2/W8A8 synthesis anchors, not a flat factor) -- see ilp_search.py's own module docstring and finn_cost_model.py's _LUT_ANCHOR_FACTORS/_BRAM_ANCHOR_FACTORS comment. These numbers are informational, already calibrated (not raw model output)."
   }
 }

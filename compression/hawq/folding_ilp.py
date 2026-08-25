@@ -28,36 +28,46 @@ there (the fully-unfolded/no-folding cost model is frequently well over
 budget, so a hard `<=` constraint risks outright infeasibility -- see this
 script's own earlier INFEASIBLE-at-W8A8 finding).
 
-IMPORTANT CALIBRATION NOTE (2026-08-25): this repo used to claim "real
-Vivado synthesis typically comes in well under this closed-form analytical
-LUT/BRAM estimate" -- that claim was NEVER actually verified against real
-synthesis for this cost model, and turned out to be WRONG for LUT once we
-got a real data point. Calibrating against S19's real 8-way-partitioned OOC
-Vivado synthesis (hardware/results.csv's
-`s19_double_mid_8way_partitioned_ooc_synth_TOTAL` row) plus the real
-resolved per-layer PE/SIMD folding config from that build
+IMPORTANT CALIBRATION NOTE (updated 2026-08-25): this repo used to claim
+"real Vivado synthesis typically comes in well under this closed-form
+analytical LUT/BRAM estimate" -- that claim was NEVER actually verified
+against real synthesis for this cost model, and turned out to be WRONG for
+LUT once we got a real data point. Calibrating against S19's real
+8-way-partitioned OOC Vivado synthesis (hardware/results.csv's
+`s19_double_mid_8way_partitioned_ooc_synth_TOTAL` row, uniform W8A8) plus
+the real resolved per-layer PE/SIMD folding config from that build
 (hardware/outputs/s19_8way_partitioned_ooc_20260820_101224/final_hw_config.json
--- effectively FOLDING_SERIAL, PE=SIMD=1 on nearly every MVAU node) gives:
-    LUT:      830,689 real  vs. 100,996 this-model-at-FOLDING_SERIAL -> 8.225x OVER
-    BRAM_18K:     906 real  vs.   1,495 this-model-at-FOLDING_SERIAL -> 0.606x (under)
-So LUT is chronically UNDER-estimated by this closed-form model (it doesn't
-model FINN's real per-layer control/glue-logic overhead), while BRAM happens
-to be OVER-estimated. Both derating factors now live in finn_cost_model.py
-(`calibrated_lut`/`calibrated_bram18k`, `LUT_DERATING_FACTOR`/
-`BRAM_DERATING_FACTOR`) and are applied here (and in ilp_search.py) before
-anything is compared to a budget or reported -- this is a single
-one-data-point calibration, not a validated general model; treat calibrated
-totals as a steering signal, not a guarantee. cycles/LUT/BRAM are on wildly
-different scales (cycles range from ~1e2 to ~1e8 per candidate depending on
-folding; LUT ~1e2-1e5; BRAM ~1e0-1e3), so each is independently min-max
-normalized to [0,1] over the FULL (layer, pe, simd) candidate space before
-combining -- normalized on RAW (uncalibrated) LUT/BRAM per candidate, which
-is equivalent to normalizing calibrated values since the derating factors
-are constant multiplicative scalars and min-max normalization is invariant
-to positive scaling; only the reported totals/percentages in "_diagnostics"
-need the explicit calibrated_lut()/calibrated_bram18k() calls -- same
-convention ilp_search.py's own `_normalize` uses for sensitivity/BRAM, just
-extended to a 3rd term here:
+-- effectively FOLDING_SERIAL, PE=SIMD=1 on nearly every MVAU node) gave a
+first calibration point:
+    LUT:      830,689 real  vs. 100,996 this-model-at-FOLDING_SERIAL -> 8.225x OVER (whole design)
+    BRAM_18K:     906 real  vs.   1,495 this-model-at-FOLDING_SERIAL -> 0.606x (under, whole design)
+A SECOND real data point (hardware/results.csv's
+`s19_hawq_block_partition_2_ooc_synth` row) is a real per-block HAWQ bit
+assignment (compression/hawq/block_bits_s19.json) on the largest 8-way
+partition, which happened to land on uniform W2A2 across every block in it
+-- a controlled same-partition, same-layers, bit-width-only comparison
+against that partition's own uniform-W8A8 baseline row showed the derating
+factor is NOT constant with bit-width: it falls sharply at low bit-width
+(LUT ~7.6x at W8A8 down to ~1.3x at W2A2; BRAM ~0.50x down to ~0.18x -- see
+finn_cost_model.py's own `_LUT_ANCHOR_FACTORS`/`_BRAM_ANCHOR_FACTORS`
+comment for the exact numbers and reasoning). `calibrated_lut`/
+`calibrated_bram18k` in finn_cost_model.py are now BIT-WIDTH-DEPENDENT
+(linear interpolation between the W2A2/W8A8 anchors at
+avg_bits=(weight_bits+act_bits)/2), applied HERE at each layer's own
+resolved bits (both when building the objective's lut_norm/bram_norm below,
+and again in `_diagnostics`) -- NOT a flat multiplier applied to an
+aggregate sum. This is still only two calibration points (nothing verified
+at 4-bit, nothing verified at a finer per-partition granularity), so treat
+calibrated totals as a steering signal, not a guarantee. cycles/LUT/BRAM
+are on wildly different scales (cycles range from ~1e2 to ~1e8 per
+candidate depending on folding; LUT ~1e2-1e5; BRAM ~1e0-1e3), so each is
+independently min-max normalized to [0,1] over the FULL (layer, pe, simd)
+candidate space before combining -- normalized on the CALIBRATED per-layer
+LUT/BRAM (not raw), since the bit-width-dependent factor is no longer a
+normalization-invariant global constant: two layers can now differ in
+calibrated magnitude by their bit-width alone, and the objective should see
+that -- same convention ilp_search.py's own `_normalize` uses for
+sensitivity/BRAM, just extended to a 3rd term here:
     minimize sum_{l,pe,simd} x[l,pe,simd] * (cycles_norm[l,pe,simd]
                                               + lut_weight * lut_norm[l,pe,simd]
                                               + bram_weight * bram_norm[l,pe,simd])
@@ -203,8 +213,15 @@ def solve_folding(
             # budget" figure, same honesty-over-fabrication choice as
             # everywhere else in this file.
             raw_cycles[key] = costs[fold_key]["cycles"]
-            raw_lut[key] = costs[fold_key]["total_lut"]
-            raw_bram[key] = costs[fold_key]["swu_bram18"] + costs[fold_key]["wm_bram18"]
+            # Calibrated at THIS layer's own (w_bits, a_bits) -- calibrated_lut/
+            # calibrated_bram18k are bit-width-dependent (interpolated between
+            # real W2A2/W8A8 synthesis anchors, see finn_cost_model.py), so
+            # unlike the old flat-factor version, applying this per layer
+            # BEFORE normalizing actually changes the relative normalized
+            # magnitudes across layers with different bit-widths -- no longer
+            # a normalization-invariant no-op.
+            raw_lut[key] = calibrated_lut(costs[fold_key]["total_lut"], w_bits, a_bits)
+            raw_bram[key] = calibrated_bram18k(costs[fold_key]["swu_bram18"] + costs[fold_key]["wm_bram18"], w_bits, a_bits)
             x[key] = pulp.LpVariable(f"x_{layer.name}_{pe}_{simd}_{ram_style}", cat=pulp.LpBinary)
 
     cycles_norm = _normalize(raw_cycles)
@@ -218,9 +235,12 @@ def solve_folding(
 
     # LUT/BRAM are a PENALTY here, not a hard `<=budget` constraint -- see
     # module docstring for why (fully-unfolded LUT/BRAM is often over budget
-    # regardless of folding choice, and a hard constraint on an uncalibrated
-    # closed-form estimate risks false infeasibility either direction --
-    # calibration shows this model UNDER-shoots LUT and OVER-shoots BRAM).
+    # regardless of folding choice, and a hard constraint on a still-only-
+    # two-point-calibrated, bit-width-dependent estimate risks false
+    # infeasibility either direction -- calibration shows this model
+    # UNDER-shoots LUT and OVER-shoots BRAM at every bit-width checked so
+    # far, W2A2 through W8A8, just by very different margins depending on
+    # bit-width).
     prob += pulp.lpSum(
         x[key] * (cycles_norm[key] + lut_weight * lut_norm[key] + bram_weight * bram_norm[key])
         for key in x
@@ -245,13 +265,22 @@ def solve_folding(
     total_bram_raw = sum(v["swu_bram18"] + v["wm_bram18"] for v in result_per_layer.values())
     total_uram = sum(v.get("wm_uram18", 0) for v in result_per_layer.values())
     total_cycles = sum(v["cycles"] for v in result_per_layer.values())
-    # Calibrated against this repo's one real synthesis data point -- see
-    # finn_cost_model.py's own LUT_DERATING_FACTOR/BRAM_DERATING_FACTOR
-    # comment. Doesn't change WHICH folding the ILP picks (min-max
-    # normalization inside the objective above is invariant to a constant
-    # per-resource rescaling), only what's reported here as "% of budget".
-    total_lut = calibrated_lut(total_lut_raw)
-    total_bram = calibrated_bram18k(total_bram_raw)
+    # Calibrated PER LAYER at its own chosen (weight_bits, act_bits) -- see
+    # finn_cost_model.py's own _LUT_ANCHOR_FACTORS/_BRAM_ANCHOR_FACTORS
+    # comment. NOT total_lut_raw run through one flat multiplier: the
+    # derating factor is bit-width-dependent now, so a heterogeneous-bit-
+    # width layer set has to be calibrated layer-by-layer and then summed,
+    # not summed-then-calibrated (those give different answers whenever
+    # layers disagree on bit-width, which per-block HAWQ configs always do).
+    # Doesn't change WHICH folding the ILP picks for a FIXED bit assignment
+    # (min-max normalization inside the objective above is invariant to a
+    # per-layer-constant rescaling that doesn't depend on pe/simd/ram_style),
+    # only what's reported here as "% of budget".
+    total_lut = sum(calibrated_lut(v["total_lut"], v["weight_bits"], v["act_bits"]) for v in result_per_layer.values())
+    total_bram = sum(
+        calibrated_bram18k(v["swu_bram18"] + v["wm_bram18"], v["weight_bits"], v["act_bits"])
+        for v in result_per_layer.values()
+    )
     return {
         "status": status_name,
         "per_layer": result_per_layer,
@@ -264,10 +293,10 @@ def solve_folding(
             "total_cycles": total_cycles,
             "note": "LUT/BRAM are informational only here (penalty in the objective via "
                     "--lut-weight/--bram-weight, NOT a hard constraint), AND already calibrated "
-                    "against this repo's one real synthesis data point -- see finn_cost_model.py's "
-                    "own LUT_DERATING_FACTOR/BRAM_DERATING_FACTOR comment and this file's own module "
-                    "docstring. Over 100% does not mean the search failed; _raw fields are the "
-                    "uncalibrated model output, for reference.",
+                    "PER LAYER at its own bit-width against this repo's real synthesis data points -- "
+                    "see finn_cost_model.py's own _LUT_ANCHOR_FACTORS/_BRAM_ANCHOR_FACTORS comment and "
+                    "this file's own module docstring. Over 100% does not mean the search failed; "
+                    "_raw fields are the uncalibrated model output, for reference.",
         },
     }
 
