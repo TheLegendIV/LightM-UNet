@@ -73,18 +73,34 @@ set -e
 # quirk, so there's no technical reason to throw away S5.6's own trained
 # weights and cold-start instead.
 #
+# TRAINABLE SLOPE (2026-08-25, RESTART -- a first attempt at this run used
+# the slope FROZEN, the ORIGINAL QuantDecomposedLeakyAct behavior; that
+# attempt is being discarded): 27 real epochs on real HPC hardware showed
+# train_loss falling steadily while Pseudo dice never moved off ~0.0 --
+# worse than even the documented no-retrain floor (~0.38-0.41) this
+# averaged map alone was known to produce. QuantENet5_6Block.py now passes
+# trainable_slope=True at every encoder activation site (see
+# QuantDecomposedLeakyAct's own docstring) -- the averaged value from
+# ENET5_6_LEAKY_SLOPE_MAP_FILE is still the WARM-START initialization (same
+# map, unchanged), but is no longer frozen, so gradients can correct a
+# block's slope away from the average if the real per-channel distribution
+# it was averaged from was too wide for one shared scalar to represent
+# well. NOTE: 26_5_w24's own per-block QAT run (same architecture family,
+# same forced-averaged-frozen-slope setup) completed successfully with a
+# real dice of 0.6806 -- so frozen slopes alone do NOT fully explain S5.6's
+# stuck-at-zero-dice failure; the per-block bit assignment itself may also
+# be a contributing factor, not yet ruled out. This fix is a genuine change
+# to test, not a confirmed complete solution.
+#
 # Confirmed via local docker smoke test (nnUNetv2_train, 1 epoch/2
 # iterations against Dataset509_ARCADE_1x1_4c, ENET_VAL_ITERATIONS_PER_EPOCH=1,
 # ENET_DISABLE_CHECKPOINTING=1): nnUNetTrainerENetQuant5_6Block builds with
-# block_bits_5_6.json + the averaged per-block slope map, warm-starts from
-# S5.6's own FP32 checkpoint_final.pth (721/919 keys transferred, 0 shape
-# mismatches -- same count QuantENet26_5_w24's own smoke test found, as
-# expected given the identical topology), and completes a real
-# forward+backward+optimizer step end to end ("Training done.", train_loss=
-# 4.9427, epoch time 92.14s -- the high initial loss is expected, not a
-# bug: the forced-nonneg-averaged-slope activation mismatch plus every
-# freshly-initialized quantizer buffer, exactly the "needs real QAT to
-# recover" situation this job's module docstring already flags).
+# block_bits_5_6.json + trainable_slope=True, warm-starts from S5.6's own
+# FP32 checkpoint_final.pth (721/820 keys transferred, 0 shape mismatches --
+# fewer keys than the frozen-slope build's own 721/919 since one_minus_alpha
+# is no longer a separately-stored buffer, computed dynamically instead),
+# and completes a real forward+backward+optimizer step end to end
+# ("Training done.", train_loss=3.5216, epoch time 94.92s).
 
 DATASET_ID=509
 DATASET_NAME="Dataset509_ARCADE_1x1_4c"
