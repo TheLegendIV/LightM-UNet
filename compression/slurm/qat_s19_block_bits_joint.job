@@ -13,9 +13,11 @@
 # config is the SAME S19 architecture (37 blocks) at a different per-block
 # bit assignment (compression/hawq/block_bits_s19_joint.json, from
 # ilp_search.py --joint), so per-iteration cost should be close to that
-# run's, not meaningfully cheaper or more expensive. Budget for needing a
-# resume job the same way, using resume_qat_s19_block_bits.job as the
-# template (swap BLOCK_BITS_FILE/RUN_NAME to the _joint variants below).
+# run's -- at its locally-measured ~139.5s/iteration, 150 epochs x 250
+# iterations/epoch (37500 total) is ~1453 real hours, well over this
+# placeholder --time. Budget for needing a resume job the same way, using
+# resume_qat_s19_block_bits.job as the template (swap BLOCK_BITS_FILE/
+# RUN_NAME to the _joint variants below).
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
 
@@ -106,9 +108,9 @@ export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
 export ENET_S19_BLOCK_BITS_FILE="$HOME/LightM-UNet/${BLOCK_BITS_FILE}"
 export ENET_S19_LEAKY_SLOPE_MAP_FILE="$HOME/LightM-UNet/${SLOPE_MAP_FILE}"
 export ENET_S19_PRETRAINED_CHECKPOINT="$HOME/LightM-UNet/${SOURCE_CHECKPOINT}"
-# Full 150-epoch budget, nnU-Net's real default 250 iterations/epoch --
-# ENET_ITERATIONS_PER_EPOCH deliberately left UNSET, same as
-# qat_s19_block_bits.job.
+# Full 150-epoch budget, same as qat_s19_block_bits.job's own, nnU-Net's
+# real default 250 iterations/epoch -- ENET_ITERATIONS_PER_EPOCH
+# deliberately left UNSET.
 export ENET_EPOCHS=150
 export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
 

@@ -1,0 +1,208 @@
+#!/bin/bash
+#SBATCH --job-name=stage_s19_dense_dilation_warmstart
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# S5.6-ified S19: S19's exact architecture (channels=4,16,32,16,4,
+# bottlenecks=4,12,12,2,1, decoder_type=upsample_conv, separable_dilated=1,
+# prelu_variant=nonneg_block) but with context_pattern=dense_dilation (S5.6's
+# OWN recipe, see compression/hawq/config_26_5_w24.py's own docstring)
+# instead of S19's dense_dilation_reg_interleaved_double_mid -- i.e. every
+# one of stage2/3's 12 slots is now a real dilated (2/4/8/16-cycling,
+# separable-factored) RegularBottleneck, with NO plain reg-bookend slots at
+# all (ENet.py's DENSE_DILATION_PATTERN has no {"reg_bottleneck": True}
+# sentinel, unlike DENSE_DILATION_REG_INTERLEAVED_DOUBLE_MID_PATTERN --
+# see that file's own _make_context_stage docstring). This is a drop-in
+# context_pattern swap, no new model/trainer class needed -- nnUNetTrainerENet
+# is already fully env-var-driven for every architecture axis used here.
+#
+# WARM START: nnUNetTrainerENetQuantS19Block_s19_qat_block_bits's own
+# checkpoint_final.pth (the already-completed per-block QAT run, same source
+# qat_s19_block_bits_joint.job warm-starts from) -- NOT S19's own untouched
+# FP32 checkpoint. Brevitas's QuantConv2d keeps the exact same `.weight`/
+# `.bias` parameter NAMES as plain nn.Conv2d (it only adds separate
+# quantizer-proxy buffers alongside them, it doesn't rename or reshape the
+# real float weight), so nnU-Net's own `-pretrained_weights` name+shape
+# matcher (nnunetv2.run.load_pretrained_weights) transfers from a Brevitas
+# checkpoint into this plain FP32 target exactly as cleanly as from another
+# plain FP32 one -- confirmed via local docker smoke test below (identical
+# overlap-count behavior either way). Preferred over S19's own FP32
+# checkpoint because it carries 150 MORE real epochs of gradient signal on
+# this exact task (the per-block QAT run), even though those epochs also
+# saw quantization noise -- this job's own 150 epochs of clean full-precision
+# fine-tuning afterward should wash out any transient quantization-specific
+# bias before its checkpoint is used for HAWQ sensitivity analysis.
+#
+# UNLIKE stage_23_1_s19_warmstart_4c.job's own same-pattern continuation,
+# this is NOT a same-pattern transfer either way -- stage2/3's dilation
+# SCHEDULE changes at every slot (S19 pattern: reg,2,4,8,16,reg,reg,2,4,8,16,
+# reg; this: 2,4,8,16,2,4,8,16,2,4,8,16), so only a partial transfer is
+# expected: the 8/12 slots per stage that are separable-factored-dilated in
+# BOTH patterns (positions 1,2,3,4,7,8,9,10) transfer cleanly regardless of
+# the exact dilation VALUE used before vs. now (dilation is a conv
+# hyperparameter, not part of the weight tensor's shape, so a
+# Sequential-structured slot matches by name+shape no matter which of
+# {2,4,8,16} it was originally trained at) -- the 4/12 slots per stage that
+# used to be S19's plain (non-factored) reg-bookends (0,5,6,11) do NOT match
+# (different module structure: one Conv2d vs. a 2-module Sequential) and
+# start fresh.
+#
+# nonneg_block PReLU: kept as an architecture axis (matches S19's own,
+# needed to eventually extract a real per-block slope map for FINN-deployable
+# quantization the same way S19's own was -- compression/post-quantization/
+# extract_leaky_slope_map.py) -- there is no PRE-EXISTING slope map for THIS
+# pattern though (S19's own slope map was trained under the interleaved
+# pattern's own dilation schedule, not this one), so it's intentionally NOT
+# passed to this FP32 stage (nonneg_block's own scalar is a real trainable
+# parameter regardless -- it doesn't need a slope map to TRAIN, only to be
+# quantization-deployed afterward, same as S19's own FP32 stage before ITS
+# slope map was ever extracted).
+#
+# This run's OWN checkpoint (once converged) is the prerequisite for
+# redoing the full per-block HAWQ pipeline on this architecture --
+# extract_leaky_slope_map.py -> block_sensitivity.py -> finn_block_costs.py
+# -> ilp_search.py (--joint) -> folding_ilp.py -- NOT done yet: block_
+# sensitivity.py's own build_fp32_model() loads with strict=True, so it
+# needs a checkpoint that was actually TRAINED (converged, or at least
+# genuinely fine-tuned) at this exact architecture, not just this job's
+# initial warm-started-but-untrained state. Do that pipeline after this job
+# produces a real checkpoint_final.pth, not before.
+#
+# 150 epochs, same budget as S19's own and stage_23_1_s19_warmstart_4c.job's own.
+#
+# Confirmed via local docker smoke test (nnUNetv2_train, 1 epoch/2
+# iterations against Dataset509_ARCADE_1x1_4c, -pretrained_weights pointing
+# at the per-block QAT checkpoint above, ENET_VAL_ITERATIONS_PER_EPOCH=1,
+# ENET_DISABLE_CHECKPOINTING=1): builds with context_pattern=dense_dilation
+# at S19's channels/bottlenecks, loads the partial warm-start without error
+# (nnU-Net's own load_pretrained_weights verbose overlap listing showed the
+# expected partial transfer -- matching Sequential-structured dilated slots
+# transferred, the former reg-bookend slots' now-different module structure
+# did not, consistent with the analysis above), and completed a real
+# forward+backward+optimizer step end to end ("Training done.", train_loss=
+# 0.1784, val_loss=0.6356, epoch time 13.09s -- notably low initial loss
+# straight out of the warm start, consistent with real transferred signal
+# rather than a from-scratch init).
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+SOURCE_NET_NAME="nnUNetTrainerENetQuantS19Block_s19_qat_block_bits"
+PRETRAINED_CKPT="$HOME/LightM-UNet/data/nnUNet_results/${DATASET_NAME}/${SOURCE_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_final.pth"
+
+RUN_NAME="s19_dense_dilation_warmstart"
+TRAINER_CLASS="nnUNetTrainerENet"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- ENet trainer knobs -- S19's recipe, minus the reg-interleave -----------
+export ENET_CHANNELS="4,16,32,16,4"
+export ENET_BOTTLENECKS="4,12,12,2,1"
+export ENET_CONTEXT_PATTERN="dense_dilation"
+export ENET_DECODER_TYPE="upsample_conv"
+export ENET_USE_PRELU=1
+export ENET_PRELU_VARIANT="nonneg_block"
+export ENET_USE_DILATED=1
+export ENET_USE_ASYMMETRIC=0
+export ENET_USE_STRIDED=1
+export ENET_USE_DSC=0
+export ENET_SEPARABLE_DILATED=1
+export ENET_DSC_NO_PROJECTION=0
+export ENET_EPOCHS=150
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Run: ${RUN_NAME}"
+echo "Pretrained checkpoint: ${PRETRAINED_CKPT}"
+echo "Output folder: ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Checking pretrained checkpoint exists ==="
+if [ ! -f "${PRETRAINED_CKPT}" ]; then
+    echo "ERROR: pretrained checkpoint not found at ${PRETRAINED_CKPT}" >&2
+    exit 1
+fi
+
+echo "=== Checking for an existing checkpoint for ${RUN_NAME} ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    echo "checkpoint_final.pth already exists at ${ENET_OUTPUT_FOLDER} -- skipping training, going straight to collect_results.py."
+else
+    echo "=== Start training: ${RUN_NAME} (warm-started from ${PRETRAINED_CKPT}) ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}" -pretrained_weights "${PRETRAINED_CKPT}"
+    echo "Training finished for ${RUN_NAME}."
+
+    echo "=== Archiving checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+fi
+
+echo "=== Collecting results into compression/results.csv ==="
+cd "$HOME/LightM-UNet"
+python compression/collect_results.py \
+    --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+    --stage experiment_s19_dense_dilation_warmstart \
+    --dataset-name "${DATASET_NAME}" \
+    --dataset-id "${DATASET_ID}" \
+    --channels "${ENET_CHANNELS}" \
+    --bottlenecks "${ENET_BOTTLENECKS}" \
+    --decoder-type "${ENET_DECODER_TYPE}" \
+    --use-dilated "${ENET_USE_DILATED}" \
+    --use-asymmetric "${ENET_USE_ASYMMETRIC}" \
+    --use-strided "${ENET_USE_STRIDED}" \
+    --use-dsc "${ENET_USE_DSC}" \
+    --separable-dilated "${ENET_SEPARABLE_DILATED}" \
+    --context-pattern "${ENET_CONTEXT_PATTERN}" \
+    --use-prelu "${ENET_USE_PRELU}" \
+    --prelu-variant "${ENET_PRELU_VARIANT}" \
+    --dsc-no-projection "${ENET_DSC_NO_PROJECTION}" \
+    --trainer-class "${TRAINER_CLASS}"
+
+echo "Done: ${RUN_NAME}."
