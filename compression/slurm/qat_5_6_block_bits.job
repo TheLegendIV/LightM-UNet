@@ -7,13 +7,22 @@
 #SBATCH --gpus=1
 #SBATCH --mem=32G
 #SBATCH --time=10:00:00
-# See the WALLTIME WARNING below before submitting -- this --time is a
-# placeholder, not a real estimate for 150 real epochs. Same situation
-# qat_26_5_w24_block_bits.job's own header already documents for this exact
-# S5.6 lineage (same channels-family, same context_pattern=dense_dilation,
-# same separable_dilated=1) -- expect a similar or somewhat larger
-# per-iteration cost here (S5.6's own stage2/3 width is 32, wider than
-# 26_5_w24's narrowed 24).
+# WALLTIME (corrected 2026-08-25 -- an earlier version of this comment cited
+# qat_26_5_w24_block_bits.job's own LOCAL-docker-smoke-test-derived estimate,
+# ~776 real hours -- NOT what actually happened on real HPC hardware).
+# qat_26_5_w24_block_bits.job (same class family, same context_pattern=
+# dense_dilation, same separable_dilated=1, same 150 epochs x 250 iterations/
+# epoch) actually ran on this partition and completed ALL 150 epochs to
+# checkpoint_final.pth WITHOUT needing a resume, within its own 08:00:00
+# budget -- i.e. real HPC rate was <=(8h*3600s)/(150*250)=0.768s/iteration,
+# not the ~73-75s/iteration the local smoke test measured (~100x slower
+# than reality). S5.6's own stage2/3 is wider (32 vs 26_5_w24's narrowed
+# 24), so expect a SOMEWHAT higher real per-iteration cost than that bound,
+# not the same one -- this --time=10:00:00 (more than 26_5_w24's own
+# 08:00:00) is the margin for that, but isn't guaranteed sufficient.
+# resume_qat_5_6_block_bits.job is prepared as a safety net in case it
+# isn't (same pattern as resume_qat_s19_block_bits.job/
+# resume_qat_s19_block_bits_joint.job).
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
 
