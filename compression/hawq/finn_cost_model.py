@@ -56,6 +56,61 @@ Folding = Literal["unfolded", "serial"]
 FOLDING_UNFOLDED: Folding = "unfolded"
 FOLDING_SERIAL: Folding = "serial"
 
+# Empirical LUT/BRAM_18K derating factors (real_synthesis / this_model's_own
+# estimate), calibrated 2026-08-25 against the ONE real data point this repo
+# has: S19 (nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_
+# double_mid) at uniform W8A8, real Vivado OOC synthesis
+# (hardware/results.csv's "s19_double_mid_8way_partitioned_ooc_synth_TOTAL"
+# row -- sum of 8 independently-synthesized StreamingDataflowPartitions, no
+# unified/merged bitstream was ever built, see that row's own notes) against
+# THIS model evaluated at FOLDING_SERIAL (the real build's own resolved
+# per-layer PE/SIMD, hardware/outputs/s19_8way_partitioned_ooc_20260820_101224/
+# final_hw_config.json, landed at PE=SIMD=1 on effectively every MVAU node --
+# i.e. already FOLDING_SERIAL in this model's own terms, not FOLDING_UNFOLDED):
+#     LUT:      830,689 real  vs. 100,996 this-model estimate  -> 8.225x
+#     BRAM_18K:     906 real  vs.   1,495 this-model estimate  -> 0.606x
+#
+# Two things this rules out, both worth stating plainly:
+#   1. This model does NOT track FINN's OWN native analytical estimator
+#      either -- at the SAME real folding, FINN's own pre-synthesis estimate
+#      (hardware/outputs/.../report/estimate_layer_resources.json, summed)
+#      was LUT=400,434 / BRAM_18K=252 -- ~4x different from THIS model's own
+#      100,996 / 1,495, in OPPOSITE directions per resource. The "verified by
+#      hand against a real FINN report" claim this module's own top-of-file
+#      docstring makes was only checked at FOLDING_UNFOLDED, not generally.
+#   2. The (now-corrected) prior assumption in this codebase -- that real
+#      synthesis comes in UNDER this closed-form estimate, used to justify
+#      treating LUT/BRAM as a soft steering signal rather than a hard
+#      constraint -- is WRONG for LUT specifically: real LUT usage is
+#      ~8.2x OVER this model's estimate, not under. BRAM is the only
+#      resource where the old "overshoots" framing happens to hold (this
+#      model over-predicts BRAM by ~1.65x here).
+#
+# CAVEAT: exactly one calibration point (one architecture, one bit-width,
+# one folding regime, a sum-of-independent-partitions build rather than a
+# unified design -- likely somewhat pessimistic vs. a real merged
+# bitstream's shared control/routing logic). Treating these as universal
+# multipliers across every architecture/bit-width/folding this repo
+# considers is a real extrapolation risk, not a general calibration curve --
+# revisit the moment a second real synthesis data point exists (ideally at a
+# different bit-width and/or folding point, to check whether the factor is
+# even roughly constant or itself folding/bit-width-dependent).
+LUT_DERATING_FACTOR = 830_689 / 100_996  # ~8.225 -- multiply this model's raw total_lut by this before comparing to a real LUT budget
+BRAM_DERATING_FACTOR = 906 / 1_495  # ~0.606 -- multiply this model's raw BRAM_18K total by this before comparing to a real BRAM budget
+
+
+def calibrated_lut(raw_total_lut: float) -> float:
+    """This model's own raw total_lut, corrected by LUT_DERATING_FACTOR --
+    see that constant's own module-level comment for the calibration this
+    is based on and its real scope limits."""
+    return raw_total_lut * LUT_DERATING_FACTOR
+
+
+def calibrated_bram18k(raw_total_bram18k: float) -> float:
+    """This model's own raw BRAM_18K total, corrected by
+    BRAM_DERATING_FACTOR -- see that constant's own module-level comment."""
+    return raw_total_bram18k * BRAM_DERATING_FACTOR
+
 # Weight-memory FPGA resource choice for the MVU's weight tile (FINN's own
 # "ram_style" nodeattr, see matrixvectoractivation.py: block=BRAM, ultra=
 # URAM; mutually exclusive, real FINN's bram_estimation()/uram_estimation()

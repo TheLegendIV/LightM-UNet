@@ -26,26 +26,48 @@ this file's original all-hard-constraint formulation): same rationale
 ilp_search.py's own docstring already gives for treating BRAM as a penalty
 there (the fully-unfolded/no-folding cost model is frequently well over
 budget, so a hard `<=` constraint risks outright infeasibility -- see this
-script's own earlier INFEASIBLE-at-W8A8 finding), PLUS this repo's own
-observation that real Vivado synthesis typically comes in well under this
-closed-form analytical LUT/BRAM estimate (it doesn't model FINN's actual
-resource sharing/optimization), so treating the estimate as a soft steering
-signal rather than a hard wall is the more honest choice, not just a
-convenience. cycles/LUT/BRAM are on wildly different scales (cycles range
-from ~1e2 to ~1e8 per candidate depending on folding; LUT ~1e2-1e5; BRAM
-~1e0-1e3), so each is independently min-max normalized to [0,1] over the
-FULL (layer, pe, simd) candidate space before combining -- same convention
-ilp_search.py's own `_normalize` uses for sensitivity/BRAM, just extended to
-a 3rd term here:
+script's own earlier INFEASIBLE-at-W8A8 finding).
+
+IMPORTANT CALIBRATION NOTE (2026-08-25): this repo used to claim "real
+Vivado synthesis typically comes in well under this closed-form analytical
+LUT/BRAM estimate" -- that claim was NEVER actually verified against real
+synthesis for this cost model, and turned out to be WRONG for LUT once we
+got a real data point. Calibrating against S19's real 8-way-partitioned OOC
+Vivado synthesis (hardware/results.csv's
+`s19_double_mid_8way_partitioned_ooc_synth_TOTAL` row) plus the real
+resolved per-layer PE/SIMD folding config from that build
+(hardware/outputs/s19_8way_partitioned_ooc_20260820_101224/final_hw_config.json
+-- effectively FOLDING_SERIAL, PE=SIMD=1 on nearly every MVAU node) gives:
+    LUT:      830,689 real  vs. 100,996 this-model-at-FOLDING_SERIAL -> 8.225x OVER
+    BRAM_18K:     906 real  vs.   1,495 this-model-at-FOLDING_SERIAL -> 0.606x (under)
+So LUT is chronically UNDER-estimated by this closed-form model (it doesn't
+model FINN's real per-layer control/glue-logic overhead), while BRAM happens
+to be OVER-estimated. Both derating factors now live in finn_cost_model.py
+(`calibrated_lut`/`calibrated_bram18k`, `LUT_DERATING_FACTOR`/
+`BRAM_DERATING_FACTOR`) and are applied here (and in ilp_search.py) before
+anything is compared to a budget or reported -- this is a single
+one-data-point calibration, not a validated general model; treat calibrated
+totals as a steering signal, not a guarantee. cycles/LUT/BRAM are on wildly
+different scales (cycles range from ~1e2 to ~1e8 per candidate depending on
+folding; LUT ~1e2-1e5; BRAM ~1e0-1e3), so each is independently min-max
+normalized to [0,1] over the FULL (layer, pe, simd) candidate space before
+combining -- normalized on RAW (uncalibrated) LUT/BRAM per candidate, which
+is equivalent to normalizing calibrated values since the derating factors
+are constant multiplicative scalars and min-max normalization is invariant
+to positive scaling; only the reported totals/percentages in "_diagnostics"
+need the explicit calibrated_lut()/calibrated_bram18k() calls -- same
+convention ilp_search.py's own `_normalize` uses for sensitivity/BRAM, just
+extended to a 3rd term here:
     minimize sum_{l,pe,simd} x[l,pe,simd] * (cycles_norm[l,pe,simd]
                                               + lut_weight * lut_norm[l,pe,simd]
                                               + bram_weight * bram_norm[l,pe,simd])
 Constraint (the only hard one): sum_{pe,simd} x[layer,pe,simd] == 1 per layer
 -- exactly one folding choice per layer. No LUT/BRAM `<=` constraint at all.
 
-Chosen LUT/BRAM/cycles totals are still computed and reported after solving
-(both on stdout and in the output JSON's "_diagnostics") -- informational,
-not a pass/fail gate, per the module's own reasoning above.
+Chosen LUT/BRAM/cycles totals (both raw and calibrated) are still computed
+and reported after solving (both on stdout and in the output JSON's
+"_diagnostics") -- informational, not a pass/fail gate, per the module's own
+reasoning above.
 
 Usage (per-STAGE bits, the original 5-group W8A8/mixed case):
     python compression/hawq/folding_ilp.py --out-file compression/hawq/folding_23_1_w8a8.json
@@ -84,7 +106,8 @@ from config_23_1 import (  # noqa: E402
 )
 from finn_block_costs import dump_block_layer_geometry  # noqa: E402
 from finn_cost_model import (  # noqa: E402
-    RAM_STYLE_BLOCK, RAM_STYLE_ULTRA, LayerGeometry, divisors, layer_cost_pe_simd, max_pe, max_simd,
+    RAM_STYLE_BLOCK, RAM_STYLE_ULTRA, LayerGeometry, calibrated_bram18k, calibrated_lut, divisors,
+    layer_cost_pe_simd, max_pe, max_simd,
 )
 from finn_stage_costs import INPUT_HW, dump_layer_geometry  # noqa: E402
 
@@ -195,8 +218,9 @@ def solve_folding(
 
     # LUT/BRAM are a PENALTY here, not a hard `<=budget` constraint -- see
     # module docstring for why (fully-unfolded LUT/BRAM is often over budget
-    # regardless of folding choice, and real synthesis tends to land well
-    # under this closed-form estimate anyway).
+    # regardless of folding choice, and a hard constraint on an uncalibrated
+    # closed-form estimate risks false infeasibility either direction --
+    # calibration shows this model UNDER-shoots LUT and OVER-shoots BRAM).
     prob += pulp.lpSum(
         x[key] * (cycles_norm[key] + lut_weight * lut_norm[key] + bram_weight * bram_norm[key])
         for key in x
@@ -217,21 +241,33 @@ def solve_folding(
                     }
                     break
 
-    total_lut = sum(v["total_lut"] for v in result_per_layer.values())
-    total_bram = sum(v["swu_bram18"] + v["wm_bram18"] for v in result_per_layer.values())
+    total_lut_raw = sum(v["total_lut"] for v in result_per_layer.values())
+    total_bram_raw = sum(v["swu_bram18"] + v["wm_bram18"] for v in result_per_layer.values())
     total_uram = sum(v.get("wm_uram18", 0) for v in result_per_layer.values())
     total_cycles = sum(v["cycles"] for v in result_per_layer.values())
+    # Calibrated against this repo's one real synthesis data point -- see
+    # finn_cost_model.py's own LUT_DERATING_FACTOR/BRAM_DERATING_FACTOR
+    # comment. Doesn't change WHICH folding the ILP picks (min-max
+    # normalization inside the objective above is invariant to a constant
+    # per-resource rescaling), only what's reported here as "% of budget".
+    total_lut = calibrated_lut(total_lut_raw)
+    total_bram = calibrated_bram18k(total_bram_raw)
     return {
         "status": status_name,
         "per_layer": result_per_layer,
         "_diagnostics": {
-            "total_lut": total_lut, "lut_pct_of_budget": 100 * total_lut / XCZU7EV["LUT"],
-            "total_bram18k": total_bram, "bram_pct_of_budget": 100 * total_bram / XCZU7EV["BRAM_18K"],
+            "total_lut_calibrated": total_lut, "total_lut_raw": total_lut_raw,
+            "lut_pct_of_budget": 100 * total_lut / XCZU7EV["LUT"],
+            "total_bram18k_calibrated": total_bram, "total_bram18k_raw": total_bram_raw,
+            "bram_pct_of_budget": 100 * total_bram / XCZU7EV["BRAM_18K"],
             "total_uram18": total_uram,
             "total_cycles": total_cycles,
             "note": "LUT/BRAM are informational only here (penalty in the objective via "
-                    "--lut-weight/--bram-weight, NOT a hard constraint) -- see this file's own "
-                    "module docstring for why. Over 100% does not mean the search failed.",
+                    "--lut-weight/--bram-weight, NOT a hard constraint), AND already calibrated "
+                    "against this repo's one real synthesis data point -- see finn_cost_model.py's "
+                    "own LUT_DERATING_FACTOR/BRAM_DERATING_FACTOR comment and this file's own module "
+                    "docstring. Over 100% does not mean the search failed; _raw fields are the "
+                    "uncalibrated model output, for reference.",
         },
     }
 
@@ -293,10 +329,13 @@ def main() -> None:
     print(f"ILP status: {result['status']}")
     if result["status"] == "Optimal":
         diag = result["_diagnostics"]
-        print(f"Total LUT: {diag['total_lut']:.0f} ({diag['lut_pct_of_budget']:.1f}% of {XCZU7EV['LUT']} budget)")
-        print(f"Total BRAM_18K: {diag['total_bram18k']:.0f} ({diag['bram_pct_of_budget']:.1f}% of {XCZU7EV['BRAM_18K']} budget)")
+        print(f"Total LUT: {diag['total_lut_calibrated']:.0f} calibrated, {diag['total_lut_raw']:.0f} raw "
+              f"({diag['lut_pct_of_budget']:.1f}% of {XCZU7EV['LUT']} budget)")
+        print(f"Total BRAM_18K: {diag['total_bram18k_calibrated']:.0f} calibrated, {diag['total_bram18k_raw']:.0f} raw "
+              f"({diag['bram_pct_of_budget']:.1f}% of {XCZU7EV['BRAM_18K']} budget)")
         print(f"Total cycles (sum, ~= per-image latency): {diag['total_cycles']:.0f}")
-        print("(LUT/BRAM are informational -- see module docstring, no hard budget was enforced.)")
+        print("(LUT/BRAM are calibrated soft penalties in the objective -- see module docstring -- "
+              "no hard budget was enforced.)")
 
     args.out_file.parent.mkdir(parents=True, exist_ok=True)
     with open(args.out_file, "w") as f:
