@@ -1,0 +1,194 @@
+#!/bin/bash
+#SBATCH --job-name=qat_s19_acc2x_regular5_0_w8
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=02:30:00
+# DELIBERATELY SHORT: diagnostic ablation, not a publishable-dice run --
+# see the module comment below. 15 REAL epochs (ENET_MAX_EPOCHS_TO_RUN=15)
+# x 250 iterations/epoch = 3,750 iterations; at the ~1.07s/iteration real
+# rate qat_s19_block_bits.job's own header measured on this partition,
+# that's ~67 real minutes -- budgeting 02:30:00 for margin (this
+# architecture runs a bit slower per-iteration than that baseline
+# measurement suggested for some of the other diagnostic jobs this
+# session, e.g. epochs have run ~235-1005s here rather than the
+# theoretical ~268s).
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# STEP 3 OF THE STUCK-QAT DEBUGGING PLAN: single-block hand-override test.
+#
+# CONTEXT: qat_s19_acc2x_frozen_slope.job (acc2x bits, frozen slope, same
+# ENET_EPOCHS=150/ENET_MAX_EPOCHS_TO_RUN=5 pattern) just ran and stayed
+# stuck at literal Pseudo dice [0.0, 0.0, 0.0, 0.0] by epoch 4, after a
+# tiny epoch-0 blip -- the same collapse signature every acc2x/joint run
+# has shown all session. Meanwhile qat_s19_validated_frozen_slope.job AND
+# qat_s19_validated_trainable_slope.job (same architecture, same warm
+# start, same LR schedule, DIFFERENT bits) both recover normally and reach
+# near-identical EMA by epoch 4 (0.022 / 0.0208) -- proving slope
+# trainability makes no difference and the bit ASSIGNMENT is the sole
+# remaining variable between working and stuck runs.
+#
+# THE ONE BLOCK THIS TESTS: compression/hawq/block_bits_s19_acc2x.json vs.
+# block_bits_s19_validated.json differ on 16/37 blocks; most of acc2x's
+# changes go UP in precision (consistent with its --sensitivity-weight 2.0
+# search), except two exceptions that go the OTHER way. This job isolates
+# the more striking of the two: `regular5.0` -- S19's single highest-
+# weight-sensitivity block by a wide margin (Hutchinson-trace weight
+# sensitivity 6.69e-01, next-highest block not close) -- which
+# validated gives W8A8 (max precision) but acc2x cuts to W4A8. Traced
+# through the ILP's own numbers: not a bug, just global min-max
+# normalization making this block's real, large sensitivity gap look
+# small next to a different block's even larger one -- but "not a bug"
+# doesn't mean "not the cause" of the stuck training.
+#
+# Bit file: compression/hawq/block_bits_s19_acc2x_regular5_0_w8.json,
+# generated via compression/hawq/make_block_bits_override.py --base
+# block_bits_s19_acc2x.json --override regular5.0.weight_bits=8 --
+# EVERY OTHER block is byte-identical to acc2x (verified: exactly 1/37
+# blocks differ). Frozen slope (ENET_S19_TRAINABLE_SLOPE=0) explicitly, to
+# keep the slope variable fixed and out of the interpretation entirely,
+# regardless of already knowing it doesn't matter -- one fewer confound to
+# reason about.
+#
+# INTERPRETATION once this finishes, reading raw per-epoch Pseudo dice:
+#   - Recovers a validated-like shape (a class breaking away by epoch 2-4,
+#     even if magnitude differs) -> regular5.0 is a major single point of
+#     failure on its own. Next: queue the other flagged blocks
+#     (stage3.4/10/11's A4->A2 drop) as the next candidate override(s).
+#   - Still flat at exact 0.0 like acc2x's own unmodified run -> a single
+#     block isn't sufficient to explain it; move to a systematic,
+#     prioritized (not combinatorial) sequence of few-block override runs
+#     using the full validated-vs-acc2x diff as the candidate list.
+#
+# WARM START: S19's own FP32 checkpoint_final.pth -- same source
+# qat_s19_acc2x.job's own (non-ablation) run uses.
+#
+# Decomposed nonneg-PReLU activation (ENET_S19_LEAKY_SLOPE_MAP_FILE below):
+# same slope map as every other S19 QAT job -- NOT optional, see
+# qat_s19_block_bits.job's own header for the documented incident of
+# skipping it.
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+
+RUN_NAME="s19_qat_acc2x_regular5_0_w8"
+TRAINER_CLASS="nnUNetTrainerENetQuantS19Block"
+
+SOURCE_NET_NAME="nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid"
+BLOCK_BITS_FILE="compression/hawq/block_bits_s19_acc2x_regular5_0_w8.json"
+SLOPE_MAP_FILE="compression/post-quantization/slope_maps/19_reginterleaved_separable_nonneg_block_double_mid.json"
+SOURCE_CHECKPOINT="data/nnUNet_results/Dataset509_ARCADE_1x1_4c/${SOURCE_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_final.pth"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- HAWQ per-block QAT knobs ---------------------------------------------------
+export ENET_S19_BLOCK_BITS_FILE="$HOME/LightM-UNet/${BLOCK_BITS_FILE}"
+export ENET_S19_LEAKY_SLOPE_MAP_FILE="$HOME/LightM-UNet/${SLOPE_MAP_FILE}"
+export ENET_S19_PRETRAINED_CHECKPOINT="$HOME/LightM-UNet/${SOURCE_CHECKPOINT}"
+export ENET_S19_TRAINABLE_SLOPE=0
+# Real 150-epoch LR schedule -- ENET_MAX_EPOCHS_TO_RUN is what actually
+# stops training early, NOT ENET_EPOCHS (see the LR-schedule-compression
+# bug this session found and fixed).
+export ENET_EPOCHS=150
+export ENET_MAX_EPOCHS_TO_RUN=15
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Run: ${RUN_NAME} (diagnostic ablation, ${ENET_MAX_EPOCHS_TO_RUN} real epochs, LR schedule shaped by ENET_EPOCHS=${ENET_EPOCHS})"
+echo "Block bits file:       ${ENET_S19_BLOCK_BITS_FILE}"
+echo "Slope map file:        ${ENET_S19_LEAKY_SLOPE_MAP_FILE}"
+echo "Warm-start checkpoint: ${ENET_S19_PRETRAINED_CHECKPOINT}"
+echo "Trainable slope:       ${ENET_S19_TRAINABLE_SLOPE}"
+echo "Output folder:         ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+echo "=== Checking required input files exist ==="
+for f in "$ENET_S19_BLOCK_BITS_FILE" "$ENET_S19_LEAKY_SLOPE_MAP_FILE" "$ENET_S19_PRETRAINED_CHECKPOINT"; do
+    if [ ! -f "$f" ]; then
+        echo "ERROR: required file not found: $f" >&2
+        exit 1
+    fi
+done
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Checking for a COMPLETED checkpoint for ${RUN_NAME} ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    echo "checkpoint_final.pth already exists at ${ENET_OUTPUT_FOLDER} -- skipping training."
+else
+    echo "=== Start training (QAT ablation): ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+    echo "Training finished for ${RUN_NAME}."
+
+    echo "=== Archiving checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+fi
+
+echo "=== Post-training Dice check ==="
+cd "$HOME/LightM-UNet"
+python -c "
+import torch, json
+import sys
+sys.path.insert(0, 'enet')
+from nnunetv2.nets.QuantENetS19Block import QuantENetS19Block, OUT_CHANNELS
+sys.path.insert(0, 'compression/hawq')
+from eval_dice import evaluate
+with open('${BLOCK_BITS_FILE}') as f: bits = json.load(f)
+with open('${SLOPE_MAP_FILE}') as f: slope_map = json.load(f)
+ckpt = torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)
+model = QuantENetS19Block(bits['stage_weight_bits'], bits['stage_act_bits'], slope_map, trainable_slope=False)
+model.load_state_dict(ckpt['network_weights'], strict=False)
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+model.to(device)
+with open('data/nnUNet_preprocessed/${DATASET_NAME}/splits_final.json') as f:
+    val_cases = json.load(f)[0]['val']
+result = evaluate(model, val_cases, device, OUT_CHANNELS)
+print(json.dumps(result, indent=2))
+"
+
+echo "Done: ${RUN_NAME}."
