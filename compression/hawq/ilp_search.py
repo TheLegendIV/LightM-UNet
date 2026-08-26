@@ -537,6 +537,17 @@ def main() -> None:
                               "26_5_w24 trains to a real dice=0.6806 with 2-bit activations in 100% of "
                               "its context-stage blocks, so '2-bit acts are too aggressive' is not "
                               "well-supported by what's been observed so far.")
+    parser.add_argument("--fix-bits", action="append", default=None, dest="fix_bits",
+                         help="'<block_name>=<bits>', repeatable -- pins a block's weight AND "
+                              "activation bits to the given value and EXCLUDES it from the ILP's own "
+                              "decision variables entirely (not just penalizes other choices). Unlike "
+                              "--min-act-bits (which restricts one axis, network-wide), this removes a "
+                              "SPECIFIC block from the search completely -- its sensitivity/cost values "
+                              "no longer contribute to _normalize()'s global min-max range either, so "
+                              "fixing an extreme block (e.g. one with an outsized sensitivity value that "
+                              "would otherwise dominate the normalization scale) can meaningfully change "
+                              "which bits get chosen for the remaining free blocks, not just remove one "
+                              "degree of freedom. E.g. --fix-bits initial=8 --fix-bits down1=8.")
     parser.add_argument("--out-file", type=Path, default=Path("compression/hawq/stage_bits_23_1.json"))
     args = parser.parse_args()
 
@@ -569,16 +580,47 @@ def main() -> None:
             f"block_sensitivity.py+finn_block_costs.py, not a mix of the two granularities)."
         )
 
+    fixed_bits: dict[str, int] = {}
+    if args.fix_bits:
+        for spec in args.fix_bits:
+            if "=" not in spec:
+                raise ValueError(f"--fix-bits {spec!r} must be '<block_name>=<bits>'.")
+            block_name, bits_str = spec.split("=", 1)
+            if block_name not in stage_names:
+                raise ValueError(f"--fix-bits {spec!r}: {block_name!r} not found in --sensitivity-file's own names.")
+            fixed_bits[block_name] = int(bits_str)
+        print(f"Fixing {len(fixed_bits)} block(s) outside the ILP search: {fixed_bits}")
+
+    free_stage_names = tuple(s for s in stage_names if s not in fixed_bits)
+
     if args.joint:
         result = solve_joint_bits(
-            sensitivity, finn_costs, stage_names, args.lut_weight, args.bram_weight,
+            sensitivity, finn_costs, free_stage_names, args.lut_weight, args.bram_weight,
             hard_lut=args.hard_lut, hard_bram=args.hard_bram, min_act_bits=args.min_act_bits,
             sensitivity_weight=args.sensitivity_weight,
         )
     else:
         result = solve_stage_bits(
-            sensitivity, finn_costs, stage_names, args.lut_weight, args.bram_weight,
+            sensitivity, finn_costs, free_stage_names, args.lut_weight, args.bram_weight,
             min_act_bits=args.min_act_bits, sensitivity_weight=args.sensitivity_weight,
+        )
+
+    if fixed_bits and result["status"] == "Optimal":
+        for block_name, bits in fixed_bits.items():
+            result["stage_weight_bits"][block_name] = bits
+            result["stage_act_bits"][block_name] = bits
+        fixed_lut = sum(_finn_cost(finn_costs, b, bits, bits, "total_lut") for b, bits in fixed_bits.items())
+        fixed_bram = sum(_finn_cost(finn_costs, b, bits, bits, "bram18k") for b, bits in fixed_bits.items())
+        result["_diagnostics"]["total_lut_calibrated"] += fixed_lut
+        result["_diagnostics"]["total_bram18k_calibrated"] += fixed_bram
+        result["_diagnostics"]["lut_pct_of_budget"] = 100 * result["_diagnostics"]["total_lut_calibrated"] / XCZU7EV_LUT
+        result["_diagnostics"]["bram_pct_of_budget"] = 100 * result["_diagnostics"]["total_bram18k_calibrated"] / XCZU7EV_BRAM_18K
+        result["_diagnostics"]["fixed_bits"] = fixed_bits
+        result["_diagnostics"]["note"] += (
+            f" ADDITIONALLY: {fixed_bits} were pinned via --fix-bits and excluded from the ILP's own "
+            f"decision variables and from _normalize()'s min-max range entirely -- the remaining "
+            f"{len(free_stage_names)} blocks were solved as if this were the full candidate set. LUT/BRAM "
+            f"totals above include the fixed blocks' own real (non-approximated) cost."
         )
 
     args.out_file.parent.mkdir(parents=True, exist_ok=True)
