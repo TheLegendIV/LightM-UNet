@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=qat_s19_validated_trainable_slope
+#SBATCH --job-name=qat_s19_validated_frozen_slope
 #SBATCH --partition=gpu_mig
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -18,50 +18,40 @@
 
 set -e
 
-# ABLATION (companion to qat_s19_validated_frozen_slope.job -- read that
-# job's header too, it's the direct cross-comparison control): reruns the
-# ALREADY-VALIDATED two-pass per-block bit assignment (compression/hawq/
-# block_bits_s19_validated.json -- the historical record of what
-# qat_s19_block_bits.job actually trained with when it reached a real
-# dice=0.7458, preserved separately since the live block_bits_s19.json has
-# since been overwritten by later ILP reruns) for just 5 REAL epochs, with
-# trainable_slope=True.
+# ABLATION (companion to qat_s19_validated_trainable_slope.job -- read that
+# job's header too, it's identical except for ENET_S19_TRAINABLE_SLOPE
+# below): reruns the ALREADY-VALIDATED two-pass per-block bit assignment
+# (compression/hawq/block_bits_s19_validated.json) for 5 REAL epochs with
+# the ORIGINAL frozen-slope QuantDecomposedLeakyAct behavior --
+# ENET_S19_TRAINABLE_SLOPE=0 (added 2026-08-26 to
+# nnUNetTrainerENetQuantS19Block.py/QuantENetS19Block.py specifically to
+# make this direct cross-comparison possible; every other real job leaves
+# this env var unset and gets trainable_slope=True by default).
 #
-# BUG FIX (2026-08-26): this job previously set ENET_EPOCHS=5 directly to
-# make it fast -- WRONG. nnUNetTrainerENet's PolyLRScheduler is built once
-# against self.num_epochs (=ENET_EPOCHS), so setting ENET_EPOCHS=5 doesn't
-# truncate the real 150-epoch LR schedule, it COMPRESSES the entire decay
-# curve into 5 epochs: LR at epoch 4 of an ENET_EPOCHS=5 run is ~0.00023
-# (23% of initial), vs. ~0.00098 (98% of initial) at epoch 4 of a real
-# ENET_EPOCHS=150 run -- an entirely different optimization regime, not a
-# prefix of one. A real HPC run under that bug (training_log_
-# 2026_8_26_01_20_51.txt) showed the same "only one class ever moves"
-# pattern the stuck configs show, which is NOT trustworthy evidence about
-# trainable_slope given the LR schedule was wrong throughout.
+# WHY THIS EXISTS: this is the CONTROL for qat_s19_validated_trainable_
+# slope.job's ablation. Every variable is held identical between the two
+# jobs -- same bit assignment, same warm-start checkpoint, same slope map,
+# same real 150-epoch LR schedule (ENET_EPOCHS=150 + ENET_MAX_EPOCHS_TO_RUN
+# =5, see that job's own BUG FIX comment for why ENET_EPOCHS itself must
+# NOT be cut to 5), same everything -- except this one flag. Whatever
+# difference shows up between the two jobs' epoch-by-epoch trajectories is
+# attributable to the slope mechanism ALONE, cleanly, for the first time
+# this session (every previous comparison conflated slope with a changed
+# bit assignment too).
 #
-# FIX: ENET_EPOCHS stays 150 (so PolyLRScheduler's decay curve is IDENTICAL
-# to the real successful run's), and the new ENET_MAX_EPOCHS_TO_RUN=5 knob
-# (nnUNetTrainerENet.run_training(), added 2026-08-26) stops the training
-# loop after 5 real epochs without touching self.num_epochs at all -- the
-# resulting per-epoch trajectory is now directly comparable, epoch-for-
-# epoch, to the real successful run's own logged epochs 0-5.
-#
-# WHY THIS TEST: isolates whether trainable_slope (vs. the ORIGINAL frozen
-# slope, see qat_s19_validated_frozen_slope.job) changes the recovery
-# trajectory on the ONE bit assignment already confirmed to work over a
-# full 150-epoch run. Its real HPC log (training_log_2026_8_24_23_47_59.txt,
-# nnUNetTrainerENetQuantS19Block__nnUNetPlans__2d's bare results folder)
-# shows nonzero per-class dice by epoch 2 ([0.0, 0.0721, 0.0, 0.0001]),
-# broad recovery by epoch 6-8 (EMA 0.0683 -> 0.1443), and EMA=0.5495 by
-# epoch 25 -- despite an equally collapsed PTQ-only starting point (~0.0,
-# confirmed via compression/hawq/diagnose_ptq_collapse.py) to every other
-# per-block config tried. That log used FROZEN slope.
+# EXPECTATION: this job's own trajectory should reproduce the real
+# original run's real HPC log (training_log_2026_8_24_23_47_59.txt,
+# nnUNetTrainerENetQuantS19Block__nnUNetPlans__2d's bare results folder) --
+# nonzero per-class dice by epoch 2 ([0.0, 0.0721, 0.0, 0.0001]), broader
+# recovery by epoch 4 ([0.0122, 0.3448, 0.0094, 0.1612]) -- since it's the
+# same bit assignment, same warm start, same (now-correct) LR schedule,
+# and the same frozen-slope architecture that log itself used. If it does
+# NOT reproduce that trajectory even with frozen slope restored, something
+# else (warm-start/environment/nnU-Net version drift) has changed since
+# that original run, independent of the slope question entirely.
 #
 # WARM START: S19's own FP32 checkpoint_final.pth -- same source
-# qat_s19_block_bits.job's original (frozen-slope) run used, so this is as
-# close to an apples-to-apples rerun of that job as trainable_slope allows
-# (a cold restart either way, since making alpha a real nn.Parameter
-# changes which params the optimizer tracks).
+# qat_s19_block_bits.job's original run used.
 #
 # Decomposed nonneg-PReLU activation (ENET_S19_LEAKY_SLOPE_MAP_FILE below):
 # same slope map as every other S19 QAT job -- NOT optional, see
@@ -71,7 +61,7 @@ set -e
 DATASET_ID=509
 DATASET_NAME="Dataset509_ARCADE_1x1_4c"
 
-RUN_NAME="s19_qat_validated_trainable_slope"
+RUN_NAME="s19_qat_validated_frozen_slope"
 TRAINER_CLASS="nnUNetTrainerENetQuantS19Block"
 
 SOURCE_NET_NAME="nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid"
@@ -109,9 +99,10 @@ export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
 export ENET_S19_BLOCK_BITS_FILE="$HOME/LightM-UNet/${BLOCK_BITS_FILE}"
 export ENET_S19_LEAKY_SLOPE_MAP_FILE="$HOME/LightM-UNet/${SLOPE_MAP_FILE}"
 export ENET_S19_PRETRAINED_CHECKPOINT="$HOME/LightM-UNet/${SOURCE_CHECKPOINT}"
-export ENET_S19_TRAINABLE_SLOPE=1
-# Real 150-epoch LR schedule (see FIX comment above) -- ENET_MAX_EPOCHS_TO_RUN
-# is what actually stops training early, not ENET_EPOCHS.
+export ENET_S19_TRAINABLE_SLOPE=0
+# Real 150-epoch LR schedule -- ENET_MAX_EPOCHS_TO_RUN is what actually
+# stops training early, not ENET_EPOCHS. See qat_s19_validated_trainable_
+# slope.job's own BUG FIX comment for why this distinction matters.
 export ENET_EPOCHS=150
 export ENET_MAX_EPOCHS_TO_RUN=5
 export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
@@ -174,7 +165,7 @@ from eval_dice import evaluate
 with open('${BLOCK_BITS_FILE}') as f: bits = json.load(f)
 with open('${SLOPE_MAP_FILE}') as f: slope_map = json.load(f)
 ckpt = torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)
-model = QuantENetS19Block(bits['stage_weight_bits'], bits['stage_act_bits'], slope_map, trainable_slope=True)
+model = QuantENetS19Block(bits['stage_weight_bits'], bits['stage_act_bits'], slope_map, trainable_slope=False)
 model.load_state_dict(ckpt['network_weights'], strict=False)
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 model.to(device)
