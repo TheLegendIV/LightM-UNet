@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=stage_26_5_w24_300epoch
+#SBATCH --job-name=stage_26_5_w24_300epoch_nonneg_block
 #SBATCH --partition=gpu_mig
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -13,36 +13,42 @@
 set -e
 
 # Stage 26, config 5 (w24) rerun at 300 epochs instead of 150 -- same
-# 26_s5_6_probe_family stage, not a new one. Exact same recipe as
+# 26_s5_6_probe_family stage, not a new one. Same structural recipe as
 # 26_5_w24 (config_26_5_w24.py / stage_26_s5_6_probe_family_array.job's
 # own task index 4): CHANNELS=4,8,24,8,4, BOTTLENECKS=4,8,8,2,1,
-# CONTEXT_PATTERN=dense_dilation, prelu_variant=standard (real per-channel
-# PReLU, untouched), decoder=upsample_conv, separable_dilated=1,
-# use_asymmetric=0 -- only ENET_EPOCHS differs (300 vs 150), so
-# PolyLRScheduler's own decay curve is recomputed correctly for the full
-# 300-epoch run (not the ENET_MAX_EPOCHS_TO_RUN early-stop path -- this is
-# a genuine full-length run).
+# CONTEXT_PATTERN=dense_dilation, decoder=upsample_conv, separable_
+# dilated=1, use_asymmetric=0 -- but with prelu_variant=nonneg_block
+# (one shared learnable NonNegativePReLU(1) scalar per bottleneck block)
+# instead of 26_5_w24's own "standard" per-channel PReLU, same deliberate
+# departure as stage_26_9_w24_s14w12_nonneg_block.job for the same reason:
+# nonneg_block is FINN-deployable losslessly, "standard" is not without an
+# approximate post-hoc leaky-slope-map average. Cold start -- no
+# ENET_NONNEG_BLOCK_INIT_MAP, no -pretrained_weights; every block's shared
+# scalar starts at NonNegativePReLU's own default init (0.25).
+#
+# ENET_EPOCHS=300 (vs 26_5_w24's own 150) so PolyLRScheduler's own decay
+# curve is recomputed correctly for the full 300-epoch run (not the
+# ENET_MAX_EPOCHS_TO_RUN early-stop path -- this is a genuine full-length
+# run) -- checking whether the extra epochs help nonneg_block in
+# particular converge further, given its shared-scalar activation is a
+# tighter constraint than per-channel PReLU.
 #
 # Cold start, from scratch -- same as every other 26_s5_6_probe_family
-# member. Separate RUN_NAME (26_5_w24_300epoch) from the original
-# 150-epoch 26_5_w24 run so neither checkpoint/output folder collides with
-# the other; both remain independently available for comparison in
-# compression/results.csv.
+# member. Separate RUN_NAME (26_5_w24_300epoch_nonneg_block) from both the
+# original 150-epoch "standard"-PReLU 26_5_w24 run and from
+# stage_26_9_w24_s14w12_nonneg_block's own run (different channels) so no
+# checkpoint/output folder collides; all remain independently available
+# for comparison in compression/results.csv.
 #
-# Motivation: 26_5_w24's own 150-epoch dice (0.7566) is the source
-# checkpoint for several downstream per-block QAT lines (see
-# qat_26_5_w24_block_bits.job / qat_26_5_w24_acc1x_joint.job's own
-# header notes) -- checking whether more epochs alone buys additional
-# FP32 dice before committing to further QAT work on top of it.
-#
-# NOT smoke-tested yet (same architecture/recipe as 26_5_w24, which is
-# already confirmed to train end-to-end for real on HPC -- only the
-# epoch count changed).
+# NOT smoke-tested yet as this exact config, but nonneg_block itself with
+# the same BOTTLENECKS/CONTEXT_PATTERN/decoder (only stage1/4 channel
+# width differs, 8 vs 12) was just smoke-tested clean in
+# stage_26_9_w24_s14w12_nonneg_block.job -- low risk, same code path.
 
 DATASET_ID=509
 DATASET_NAME="Dataset509_ARCADE_1x1_4c"
 
-RUN_NAME="26_5_w24_300epoch"
+RUN_NAME="26_5_w24_300epoch_nonneg_block"
 TRAINER_CLASS="nnUNetTrainerENet"
 
 mkdir -p logs
@@ -71,12 +77,14 @@ export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
 export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
 export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
 
-# -- ENet trainer knobs -- 26_5_w24's exact recipe, 300 epochs instead of 150 --
+# -- ENet trainer knobs -- 26_5_w24's structural recipe, 300 epochs
+#    instead of 150, prelu_variant=nonneg_block instead of standard -------
 export ENET_CHANNELS="4,8,24,8,4"
 export ENET_BOTTLENECKS="4,8,8,2,1"
 export ENET_CONTEXT_PATTERN="dense_dilation"
 export ENET_DECODER_TYPE="upsample_conv"
 export ENET_USE_PRELU=1
+export ENET_PRELU_VARIANT="nonneg_block"
 export ENET_USE_DILATED=1
 export ENET_USE_ASYMMETRIC=0
 export ENET_USE_STRIDED=1
@@ -89,7 +97,7 @@ export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RU
 echo "=== Job info ==="
 echo "Host: $(hostname)"
 echo "Date: $(date)"
-echo "Run: ${RUN_NAME} (${ENET_EPOCHS}-epoch run, double 26_5_w24's own 150)"
+echo "Run: ${RUN_NAME} (${ENET_EPOCHS}-epoch run, double 26_5_w24's own 150; ENET_PRELU_VARIANT=${ENET_PRELU_VARIANT})"
 echo "Output folder: ${ENET_OUTPUT_FOLDER}"
 
 echo "=== GPU info ==="
@@ -141,6 +149,7 @@ python compression/collect_results.py \
     --separable-dilated "${ENET_SEPARABLE_DILATED}" \
     --context-pattern "${ENET_CONTEXT_PATTERN}" \
     --use-prelu "${ENET_USE_PRELU}" \
+    --prelu-variant "${ENET_PRELU_VARIANT}" \
     --dsc-no-projection "${ENET_DSC_NO_PROJECTION}" \
     --trainer-class "${TRAINER_CLASS}"
 
