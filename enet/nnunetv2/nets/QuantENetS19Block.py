@@ -95,7 +95,7 @@ BLOCK_NAMES = (
 
 def _make_block_shallow_stage(
     channels: int, n_ops: int, block_weight_bits: dict[str, int], block_act_bits: dict[str, int], dropout_p: float,
-    name_prefix: str, slope_map: dict[str, float],
+    name_prefix: str, slope_map: dict[str, float], trainable_slope: bool = False,
 ) -> nn.Sequential:
     """regular1/regular4/regular5: plain QuantRegularBottleneck repeats,
     each with its OWN (w, a, negative_slope) looked up by
@@ -105,6 +105,7 @@ def _make_block_shallow_stage(
         QuantRegularBottleneck(
             channels, block_weight_bits[f"{name_prefix}.{i}"], block_act_bits[f"{name_prefix}.{i}"],
             dropout_p=dropout_p, use_dsc=False, negative_slope=slope_map.get(f"{name_prefix}.{i}"),
+            trainable_slope=trainable_slope,
         )
         for i in range(n_ops)
     ])
@@ -112,7 +113,7 @@ def _make_block_shallow_stage(
 
 def _make_block_context_stage(
     channels: int, n_ops: int, block_weight_bits: dict[str, int], block_act_bits: dict[str, int], name_prefix: str,
-    slope_map: dict[str, float],
+    slope_map: dict[str, float], trainable_slope: bool = False,
 ) -> nn.Sequential:
     """stage2/stage3 under context_pattern=
     "dense_dilation_reg_interleaved_double_mid" (reg,2,4,8,16,reg,reg,2,4,8,
@@ -132,7 +133,7 @@ def _make_block_context_stage(
         ops.append(QuantRegularBottleneck(
             channels, block_weight_bits[block_name], block_act_bits[block_name],
             dropout_p=0.1, use_dsc=False, separable_dilated=SEPARABLE_DILATED,
-            negative_slope=slope_map.get(block_name), **kwargs,
+            negative_slope=slope_map.get(block_name), trainable_slope=trainable_slope, **kwargs,
         ))
     return nn.Sequential(*ops)
 
@@ -147,7 +148,7 @@ class QuantENetS19Block(nn.Module):
 
     def __init__(
         self, block_weight_bits: dict[str, int], block_act_bits: dict[str, int],
-        leaky_slope_map: dict[str, float] | None = None,
+        leaky_slope_map: dict[str, float] | None = None, trainable_slope: bool = True,
     ):
         super().__init__()
         missing_w = [b for b in BLOCK_NAMES if b not in block_weight_bits]
@@ -164,23 +165,46 @@ class QuantENetS19Block(nn.Module):
         initial_ch, stage1_ch, stage23_ch, stage4_ch, stage5_ch = CHANNELS
         n_stage1, n_stage2, n_stage3, n_regular4, n_regular5 = BOTTLENECKS_PER_STAGE
 
+        # trainable_slope defaults to True everywhere a real slope_map value
+        # gets used: nonneg_block's own slope is architecturally a
+        # trainable-per-block parameter by definition -- the fact that its
+        # CURRENT value came from real FP32 training doesn't mean it should
+        # become permanently frozen once QAT starts. Freezing it here was
+        # this class's original (undefended) design choice; there's no
+        # principled reason a QAT retrain shouldn't keep letting it adapt to
+        # quantization noise, same as QuantENet5_6Block.py's own (more
+        # clearly necessary, since that map is a known-wrong post-hoc
+        # average) fix. See QuantDecomposedLeakyAct's own docstring for the
+        # mechanism and why this has no FINN-export cost. The constructor
+        # parameter exists so a controlled ablation can still build the
+        # ORIGINAL frozen-slope architecture on demand (e.g. to
+        # cross-compare directly against a trainable-slope run on the exact
+        # same bit assignment) without reverting this default.
         w, a = block_weight_bits["initial"], block_act_bits["initial"]
-        self.initial = QuantInitialBlock(IN_CHANNELS, initial_ch, w, a, negative_slope=slope_map.get("initial"))
+        self.initial = QuantInitialBlock(
+            IN_CHANNELS, initial_ch, w, a, negative_slope=slope_map.get("initial"), trainable_slope=trainable_slope,
+        )
 
         w, a = block_weight_bits["down1"], block_act_bits["down1"]
         self.down1 = QuantDownsamplingBottleneck(
             initial_ch, stage1_ch, w, a, dropout_p=0.01, use_strided=USE_STRIDED,
-            negative_slope=slope_map.get("down1"),
+            negative_slope=slope_map.get("down1"), trainable_slope=trainable_slope,
         )
-        self.regular1 = _make_block_shallow_stage(stage1_ch, n_stage1, block_weight_bits, block_act_bits, 0.01, "regular1", slope_map)
+        self.regular1 = _make_block_shallow_stage(
+            stage1_ch, n_stage1, block_weight_bits, block_act_bits, 0.01, "regular1", slope_map, trainable_slope=trainable_slope,
+        )
 
         w, a = block_weight_bits["down2"], block_act_bits["down2"]
         self.down2 = QuantDownsamplingBottleneck(
             stage1_ch, stage23_ch, w, a, dropout_p=0.1, use_strided=USE_STRIDED,
-            negative_slope=slope_map.get("down2"),
+            negative_slope=slope_map.get("down2"), trainable_slope=trainable_slope,
         )
-        self.stage2 = _make_block_context_stage(stage23_ch, n_stage2, block_weight_bits, block_act_bits, "stage2", slope_map)
-        self.stage3 = _make_block_context_stage(stage23_ch, n_stage3, block_weight_bits, block_act_bits, "stage3", slope_map)
+        self.stage2 = _make_block_context_stage(
+            stage23_ch, n_stage2, block_weight_bits, block_act_bits, "stage2", slope_map, trainable_slope=trainable_slope,
+        )
+        self.stage3 = _make_block_context_stage(
+            stage23_ch, n_stage3, block_weight_bits, block_act_bits, "stage3", slope_map, trainable_slope=trainable_slope,
+        )
 
         # Decoder (regular4/regular5/up4/up5) is always plain QuantReLU,
         # regardless of leaky_slope_map -- same rule QuantENet23_1.py/
@@ -222,13 +246,13 @@ class QuantENetS19Block(nn.Module):
     @classmethod
     def from_pretrained(
         cls, checkpoint_path: str | Path, block_weight_bits: dict[str, int], block_act_bits: dict[str, int],
-        leaky_slope_map: dict[str, float] | None = None,
+        leaky_slope_map: dict[str, float] | None = None, trainable_slope: bool = True,
     ) -> "QuantENetS19Block":
         """Same strict=False name+shape transfer as QuantENet23_1/
         QuantENet26_5_w24's own from_pretrained -- see either's docstring
         for why (Brevitas quantizer-scale params aren't in a fresh FP32
         checkpoint's state_dict)."""
-        model = cls(block_weight_bits, block_act_bits, leaky_slope_map)
+        model = cls(block_weight_bits, block_act_bits, leaky_slope_map, trainable_slope=trainable_slope)
         checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
         source_state_dict = checkpoint["network_weights"]
         model_state_dict = model.state_dict()

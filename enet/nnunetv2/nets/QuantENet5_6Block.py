@@ -33,14 +33,29 @@ retraining at all (compression/post-quantization/slope_maps/
 results.csv's own pre-existing experiment_leaky_from_prelu_perblock row's
 recorded leaky_slope_map for this exact checkpoint).
 
-THIS IS A KNOWN, EMPIRICALLY BAD MOVE ON ITS OWN (same warning
-QuantENet26_5_w24.py's own docstring gives, this IS that same S5.6
-lineage): compression/results.csv's experiment_leaky_from_prelu_global/
-_perblock rows document that exact post-hoc-average-with-no-retrain
+THIS IS A KNOWN, EMPIRICALLY BAD MOVE AS A DROP-IN, NO-RETRAIN SUBSTITUTE
+(same warning QuantENet26_5_w24.py's own docstring gives, this IS that
+same S5.6 lineage): compression/results.csv's experiment_leaky_from_prelu_
+global/_perblock rows document that exact post-hoc-average-with-no-retrain
 operation collapsing dice from 0.7985 to ~0.38-0.41. The averaged map is
-only sound to use as a WARM-START initialization for a real QAT run
-(letting every weight re-adapt to the now-frozen per-block slope over real
-training), never as a drop-in PTQ-style deployment on its own.
+only sound to use as a WARM-START INITIALIZATION for a real QAT run.
+
+UPDATE (2026-08-25): a first real QAT attempt using this averaged map as a
+FROZEN slope (QuantDecomposedLeakyAct's original register_buffer-only
+behavior) showed exactly the failure mode that history predicts, WORSE
+than expected -- 21-27 real epochs on real HPC hardware with train_loss
+falling steadily but Pseudo dice never moving off ~0.0 (compare the
+already-successful QuantENetS19Block per-block QAT run, which broke 0.5+
+per-class dice by epoch 15-20 under the same training setup). Every call
+site below now passes trainable_slope=True (see QuantDecomposedLeakyAct's
+own docstring) -- the averaged value is still the WARM-START
+initialization (same map, same file), but is no longer frozen: gradients
+can correct a block's slope away from the post-hoc average if the real
+per-channel distribution it was averaged from was too wide for one shared
+scalar to represent well. Whether this alone fixes the stuck-at-zero-dice
+issue, or whether the per-block bit assignment itself is part of the
+problem, is not yet established -- this is a genuine change to test, not
+a confirmed fix.
 
 Reuses QuantENet.py's block classes (QuantInitialBlock,
 QuantDownsamplingBottleneck, QuantRegularBottleneck, QuantUpsamplingBottleneck)
@@ -101,16 +116,20 @@ BLOCK_NAMES = (
 
 def _make_block_shallow_stage(
     channels: int, n_ops: int, block_weight_bits: dict[str, int], block_act_bits: dict[str, int], dropout_p: float,
-    name_prefix: str, slope_map: dict[str, float],
+    name_prefix: str, slope_map: dict[str, float], trainable_slope: bool = False,
 ) -> nn.Sequential:
     """regular1/regular4/regular5: plain QuantRegularBottleneck repeats,
     each with its OWN (w, a, negative_slope) looked up by
     "<name_prefix>.<i>" -- the per-block generalization of
-    QuantENet._make_shallow_stage's single shared pair."""
+    QuantENet._make_shallow_stage's single shared pair. trainable_slope is
+    a no-op wherever slope_map has no entry for a given block (decoder
+    callers pass slope_map={} and never set trainable_slope=True, since
+    negative_slope=None there makes it irrelevant either way)."""
     return nn.Sequential(*[
         QuantRegularBottleneck(
             channels, block_weight_bits[f"{name_prefix}.{i}"], block_act_bits[f"{name_prefix}.{i}"],
             dropout_p=dropout_p, use_dsc=False, negative_slope=slope_map.get(f"{name_prefix}.{i}"),
+            trainable_slope=trainable_slope,
         )
         for i in range(n_ops)
     ])
@@ -118,7 +137,7 @@ def _make_block_shallow_stage(
 
 def _make_block_context_stage(
     channels: int, n_ops: int, block_weight_bits: dict[str, int], block_act_bits: dict[str, int], name_prefix: str,
-    slope_map: dict[str, float],
+    slope_map: dict[str, float], trainable_slope: bool = False,
 ) -> nn.Sequential:
     """stage2/stage3 under context_pattern="dense_dilation" (every slot
     dilated, 2/4/8/16 repeated over BOTTLENECKS_PER_STAGE's own 8-slot
@@ -132,7 +151,7 @@ def _make_block_context_stage(
         ops.append(QuantRegularBottleneck(
             channels, block_weight_bits[block_name], block_act_bits[block_name],
             dropout_p=0.1, use_dsc=False, separable_dilated=SEPARABLE_DILATED,
-            negative_slope=slope_map.get(block_name), **kwargs,
+            negative_slope=slope_map.get(block_name), trainable_slope=trainable_slope, **kwargs,
         ))
     return nn.Sequential(*ops)
 
@@ -164,23 +183,39 @@ class QuantENet5_6Block(nn.Module):
         initial_ch, stage1_ch, stage23_ch, stage4_ch, stage5_ch = CHANNELS
         n_stage1, n_stage2, n_stage3, n_regular4, n_regular5 = BOTTLENECKS_PER_STAGE
 
+        # trainable_slope=True everywhere a real slope_map value gets used:
+        # this class's own leaky_slope_map is ALWAYS the post-hoc per-channel
+        # average (S5.6 is prelu_variant="standard", never nonneg_block --
+        # see module docstring), a known-wrong-but-reasonable starting point,
+        # never a genuinely-trained scalar the way QuantENetS19Block's own
+        # map is -- so unlike that class, there is no reason to freeze it
+        # here. See QuantDecomposedLeakyAct's own docstring for the full
+        # rationale and why this has no FINN-export cost.
         w, a = block_weight_bits["initial"], block_act_bits["initial"]
-        self.initial = QuantInitialBlock(IN_CHANNELS, initial_ch, w, a, negative_slope=slope_map.get("initial"))
+        self.initial = QuantInitialBlock(
+            IN_CHANNELS, initial_ch, w, a, negative_slope=slope_map.get("initial"), trainable_slope=True,
+        )
 
         w, a = block_weight_bits["down1"], block_act_bits["down1"]
         self.down1 = QuantDownsamplingBottleneck(
             initial_ch, stage1_ch, w, a, dropout_p=0.01, use_strided=USE_STRIDED,
-            negative_slope=slope_map.get("down1"),
+            negative_slope=slope_map.get("down1"), trainable_slope=True,
         )
-        self.regular1 = _make_block_shallow_stage(stage1_ch, n_stage1, block_weight_bits, block_act_bits, 0.01, "regular1", slope_map)
+        self.regular1 = _make_block_shallow_stage(
+            stage1_ch, n_stage1, block_weight_bits, block_act_bits, 0.01, "regular1", slope_map, trainable_slope=True,
+        )
 
         w, a = block_weight_bits["down2"], block_act_bits["down2"]
         self.down2 = QuantDownsamplingBottleneck(
             stage1_ch, stage23_ch, w, a, dropout_p=0.1, use_strided=USE_STRIDED,
-            negative_slope=slope_map.get("down2"),
+            negative_slope=slope_map.get("down2"), trainable_slope=True,
         )
-        self.stage2 = _make_block_context_stage(stage23_ch, n_stage2, block_weight_bits, block_act_bits, "stage2", slope_map)
-        self.stage3 = _make_block_context_stage(stage23_ch, n_stage3, block_weight_bits, block_act_bits, "stage3", slope_map)
+        self.stage2 = _make_block_context_stage(
+            stage23_ch, n_stage2, block_weight_bits, block_act_bits, "stage2", slope_map, trainable_slope=True,
+        )
+        self.stage3 = _make_block_context_stage(
+            stage23_ch, n_stage3, block_weight_bits, block_act_bits, "stage3", slope_map, trainable_slope=True,
+        )
 
         # Decoder (regular4/regular5/up4/up5) is always plain QuantReLU,
         # regardless of leaky_slope_map -- same rule every other QuantENet

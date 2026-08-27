@@ -1,0 +1,182 @@
+#!/bin/bash
+#SBATCH --job-name=qat_5_6_acc2x_fixed
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=02:00:00
+# DELIBERATELY SHORT: diagnostic ablation, not a publishable-dice run --
+# see the module comment below. 10 REAL epochs (ENET_MAX_EPOCHS_TO_RUN=10)
+# x 250 iterations/epoch = 2,500 iterations; at qat_5_6_block_bits.job's
+# own real-HPC-rate derivation (<=0.768s/iteration measured on this
+# partition), that's ~32 real minutes -- budgeting 02:00:00 for margin.
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# ILP RESULT UNDER TEST: compression/hawq/block_bits_5_6_acc2x_fixed.json --
+# same --sensitivity-weight 2.0 two-pass search as block_bits_5_6_acc2x.json,
+# but with `initial`, `down1`, `final`, `regular5.0` PINNED to W8A8 and
+# EXCLUDED from the ILP's own decision variables and from _normalize()'s
+# global min-max range entirely (compression/hawq/ilp_search.py --fix-bits,
+# added 2026-08-26 specifically for this test -- same rationale as
+# qat_s19_acc2x_fixed.job's own header, which has the full background on
+# WHY fixing these specific boundary/high-sensitivity blocks and removing
+# them from the normalization pool changes the remaining free blocks'
+# outcome, not repeated here).
+#
+# RESULT: with those 4 blocks removed from the pool, S5.6's remaining free
+# blocks landed on uniform W4 everywhere, with activations at A2 across the
+# ENTIRE context stage (down2 through up4) and A4 in the shallow
+# encoder/decoder stages -- notably similar in shape to 26_5_w24's own
+# per-block QAT config (2-bit activations throughout its context stage),
+# which trained successfully to a real dice=0.6806. This is the first S5.6
+# per-block bit assignment this session that resembles a config known to
+# actually work, rather than qat_5_6_block_bits.job's own --joint result
+# or the acc2x result, both of which stayed stuck.
+#
+# TRAINABLE SLOPE: QuantENet5_6Block.py has no frozen/trainable toggle yet
+# (unlike QuantENetS19Block.py) -- unconditionally trainable_slope=True at
+# every encoder site, same as every other S5.6 job this session. Already
+# confirmed (for S19) that slope trainability makes no measurable
+# difference on any bit assignment tried -- no reason to expect otherwise
+# here.
+#
+# INTERPRETATION once this finishes, reading raw per-epoch Pseudo dice:
+#   - Recovers a normal-looking trajectory (a class breaking away by
+#     epoch 2-4, unlike qat_5_6_block_bits.job's own 16-epoch-flat stuck
+#     log): confirms the normalization-squashing fix generalizes beyond
+#     S19, and this uniform-A2-context pattern may be a genuinely more
+#     trainable S5.6 config, not just a coincidence of S19's own numbers.
+#   - Still flat at exact 0.0: the S19 fix (if it works) doesn't
+#     generalize to S5.6 as-is -- something architecture-specific to S5.6
+#     (different context_pattern, different channel widths) may be at play.
+#
+# WARM START: S5.6's own FP32 checkpoint_final.pth -- same source
+# qat_5_6_block_bits.job's own run uses.
+#
+# NONNEG-PRELU FOR THE QAT: same slope map, same rationale, as
+# qat_5_6_block_bits.job's own header (S5.6 is prelu_variant="standard",
+# the slope map is a post-hoc per-channel average with no retraining
+# behind it until QAT gives it one) -- not repeated here.
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+
+RUN_NAME="5_6_qat_acc2x_fixed"
+TRAINER_CLASS="nnUNetTrainerENetQuant5_6Block"
+
+SOURCE_NET_NAME="nnUNetTrainerENet_5_6_separable_dense_dilation"
+BLOCK_BITS_FILE="compression/hawq/block_bits_5_6_acc2x_fixed.json"
+SLOPE_MAP_FILE="compression/post-quantization/slope_maps/5_6_separable_dense_dilation.json"
+SOURCE_CHECKPOINT="data/nnUNet_results/Dataset509_ARCADE_1x1_4c/${SOURCE_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_final.pth"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- HAWQ per-block QAT knobs ---------------------------------------------------
+export ENET5_6_BLOCK_BITS_FILE="$HOME/LightM-UNet/${BLOCK_BITS_FILE}"
+export ENET5_6_LEAKY_SLOPE_MAP_FILE="$HOME/LightM-UNet/${SLOPE_MAP_FILE}"
+export ENET5_6_PRETRAINED_CHECKPOINT="$HOME/LightM-UNet/${SOURCE_CHECKPOINT}"
+# Real 150-epoch LR schedule -- ENET_MAX_EPOCHS_TO_RUN is what actually
+# stops training early, NOT ENET_EPOCHS (see the LR-schedule-compression
+# bug this session found and fixed, and qat_s19_acc2x_fixed.job's own
+# comment for the full background).
+export ENET_EPOCHS=150
+export ENET_MAX_EPOCHS_TO_RUN=10
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Run: ${RUN_NAME} (diagnostic ablation, ${ENET_MAX_EPOCHS_TO_RUN} real epochs, LR schedule shaped by ENET_EPOCHS=${ENET_EPOCHS})"
+echo "Block bits file:       ${ENET5_6_BLOCK_BITS_FILE}"
+echo "Slope map file:        ${ENET5_6_LEAKY_SLOPE_MAP_FILE}"
+echo "Warm-start checkpoint: ${ENET5_6_PRETRAINED_CHECKPOINT}"
+echo "Output folder:         ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+echo "=== Checking required input files exist ==="
+for f in "$ENET5_6_BLOCK_BITS_FILE" "$ENET5_6_LEAKY_SLOPE_MAP_FILE" "$ENET5_6_PRETRAINED_CHECKPOINT"; do
+    if [ ! -f "$f" ]; then
+        echo "ERROR: required file not found: $f" >&2
+        exit 1
+    fi
+done
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Checking for a COMPLETED checkpoint for ${RUN_NAME} ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    echo "checkpoint_final.pth already exists at ${ENET_OUTPUT_FOLDER} -- skipping training."
+else
+    echo "=== Start training (QAT ablation): ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+    echo "Training finished for ${RUN_NAME}."
+
+    echo "=== Archiving checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+fi
+
+echo "=== Post-training Dice check ==="
+cd "$HOME/LightM-UNet"
+python -c "
+import torch, json
+import sys
+sys.path.insert(0, 'enet')
+from nnunetv2.nets.QuantENet5_6Block import QuantENet5_6Block, OUT_CHANNELS
+sys.path.insert(0, 'compression/hawq')
+from eval_dice import evaluate
+with open('${BLOCK_BITS_FILE}') as f: bits = json.load(f)
+with open('${SLOPE_MAP_FILE}') as f: slope_map = json.load(f)
+ckpt = torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)
+model = QuantENet5_6Block(bits['stage_weight_bits'], bits['stage_act_bits'], slope_map)
+model.load_state_dict(ckpt['network_weights'], strict=False)
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+model.to(device)
+with open('data/nnUNet_preprocessed/${DATASET_NAME}/splits_final.json') as f:
+    val_cases = json.load(f)[0]['val']
+result = evaluate(model, val_cases, device, OUT_CHANNELS)
+print(json.dumps(result, indent=2))
+"
+
+echo "Done: ${RUN_NAME}."

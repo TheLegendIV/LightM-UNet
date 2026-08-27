@@ -1,0 +1,47 @@
+
+#######################################################################
+Please cite the following paper when using nnU-Net:
+Isensee, F., Jaeger, P. F., Kohl, S. A., Petersen, J., & Maier-Hein, K. H. (2021). nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature methods, 18(2), 203-211.
+#######################################################################
+ 
+
+This is the configuration used by this training:
+Configuration name: 2d
+ {'data_identifier': 'nnUNetPlans_2d', 'preprocessor_name': 'DefaultPreprocessor', 'batch_size': 12, 'patch_size': [512, 512], 'median_image_size_in_voxels': [512.0, 512.0], 'spacing': [1.0, 1.0], 'normalization_schemes': ['ZScoreNormalization'], 'use_mask_for_norm': [False], 'UNet_class_name': 'PlainConvUNet', 'UNet_base_num_features': 32, 'n_conv_per_stage_encoder': [2, 2, 2, 2, 2, 2, 2, 2], 'n_conv_per_stage_decoder': [2, 2, 2, 2, 2, 2, 2], 'num_pool_per_axis': [7, 7], 'pool_op_kernel_sizes': [[1, 1], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2]], 'conv_kernel_sizes': [[3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3]], 'unet_max_num_features': 512, 'resampling_fn_data': 'resample_data_or_seg_to_shape', 'resampling_fn_seg': 'resample_data_or_seg_to_shape', 'resampling_fn_data_kwargs': {'is_seg': False, 'order': 3, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_seg_kwargs': {'is_seg': True, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_probabilities': 'resample_data_or_seg_to_shape', 'resampling_fn_probabilities_kwargs': {'is_seg': False, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'batch_dice': True} 
+ 
+These are the global plan.json settings:
+ {'dataset_name': 'Dataset509_ARCADE_1x1_4c', 'plans_name': 'nnUNetPlans', 'original_median_spacing_after_transp': [999.0, 1.0, 1.0], 'original_median_shape_after_transp': [1, 512, 512], 'image_reader_writer': 'NaturalImage2DIO', 'transpose_forward': [0, 1, 2], 'transpose_backward': [0, 1, 2], 'experiment_planner_used': 'ExperimentPlanner', 'label_manager': 'LabelManager', 'foreground_intensity_properties_per_channel': {'0': {'max': 255.0, 'mean': 97.36139678955078, 'median': 94.0, 'min': 0.0, 'percentile_00_5': 31.0, 'percentile_99_5': 185.0, 'std': 31.739503860473633}}} 
+ 
+2026-08-25 19:35:04.573541: unpacking dataset... 
+2026-08-25 19:35:46.540245: unpacking done... 
+2026-08-25 19:35:46.552866: do_dummy_2d_data_aug: False 
+2026-08-25 19:35:46.634005: Using splits from existing split file: /workspace/LightM-UNet/data/nnUNet_preprocessed/Dataset509_ARCADE_1x1_4c/splits_final.json 
+2026-08-25 19:35:46.653017: The split file contains 1 splits. 
+2026-08-25 19:35:46.668827: Desired fold for training: 0 
+2026-08-25 19:35:46.693262: This split has 1000 training and 200 validation cases. 
+2026-08-25 19:35:48.870923: Unable to plot network architecture: 
+2026-08-25 19:35:48.888184: Cannot insert a Tensor that requires grad as a constant. Consider making it a parameter or input, or detaching the gradient
+Tensor:
+1
+[ torch.cuda.FloatTensor{} ] 
+2026-08-25 19:35:49.106393:  
+2026-08-25 19:35:49.121434: Epoch 0 
+2026-08-25 19:35:49.162115: Current learning rate: 0.001 
+2026-08-25 19:38:36.564752: train_loss 0.4589 
+2026-08-25 19:38:36.595781: val_loss 0.3042 
+2026-08-25 19:38:36.658468: Pseudo dice [0.0, 0.0, 0.0, 0.0] 
+2026-08-25 19:38:36.695238: Epoch time: 167.6 s 
+2026-08-25 19:38:36.716768: Yayy! New best EMA pseudo Dice: 0.0 
+2026-08-25 19:38:36.744314: No checkpoint written, checkpointing is disabled 
+2026-08-25 19:38:46.629299: No checkpoint written, checkpointing is disabled 
+2026-08-25 19:38:51.322183: Training done. 
+2026-08-25 19:38:51.573565: Using splits from existing split file: /workspace/LightM-UNet/data/nnUNet_preprocessed/Dataset509_ARCADE_1x1_4c/splits_final.json 
+2026-08-25 19:38:51.599538: The split file contains 1 splits. 
+2026-08-25 19:38:51.609847: Desired fold for training: 0 
+2026-08-25 19:38:51.636559: This split has 1000 training and 200 validation cases. 
+2026-08-25 19:38:51.669360: predicting val_100_p0000 
+2026-08-25 19:39:52.383869: predicting val_101_p0000 
+2026-08-25 19:40:20.487117: predicting val_102_p0000 
+2026-08-25 19:40:42.930642: predicting val_103_p0000 
+2026-08-25 19:41:09.935450: predicting val_104_p0000 
+2026-08-25 19:41:38.024639: predicting val_105_p0000 

@@ -23,6 +23,14 @@ ENET_S19_PRETRAINED_CHECKPOINT (optional but effectively the real default
 the architecture's own FP32 lineage): path to a real FP32
 nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid
 checkpoint to warm-start from. Omit to cold-start instead.
+
+ENET_S19_TRAINABLE_SLOPE (optional, default "1" i.e. True): set to "0" to
+build with the ORIGINAL frozen-slope QuantDecomposedLeakyAct behavior
+instead of QuantENetS19Block.py's current trainable_slope=True default --
+exists purely so a controlled ablation can cross-compare a trainable-slope
+run against a frozen-slope run on the EXACT same bit assignment/warm-start/
+LR schedule, isolating the slope mechanism from every other variable. Every
+real (non-diagnostic) job should leave this unset.
 """
 import json
 import os
@@ -90,9 +98,15 @@ class nnUNetTrainerENetQuantS19Block(nnUNetTrainerENet):
             with open(slope_map_file) as f:
                 leaky_slope_map = json.load(f)
 
+        trainable_slope = os.environ.get("ENET_S19_TRAINABLE_SLOPE", "1") != "0"
+
         pretrained_checkpoint = os.environ.get("ENET_S19_PRETRAINED_CHECKPOINT")
         if pretrained_checkpoint:
             return QuantENetS19Block.from_pretrained(
                 pretrained_checkpoint, block_bits["stage_weight_bits"], block_bits["stage_act_bits"], leaky_slope_map,
+                trainable_slope=trainable_slope,
             )
-        return QuantENetS19Block(block_bits["stage_weight_bits"], block_bits["stage_act_bits"], leaky_slope_map)
+        return QuantENetS19Block(
+            block_bits["stage_weight_bits"], block_bits["stage_act_bits"], leaky_slope_map,
+            trainable_slope=trainable_slope,
+        )

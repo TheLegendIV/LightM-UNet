@@ -76,6 +76,14 @@ RUN_NAME="s19_qat_block_bits"
 TRAINER_CLASS="nnUNetTrainerENetQuantS19Block"
 
 SOURCE_NET_NAME="nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid"
+# NOTE (2026-08-25): this job already COMPLETED (real dice=0.7458, see
+# compression/configs/s19_per_block_qat_results.md) using block_bits_s19.json
+# AS IT EXISTED AT THAT TIME. The live file has since been overwritten by
+# later ILP reruns (recalibration fixes, then a 16-bit-candidate
+# experiment) and no longer matches what this run actually trained with --
+# the REAL historical bit assignment is preserved at
+# compression/hawq/block_bits_s19_validated.json (reconstructed from the
+# results.md table) if this job is ever re-referenced for comparison.
 BLOCK_BITS_FILE="compression/hawq/block_bits_s19.json"
 SLOPE_MAP_FILE="compression/post-quantization/slope_maps/19_reginterleaved_separable_nonneg_block_double_mid.json"
 SOURCE_CHECKPOINT="data/nnUNet_results/Dataset509_ARCADE_1x1_4c/${SOURCE_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_final.pth"

@@ -46,4 +46,4 @@ STAGE_BOUNDARY_ATTR = {
     "stage5": "regular5",  # self.final has no activation quantizer of its own
 }
 STAGE_NAMES = tuple(STAGE_MODULE_ATTRS.keys())
-CANDIDATE_BITS = (2, 4, 8)
+CANDIDATE_BITS = (2, 4, 8, 16)

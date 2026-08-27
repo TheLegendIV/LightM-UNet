@@ -87,6 +87,59 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
             self.output_folder = os.environ["ENET_OUTPUT_FOLDER"]
             self.output_folder_base = os.path.dirname(self.output_folder)
             os.makedirs(self.output_folder, exist_ok=True)
+        self._max_epochs_to_run = None
+        if os.environ.get("ENET_MAX_EPOCHS_TO_RUN"):
+            self._max_epochs_to_run = int(os.environ["ENET_MAX_EPOCHS_TO_RUN"])
+
+    def run_training(self):
+        """Same body as the base nnUNetTrainer.run_training() -- the ONLY
+        change is the loop's upper bound, when ENET_MAX_EPOCHS_TO_RUN is set.
+
+        Deliberately does NOT touch self.num_epochs (still whatever
+        ENET_EPOCHS says, e.g. 150) -- PolyLRScheduler is constructed once,
+        at training start, against self.num_epochs, so its whole decay
+        curve is shaped by that number regardless of how many epochs
+        actually run. Cutting self.num_epochs itself to run fewer epochs
+        quickly (e.g. for a diagnostic ablation) would COMPRESS the entire
+        LR decay curve into fewer epochs instead of truncating it -- by
+        epoch 4 of an ENET_EPOCHS=5 run the LR has already crashed to ~23%
+        of its initial value, vs. ~98% at epoch 4 of a real ENET_EPOCHS=150
+        run, an entirely different optimization regime, not a prefix of it.
+        ENET_MAX_EPOCHS_TO_RUN instead stops the loop early while
+        self.num_epochs (and therefore the LR schedule) stays exactly as
+        the real run would see it -- the resulting per-epoch trajectory is
+        directly comparable to the same epoch numbers in a real run.
+
+        on_train_end() has no hardcoded assumption that current_epoch ==
+        num_epochs - 1 (confirmed by reading it) -- it just saves
+        checkpoint_final.pth at whatever current_epoch was reached, so
+        stopping early here is safe and still produces a real, loadable
+        checkpoint plus a normal "Training done." log line."""
+        self.on_train_start()
+
+        max_epoch = self.num_epochs
+        if self._max_epochs_to_run is not None:
+            max_epoch = min(self.num_epochs, self.current_epoch + self._max_epochs_to_run)
+
+        for epoch in range(self.current_epoch, max_epoch):
+            self.on_epoch_start()
+
+            self.on_train_epoch_start()
+            train_outputs = []
+            for batch_id in range(self.num_iterations_per_epoch):
+                train_outputs.append(self.train_step(next(self.dataloader_train)))
+            self.on_train_epoch_end(train_outputs)
+
+            with torch.no_grad():
+                self.on_validation_epoch_start()
+                val_outputs = []
+                for batch_id in range(self.num_val_iterations_per_epoch):
+                    val_outputs.append(self.validation_step(next(self.dataloader_val)))
+                self.on_validation_epoch_end(val_outputs)
+
+            self.on_epoch_end()
+
+        self.on_train_end()
 
     @staticmethod
     def build_network_architecture(

@@ -1,0 +1,241 @@
+
+#######################################################################
+Please cite the following paper when using nnU-Net:
+Isensee, F., Jaeger, P. F., Kohl, S. A., Petersen, J., & Maier-Hein, K. H. (2021). nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature methods, 18(2), 203-211.
+#######################################################################
+ 
+
+This is the configuration used by this training:
+Configuration name: 2d
+ {'data_identifier': 'nnUNetPlans_2d', 'preprocessor_name': 'DefaultPreprocessor', 'batch_size': 12, 'patch_size': [512, 512], 'median_image_size_in_voxels': [512.0, 512.0], 'spacing': [1.0, 1.0], 'normalization_schemes': ['ZScoreNormalization'], 'use_mask_for_norm': [False], 'UNet_class_name': 'PlainConvUNet', 'UNet_base_num_features': 32, 'n_conv_per_stage_encoder': [2, 2, 2, 2, 2, 2, 2, 2], 'n_conv_per_stage_decoder': [2, 2, 2, 2, 2, 2, 2], 'num_pool_per_axis': [7, 7], 'pool_op_kernel_sizes': [[1, 1], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2]], 'conv_kernel_sizes': [[3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3]], 'unet_max_num_features': 512, 'resampling_fn_data': 'resample_data_or_seg_to_shape', 'resampling_fn_seg': 'resample_data_or_seg_to_shape', 'resampling_fn_data_kwargs': {'is_seg': False, 'order': 3, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_seg_kwargs': {'is_seg': True, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_probabilities': 'resample_data_or_seg_to_shape', 'resampling_fn_probabilities_kwargs': {'is_seg': False, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'batch_dice': True} 
+ 
+These are the global plan.json settings:
+ {'dataset_name': 'Dataset509_ARCADE_1x1_4c', 'plans_name': 'nnUNetPlans', 'original_median_spacing_after_transp': [999.0, 1.0, 1.0], 'original_median_shape_after_transp': [1, 512, 512], 'image_reader_writer': 'NaturalImage2DIO', 'transpose_forward': [0, 1, 2], 'transpose_backward': [0, 1, 2], 'experiment_planner_used': 'ExperimentPlanner', 'label_manager': 'LabelManager', 'foreground_intensity_properties_per_channel': {'0': {'max': 255.0, 'mean': 97.36139678955078, 'median': 94.0, 'min': 0.0, 'percentile_00_5': 31.0, 'percentile_99_5': 185.0, 'std': 31.739503860473633}}} 
+ 
+2026-08-25 20:06:52.202949: unpacking dataset... 
+2026-08-25 20:07:00.679103: unpacking done... 
+2026-08-25 20:07:00.685584: do_dummy_2d_data_aug: False 
+2026-08-25 20:07:00.775221: Using splits from existing split file: /workspace/LightM-UNet/data/nnUNet_preprocessed/Dataset509_ARCADE_1x1_4c/splits_final.json 
+2026-08-25 20:07:00.785327: The split file contains 1 splits. 
+2026-08-25 20:07:00.797713: Desired fold for training: 0 
+2026-08-25 20:07:00.815069: This split has 1000 training and 200 validation cases. 
+2026-08-25 20:07:01.591084: Unable to plot network architecture: 
+2026-08-25 20:07:01.594469: Cannot insert a Tensor that requires grad as a constant. Consider making it a parameter or input, or detaching the gradient
+Tensor:
+1
+[ torch.cuda.FloatTensor{} ] 
+2026-08-25 20:07:01.661629:  
+2026-08-25 20:07:01.666216: Epoch 0 
+2026-08-25 20:07:01.683373: Current learning rate: 0.001 
+2026-08-25 20:08:36.552613: train_loss 3.5216 
+2026-08-25 20:08:36.583857: val_loss 6.2216 
+2026-08-25 20:08:36.653026: Pseudo dice [0.0, 0.0, 0.0, 0.0059] 
+2026-08-25 20:08:36.679494: Epoch time: 94.92 s 
+2026-08-25 20:08:36.703875: Yayy! New best EMA pseudo Dice: 0.0015 
+2026-08-25 20:08:36.731100: No checkpoint written, checkpointing is disabled 
+2026-08-25 20:08:41.020050: No checkpoint written, checkpointing is disabled 
+2026-08-25 20:08:42.947680: Training done. 
+2026-08-25 20:08:43.173672: Using splits from existing split file: /workspace/LightM-UNet/data/nnUNet_preprocessed/Dataset509_ARCADE_1x1_4c/splits_final.json 
+2026-08-25 20:08:43.198770: The split file contains 1 splits. 
+2026-08-25 20:08:43.210475: Desired fold for training: 0 
+2026-08-25 20:08:43.240227: This split has 1000 training and 200 validation cases. 
+2026-08-25 20:08:43.278042: predicting val_100_p0000 
+2026-08-25 20:09:08.698847: predicting val_101_p0000 
+2026-08-25 20:09:21.038821: predicting val_102_p0000 
+2026-08-25 20:09:26.925084: predicting val_103_p0000 
+2026-08-25 20:09:31.548986: predicting val_104_p0000 
+2026-08-25 20:09:36.016029: predicting val_105_p0000 
+2026-08-25 20:09:43.482073: predicting val_106_p0000 
+2026-08-25 20:09:53.466225: predicting val_107_p0000 
+2026-08-25 20:09:59.887661: predicting val_108_p0000 
+2026-08-25 20:10:06.844055: predicting val_109_p0000 
+2026-08-25 20:10:11.820403: predicting val_10_p0000 
+2026-08-25 20:10:19.652920: predicting val_110_p0000 
+2026-08-25 20:10:28.755175: predicting val_111_p0000 
+2026-08-25 20:10:36.768699: predicting val_112_p0000 
+2026-08-25 20:10:43.828813: predicting val_113_p0000 
+2026-08-25 20:10:50.003449: predicting val_114_p0000 
+2026-08-25 20:10:53.348972: predicting val_115_p0000 
+2026-08-25 20:10:56.632386: predicting val_116_p0000 
+2026-08-25 20:10:59.624419: predicting val_117_p0000 
+2026-08-25 20:11:02.711881: predicting val_118_p0000 
+2026-08-25 20:11:05.634832: predicting val_119_p0000 
+2026-08-25 20:11:08.642164: predicting val_11_p0000 
+2026-08-25 20:11:12.023558: predicting val_120_p0000 
+2026-08-25 20:11:15.118043: predicting val_121_p0000 
+2026-08-25 20:11:18.611481: predicting val_122_p0000 
+2026-08-25 20:11:25.473744: predicting val_123_p0000 
+2026-08-25 20:11:35.318276: predicting val_124_p0000 
+2026-08-25 20:11:41.040419: predicting val_125_p0000 
+2026-08-25 20:11:47.935525: predicting val_126_p0000 
+2026-08-25 20:11:53.460751: predicting val_127_p0000 
+2026-08-25 20:12:01.175921: predicting val_128_p0000 
+2026-08-25 20:12:06.991866: predicting val_129_p0000 
+2026-08-25 20:12:12.919892: predicting val_12_p0000 
+2026-08-25 20:12:19.023833: predicting val_130_p0000 
+2026-08-25 20:12:25.580820: predicting val_131_p0000 
+2026-08-25 20:12:31.605425: predicting val_132_p0000 
+2026-08-25 20:12:35.065247: predicting val_133_p0000 
+2026-08-25 20:12:38.184132: predicting val_134_p0000 
+2026-08-25 20:12:41.486973: predicting val_135_p0000 
+2026-08-25 20:12:45.911495: predicting val_136_p0000 
+2026-08-25 20:12:51.171405: predicting val_137_p0000 
+2026-08-25 20:12:55.687915: predicting val_138_p0000 
+2026-08-25 20:13:05.317822: predicting val_139_p0000 
+2026-08-25 20:13:13.232171: predicting val_13_p0000 
+2026-08-25 20:13:22.003129: predicting val_140_p0000 
+2026-08-25 20:13:29.774152: predicting val_141_p0000 
+2026-08-25 20:13:37.998154: predicting val_142_p0000 
+2026-08-25 20:13:42.235090: predicting val_143_p0000 
+2026-08-25 20:13:45.390954: predicting val_144_p0000 
+2026-08-25 20:13:48.610209: predicting val_145_p0000 
+2026-08-25 20:13:51.910031: predicting val_146_p0000 
+2026-08-25 20:13:55.162134: predicting val_147_p0000 
+2026-08-25 20:13:58.493361: predicting val_148_p0000 
+2026-08-25 20:14:05.593331: predicting val_149_p0000 
+2026-08-25 20:14:12.580363: predicting val_14_p0000 
+2026-08-25 20:14:17.306597: predicting val_150_p0000 
+2026-08-25 20:14:21.964564: predicting val_151_p0000 
+2026-08-25 20:14:28.077819: predicting val_152_p0000 
+2026-08-25 20:14:33.552825: predicting val_153_p0000 
+2026-08-25 20:14:41.070636: predicting val_154_p0000 
+2026-08-25 20:14:45.956803: predicting val_155_p0000 
+2026-08-25 20:14:51.309356: predicting val_156_p0000 
+2026-08-25 20:14:54.312147: predicting val_157_p0000 
+2026-08-25 20:14:57.402286: predicting val_158_p0000 
+2026-08-25 20:15:00.427245: predicting val_159_p0000 
+2026-08-25 20:15:03.211871: predicting val_15_p0000 
+2026-08-25 20:15:06.059798: predicting val_160_p0000 
+2026-08-25 20:15:09.215331: predicting val_161_p0000 
+2026-08-25 20:15:12.358597: predicting val_162_p0000 
+2026-08-25 20:15:17.261725: predicting val_163_p0000 
+2026-08-25 20:15:22.121747: predicting val_164_p0000 
+2026-08-25 20:15:28.076722: predicting val_165_p0000 
+2026-08-25 20:15:33.044304: predicting val_166_p0000 
+2026-08-25 20:15:37.573099: predicting val_167_p0000 
+2026-08-25 20:15:42.199447: predicting val_168_p0000 
+2026-08-25 20:15:46.450474: predicting val_169_p0000 
+2026-08-25 20:15:51.416857: predicting val_16_p0000 
+2026-08-25 20:15:55.808302: predicting val_170_p0000 
+2026-08-25 20:16:00.557101: predicting val_171_p0000 
+2026-08-25 20:16:04.122515: predicting val_172_p0000 
+2026-08-25 20:16:07.101475: predicting val_173_p0000 
+2026-08-25 20:16:10.033297: predicting val_174_p0000 
+2026-08-25 20:16:13.286262: predicting val_175_p0000 
+2026-08-25 20:16:16.341374: predicting val_176_p0000 
+2026-08-25 20:16:19.571629: predicting val_177_p0000 
+2026-08-25 20:16:22.895989: predicting val_178_p0000 
+2026-08-25 20:16:28.963297: predicting val_179_p0000 
+2026-08-25 20:16:34.973978: predicting val_17_p0000 
+2026-08-25 20:16:42.887650: predicting val_180_p0000 
+2026-08-25 20:16:54.042614: predicting val_181_p0000 
+2026-08-25 20:17:02.062945: predicting val_182_p0000 
+2026-08-25 20:17:06.824966: predicting val_183_p0000 
+2026-08-25 20:17:15.926354: predicting val_184_p0000 
+2026-08-25 20:17:28.277647: predicting val_185_p0000 
+2026-08-25 20:17:33.899503: predicting val_186_p0000 
+2026-08-25 20:17:39.950101: predicting val_187_p0000 
+2026-08-25 20:17:45.281244: predicting val_188_p0000 
+2026-08-25 20:17:52.350999: predicting val_189_p0000 
+2026-08-25 20:18:03.205738: predicting val_18_p0000 
+2026-08-25 20:18:10.647862: predicting val_190_p0000 
+2026-08-25 20:18:16.340916: predicting val_191_p0000 
+2026-08-25 20:18:23.317762: predicting val_192_p0000 
+2026-08-25 20:18:29.636654: predicting val_193_p0000 
+2026-08-25 20:18:35.074930: predicting val_194_p0000 
+2026-08-25 20:18:41.623459: predicting val_195_p0000 
+2026-08-25 20:18:47.455941: predicting val_196_p0000 
+2026-08-25 20:18:53.277872: predicting val_197_p0000 
+2026-08-25 20:19:00.511745: predicting val_198_p0000 
+2026-08-25 20:19:06.401401: predicting val_199_p0000 
+2026-08-25 20:19:13.619418: predicting val_19_p0000 
+2026-08-25 20:19:20.067858: predicting val_1_p0000 
+2026-08-25 20:19:30.786389: predicting val_200_p0000 
+2026-08-25 20:19:37.652466: predicting val_20_p0000 
+2026-08-25 20:19:43.199618: predicting val_21_p0000 
+2026-08-25 20:19:51.740350: predicting val_22_p0000 
+2026-08-25 20:20:00.351723: predicting val_23_p0000 
+2026-08-25 20:20:08.369330: predicting val_24_p0000 
+2026-08-25 20:20:16.030398: predicting val_25_p0000 
+2026-08-25 20:20:23.106683: predicting val_26_p0000 
+2026-08-25 20:20:31.804049: predicting val_27_p0000 
+2026-08-25 20:20:36.840199: predicting val_28_p0000 
+2026-08-25 20:20:42.735665: predicting val_29_p0000 
+2026-08-25 20:20:48.258921: predicting val_2_p0000 
+2026-08-25 20:20:56.377064: predicting val_30_p0000 
+2026-08-25 20:21:04.776837: predicting val_31_p0000 
+2026-08-25 20:21:16.289759: predicting val_32_p0000 
+2026-08-25 20:21:24.220601: predicting val_33_p0000 
+2026-08-25 20:21:31.786807: predicting val_34_p0000 
+2026-08-25 20:21:37.622659: predicting val_35_p0000 
+2026-08-25 20:21:43.707109: predicting val_36_p0000 
+2026-08-25 20:21:49.104418: predicting val_37_p0000 
+2026-08-25 20:21:54.906843: predicting val_38_p0000 
+2026-08-25 20:22:00.459386: predicting val_39_p0000 
+2026-08-25 20:22:05.788642: predicting val_3_p0000 
+2026-08-25 20:22:11.860410: predicting val_40_p0000 
+2026-08-25 20:22:16.737789: predicting val_41_p0000 
+2026-08-25 20:22:24.620577: predicting val_42_p0000 
+2026-08-25 20:22:35.102675: predicting val_43_p0000 
+2026-08-25 20:22:42.064023: predicting val_44_p0000 
+2026-08-25 20:22:47.979758: predicting val_45_p0000 
+2026-08-25 20:22:54.079892: predicting val_46_p0000 
+2026-08-25 20:22:59.337215: predicting val_47_p0000 
+2026-08-25 20:23:04.716101: predicting val_48_p0000 
+2026-08-25 20:23:10.425435: predicting val_49_p0000 
+2026-08-25 20:23:17.871568: predicting val_4_p0000 
+2026-08-25 20:23:24.328955: predicting val_50_p0000 
+2026-08-25 20:23:30.599321: predicting val_51_p0000 
+2026-08-25 20:23:35.958209: predicting val_52_p0000 
+2026-08-25 20:23:41.567644: predicting val_53_p0000 
+2026-08-25 20:23:47.039848: predicting val_54_p0000 
+2026-08-25 20:23:52.645644: predicting val_55_p0000 
+2026-08-25 20:23:58.258150: predicting val_56_p0000 
+2026-08-25 20:24:05.515498: predicting val_57_p0000 
+2026-08-25 20:24:11.334797: predicting val_58_p0000 
+2026-08-25 20:24:16.572326: predicting val_59_p0000 
+2026-08-25 20:24:22.633903: predicting val_5_p0000 
+2026-08-25 20:24:27.835956: predicting val_60_p0000 
+2026-08-25 20:24:33.366828: predicting val_61_p0000 
+2026-08-25 20:24:38.828724: predicting val_62_p0000 
+2026-08-25 20:24:44.589505: predicting val_63_p0000 
+2026-08-25 20:24:49.867192: predicting val_64_p0000 
+2026-08-25 20:24:55.504506: predicting val_65_p0000 
+2026-08-25 20:25:00.933258: predicting val_66_p0000 
+2026-08-25 20:25:06.699405: predicting val_67_p0000 
+2026-08-25 20:25:12.807101: predicting val_68_p0000 
+2026-08-25 20:25:18.702104: predicting val_69_p0000 
+2026-08-25 20:25:23.955722: predicting val_6_p0000 
+2026-08-25 20:25:29.696222: predicting val_70_p0000 
+2026-08-25 20:25:37.430313: predicting val_71_p0000 
+2026-08-25 20:25:43.510565: predicting val_72_p0000 
+2026-08-25 20:25:49.877220: predicting val_73_p0000 
+2026-08-25 20:26:03.178672: predicting val_74_p0000 
+2026-08-25 20:26:09.634988: predicting val_75_p0000 
+2026-08-25 20:26:14.555742: predicting val_76_p0000 
+2026-08-25 20:26:20.236973: predicting val_77_p0000 
+2026-08-25 20:26:26.030518: predicting val_78_p0000 
+2026-08-25 20:26:31.438781: predicting val_79_p0000 
+2026-08-25 20:26:36.823096: predicting val_7_p0000 
+2026-08-25 20:26:42.101341: predicting val_80_p0000 
+2026-08-25 20:26:47.831995: predicting val_81_p0000 
+2026-08-25 20:26:55.967974: predicting val_82_p0000 
+2026-08-25 20:27:02.677281: predicting val_83_p0000 
+2026-08-25 20:27:07.088295: predicting val_84_p0000 
+2026-08-25 20:27:12.268192: predicting val_85_p0000 
+2026-08-25 20:27:16.639395: predicting val_86_p0000 
+2026-08-25 20:27:21.050883: predicting val_87_p0000 
+2026-08-25 20:27:25.214675: predicting val_88_p0000 
+2026-08-25 20:27:29.996771: predicting val_89_p0000 
+2026-08-25 20:27:34.521252: predicting val_8_p0000 
+2026-08-25 20:27:38.835051: predicting val_90_p0000 
+2026-08-25 20:27:43.105343: predicting val_91_p0000 
+2026-08-25 20:27:47.287462: predicting val_92_p0000 
+2026-08-25 20:27:54.070518: predicting val_93_p0000 
+2026-08-25 20:28:02.764224: predicting val_94_p0000 
+2026-08-25 20:28:08.688362: predicting val_95_p0000 
+2026-08-25 20:28:13.513598: predicting val_96_p0000 
+2026-08-25 20:28:17.942259: predicting val_97_p0000 
+2026-08-25 20:28:22.299982: predicting val_98_p0000 
+2026-08-25 20:28:26.411632: predicting val_99_p0000 
+2026-08-25 20:28:30.921382: predicting val_9_p0000 
