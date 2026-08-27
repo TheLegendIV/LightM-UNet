@@ -212,6 +212,15 @@ def main() -> None:
     args = parser.parse_args()
 
     load_config(args.config)  # populates CHANNELS/BOTTLENECKS_PER_STAGE/NET_NAME/... as module globals
+    # Re-sync: load_config() just rebound this module's OWN CANDIDATE_BITS
+    # global to the loaded config's value, but quantization_deltas() lives in
+    # sensitivity.py and reads ITS module's CANDIDATE_BITS -- the one-time
+    # injection at import time (module-level, above) used this file's stale
+    # pre-load_config() default (2,4,8,16), not the config actually loaded
+    # here. Without this, any config with CANDIDATE_BITS != (2,4,8,16)
+    # (e.g. config_26_5_w24's (2,4,8)) raises KeyError inside
+    # run_block_sensitivity's weight_delta_sum/act_delta_sum accumulation.
+    _sensitivity.CANDIDATE_BITS = CANDIDATE_BITS
     net_name = args.net_name or NET_NAME
     out_file = args.out_file or Path(f"compression/hawq/block_sensitivity_{args.config.removeprefix('config_')}.json")
 
