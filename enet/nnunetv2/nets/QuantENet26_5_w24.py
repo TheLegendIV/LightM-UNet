@@ -120,11 +120,16 @@ def _make_block_shallow_stage(
     "<name_prefix>.<i>" -- the per-block generalization of
     QuantENet._make_shallow_stage's single shared pair. Scoped to just this
     config's own flags (use_dsc=False, dsc_no_projection=False -- neither
-    applies to 26_5_w24)."""
+    applies to 26_5_w24). trainable_slope=True (see QuantDecomposedLeakyAct's
+    own docstring and QuantENet5_6Block.py's 2026-08-25 fix for the
+    rationale -- this map is a post-hoc per-channel average, not a trained
+    scalar, so there's no principled reason to freeze it once real QAT
+    gradients could correct it)."""
     return nn.Sequential(*[
         QuantRegularBottleneck(
             channels, block_weight_bits[f"{name_prefix}.{i}"], block_act_bits[f"{name_prefix}.{i}"],
             dropout_p=dropout_p, use_dsc=False, negative_slope=slope_map.get(f"{name_prefix}.{i}"),
+            trainable_slope=True,
         )
         for i in range(n_ops)
     ])
@@ -140,7 +145,8 @@ def _make_block_context_stage(
     QuantENet._make_context_stage's single shared pair, scoped to just this
     one pattern (26_5_w24 never uses reg-bookend/dsc_no_projection/
     asymmetric slots, unlike QuantENet23_1's dense_dilation_reg_interleaved_
-    double_mid)."""
+    double_mid). trainable_slope=True, same rationale as
+    _make_block_shallow_stage above."""
     ops = []
     for i in range(n_ops):
         kwargs = dict(DENSE_DILATION_PATTERN[i % len(DENSE_DILATION_PATTERN)])
@@ -148,7 +154,7 @@ def _make_block_context_stage(
         ops.append(QuantRegularBottleneck(
             channels, block_weight_bits[block_name], block_act_bits[block_name],
             dropout_p=0.1, use_dsc=False, separable_dilated=SEPARABLE_DILATED,
-            negative_slope=slope_map.get(block_name), **kwargs,
+            negative_slope=slope_map.get(block_name), trainable_slope=True, **kwargs,
         ))
     return nn.Sequential(*ops)
 
@@ -181,19 +187,21 @@ class QuantENet26_5_w24(nn.Module):
         n_stage1, n_stage2, n_stage3, n_regular4, n_regular5 = BOTTLENECKS_PER_STAGE
 
         w, a = block_weight_bits["initial"], block_act_bits["initial"]
-        self.initial = QuantInitialBlock(IN_CHANNELS, initial_ch, w, a, negative_slope=slope_map.get("initial"))
+        self.initial = QuantInitialBlock(
+            IN_CHANNELS, initial_ch, w, a, negative_slope=slope_map.get("initial"), trainable_slope=True,
+        )
 
         w, a = block_weight_bits["down1"], block_act_bits["down1"]
         self.down1 = QuantDownsamplingBottleneck(
             initial_ch, stage1_ch, w, a, dropout_p=0.01, use_strided=USE_STRIDED,
-            negative_slope=slope_map.get("down1"),
+            negative_slope=slope_map.get("down1"), trainable_slope=True,
         )
         self.regular1 = _make_block_shallow_stage(stage1_ch, n_stage1, block_weight_bits, block_act_bits, 0.01, "regular1", slope_map)
 
         w, a = block_weight_bits["down2"], block_act_bits["down2"]
         self.down2 = QuantDownsamplingBottleneck(
             stage1_ch, stage23_ch, w, a, dropout_p=0.1, use_strided=USE_STRIDED,
-            negative_slope=slope_map.get("down2"),
+            negative_slope=slope_map.get("down2"), trainable_slope=True,
         )
         self.stage2 = _make_block_context_stage(stage23_ch, n_stage2, block_weight_bits, block_act_bits, "stage2", slope_map)
         self.stage3 = _make_block_context_stage(stage23_ch, n_stage3, block_weight_bits, block_act_bits, "stage3", slope_map)

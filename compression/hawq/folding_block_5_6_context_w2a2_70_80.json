@@ -1,0 +1,17 @@
+{
+  "status": "Infeasible",
+  "per_layer": {},
+  "_diagnostics": {
+    "total_lut_calibrated": 0,
+    "total_lut_raw": 0,
+    "lut_pct_of_budget": 0.0,
+    "total_bram18k_calibrated": 0,
+    "total_bram18k_raw": 0,
+    "bram_pct_of_budget": 0.0,
+    "total_uram18": 0,
+    "total_cycles": 0,
+    "hard_lut": 0.7,
+    "hard_bram": 0.8,
+    "note": "hard_lut/hard_bram constraints were ENFORCED (see those fields, each either null or the fraction of XCZU7EV's nominal budget actually capped at) -- if status is Optimal, this folding is GUARANTEED to fit those (possibly fractional) budgets under this cost model's own calibration; if Infeasible, no folding choice can satisfy the requested constraint(s) for this bit assignment. already calibrated PER LAYER at its own bit-width against this repo's real synthesis data points -- see finn_cost_model.py's own _LUT_ANCHOR_FACTORS/_BRAM_ANCHOR_FACTORS comment and this file's own module docstring. Over 100% does not mean the search failed; _raw fields are the uncalibrated model output, for reference."
+  }
+}
