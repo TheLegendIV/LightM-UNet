@@ -64,7 +64,14 @@ from finn_stage_partition import (  # noqa: E402
 from qonnx.custom_op.registry import getCustomOp  # noqa: E402
 from qonnx.transformation.general import GiveUniqueNodeNames, GiveReadableTensorNames  # noqa: E402
 
+# finn_enet_ip_build_partitioned_8way reads sys.argv[1]/[2] (MODEL_NAME/
+# FIFO_STRATEGY) at import time -- mask our own CLI args during the import
+# so they aren't misread as that module's positional args.
+_real_argv = sys.argv
+sys.argv = _real_argv[:1]
 import finn_enet_ip_build_partitioned_8way as base  # noqa: E402
+sys.argv = _real_argv
+
 from finn_partition_build_steps import step_create_dataflow_partition_multi  # noqa: E402
 from finn.builder.build_dataflow_steps import (  # noqa: E402
     step_specialize_layers,
@@ -161,11 +168,13 @@ def resolve_folding_entry(logical_name, per_layer):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: finn_hawq_folding_bridge.py <hawq_preamble_output_dir>")
+        print("Usage: finn_hawq_folding_bridge.py <hawq_preamble_output_dir> [folding_block_json_path]")
         sys.exit(1)
     preamble_dir = sys.argv[1]
+    folding_block_file = sys.argv[2] if len(sys.argv) > 2 else FOLDING_BLOCK_FILE
     source_ckpt = os.path.join(preamble_dir, "intermediate_models", "assign_stage_partition_ids_8way.onnx")
     print(f"Source checkpoint: {source_ckpt}")
+    print(f"Folding block file: {folding_block_file}")
 
     flat_model = ModelWrapper(source_ckpt)
     cfg = base.cfg_stitched_ip_partitioned_8way
@@ -217,7 +226,7 @@ def main():
             print(f"  {ln}")
         sys.exit(2)
 
-    with open(FOLDING_BLOCK_FILE) as f:
+    with open(folding_block_file) as f:
         folding_block = json.load(f)
     per_layer = folding_block["per_layer"]
 
