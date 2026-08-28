@@ -24,6 +24,16 @@ a real FP32 nnUNetTrainerENet_26_9_w24_s14w12_nonneg_block checkpoint to
 warm-start from (conv/BN weights transferred by name+shape via
 QuantENet26_9_w24_s14w12_nonneg_block.from_pretrained's own strict=False
 logic) -- omit to cold-start instead.
+
+ENET26_9_W24_S14W12_NONNEG_BLOCK_TRAINABLE_SLOPE (optional, default "1"
+i.e. True): set to "0" to freeze every block's leaky-slope scalar at its
+slope_map value (or QuantDecomposedLeakyAct's own default init if
+unmapped) instead of letting real QAT gradients keep adapting it -- same
+toggle ENET_S19_TRAINABLE_SLOPE provides for QuantENetS19Block. Added to
+isolate whether trainable_slope itself (as opposed to the bit assignment)
+is why this architecture's own real HPC QAT runs got stuck at pseudo-dice
+0.0 -- see qat_26_9_w24_s14w12_nonneg_block_acc1x_joint_frozenslope_5ep.job's
+own header for the full investigation history.
 """
 import json
 import os
@@ -94,9 +104,15 @@ class nnUNetTrainerENetQuant26_9_w24_s14w12_nonneg_blockBlock(nnUNetTrainerENet)
             with open(slope_map_file) as f:
                 leaky_slope_map = json.load(f)
 
+        trainable_slope = os.environ.get("ENET26_9_W24_S14W12_NONNEG_BLOCK_TRAINABLE_SLOPE", "1") != "0"
+
         pretrained_checkpoint = os.environ.get("ENET26_9_W24_S14W12_NONNEG_BLOCK_PRETRAINED_CHECKPOINT")
         if pretrained_checkpoint:
             return QuantENet26_9_w24_s14w12_nonneg_block.from_pretrained(
                 pretrained_checkpoint, block_bits["stage_weight_bits"], block_bits["stage_act_bits"], leaky_slope_map,
+                trainable_slope=trainable_slope,
             )
-        return QuantENet26_9_w24_s14w12_nonneg_block(block_bits["stage_weight_bits"], block_bits["stage_act_bits"], leaky_slope_map)
+        return QuantENet26_9_w24_s14w12_nonneg_block(
+            block_bits["stage_weight_bits"], block_bits["stage_act_bits"], leaky_slope_map,
+            trainable_slope=trainable_slope,
+        )
