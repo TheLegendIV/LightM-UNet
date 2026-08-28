@@ -29,6 +29,33 @@ Usage (S19, real trained nonneg_block slopes):
         --block-bits-file compression/hawq/block_bits_s19.json \\
         --leaky-slope-map-file compression/post-quantization/slope_maps/19_reginterleaved_separable_nonneg_block_double_mid.json \\
         --source-checkpoint-name checkpoint_final.pth
+
+--prune-blocks (optional, comma-separated dotted block names, e.g.
+"stage3.1,regular4.1"): applied via ENet.py's own apply_block_pruning
+AFTER from_pretrained's weight transfer but BEFORE calibration -- pruned
+blocks become nn.Identity() (pure skip, zero compute), and calibration
+then runs on the ALREADY-PRUNED graph so every surviving quantizer's scale
+reflects the real post-pruning activation distribution, not the original
+network's. Caller's responsibility to only name channel-preserving
+residual blocks (RegularBottleneck-style) -- never down1/down2/up4/up5/
+initial/final, which change channel counts (see apply_block_pruning's own
+docstring in ENet.py).
+
+Usage (26_9_w24_s14w12_nonneg_block, vanilla INT8 vs. pruned-INT8
+comparison -- real trained nonneg_block slopes):
+    python compression/post-quantization/ptq_block.py \\
+        --model 26_9_w24_s14w12_nonneg_block \\
+        --source-net-name nnUNetTrainerENet_26_9_w24_s14w12_nonneg_block \\
+        --out-net-name nnUNetTrainerENetQuant_26_9_ptq_int8 \\
+        --block-bits-file compression/hawq/block_bits_26_9_w24_s14w12_nonneg_block_int8.json \\
+        --leaky-slope-map-file compression/post-quantization/slope_maps/26_9_w24_s14w12_nonneg_block.json
+    python compression/post-quantization/ptq_block.py \\
+        --model 26_9_w24_s14w12_nonneg_block \\
+        --source-net-name nnUNetTrainerENet_26_9_w24_s14w12_nonneg_block \\
+        --out-net-name nnUNetTrainerENetQuant_26_9_ptq_int8_pruned5 \\
+        --block-bits-file compression/hawq/block_bits_26_9_w24_s14w12_nonneg_block_int8.json \\
+        --leaky-slope-map-file compression/post-quantization/slope_maps/26_9_w24_s14w12_nonneg_block.json \\
+        --prune-blocks stage3.1,regular4.1,stage3.6,stage3.3,stage3.7
 """
 from __future__ import annotations
 
@@ -44,7 +71,11 @@ import torch
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 PACKAGE_ROOT = REPO_ROOT / "enet"
 sys.path.insert(0, str(PACKAGE_ROOT))
+from nnunetv2.nets.ENet import apply_block_pruning  # noqa: E402
 from nnunetv2.nets.QuantENet26_5_w24 import BLOCK_NAMES as BLOCK_NAMES_26_5_W24, QuantENet26_5_w24  # noqa: E402
+from nnunetv2.nets.QuantENet26_9_w24_s14w12_nonneg_block import (  # noqa: E402
+    BLOCK_NAMES as BLOCK_NAMES_26_9, QuantENet26_9_w24_s14w12_nonneg_block,
+)
 from nnunetv2.nets.QuantENetS19Block import BLOCK_NAMES as BLOCK_NAMES_S19, QuantENetS19Block  # noqa: E402
 
 from brevitas.graph.calibrate import calibration_mode  # noqa: E402
@@ -60,6 +91,10 @@ MODELS = {
     "s19": {
         "cls": QuantENetS19Block, "block_names": BLOCK_NAMES_S19,
         "trainer_name": "nnUNetTrainerENetQuantS19Block",
+    },
+    "26_9_w24_s14w12_nonneg_block": {
+        "cls": QuantENet26_9_w24_s14w12_nonneg_block, "block_names": BLOCK_NAMES_26_9,
+        "trainer_name": "nnUNetTrainerENetQuant26_9_w24_s14w12_nonneg_blockBlock",
     },
 }
 
@@ -139,6 +174,12 @@ def main() -> None:
     parser.add_argument("--n-calibration-images", type=int, default=64)
     parser.add_argument("--calibration-seed", type=int, default=0)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument(
+        "--prune-blocks", default=None,
+        help="Comma-separated dotted block names (e.g. 'stage3.1,regular4.1') to replace with nn.Identity() "
+             "via ENet.py's apply_block_pruning, applied AFTER from_pretrained but BEFORE calibration -- only "
+             "channel-preserving residual blocks are safe (never down1/down2/up4/up5/initial/final).",
+    )
     args = parser.parse_args()
 
     spec = MODELS[args.model]
@@ -161,6 +202,13 @@ def main() -> None:
     quant_model = spec["cls"].from_pretrained(
         source_checkpoint_path, block_bits["stage_weight_bits"], block_bits["stage_act_bits"], leaky_slope_map,
     )
+
+    if args.prune_blocks:
+        prune_names = [name.strip() for name in args.prune_blocks.split(",") if name.strip()]
+        n_pruned = apply_block_pruning(quant_model, prune_names)
+        if n_pruned != len(prune_names):
+            raise ValueError(f"--prune-blocks {args.prune_blocks!r} -- expected {len(prune_names)} blocks pruned, got {n_pruned}.")
+        print(f"Pruned {n_pruned} block(s) to nn.Identity() before calibration: {prune_names}")
 
     calibration_batches = load_calibration_batches(args.dataset_name, args.n_calibration_images, seed=args.calibration_seed)
     print(f"Calibrating on up to {len(calibration_batches)} real preprocessed images...")

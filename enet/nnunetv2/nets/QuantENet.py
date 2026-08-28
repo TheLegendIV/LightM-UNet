@@ -160,10 +160,45 @@ class QuantDecomposedLeakyAct(nn.Module):
     forward time (not backprop-independent) so gradients actually flow into
     ONE real per-site parameter rather than two shadow-tied ones."""
 
-    def __init__(self, channels: int, act_bit_width: int, negative_slope: float, trainable_slope: bool = False):
+    def __init__(
+        self, channels: int, act_bit_width: int, negative_slope: float, trainable_slope: bool = False,
+        internal_bit_width: int | None = None,
+    ):
         super().__init__()
-        self.pre_quant = qnn.QuantIdentity(bit_width=act_bit_width, act_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
-        self.act_pos = qnn.QuantReLU(bit_width=act_bit_width, act_quant=Uint8ActPerTensorFloat, return_quant_tensor=True)
+        # OPT-IN, default-None (act_bit_width is used for pre_quant/act_pos
+        # too, preserving every existing caller's behavior unchanged). When
+        # set, forces pre_quant/act_pos -- this module's own TWO INTERNAL
+        # fake-quantizers, NOT out_quant -- to a FIXED bit-width regardless
+        # of how low this site's real act_bit_width is, decoupling their
+        # OWN rounding error from the block's real, externally-assigned
+        # bit-width contract. out_quant is UNCHANGED by this parameter --
+        # always act_bit_width -- since that's the load-bearing boundary
+        # quantizer the next layer downstream actually needs to match (the
+        # real deployed low-bit contract), whereas pre_quant/act_pos are
+        # purely this module's own internal decomposition machinery (see
+        # class docstring: LeakyReLU(x,a) = a*x + (1-a)*ReLU(x)) with no
+        # external contract of their own. Motivation: three SEPARATE
+        # low-bit (e.g. 2-bit) fake-quantizations chained in series
+        # (pre_quant -> act_pos -> out_quant) compound rounding error
+        # roughly 3x over a single QuantReLU's one -- see quant_enabled's
+        # own comment below -- and was isolated by direct experiment
+        # (compression/slurm/qat_26_9_w24_s14w12_nonneg_block_*proxy* jobs)
+        # as the actual cause of this architecture's QAT collapse,
+        # independent of alpha itself: plain QuantReLU trains fine; every
+        # variant of this 3-chained-quantizer class collapses regardless of
+        # alpha's value/trainability/discretization/clamping. Setting e.g.
+        # internal_bit_width=8 reduces this to ONE meaningful low-bit
+        # rounding (out_quant, the real boundary) plus two much finer
+        # 8-bit ones, without removing any of the three quantizers (all
+        # three are real FINN hardware ops per this class's own docstring,
+        # not training scaffolding). This is a build-time architectural
+        # choice -- unlike quant_enabled/alpha_clamp below, it changes
+        # which Brevitas quantizer modules get constructed, so it cannot be
+        # toggled after construction the same way.
+        self.internal_bit_width = internal_bit_width
+        pre_act_bit_width = internal_bit_width if internal_bit_width is not None else act_bit_width
+        self.pre_quant = qnn.QuantIdentity(bit_width=pre_act_bit_width, act_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
+        self.act_pos = qnn.QuantReLU(bit_width=pre_act_bit_width, act_quant=Uint8ActPerTensorFloat, return_quant_tensor=True)
         self.trainable_slope = trainable_slope
         if trainable_slope:
             self.alpha = nn.Parameter(torch.full((1, channels, 1, 1), float(negative_slope)))
@@ -171,8 +206,161 @@ class QuantDecomposedLeakyAct(nn.Module):
             self.register_buffer("alpha", torch.full((1, channels, 1, 1), float(negative_slope)))
             self.register_buffer("one_minus_alpha", torch.full((1, channels, 1, 1), 1.0 - float(negative_slope)))
         self.out_quant = qnn.QuantIdentity(bit_width=act_bit_width, act_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
+        # OPT-IN, default-True (preserves every existing caller's behavior
+        # unchanged unless explicitly toggled via set_quant_enabled below).
+        # When False: skip pre_quant/act_pos/out_quant entirely and compute
+        # the SAME algebraic identity (alpha*x + (1-alpha)*relu(x)) in plain
+        # float, on x.value if x arrives as a Brevitas QuantTensor. Returns
+        # a plain (unwrapped) tensor -- Brevitas layers downstream already
+        # accept a plain float tensor as input (they just re-quantize it
+        # fresh from there, same as any first layer would), so this is a
+        # supported, not a hacky, interface. Motivation: this module's own
+        # 3 chained fake-quant ops (pre_quant -> act_pos -> out_quant, each
+        # at this site's own act_bit_width) compound quantization error 3x
+        # over a single QuantReLU's one -- plausibly catastrophic at very
+        # low act_bit_width (e.g. 2-bit), especially across many consecutive
+        # blocks simultaneously at the START of QAT, before the rest of the
+        # network has adapted to ANY quantization noise yet. Running this
+        # site in plain FP32 for an initial stretch of training, then
+        # calling set_quant_enabled(True) partway through, lets the slope
+        # and surrounding conv weights stabilize first -- final topology at
+        # quant_enabled=True is IDENTICAL either way (this is a training-time
+        # schedule, not an architecture change; QONNX export should always
+        # be done with quant_enabled=True to get the real deployable graph).
+        self.quant_enabled = True
+        # OPT-IN, default-None (no clamp, preserves every existing caller's
+        # behavior unchanged). (lo, hi) forward-clamps alpha into that range
+        # every forward call -- gradient passes through unchanged inside the
+        # range and is zeroed outside it (standard bounded-parameter
+        # technique), so a poorly-scaled gradient step can't push alpha past
+        # values the FP32 network itself ever produced. Motivation: alpha is
+        # currently a completely unconstrained nn.Parameter, yet a real
+        # nonneg_block-trained FP32 checkpoint's own per-block means never
+        # exceed ~0.76 anywhere in the network (see compression/post-
+        # quantization/slope_maps/26_9_w24_s14w12_nonneg_block.json) -- [0, 0.8]
+        # keeps alpha inside the region training already knows is productive,
+        # on the theory that alpha is also a SCALE feeding a coarse (often
+        # 2-bit) downstream quantizer, where a large excursion could flip
+        # which of very few representable levels an activation rounds to.
+        self.alpha_clamp: tuple[float, float] | None = None
+        # OPT-IN, default-False. One-shot, POST-CONSTRUCTION conversion to
+        # Gumbel-Softmax categorical slope selection over a small set of
+        # fixed levels (see enable_gumbel_slope below) -- a bare-metal test
+        # of whether a smooth relaxation avoids the collapse that round-to-
+        # nearest discretization of alpha ALSO hit (same 5 levels), since
+        # every attempt to fix alpha's value/range/discretization/warm-start
+        # maturity failed identically and only bypassing this class's own
+        # fake-quant chain (quant_enabled=False) or decoupling its internal
+        # precision (internal_bit_width) ever helped -- this tests a THIRD,
+        # orthogonal axis: HOW the discrete choice is made, not removing the
+        # quantizers or changing their precision.
+        self.gumbel_slope = False
+
+    def set_quant_enabled(self, enabled: bool) -> None:
+        self.quant_enabled = enabled
+
+    def set_alpha_clamp(self, clamp: tuple[float, float] | None) -> None:
+        if clamp is not None and self.gumbel_slope:
+            raise ValueError(
+                "alpha_clamp is not supported once gumbel_slope is enabled -- there is no single "
+                "continuous alpha value left to clamp."
+            )
+        self.alpha_clamp = clamp
+
+    def enable_gumbel_slope(
+        self, levels: tuple[float, ...] = (0.0, 0.2, 0.4, 0.6, 0.8), tau: float = 5.0,
+    ) -> None:
+        """One-shot, post-construction conversion to Gumbel-Softmax
+        categorical slope selection (bare-metal test -- see
+        nnUNetTrainerENetQuant26_9_w24_s14w12_nonneg_blockBlock's own
+        monkey-patch pass in build_network_architecture, NOT threaded
+        through this class's own __init__/_quant_block_act, to keep this
+        experiment's blast radius to a single class). Deletes the
+        continuous alpha (whatever trainable_slope produced -- a real
+        nn.Parameter or a frozen buffer) and replaces it with a single
+        shared set of logits over `levels` -- ONE scalar effective alpha
+        per instance, broadcast to every channel (matches how the real
+        nonneg_block FP32 checkpoint this warm-starts from was itself
+        trained: one shared scalar per block, not per-channel -- see
+        ENet.py's own NonNegativePReLU(num_parameters=1) convention), not
+        per-channel logits.
+
+        trainable_slope's own stored value becomes moot from this point on
+        -- gumbel_logits is ALWAYS a real trainable nn.Parameter, that IS
+        the mechanism. alpha_clamp is disallowed once enabled (see
+        set_alpha_clamp above): there is no continuous alpha value left for
+        a forward-clamp to act on."""
+        if self.gumbel_slope:
+            raise RuntimeError("enable_gumbel_slope() already called on this instance.")
+        if self.alpha_clamp is not None:
+            raise ValueError("alpha_clamp is set -- gumbel_slope and alpha_clamp are mutually exclusive.")
+        del self.alpha
+        if hasattr(self, "one_minus_alpha"):
+            del self.one_minus_alpha
+        self.register_buffer("gumbel_levels", torch.tensor(list(levels), dtype=torch.float32))
+        self.gumbel_logits = nn.Parameter(torch.zeros(len(levels)))
+        self.tau = float(tau)
+        self.gumbel_slope = True
+
+    def set_gumbel_temperature(self, tau: float) -> None:
+        if not self.gumbel_slope:
+            raise RuntimeError("set_gumbel_temperature() called before enable_gumbel_slope().")
+        self.tau = float(tau)
+
+    def gumbel_diagnostics(self) -> tuple[float, float]:
+        """(entropy, argmax_level) of the current categorical distribution,
+        read from logits alone (no Gumbel noise) -- entropy 0 means fully
+        collapsed onto one level, log(len(levels)) means still ~uniform.
+        Read-only, no autograd side effects."""
+        if not self.gumbel_slope:
+            raise RuntimeError("gumbel_diagnostics() called before enable_gumbel_slope().")
+        probs = F.softmax(self.gumbel_logits, dim=-1)
+        entropy = -(probs * (probs + 1e-12).log()).sum().item()
+        argmax_level = self.gumbel_levels[torch.argmax(probs)].item()
+        return entropy, argmax_level
+
+    def _gumbel_alpha(self) -> torch.Tensor:
+        """Straight-through Gumbel-Softmax mixture during training (every
+        level gets gradient every step via the soft backward pass; the
+        forward VALUE is a hard one-hot pick), plain hard argmax (no
+        sampling) at eval -- reuses nn.Module's own self.training flag,
+        same train/eval-conditioned convention nn.Dropout2d already uses
+        elsewhere in this file."""
+        if self.training:
+            weights = F.gumbel_softmax(self.gumbel_logits, tau=self.tau, hard=True)
+        else:
+            idx = torch.argmax(self.gumbel_logits)
+            weights = F.one_hot(idx, num_classes=self.gumbel_logits.shape[0]).to(self.gumbel_logits.dtype)
+        alpha = (weights * self.gumbel_levels).sum()
+        return alpha.reshape(1, 1, 1, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.gumbel_slope:
+            alpha = self._gumbel_alpha()
+            one_minus_alpha = 1.0 - alpha
+        else:
+            if self.alpha_clamp is not None:
+                # Project the STORED value into range in-place (outside
+                # autograd, .data bypasses graph tracking) BEFORE using it --
+                # not a differentiable torch.clamp() applied only to the value
+                # used in this forward's own computation. torch.clamp()'s
+                # gradient is exactly zero for any input strictly outside
+                # [lo, hi] -- if alpha ever left the range (e.g. one large
+                # optimizer step), a clamp-in-the-graph-only approach would
+                # leave it PERMANENTLY stuck there with no gradient able to
+                # pull it back, which is worse than no clamp at all. Clamping
+                # the storage itself guarantees alpha is always inside [lo, hi]
+                # by the time any gradient gets computed against it, so the
+                # gradient stays well-defined everywhere it can actually be.
+                with torch.no_grad():
+                    self.alpha.clamp_(self.alpha_clamp[0], self.alpha_clamp[1])
+            alpha = self.alpha
+            one_minus_alpha = (1.0 - alpha) if self.trainable_slope else self.one_minus_alpha
+
+        if not self.quant_enabled:
+            x_val = x.value if hasattr(x, "value") else x
+            return x_val * alpha + F.relu(x_val) * one_minus_alpha
+
         x_q = self.pre_quant(x)
         pos = self.act_pos(x_q)
         # constant operand MUST be input[1] (dynamic * constant, not
@@ -182,29 +370,34 @@ class QuantDecomposedLeakyAct(nn.Module):
         # export time when trainable_slope=True: whatever alpha's final
         # trained value is gets baked in as a QONNX Initializer the same
         # way a frozen buffer would.
-        one_minus_alpha = (1.0 - self.alpha) if self.trainable_slope else self.one_minus_alpha
-        scaled_x = x_q * self.alpha
+        scaled_x = x_q * alpha
         scaled_pos = pos * one_minus_alpha
         return self.out_quant(scaled_x + scaled_pos)
 
 
 def _quant_block_act(
     channels: int, act_bit_width: int, negative_slope: float | None, trainable_slope: bool = False,
+    internal_bit_width: int | None = None,
 ) -> nn.Module:
     """Picks plain QuantReLU (negative_slope=None, the default -- matches
     every existing QuantENet config) or the FINN-verified decomposed-leaky
     stand-in (negative_slope set) for one activation site. trainable_slope
-    is a no-op when negative_slope is None; see QuantDecomposedLeakyAct's
-    own docstring for what it does otherwise."""
+    and internal_bit_width are both no-ops when negative_slope is None --
+    a plain QuantReLU has no internal pre_quant/act_pos decomposition to
+    decouple; see QuantDecomposedLeakyAct's own docstring for what they do
+    otherwise."""
     if negative_slope is None:
         return _quant_act(act_bit_width)
-    return QuantDecomposedLeakyAct(channels, act_bit_width, negative_slope, trainable_slope=trainable_slope)
+    return QuantDecomposedLeakyAct(
+        channels, act_bit_width, negative_slope, trainable_slope=trainable_slope, internal_bit_width=internal_bit_width,
+    )
 
 
 class QuantInitialBlock(nn.Module):
     def __init__(
         self, in_channels: int, out_channels: int, weight_bit_width: int, act_bit_width: int,
         negative_slope: float | None = None, trainable_slope: bool = False,
+        internal_bit_width: int | None = None,
     ):
         super().__init__()
         if out_channels <= in_channels:
@@ -213,7 +406,9 @@ class QuantInitialBlock(nn.Module):
         self.conv = _quant_conv2d(in_channels, out_channels - in_channels, weight_bit_width, kernel_size=3, stride=2, padding=1)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
         self.bn = nn.BatchNorm2d(out_channels)
-        self.act = _quant_block_act(out_channels, act_bit_width, negative_slope, trainable_slope=trainable_slope)
+        self.act = _quant_block_act(
+            out_channels, act_bit_width, negative_slope, trainable_slope=trainable_slope, internal_bit_width=internal_bit_width,
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.input_quant(x)
@@ -226,6 +421,7 @@ class QuantRegularBottleneck(nn.Module):
         kernel_size: int = 3, padding: int = 1, dilation: int = 1,
         asymmetric: bool = False, dropout_p: float = 0.1, use_dsc: bool = False,
         separable_dilated: bool = False, negative_slope: float | None = None, trainable_slope: bool = False,
+        internal_bit_width: int | None = None,
     ):
         super().__init__()
         internal_channels = max(1, channels // internal_ratio)
@@ -233,7 +429,7 @@ class QuantRegularBottleneck(nn.Module):
         self.reduce = nn.Sequential(
             _quant_conv2d(channels, internal_channels, weight_bit_width, kernel_size=1),
             nn.BatchNorm2d(internal_channels),
-            _quant_block_act(internal_channels, act_bit_width, negative_slope, trainable_slope=trainable_slope),
+            _quant_block_act(internal_channels, act_bit_width, negative_slope, trainable_slope=trainable_slope, internal_bit_width=internal_bit_width),
         )
         if asymmetric:
             if use_dsc:
@@ -241,7 +437,7 @@ class QuantRegularBottleneck(nn.Module):
             self.conv = nn.Sequential(
                 _quant_conv2d(internal_channels, internal_channels, weight_bit_width, kernel_size=(kernel_size, 1), padding=(padding, 0)),
                 nn.BatchNorm2d(internal_channels),
-                _quant_block_act(internal_channels, act_bit_width, negative_slope, trainable_slope=trainable_slope),
+                _quant_block_act(internal_channels, act_bit_width, negative_slope, trainable_slope=trainable_slope, internal_bit_width=internal_bit_width),
                 _quant_conv2d(internal_channels, internal_channels, weight_bit_width, kernel_size=(1, kernel_size), padding=(0, padding)),
             )
         elif use_dsc:
@@ -259,7 +455,7 @@ class QuantRegularBottleneck(nn.Module):
                 _quant_conv2d(internal_channels, internal_channels, weight_bit_width, kernel_size=(kernel_size, 1),
                                padding=(padding, 0), dilation=dilation),
                 nn.BatchNorm2d(internal_channels),
-                _quant_block_act(internal_channels, act_bit_width, negative_slope, trainable_slope=trainable_slope),
+                _quant_block_act(internal_channels, act_bit_width, negative_slope, trainable_slope=trainable_slope, internal_bit_width=internal_bit_width),
                 _quant_conv2d(internal_channels, internal_channels, weight_bit_width, kernel_size=(1, kernel_size),
                                padding=(0, padding), dilation=dilation),
             )
@@ -269,7 +465,7 @@ class QuantRegularBottleneck(nn.Module):
         self.conv_bn_act = nn.Sequential(
             self.conv,
             nn.BatchNorm2d(internal_channels),
-            _quant_block_act(internal_channels, act_bit_width, negative_slope, trainable_slope=trainable_slope),
+            _quant_block_act(internal_channels, act_bit_width, negative_slope, trainable_slope=trainable_slope, internal_bit_width=internal_bit_width),
         )
         self.expand = nn.Sequential(
             _quant_conv2d(internal_channels, channels, weight_bit_width, kernel_size=1),
@@ -296,7 +492,7 @@ class QuantRegularBottleneck(nn.Module):
         # try to re-apply it to QuantENet.py's own residual_add sites (this
         # one and the 3 others in this file, which just reference this note).
         self.residual_add = qnn.QuantEltwiseAdd(bit_width=act_bit_width, input_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
-        self.out_act = _quant_block_act(channels, act_bit_width, negative_slope, trainable_slope=trainable_slope)
+        self.out_act = _quant_block_act(channels, act_bit_width, negative_slope, trainable_slope=trainable_slope, internal_bit_width=internal_bit_width)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.reduce(x)
@@ -343,7 +539,7 @@ class QuantDownsamplingBottleneck(nn.Module):
     def __init__(
         self, in_channels: int, out_channels: int, weight_bit_width: int, act_bit_width: int, internal_ratio: int = 4,
         dropout_p: float = 0.01, use_strided: bool = True, negative_slope: float | None = None,
-        trainable_slope: bool = False,
+        trainable_slope: bool = False, internal_bit_width: int | None = None,
     ):
         super().__init__()
         internal_channels = max(1, out_channels // internal_ratio)
@@ -352,19 +548,19 @@ class QuantDownsamplingBottleneck(nn.Module):
             self.reduce = nn.Sequential(
                 _quant_conv2d(in_channels, internal_channels, weight_bit_width, kernel_size=2, stride=2),
                 nn.BatchNorm2d(internal_channels),
-                _quant_block_act(internal_channels, act_bit_width, negative_slope, trainable_slope=trainable_slope),
+                _quant_block_act(internal_channels, act_bit_width, negative_slope, trainable_slope=trainable_slope, internal_bit_width=internal_bit_width),
             )
         else:
             self.reduce = nn.Sequential(
                 nn.MaxPool2d(kernel_size=2, stride=2),
                 _quant_conv2d(in_channels, internal_channels, weight_bit_width, kernel_size=1),
                 nn.BatchNorm2d(internal_channels),
-                _quant_block_act(internal_channels, act_bit_width, negative_slope, trainable_slope=trainable_slope),
+                _quant_block_act(internal_channels, act_bit_width, negative_slope, trainable_slope=trainable_slope, internal_bit_width=internal_bit_width),
             )
         self.conv = nn.Sequential(
             _quant_conv2d(internal_channels, internal_channels, weight_bit_width, kernel_size=3, padding=1),
             nn.BatchNorm2d(internal_channels),
-            _quant_block_act(internal_channels, act_bit_width, negative_slope, trainable_slope=trainable_slope),
+            _quant_block_act(internal_channels, act_bit_width, negative_slope, trainable_slope=trainable_slope, internal_bit_width=internal_bit_width),
         )
         self.expand = nn.Sequential(
             _quant_conv2d(internal_channels, out_channels, weight_bit_width, kernel_size=1),
@@ -376,7 +572,7 @@ class QuantDownsamplingBottleneck(nn.Module):
         # across both operands by construction, so this join is already
         # FINN-safe -- no CONST-scale fix needed here.
         self.residual_add = qnn.QuantEltwiseAdd(bit_width=act_bit_width, input_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
-        self.out_act = _quant_block_act(out_channels, act_bit_width, negative_slope, trainable_slope=trainable_slope)
+        self.out_act = _quant_block_act(out_channels, act_bit_width, negative_slope, trainable_slope=trainable_slope, internal_bit_width=internal_bit_width)
         self.out_channels = out_channels
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Size]:

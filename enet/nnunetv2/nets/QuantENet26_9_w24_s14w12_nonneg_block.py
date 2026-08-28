@@ -40,6 +40,18 @@ a fresh pair per loop index instead, scoped to just the context_pattern
 this architecture actually uses -- not full parity with QuantENet.py's own
 scoped subset (no dsc_no_projection/asymmetric/reg-bookend handling here,
 none of it applies to this config).
+
+internal_bit_width (optional, default None): when set (e.g. 8), forces
+every QuantDecomposedLeakyAct site's own internal pre_quant/act_pos
+quantizers to that fixed bit-width regardless of the block's real,
+per-block act_bit_width -- out_quant (the real boundary the next layer
+matches) is unchanged. See QuantDecomposedLeakyAct's own internal_bit_width
+comment in QuantENet.py, and this architecture's trainer's
+ENET26_9_W24_S14W12_NONNEG_BLOCK_LEAKY_INTERNAL_BITS docstring, for the
+full rationale (three chained low-bit fake-quantizers compounding rounding
+error was isolated as the likely cause of this architecture's own QAT
+collapse, independent of the slope itself). None (default) is byte-for-byte
+identical to this parameter not existing.
 """
 from __future__ import annotations
 
@@ -95,6 +107,7 @@ BLOCK_NAMES = (
 def _make_block_shallow_stage(
     channels: int, n_ops: int, block_weight_bits: dict[str, int], block_act_bits: dict[str, int], dropout_p: float,
     name_prefix: str, slope_map: dict[str, float], trainable_slope: bool = True,
+    internal_bit_width: int | None = None,
 ) -> nn.Sequential:
     """regular1/regular4/regular5: plain QuantRegularBottleneck repeats,
     each with its OWN (w, a, negative_slope) looked up by
@@ -104,12 +117,15 @@ def _make_block_shallow_stage(
     applies to this architecture). trainable_slope defaults to True (lets
     real QAT gradients keep adapting the slope) -- pass False to freeze
     each block's slope at its slope_map value (or QuantDecomposedLeakyAct's
-    own default init if unmapped), same toggle QuantENetS19Block.py has."""
+    own default init if unmapped), same toggle QuantENetS19Block.py has.
+    internal_bit_width: see QuantDecomposedLeakyAct's own docstring in
+    QuantENet.py -- decouples pre_quant/act_pos's own precision from this
+    block's real, possibly very low act_bit_width."""
     return nn.Sequential(*[
         QuantRegularBottleneck(
             channels, block_weight_bits[f"{name_prefix}.{i}"], block_act_bits[f"{name_prefix}.{i}"],
             dropout_p=dropout_p, use_dsc=False, negative_slope=slope_map.get(f"{name_prefix}.{i}"),
-            trainable_slope=trainable_slope,
+            trainable_slope=trainable_slope, internal_bit_width=internal_bit_width,
         )
         for i in range(n_ops)
     ])
@@ -117,15 +133,15 @@ def _make_block_shallow_stage(
 
 def _make_block_context_stage(
     channels: int, n_ops: int, block_weight_bits: dict[str, int], block_act_bits: dict[str, int], name_prefix: str,
-    slope_map: dict[str, float], trainable_slope: bool = True,
+    slope_map: dict[str, float], trainable_slope: bool = True, internal_bit_width: int | None = None,
 ) -> nn.Sequential:
     """stage2/stage3 under context_pattern="dense_dilation" (every slot
     dilated, 2/4/8/16 repeated twice over 8 slots, separable_dilated=True --
     see ENet.py's DENSE_DILATION_PATTERN) -- the per-block generalization of
     QuantENet._make_context_stage's single shared pair, scoped to just this
     one pattern (this architecture never uses reg-bookend/dsc_no_projection/
-    asymmetric slots). trainable_slope, same rationale/default as
-    _make_block_shallow_stage above."""
+    asymmetric slots). trainable_slope/internal_bit_width, same
+    rationale/default as _make_block_shallow_stage above."""
     ops = []
     for i in range(n_ops):
         kwargs = dict(DENSE_DILATION_PATTERN[i % len(DENSE_DILATION_PATTERN)])
@@ -133,7 +149,8 @@ def _make_block_context_stage(
         ops.append(QuantRegularBottleneck(
             channels, block_weight_bits[block_name], block_act_bits[block_name],
             dropout_p=0.1, use_dsc=False, separable_dilated=SEPARABLE_DILATED,
-            negative_slope=slope_map.get(block_name), trainable_slope=trainable_slope, **kwargs,
+            negative_slope=slope_map.get(block_name), trainable_slope=trainable_slope,
+            internal_bit_width=internal_bit_width, **kwargs,
         ))
     return nn.Sequential(*ops)
 
@@ -150,6 +167,7 @@ class QuantENet26_9_w24_s14w12_nonneg_block(nn.Module):
     def __init__(
         self, block_weight_bits: dict[str, int], block_act_bits: dict[str, int],
         leaky_slope_map: dict[str, float] | None = None, trainable_slope: bool = True,
+        internal_bit_width: int | None = None,
     ):
         super().__init__()
         missing_w = [b for b in BLOCK_NAMES if b not in block_weight_bits]
@@ -169,22 +187,34 @@ class QuantENet26_9_w24_s14w12_nonneg_block(nn.Module):
         w, a = block_weight_bits["initial"], block_act_bits["initial"]
         self.initial = QuantInitialBlock(
             IN_CHANNELS, initial_ch, w, a, negative_slope=slope_map.get("initial"), trainable_slope=trainable_slope,
+            internal_bit_width=internal_bit_width,
         )
 
         w, a = block_weight_bits["down1"], block_act_bits["down1"]
         self.down1 = QuantDownsamplingBottleneck(
             initial_ch, stage1_ch, w, a, dropout_p=0.01, use_strided=USE_STRIDED,
             negative_slope=slope_map.get("down1"), trainable_slope=trainable_slope,
+            internal_bit_width=internal_bit_width,
         )
-        self.regular1 = _make_block_shallow_stage(stage1_ch, n_stage1, block_weight_bits, block_act_bits, 0.01, "regular1", slope_map, trainable_slope=trainable_slope)
+        self.regular1 = _make_block_shallow_stage(
+            stage1_ch, n_stage1, block_weight_bits, block_act_bits, 0.01, "regular1", slope_map,
+            trainable_slope=trainable_slope, internal_bit_width=internal_bit_width,
+        )
 
         w, a = block_weight_bits["down2"], block_act_bits["down2"]
         self.down2 = QuantDownsamplingBottleneck(
             stage1_ch, stage23_ch, w, a, dropout_p=0.1, use_strided=USE_STRIDED,
             negative_slope=slope_map.get("down2"), trainable_slope=trainable_slope,
+            internal_bit_width=internal_bit_width,
         )
-        self.stage2 = _make_block_context_stage(stage23_ch, n_stage2, block_weight_bits, block_act_bits, "stage2", slope_map, trainable_slope=trainable_slope)
-        self.stage3 = _make_block_context_stage(stage23_ch, n_stage3, block_weight_bits, block_act_bits, "stage3", slope_map, trainable_slope=trainable_slope)
+        self.stage2 = _make_block_context_stage(
+            stage23_ch, n_stage2, block_weight_bits, block_act_bits, "stage2", slope_map,
+            trainable_slope=trainable_slope, internal_bit_width=internal_bit_width,
+        )
+        self.stage3 = _make_block_context_stage(
+            stage23_ch, n_stage3, block_weight_bits, block_act_bits, "stage3", slope_map,
+            trainable_slope=trainable_slope, internal_bit_width=internal_bit_width,
+        )
 
         # Decoder (regular4/regular5/up4/up5) is always plain QuantReLU,
         # regardless of leaky_slope_map -- same rule every other file in
@@ -229,11 +259,15 @@ class QuantENet26_9_w24_s14w12_nonneg_block(nn.Module):
     def from_pretrained(
         cls, checkpoint_path: str | Path, block_weight_bits: dict[str, int], block_act_bits: dict[str, int],
         leaky_slope_map: dict[str, float] | None = None, trainable_slope: bool = True,
+        internal_bit_width: int | None = None,
     ) -> "QuantENet26_9_w24_s14w12_nonneg_block":
         """Builds the quantized model, then transfers FP32 conv/BN weights
         from an nnU-Net ENet checkpoint by direct name+shape match
         (strict=False) -- same pattern as QuantENet26_5_w24.from_pretrained."""
-        model = cls(block_weight_bits, block_act_bits, leaky_slope_map, trainable_slope=trainable_slope)
+        model = cls(
+            block_weight_bits, block_act_bits, leaky_slope_map, trainable_slope=trainable_slope,
+            internal_bit_width=internal_bit_width,
+        )
         checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
         source_state_dict = checkpoint["network_weights"]
         model_state_dict = model.state_dict()
@@ -287,6 +321,38 @@ if __name__ == "__main__":
     assert not isinstance(slope_model.regular4[0].out_act, QuantDecomposedLeakyAct), "regular4 (decoder) must stay plain QuantReLU regardless of the map"
     assert not isinstance(slope_model.stage2[1].out_act, QuantDecomposedLeakyAct), "stage2.1 (unmapped) should stay plain QuantReLU"
     print("leaky_slope_map wiring verified (mapped block -> QuantDecomposedLeakyAct, unmapped/decoder -> plain QuantReLU).")
+
+    # internal_bit_width: default (None) must be byte-for-byte unchanged
+    # behavior (all three quantizers at the real, low act_bit_width); when
+    # set, pre_quant/act_pos must move to the fixed internal bit-width while
+    # out_quant stays pinned at the real act_bit_width. QuantDecomposedLeakyAct
+    # has no top-level .act_quant (unlike plain QuantReLU/QuantIdentity
+    # blocks) -- must reach into .pre_quant/.act_pos/.out_quant individually.
+    low_bit_a = dict(homogeneous_a)
+    low_bit_a["initial"] = 2  # exercise a real low-bit boundary, not just W8A8
+
+    default_model = QuantENet26_9_w24_s14w12_nonneg_block(
+        homogeneous_w, low_bit_a, leaky_slope_map={"initial": 0.5},
+    )
+    leaky = default_model.initial.act
+    assert isinstance(leaky, QuantDecomposedLeakyAct)
+    assert leaky.pre_quant.act_quant.bit_width().item() == 2, "default internal_bit_width=None must leave pre_quant at act_bit_width (2)"
+    assert leaky.act_pos.act_quant.bit_width().item() == 2, "default internal_bit_width=None must leave act_pos at act_bit_width (2)"
+    assert leaky.out_quant.act_quant.bit_width().item() == 2, "out_quant is always act_bit_width regardless"
+    print("internal_bit_width default (None): pre_quant/act_pos/out_quant all at act_bit_width (2), unchanged -- OK")
+
+    internal8_model = QuantENet26_9_w24_s14w12_nonneg_block(
+        homogeneous_w, low_bit_a, leaky_slope_map={"initial": 0.5}, internal_bit_width=8,
+    )
+    leaky8 = internal8_model.initial.act
+    assert leaky8.pre_quant.act_quant.bit_width().item() == 8, "internal_bit_width=8 must force pre_quant to 8-bit"
+    assert leaky8.act_pos.act_quant.bit_width().item() == 8, "internal_bit_width=8 must force act_pos to 8-bit"
+    assert leaky8.out_quant.act_quant.bit_width().item() == 2, "out_quant must stay at the REAL act_bit_width (2), never overridden"
+    with torch.no_grad():
+        out8 = internal8_model(dummy)
+    out8_t = out8.value if hasattr(out8, "value") else out8
+    assert out8_t.shape == (1, OUT_CHANNELS, 512, 512), f"internal_bit_width=8: build+forward failed, got {tuple(out8_t.shape)}"
+    print("internal_bit_width=8 override verified: pre_quant/act_pos forced to 8-bit, out_quant stays at real act_bit_width (2), build+forward OK")
 
     fp32 = ENet(
         in_channels=IN_CHANNELS, out_channels=OUT_CHANNELS, channels=CHANNELS,
