@@ -20,8 +20,13 @@ step_enet_convert_to_hw.onnx checkpoint (580 HW nodes):
   - FINNDownsamplingBottleneck.forward() computes `shortcut_proj(
     shortcut_pool(x))` FIRST, before its main conv path. FINN lowers the
     nn.MaxPool2d shortcut into a single "StreamingMaxPool" HW node, which
-    is therefore always the FIRST node of down1/down2. There are exactly
-    2 StreamingMaxPool nodes in this network (down1, down2).
+    is therefore always the FIRST node of down1/down2. There are either 2
+    (down1, down2 only -- the original fresh-init single-conv initial
+    block, e.g. 26_5_w24) or 3 (+ the real Concat-based initial block's
+    own MaxPool branch, FINNInitialBlockHAWQ, added 2026-08-28, e.g.
+    26_9_w24_ptq) StreamingMaxPool nodes in this network -- either way,
+    down1/down2 are always the LAST two by node index (any initial-block
+    pool always precedes down1 entirely).
 
   - FINNUpsamplingBottleneck.forward() computes `main_act(main_bn(
     main_up(x)))` FIRST, before its reduce/up/expand path. FINN lowers
@@ -41,6 +46,7 @@ step_create_dataflow_partition_multi (see finn_partition_build_steps.py).
 """
 
 from qonnx.custom_op.registry import getCustomOp
+from qonnx.transformation.general import SortGraph
 from qonnx.util.basic import get_by_name
 
 
@@ -66,14 +72,22 @@ def find_stage_boundaries(model):
     """Returns a sorted list of 4 node indices marking the start of
     stage1, stage2/3, stage4, stage5 respectively (partition 0/initial
     always starts at index 0). Raises AssertionError if the expected
-    marker node counts aren't found (2 StreamingMaxPool, 5
+    marker node counts aren't found (2 or 3 StreamingMaxPool, 5
     FMPadding_Pixel) -- this is a deliberate fail-fast so a topology
-    change doesn't silently mis-partition the graph."""
+    change doesn't silently mis-partition the graph.
+
+    2 StreamingMaxPool = down1/down2 shortcut_pool only (the original
+    fresh-init single-conv initial block, e.g. 26_5_w24). 3 = same plus
+    the real Concat-based initial block's own MaxPool branch
+    (FINNInitialBlockHAWQ, added 2026-08-28, e.g. 26_9_w24_ptq) --
+    whichever it is, down1/down2 are always the LAST two by node index
+    (any initial-block pool always precedes down1 entirely)."""
 
     maxpools = model.get_nodes_by_op_type("StreamingMaxPool")
-    assert len(maxpools) == 2, (
-        "Expected exactly 2 StreamingMaxPool nodes (down1, down2), found %d. "
-        "Topology may have changed -- update find_stage_boundaries()." % len(maxpools)
+    assert len(maxpools) in (2, 3), (
+        "Expected 2 (down1, down2) or 3 (+ initial's own pool branch) "
+        "StreamingMaxPool nodes, found %d. Topology may have changed -- "
+        "update find_stage_boundaries()." % len(maxpools)
     )
     fmpad = model.get_nodes_by_op_type("FMPadding_Pixel")
     assert len(fmpad) == 5, (
@@ -87,8 +101,10 @@ def find_stage_boundaries(model):
     maxpools = sorted(maxpools, key=lambda n: _node_index(model, n))
     fmpad = sorted(fmpad, key=lambda n: _node_index(model, n))
 
-    down1_start = _node_index(model, maxpools[0])
-    down2_start = _node_index(model, maxpools[1])
+    # down1/down2 are always the LAST two maxpools -- any earlier one
+    # (index 0 of 3) is the initial block's own pool branch, not a boundary.
+    down1_start = _node_index(model, maxpools[-2])
+    down2_start = _node_index(model, maxpools[-1])
     up4_start = _node_index(model, fmpad[0])
     up5_start = _node_index(model, fmpad[2])
     # fmpad[4] (final's own transpose) is intentionally not a boundary
@@ -102,6 +118,30 @@ def find_stage_boundaries(model):
     return boundaries
 
 
+def _shrink_boundary_past_sandwiched_nonhw(model, prev_boundary, boundary):
+    """create_generic_partitions' convexity check forbids a non-HW node
+    (partition_id -1, e.g. a leftover Transpose) from sitting BETWEEN two
+    same-partition HW nodes -- that would make the partition depend on
+    itself once extracted as its own subgraph ("cycle-free graph
+    violated"). This can happen when a fixup transform (e.g.
+    MoveTransposePastJoinConcat, used by the Concat-based initial block,
+    2026-08-28) leaves a genuine trailing Transpose right after a
+    StreamingConcat/etc. node that the naive index-threshold boundary
+    would otherwise still count as part of the SAME partition as its
+    successor. Fix: scan the [prev_boundary, boundary) range for the
+    EARLIEST non-HW node that still has at least one more node before
+    `boundary` (i.e. it would be sandwiched); if found, shrink `boundary`
+    to right after it, so that node's successor(s) become the first
+    node(s) of the NEXT partition instead -- turning it into a genuine
+    inter-partition edge (allowed) rather than an internal one
+    (forbidden)."""
+    nodes = list(model.graph.node)
+    for idx in range(prev_boundary, boundary):
+        if not _is_fpgadataflow_node(nodes[idx]) and idx + 1 < boundary:
+            return idx + 1
+    return boundary
+
+
 def assign_stage_partition_ids(model, cfg=None):
     """Custom build step: sets the 'partition_id' nodeattr on every
     fpgadataflow node according to the 5-stage split described above.
@@ -110,7 +150,18 @@ def assign_stage_partition_ids(model, cfg=None):
     only so this matches the (model, cfg) step-function signature FINN's
     build_dataflow driver expects."""
 
+    # step_enet_convert_to_hw's HW-inference transforms (e.g. InferConcatLayer,
+    # needed by the real Concat-based initial block, 2026-08-28) don't always
+    # leave model.graph.node in a valid topological order -- and the flat
+    # index-threshold logic below silently assumes it is. Re-sort defensively
+    # (same pattern every other order-sensitive FINN/qonnx step uses).
+    model = model.transform(SortGraph())
+
     down1_start, down2_start, up4_start, up5_start = find_stage_boundaries(model)
+    down1_start = _shrink_boundary_past_sandwiched_nonhw(model, 0, down1_start)
+    down2_start = _shrink_boundary_past_sandwiched_nonhw(model, down1_start, down2_start)
+    up4_start = _shrink_boundary_past_sandwiched_nonhw(model, down2_start, up4_start)
+    up5_start = _shrink_boundary_past_sandwiched_nonhw(model, up4_start, up5_start)
 
     n_initial = n_stage1 = n_stage23 = n_stage4 = n_stage5 = 0
     n_skipped = 0
@@ -193,8 +244,21 @@ def assign_stage_partition_ids_8way(model, cfg=None):
     step-function signature FINN's build_dataflow driver expects (same as
     assign_stage_partition_ids)."""
 
+    # see assign_stage_partition_ids' matching comment: re-sort defensively,
+    # convert_to_hw's HW-inference transforms don't guarantee topological
+    # node order is preserved (surfaced by the new Concat-based initial
+    # block's two parallel branches, 2026-08-28).
+    model = model.transform(SortGraph())
+
     down1_start, down2_start, up4_start, up5_start = find_stage_boundaries(model)
+    down1_start = _shrink_boundary_past_sandwiched_nonhw(model, 0, down1_start)
+    down2_start = _shrink_boundary_past_sandwiched_nonhw(model, down1_start, down2_start)
+    up4_start = _shrink_boundary_past_sandwiched_nonhw(model, down2_start, up4_start)
+    up5_start = _shrink_boundary_past_sandwiched_nonhw(model, up4_start, up5_start)
     q2_start, q3_start, q4_start = find_stage23_quarter_boundaries(down2_start, up4_start)
+    q2_start = _shrink_boundary_past_sandwiched_nonhw(model, down2_start, q2_start)
+    q3_start = _shrink_boundary_past_sandwiched_nonhw(model, q2_start, q3_start)
+    q4_start = _shrink_boundary_past_sandwiched_nonhw(model, q3_start, q4_start)
 
     counts = [0] * 8
     n_skipped = 0

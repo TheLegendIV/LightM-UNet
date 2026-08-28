@@ -427,6 +427,77 @@ class MoveScalarAddPastMaxPoolNHWC(Transformation):
         return _move_scalar_op_past_maxpoolnhwc(model, "Add")
 
 
+def _move_scalar_op_past_concat(model: ModelWrapper, op_type: str):
+    """Move a scalar Mul/Add past a directly-following Concat, when EVERY
+    one of Concat's inputs is produced by an identical Mul(same scale)/
+    Add(same bias) -- the real Concat-based FINNInitialBlockHAWQ's own
+    pattern (2026-08-28): both branches are quantized via the SAME shared
+    `self.requant` instance immediately before `torch.cat`, so their
+    stranded dequant Mul/Add pairs carry numerically identical constants.
+    concat(a*s+b, c*s+b, ...) == concat(a,c,...)*s+b elementwise (unlike
+    MatMul, Concat never combines values across inputs), so this is exact,
+    not approximate. Skipped (no-op) if the branches' constants differ."""
+    graph = model.graph
+    graph_modified = False
+    for concat_node in list(graph.node):
+        if concat_node.op_type != "Concat":
+            continue
+        producers = [model.find_producer(t) for t in concat_node.input]
+        if any(p is None or p.op_type != op_type for p in producers):
+            continue
+        if any(model.is_fork_node(p) or model.is_join_node(p) for p in producers):
+            continue
+        consts, data_inputs, scalar_names = [], [], []
+        ok = True
+        for p in producers:
+            A = model.get_initializer(p.input[1])
+            data_in, scalar_name = p.input[0], p.input[1]
+            if A is None:
+                A = model.get_initializer(p.input[0])
+                data_in, scalar_name = p.input[1], p.input[0]
+            if A is None or np.prod(A.shape) != 1:
+                ok = False
+                break
+            consts.append(float(np.asarray(A).reshape(-1)[0]))
+            data_inputs.append(data_in)
+            scalar_names.append(scalar_name)
+        if not ok or any(abs(c - consts[0]) > 1e-9 for c in consts[1:]):
+            continue  # not present, or branches don't share the exact same constant
+        end_name = concat_node.output[0]
+        middle_name = end_name + "_pre_scalar"
+        correct_out_shape = model.get_tensor_shape(end_name)
+        attrs = {a.name: get_attribute_value(a) for a in concat_node.attribute}
+        new_concat = oh.make_node(
+            "Concat", data_inputs, [middle_name], name=concat_node.name, domain=concat_node.domain, **attrs
+        )
+        new_scalar_op = oh.make_node(op_type, [middle_name, scalar_names[0]], [end_name], name=producers[0].name)
+        node_ind = list(graph.node).index(concat_node)
+        for p in producers:
+            graph.node.remove(p)
+        graph.node.remove(concat_node)
+        graph.node.insert(node_ind, new_concat)
+        graph.node.insert(node_ind + 1, new_scalar_op)
+        model.set_tensor_shape(middle_name, correct_out_shape)
+        graph_modified = True
+    if graph_modified:
+        model = model.transform(InferShapes())
+    return model, graph_modified
+
+
+class MoveScalarMulPastConcat(Transformation):
+    """See _move_scalar_op_past_concat."""
+
+    def apply(self, model):
+        return _move_scalar_op_past_concat(model, "Mul")
+
+
+class MoveScalarAddPastConcat(Transformation):
+    """See _move_scalar_op_past_concat."""
+
+    def apply(self, model):
+        return _move_scalar_op_past_concat(model, "Add")
+
+
 def step_absorb_leftover_scale_before_matmul(model: ModelWrapper, cfg: DataflowBuildConfig = None) -> ModelWrapper:
     """Fixup for a DecomposedPReLUAct-specific streamlining gap.
 
@@ -482,10 +553,29 @@ def step_absorb_leftover_scale_before_matmul(model: ModelWrapper, cfg: DataflowB
     fixed with the analogous MoveScalarMulPastMaxPoolNHWC/
     MoveScalarAddPastMaxPoolNHWC pair (safe since MaxPool commutes with any
     translation and with scaling by a positive factor).
+
+    A third gap found 2026-08-28 with the real Concat-based
+    FINNInitialBlockHAWQ: both of its branches share a single `self.
+    requant` quantizer instance called immediately before `torch.cat`, so
+    each branch strands an IDENTICAL Mul(scale)+Add(bias) pair directly in
+    front of the Concat -- neither Im2Col/MatMul/MaxPoolNHWC blockers, so
+    none of the above passes touch it, and Concat itself needs confirmed-
+    integer inputs to lower to StreamingConcat (InferConcatLayer), which
+    never happens while this is stranded -- the un-lowered plain Concat
+    then propagates a non-integer dtype into everything downstream (both
+    branches of the very next block, e.g. down1's shortcut_proj AND its
+    main-path reduce conv), leaving disjoint non-HW islands that break
+    step_create_dataflow_partition the exact same way ("cycle-free graph
+    violated"). Fixed with MoveScalarMulPastConcat/MoveScalarAddPastConcat
+    (safe here specifically because both branches carry the SAME constant,
+    verified numerically -- Concat never combines values the way MatMul
+    does, so no dot-product-style correction is needed).
     """
     for _ in range(4):
         for trn in [
             MoveScalarLinearPastInvariants(),
+            MoveScalarAddPastConcat(),
+            MoveScalarMulPastConcat(),
             MoveScalarMulPastIm2Col(),
             MoveScalarAddPastIm2Col(),
             MoveScalarMulPastMaxPoolNHWC(),

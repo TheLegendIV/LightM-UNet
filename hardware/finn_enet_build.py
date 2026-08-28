@@ -15,6 +15,7 @@ Key fix vs standard step_streamline:
 import os
 import sys
 import shutil
+import onnx.helper as oh
 from datetime import datetime
 
 # ── FINN source paths (source install, not pip) ──────────────────────────────
@@ -43,6 +44,8 @@ os.environ.setdefault("XILINX_HLS", "/tools/Xilinx/Vitis_HLS/2022.2")
 # ── imports ──────────────────────────────────────────────────────────────────
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.core.datatype import DataType
+from qonnx.util.basic import get_by_name
+from qonnx.transformation.base import Transformation
 from qonnx.transformation.fold_constants import FoldConstants
 from qonnx.transformation.double_to_single_float import DoubleToSingleFloat
 from qonnx.transformation.infer_shapes import InferShapes
@@ -272,6 +275,67 @@ def step_enet_streamline(model: ModelWrapper, cfg: DataflowBuildConfig):
     return model
 
 
+def _move_transpose_past_concat(model: ModelWrapper, perm=(0, 3, 1, 2)):
+    """Move an identical NHWC->NCHW Transpose (default perm=[0,3,1,2])
+    stranded on EVERY input of a channel-axis (axis=1) Concat to AFTER the
+    Concat instead, rewriting the Concat itself to axis=-1 (NHWC-native) in
+    the process: transpose(a, perm) concatenated on axis=1 with
+    transpose(b, perm) on axis=1 is exactly transpose(concat(a, b,
+    axis=-1), perm), since this perm maps the pre-transpose last axis
+    (NHWC channel) to post-transpose axis 1 (NCHW channel). See
+    step_enet_convert_to_hw's docstring comment for why this is needed --
+    to_hw.InferConcatLayer only ever converts a Concat whose axis is -1 or
+    the tensor's last axis."""
+    graph = model.graph
+    graph_modified = False
+    for concat_node in list(graph.node):
+        if concat_node.op_type != "Concat":
+            continue
+        axis_attr = get_by_name(concat_node.attribute, "axis")
+        if axis_attr is None or axis_attr.i != 1:
+            continue
+        producers = [model.find_producer(t) for t in concat_node.input]
+        if any(p is None or p.op_type != "Transpose" for p in producers):
+            continue
+        if any(model.is_fork_node(p) or model.is_join_node(p) for p in producers):
+            continue
+        perms = [get_by_name(p.attribute, "perm") for p in producers]
+        if any(pm is None or list(pm.ints) != list(perm) for pm in perms):
+            continue
+        data_inputs = [p.input[0] for p in producers]
+        ishapes = [model.get_tensor_shape(x) for x in data_inputs]
+        if any(s is None or len(s) != 4 for s in ishapes):
+            continue
+        end_name = concat_node.output[0]
+        middle_name = end_name + "_pre_transpose"
+        correct_out_shape = model.get_tensor_shape(end_name)  # NCHW, already correct
+        new_concat = oh.make_node(
+            "Concat", data_inputs, [middle_name], name=concat_node.name, domain=concat_node.domain, axis=-1
+        )
+        new_transpose = oh.make_node(
+            "Transpose", [middle_name], [end_name], name=producers[0].name, perm=list(perm)
+        )
+        node_ind = list(graph.node).index(concat_node)
+        for p in producers:
+            graph.node.remove(p)
+        graph.node.remove(concat_node)
+        graph.node.insert(node_ind, new_concat)
+        graph.node.insert(node_ind + 1, new_transpose)
+        n0, c0, h0, w0 = correct_out_shape
+        model.set_tensor_shape(middle_name, [n0, h0, w0, c0])  # pre-transpose NHWC shape
+        graph_modified = True
+    if graph_modified:
+        model = model.transform(InferShapes())
+    return model, graph_modified
+
+
+class MoveTransposePastJoinConcat(Transformation):
+    """See _move_transpose_past_concat."""
+
+    def apply(self, model):
+        return _move_transpose_past_concat(model)
+
+
 # ── Custom step: convert to HW ────────────────────────────────────────────────
 def step_enet_convert_to_hw(model: ModelWrapper, cfg: DataflowBuildConfig):
     """Convert to HW layers.
@@ -299,10 +363,39 @@ def step_enet_convert_to_hw(model: ModelWrapper, cfg: DataflowBuildConfig):
                 model.set_tensor_datatype(n.output[0], DataType["INT32"])
     model = model.transform(InferDataTypes())
 
+    # The real Concat-based FINNInitialBlockHAWQ's initial-block Concat
+    # (axis=1, the channel axis of the original NCHW torch.cat) sits
+    # between two branches that both end up genuinely NCHW at this point
+    # (a raw ONNX "MaxPool" for the pool branch, and a Transpose(perm=
+    # [0,3,1,2]) NHWC->NCHW for the conv branch's Thresholding output) --
+    # axis=1 is actually CORRECT for these NCHW operands, but
+    # to_hw.InferConcatLayer only ever converts a Concat whose axis is -1
+    # or the tensor's last axis (its HW StreamingConcat implementation only
+    # supports concatenating along the fastest-varying/channel-last axis),
+    # so this legitimately-NCHW Concat can never lower to StreamingConcat
+    # as-is. Fix in two steps, run as a SECOND pass below (after
+    # to_hw.InferThresholdingLayer, since the pool branch's MaxPool has no
+    # adjacent Transpose yet at this point -- InferThresholdingLayer is
+    # what inserts the NHWC->NCHW Transpose right after converting the
+    # preceding MultiThreshold to a HW "Thresholding" op, and only THEN can
+    # MakeMaxPoolNHWC's producer-side pattern match fire): (1)
+    # MakeMaxPoolNHWC turns the pool branch's plain "MaxPool" into
+    # "MaxPoolNHWC" by swapping it with its own producing Transpose, so
+    # BOTH branches end up fed by an identical trailing Transpose(perm=
+    # [0,3,1,2]); (2) MoveTransposePastJoinConcat then pushes that
+    # now-symmetric pair of Transposes past the Concat instead, rewriting
+    # Concat to axis=-1 (operating on the pre-transpose NHWC tensors)
+    # followed by a single trailing Transpose back to NCHW --
+    # mathematically identical, but now InferConcatLayer's axis check
+    # passes. Without this, the Concat (and everything gated behind it,
+    # e.g. the pool branch's own MaxPool) stays stranded as non-HW nodes,
+    # breaking step_create_dataflow_partition_multi's "cycle-free graph
+    # violated" convexity check.
+
     for trn in [
         to_hw.InferAddStreamsLayer,            # residual Add → AddStreams_Batch
         to_hw.InferChannelwiseLinearLayer,
-        to_hw.InferStreamingMaxPool,           # MaxPool (NHWC) → StreamingMaxPool
+        to_hw.InferStreamingMaxPool,           # MaxPool(NHWC) → StreamingMaxPool (pre-existing backbone pools)
         RoundAndClipThresholds,
         to_hw.InferBinaryMatrixVectorActivation,
         to_hw.InferQuantizedMatrixVectorActivation,  # Im2Col+T+MatMul+MT → MVAU
@@ -317,11 +410,25 @@ def step_enet_convert_to_hw(model: ModelWrapper, cfg: DataflowBuildConfig):
         model = model.transform(GiveUniqueNodeNames())
         model = model.transform(InferDataTypes())
 
+    # Second pass: now that InferThresholdingLayer (above) has inserted the
+    # Transpose the initial block's pool-branch MaxPool needs, retry
+    # MaxPool→MaxPoolNHWC→StreamingMaxPool and Concat→StreamingConcat.
+    model = model.transform(MakeMaxPoolNHWC())
+    model = model.transform(MoveTransposePastJoinConcat())
+    model = model.transform(InferShapes())
+    model = model.transform(InferDataTypes())
+    for trn in [to_hw.InferStreamingMaxPool, to_hw.InferConcatLayer, AbsorbConsecutiveTransposes]:
+        model = model.transform(trn())
+        model = model.transform(InferDataLayouts())
+        model = model.transform(GiveUniqueNodeNames())
+        model = model.transform(InferDataTypes())
+
     model = model.transform(RemoveCNVtoFCFlatten())
     model = model.transform(GiveReadableTensorNames())
     model = model.transform(RemoveUnusedTensors())
     model = model.transform(SortGraph())
     return model
+
 
 
 # ── Build config ──────────────────────────────────────────────────────────────

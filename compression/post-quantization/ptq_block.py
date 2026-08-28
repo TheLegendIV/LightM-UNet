@@ -45,6 +45,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 PACKAGE_ROOT = REPO_ROOT / "enet"
 sys.path.insert(0, str(PACKAGE_ROOT))
 from nnunetv2.nets.QuantENet26_5_w24 import BLOCK_NAMES as BLOCK_NAMES_26_5_W24, QuantENet26_5_w24  # noqa: E402
+from nnunetv2.nets.QuantENet26_9_w24_s14w12_nonneg_block import (  # noqa: E402
+    BLOCK_NAMES as BLOCK_NAMES_26_9_W24_S14W12_NONNEG_BLOCK,
+    QuantENet26_9_w24_s14w12_nonneg_block,
+)
 from nnunetv2.nets.QuantENetS19Block import BLOCK_NAMES as BLOCK_NAMES_S19, QuantENetS19Block  # noqa: E402
 
 from brevitas.graph.calibrate import calibration_mode  # noqa: E402
@@ -56,6 +60,10 @@ MODELS = {
     "26_5_w24": {
         "cls": QuantENet26_5_w24, "block_names": BLOCK_NAMES_26_5_W24,
         "trainer_name": "nnUNetTrainerENetQuant26_5_w24Block",
+    },
+    "26_9_w24_s14w12_nonneg_block": {
+        "cls": QuantENet26_9_w24_s14w12_nonneg_block, "block_names": BLOCK_NAMES_26_9_W24_S14W12_NONNEG_BLOCK,
+        "trainer_name": "nnUNetTrainerENetQuant26_9_w24_s14w12_nonneg_blockBlock",
     },
     "s19": {
         "cls": QuantENetS19Block, "block_names": BLOCK_NAMES_S19,
