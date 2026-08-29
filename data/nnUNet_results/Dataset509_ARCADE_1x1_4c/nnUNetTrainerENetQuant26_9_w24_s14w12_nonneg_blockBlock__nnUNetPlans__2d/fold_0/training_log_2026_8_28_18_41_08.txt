@@ -1,0 +1,52 @@
+
+#######################################################################
+Please cite the following paper when using nnU-Net:
+Isensee, F., Jaeger, P. F., Kohl, S. A., Petersen, J., & Maier-Hein, K. H. (2021). nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature methods, 18(2), 203-211.
+#######################################################################
+ 
+
+This is the configuration used by this training:
+Configuration name: 2d
+ {'data_identifier': 'nnUNetPlans_2d', 'preprocessor_name': 'DefaultPreprocessor', 'batch_size': 12, 'patch_size': [512, 512], 'median_image_size_in_voxels': [512.0, 512.0], 'spacing': [1.0, 1.0], 'normalization_schemes': ['ZScoreNormalization'], 'use_mask_for_norm': [False], 'UNet_class_name': 'PlainConvUNet', 'UNet_base_num_features': 32, 'n_conv_per_stage_encoder': [2, 2, 2, 2, 2, 2, 2, 2], 'n_conv_per_stage_decoder': [2, 2, 2, 2, 2, 2, 2], 'num_pool_per_axis': [7, 7], 'pool_op_kernel_sizes': [[1, 1], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2]], 'conv_kernel_sizes': [[3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3]], 'unet_max_num_features': 512, 'resampling_fn_data': 'resample_data_or_seg_to_shape', 'resampling_fn_seg': 'resample_data_or_seg_to_shape', 'resampling_fn_data_kwargs': {'is_seg': False, 'order': 3, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_seg_kwargs': {'is_seg': True, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_probabilities': 'resample_data_or_seg_to_shape', 'resampling_fn_probabilities_kwargs': {'is_seg': False, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'batch_dice': True} 
+ 
+These are the global plan.json settings:
+ {'dataset_name': 'Dataset509_ARCADE_1x1_4c', 'plans_name': 'nnUNetPlans', 'original_median_spacing_after_transp': [999.0, 1.0, 1.0], 'original_median_shape_after_transp': [1, 512, 512], 'image_reader_writer': 'NaturalImage2DIO', 'transpose_forward': [0, 1, 2], 'transpose_backward': [0, 1, 2], 'experiment_planner_used': 'ExperimentPlanner', 'label_manager': 'LabelManager', 'foreground_intensity_properties_per_channel': {'0': {'max': 255.0, 'mean': 97.36139678955078, 'median': 94.0, 'min': 0.0, 'percentile_00_5': 31.0, 'percentile_99_5': 185.0, 'std': 31.739503860473633}}} 
+ 
+2026-08-28 18:41:13.604780: unpacking dataset... 
+2026-08-28 18:41:22.112285: unpacking done... 
+2026-08-28 18:41:22.118919: do_dummy_2d_data_aug: False 
+2026-08-28 18:41:22.169665: Using splits from existing split file: /workspace/LightM-UNet/data/nnUNet_preprocessed/Dataset509_ARCADE_1x1_4c/splits_final.json 
+2026-08-28 18:41:22.178120: The split file contains 1 splits. 
+2026-08-28 18:41:22.198879: Desired fold for training: 0 
+2026-08-28 18:41:22.216020: This split has 1000 training and 200 validation cases. 
+2026-08-28 18:41:22.314613: Skipping network architecture plot because ENET_SKIP_ARCH_PLOT=1 
+2026-08-28 18:41:22.406123:  
+2026-08-28 18:41:22.412714: Epoch 0 
+2026-08-28 18:41:22.428043: Current learning rate: 0.001 
+2026-08-28 18:46:17.984340: train_loss 0.3644 
+2026-08-28 18:46:18.001632: val_loss 0.3677 
+2026-08-28 18:46:18.029026: Pseudo dice [0.0, 0.0, 0.0, 0.0] 
+2026-08-28 18:46:18.059309: Epoch time: 295.63 s 
+2026-08-28 18:46:18.083373: Yayy! New best EMA pseudo Dice: 0.0 
+2026-08-28 18:46:18.111641: No checkpoint written, checkpointing is disabled 
+2026-08-28 18:46:25.302299:  
+2026-08-28 18:46:25.322324: Epoch 1 
+2026-08-28 18:46:25.371665: Current learning rate: 0.00099 
+2026-08-28 18:50:45.603016: train_loss 0.3376 
+2026-08-28 18:50:45.613629: val_loss 0.2751 
+2026-08-28 18:50:45.642205: Pseudo dice [0.0001, 0.0, 0.0, 0.0012] 
+2026-08-28 18:50:45.670319: Epoch time: 260.81 s 
+2026-08-28 18:50:45.695697: Yayy! New best EMA pseudo Dice: 0.0 
+2026-08-28 18:50:45.719541: No checkpoint written, checkpointing is disabled 
+2026-08-28 18:50:47.498437:  
+2026-08-28 18:50:47.507439: Epoch 2 
+2026-08-28 18:50:47.529119: Current learning rate: 0.00099 
+2026-08-28 18:54:34.055829: train_loss 0.3165 
+2026-08-28 18:54:34.064197: val_loss 0.3057 
+2026-08-28 18:54:34.094450: Pseudo dice [0.0002, 0.0008, 0.0, 0.0014] 
+2026-08-28 18:54:34.115623: Epoch time: 226.62 s 
+2026-08-28 18:54:34.147237: Yayy! New best EMA pseudo Dice: 0.0001 
+2026-08-28 18:54:34.160515: No checkpoint written, checkpointing is disabled 
+2026-08-28 18:54:36.362345: No checkpoint written, checkpointing is disabled 
+2026-08-28 18:54:40.987641: Training done. 
+2026-08-28 18:54:40.999844: Skipping final full validation because ENET_SKIP_FINAL_VALIDATION=1 

@@ -110,6 +110,37 @@ of alpha itself. Unset (default) means every quantizer stays at
 act_bit_width, i.e. no change from every other QuantENet trainer's
 behavior.
 
+ENET26_9_W24_S14W12_NONNEG_BLOCK_FUSED_LEAKY (optional, default "0" i.e.
+off): set to "1" to build every leaky-slope site as QuantFusedLeakyAct
+(QuantENet.py) instead of QuantDecomposedLeakyAct -- a SINGLE-output-
+quantizer implementation of the same LeakyReLU(x,a)=a*x+(1-a)*ReLU(x)
+identity (no pre_quant/act_pos), tested this session as a more fundamental
+fix than LEAKY_INTERNAL_BITS/GUMBEL_SLOPE above once
+hardware/finn_enet_build_decomposed_prelu.py's own step_fuse_leaky_relu_to_
+threshold was found to fuse QuantDecomposedLeakyAct's 3-quantizer chain
+into ONE MultiThreshold at real FINN export time anyway ("The fusion is
+EXACT, not an approximation") -- meaning the 3-chained-quantizer compounding
+error this architecture's stuck QAT was traced to is a pure TRAINING-time
+artifact of how that class is built, with zero reflection in the deployed
+hardware. QuantFusedLeakyAct computes the same identity directly (one
+fake-quantizer on the output, matching plain QuantReLU's own shape) instead
+of decomposing into existing Brevitas building blocks. See that class's own
+docstring for a real, currently-unresolved gap: its own exported graph does
+NOT match step_fuse_leaky_relu_to_threshold's exact 3-node pattern (no
+leading MultiThreshold), so that existing fusion pass will not fire on it
+as exported today -- this env var targets the training-stability question
+only; real FINN-export verification for a model trained this way is
+separate, later work.
+
+ENET26_9_W24_S14W12_NONNEG_BLOCK_ALPHA_BIT_WIDTH (optional, default "8"):
+only has an effect when FUSED_LEAKY=1. Every QuantFusedLeakyAct's alpha is
+round-to-nearest quantized to this many bits over [0, 1] (straight-through
+estimator) rather than left an unconstrained continuous float -- alpha
+stays QUANTIZED even though this module's own activation output is now
+only fake-quantized once, matching this architecture's real per-block
+nonneg_block-trained FP32 slopes (never exceed ~0.76 anywhere in this
+network) with margin to spare.
+
 ENET26_9_W24_S14W12_NONNEG_BLOCK_GUMBEL_SLOPE (optional, default "0" i.e.
 off): set to "1" to enable a THIRD, orthogonal axis on top of the
 investigation above -- Gumbel-Softmax categorical slope selection over the
@@ -324,6 +355,9 @@ class nnUNetTrainerENetQuant26_9_w24_s14w12_nonneg_blockBlock(nnUNetTrainerENet)
         internal_bits_str = os.environ.get("ENET26_9_W24_S14W12_NONNEG_BLOCK_LEAKY_INTERNAL_BITS")
         internal_bit_width = int(internal_bits_str) if internal_bits_str else None
 
+        fused_leaky = os.environ.get("ENET26_9_W24_S14W12_NONNEG_BLOCK_FUSED_LEAKY", "0") != "0"
+        alpha_bit_width = int(os.environ.get("ENET26_9_W24_S14W12_NONNEG_BLOCK_ALPHA_BIT_WIDTH", "8"))
+
         gumbel_slope = os.environ.get("ENET26_9_W24_S14W12_NONNEG_BLOCK_GUMBEL_SLOPE", "0") != "0"
 
         pretrained_checkpoint = os.environ.get("ENET26_9_W24_S14W12_NONNEG_BLOCK_PRETRAINED_CHECKPOINT")
@@ -331,11 +365,13 @@ class nnUNetTrainerENetQuant26_9_w24_s14w12_nonneg_blockBlock(nnUNetTrainerENet)
             model = QuantENet26_9_w24_s14w12_nonneg_block.from_pretrained(
                 pretrained_checkpoint, block_bits["stage_weight_bits"], block_bits["stage_act_bits"], leaky_slope_map,
                 trainable_slope=trainable_slope, internal_bit_width=internal_bit_width,
+                fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
             )
         else:
             model = QuantENet26_9_w24_s14w12_nonneg_block(
                 block_bits["stage_weight_bits"], block_bits["stage_act_bits"], leaky_slope_map,
                 trainable_slope=trainable_slope, internal_bit_width=internal_bit_width,
+                fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
             )
 
         if gumbel_slope:
