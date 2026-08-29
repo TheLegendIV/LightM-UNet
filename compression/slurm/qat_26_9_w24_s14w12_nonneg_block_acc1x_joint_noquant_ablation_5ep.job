@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --gpus=1
 #SBATCH --mem=32G
-#SBATCH --time=03:00:00
+#SBATCH --time=03:30:00
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
 
@@ -46,7 +46,7 @@ set -e
 # (real FINN-export verification for that reconstruction is separate,
 # later work, not done here or in this job).
 #
-# Rather than one HPC allocation per single change, this job runs 4
+# Rather than one HPC allocation per single change, this job runs 5
 # variants BACK TO BACK in one submission (each independent, each
 # warm-started fresh from the same FP32 checkpoint, each 5 epochs):
 #   0. REFERENCE: plain QuantReLU everywhere, no leaky mechanism at all
@@ -57,16 +57,27 @@ set -e
 #      comparison, and the trainer's own investigation-history docstring's
 #      "THIRD attempt... plain QuantReLU everywhere, no alpha... did NOT
 #      get stuck" real HPC precedent -- this reruns that exact reference
-#      point on the SAME 5-epoch/full-iteration footing as the 3 variants
+#      point on the SAME 5-epoch/full-iteration footing as the 4 variants
 #      below, for direct comparability.
-#   1. quant_enabled=False only (QUANT_LEAKY_FROM_EPOCH set past this run's
+#   1. REFERENCE: internal_bit_width=8 alone -- the ORIGINAL decoupling fix
+#      (QuantDecomposedLeakyAct's own pre_quant/act_pos forced to 8-bit
+#      regardless of the block's real, often 2-bit, act_bit_width;
+#      out_quant unchanged), quant_enabled=True (standard, quantized from
+#      epoch 0), REAL trained slope map, no damping. A local cheap-GPU-
+#      proxy version of exactly this (unpruned, same real bit assignment)
+#      already ran this session and stayed flat in a 0.004-0.044 band
+#      over 8 REDUCED-iteration epochs -- weak, inconclusive, not clearly
+#      collapsed OR recovering. This reruns it on the same real-epoch/
+#      full-iteration footing as every other variant here for a fair,
+#      directly comparable read, before drawing any conclusion from it.
+#   2. quant_enabled=False only (QUANT_LEAKY_FROM_EPOCH set past this run's
 #      own length -- never turns on), REAL trained nonneg_block slope map
 #      (unchanged from every other non-zeroed run this session).
-#   2. Same as 1, PLUS ALPHA_LR_SCALE=0.1 (damping) -- already shown this
+#   3. Same as 2, PLUS ALPHA_LR_SCALE=0.1 (damping) -- already shown this
 #      session (matched Run2-vs-Run3 pair, pruned+top5w8a8+internal8
 #      config) to make things slightly WORSE, not better, when quantization
 #      IS active; untested combined with quant_enabled=False.
-#   3. Same as 2, PLUS the zeroed slope map (compression/post-quantization/
+#   4. Same as 3, PLUS the zeroed slope map (compression/post-quantization/
 #      slope_maps/26_9_w24_s14w12_nonneg_block_zeroed.json) instead of the
 #      real trained one -- every block's slope starts at exactly 0.0
 #      (genuinely equivalent to ReLU at epoch 0 THIS time, since
@@ -165,6 +176,8 @@ run_variant() {
     local run_name="$1"
     local slope_map_file="$2"
     local alpha_lr_scale="$3"
+    local never_quantize="$4"       # "1" = QUANT_LEAKY_FROM_EPOCH set past this run's length (bypass, never turns on); "" = standard (unset, quantized from epoch 0)
+    local internal_bit_width="$5"   # "" = unset (default: pre_quant/act_pos at the block's own real, often low, act_bit_width)
     local out_folder="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${run_name}__nnUNetPlans__2d/fold_0"
 
     if [ -n "$slope_map_file" ]; then
@@ -180,11 +193,24 @@ run_variant() {
     else
         unset ENET26_9_W24_S14W12_NONNEG_BLOCK_ALPHA_LR_SCALE
     fi
+    if [ "$never_quantize" = "1" ]; then
+        # Never turns on within a 5-epoch run (current_epoch < 150 always)
+        # -- quant_enabled stays False (bypass, plain float identity) the
+        # entire run.
+        export ENET26_9_W24_S14W12_NONNEG_BLOCK_QUANT_LEAKY_FROM_EPOCH=150
+    else
+        unset ENET26_9_W24_S14W12_NONNEG_BLOCK_QUANT_LEAKY_FROM_EPOCH
+    fi
+    if [ -n "$internal_bit_width" ]; then
+        export ENET26_9_W24_S14W12_NONNEG_BLOCK_LEAKY_INTERNAL_BITS="$internal_bit_width"
+    else
+        unset ENET26_9_W24_S14W12_NONNEG_BLOCK_LEAKY_INTERNAL_BITS
+    fi
     export ENET_OUTPUT_FOLDER="$out_folder"
 
     echo "############################################"
     echo "### VARIANT: ${run_name} ###"
-    echo "### slope_map=${slope_map_file:-none (plain QuantReLU)}  alpha_lr_scale=${alpha_lr_scale:-1.0 (no damping)} ###"
+    echo "### slope_map=${slope_map_file:-none (plain QuantReLU)}  alpha_lr_scale=${alpha_lr_scale:-1.0 (no damping)}  never_quantize=${never_quantize:-0}  internal_bit_width=${internal_bit_width:-none (real act_bit_width)} ###"
     echo "############################################"
 
     if [ -f "${out_folder}/checkpoint_final.pth" ]; then
@@ -195,9 +221,10 @@ run_variant() {
     echo "Done: ${run_name}."
 }
 
-run_variant "acc1x_joint_plain_relu_reference_5ep"         ""                       ""
-run_variant "acc1x_joint_noquant_5ep"                      "$REAL_SLOPE_MAP_FILE"   ""
-run_variant "acc1x_joint_noquant_damped_5ep"                "$REAL_SLOPE_MAP_FILE"   "0.1"
-run_variant "acc1x_joint_noquant_damped_zeroslope_5ep"      "$ZEROED_SLOPE_MAP_FILE" "0.1"
+run_variant "acc1x_joint_plain_relu_reference_5ep"          ""                       ""    ""  ""
+run_variant "acc1x_joint_internal8_5ep"                     "$REAL_SLOPE_MAP_FILE"   ""    ""  "8"
+run_variant "acc1x_joint_noquant_5ep"                       "$REAL_SLOPE_MAP_FILE"   ""    "1" ""
+run_variant "acc1x_joint_noquant_damped_5ep"                "$REAL_SLOPE_MAP_FILE"   "0.1" "1" ""
+run_variant "acc1x_joint_noquant_damped_zeroslope_5ep"      "$ZEROED_SLOPE_MAP_FILE" "0.1" "1" ""
 
-echo "ALL 3 VARIANTS DONE. Read each variant's own per-epoch Pseudo dice lines directly from this log to judge recovery."
+echo "ALL 5 VARIANTS DONE. Read each variant's own per-epoch Pseudo dice lines directly from this log to judge recovery."
