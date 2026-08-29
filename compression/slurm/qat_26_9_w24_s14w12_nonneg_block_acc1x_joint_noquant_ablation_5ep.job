@@ -121,14 +121,16 @@ export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
 export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
 export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
 
-# -- Common HAWQ per-block QAT knobs (identical for all 3 variants) ----------
+# -- Common HAWQ per-block QAT knobs (identical for every variant below) ----
 export ENET26_9_W24_S14W12_NONNEG_BLOCK_BLOCK_BITS_FILE="$HOME/LightM-UNet/${BLOCK_BITS_FILE}"
 export ENET26_9_W24_S14W12_NONNEG_BLOCK_PRETRAINED_CHECKPOINT="$HOME/LightM-UNet/${SOURCE_CHECKPOINT}"
 export ENET_EPOCHS=150
 export ENET_MAX_EPOCHS_TO_RUN=5
-# Never turns on within a 5-epoch run (current_epoch < 150 always) --
-# quant_enabled stays False the entire run, all 3 variants.
-export ENET26_9_W24_S14W12_NONNEG_BLOCK_QUANT_LEAKY_FROM_EPOCH=150
+# QUANT_LEAKY_FROM_EPOCH and LEAKY_INTERNAL_BITS are set PER VARIANT below
+# (run_variant's own 4th/5th args), NOT here -- the quant_enabled=False
+# variants need it set past this run's own length (never turns on), but
+# the internal_bit_width=8 reference variant needs the STANDARD
+# quantized-from-epoch-0 behavior (unset/0), not the bypass.
 
 echo "=== Job info ==="
 echo "Host: $(hostname)"
