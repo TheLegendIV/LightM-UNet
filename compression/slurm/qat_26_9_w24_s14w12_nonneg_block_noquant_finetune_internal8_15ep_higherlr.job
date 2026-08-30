@@ -1,0 +1,137 @@
+#!/bin/bash
+#SBATCH --job-name=qat_26_9_noquant_finetune_internal8_15ep_higherlr
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=02:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# Same as qat_26_9_w24_s14w12_nonneg_block_noquant_finetune_internal8_15ep.job
+# (see that job's own header for the full Step 1/Step 2 rationale -- not
+# repeated here), meant to run IN PARALLEL alongside it as a separate
+# sbatch submission -- reuses the SAME calibrated checkpoint (Step 1 is
+# skipped here if it already exists, avoiding any write race between the
+# two concurrent jobs) and ONLY changes Step 2's own ENET_LR.
+#
+# MOTIVATION: the sibling job's own real HPC run (default ENET_LR=1e-3, the
+# base nnUNetTrainerENet's own default) showed 3 of 4 classes recovering
+# into a healthy, still-climbing 0.10-0.47 range by epoch 9 (EMA dice
+# 0.101 -> 0.182), but the 3rd class stayed dead at ~0.0 the entire time --
+# a classic "dead ReLU"/saturated-channel pattern (one output channel
+# stuck long enough that ordinary small gradient steps under the default
+# LR never move it). This job tests whether simply giving fine-tuning a
+# BIGGER learning rate (ENET_LR=0.003, 3x default) is enough to knock that
+# channel out of whatever saturated state it's stuck in, within the SAME
+# 15-epoch diagnostic window -- the standard first thing to try for exactly
+# this failure pattern, and here genuinely free to test: ENET_LR is already
+# a real env-var knob on the base nnUNetTrainerENet class (self.initial_lr
+# = float(os.environ.get("ENET_LR", "1e-3")), inherited unchanged by this
+# quant trainer), no new code needed at all.
+#
+# Same bit assignment, same zeroed slope map, same 15-epoch/full-iteration
+# footing as the sibling job -- ENET_LR is the ONLY variable that differs,
+# for a clean, directly comparable read once both finish.
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+TRAINER_CLASS="nnUNetTrainerENetQuant26_9_w24_s14w12_nonneg_blockBlock"
+SOURCE_NET_NAME="nnUNetTrainerENetQuant26_9_w24_s14w12_nonneg_blockBlock_acc1x_joint_noquant_damped_zeroslope_5ep"
+CALIBRATED_NET_NAME="nnUNetTrainerENetQuant_26_9_noquant_zeroslope_internal8_calibrated"
+RUN_NAME="acc1x_joint_noquant_zeroslope_finetune_internal8_15ep_higherlr"
+BLOCK_BITS_FILE="compression/hawq/block_bits_26_9_w24_s14w12_nonneg_block_acc1x_joint.json"
+SLOPE_MAP_FILE="compression/post-quantization/slope_maps/26_9_w24_s14w12_nonneg_block_zeroed.json"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+
+SOURCE_CHECKPOINT="$nnUNet_results/${DATASET_NAME}/${SOURCE_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_final.pth"
+echo "=== Checking source checkpoint exists (from the noquant_ablation_5ep job) ==="
+if [ ! -f "$SOURCE_CHECKPOINT" ]; then
+    echo "ERROR: source checkpoint not found: $SOURCE_CHECKPOINT -- run qat_26_9_w24_s14w12_nonneg_block_acc1x_joint_noquant_ablation_5ep.job first." >&2
+    exit 1
+fi
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet"
+
+CALIBRATED_CHECKPOINT="$nnUNet_results/${DATASET_NAME}/${CALIBRATED_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
+echo "=== STEP 1: reconstruct + calibrate (internal_bit_width=8) -- reuses the sibling job's own checkpoint if already present ==="
+if [ -f "$CALIBRATED_CHECKPOINT" ]; then
+    echo "Calibrated checkpoint already exists at ${CALIBRATED_CHECKPOINT} -- skipping Step 1 (avoids a write race with the sibling job running in parallel)."
+else
+    python compression/post-quantization/calibrate_noquant_to_decomposed.py \
+        --source-net-name "${SOURCE_NET_NAME}" \
+        --out-net-name "${CALIBRATED_NET_NAME}" \
+        --dataset-name "${DATASET_NAME}" \
+        --block-bits-file "${BLOCK_BITS_FILE}" \
+        --leaky-slope-map-file "${SLOPE_MAP_FILE}" \
+        --internal-bit-width 8
+fi
+
+echo "=== STEP 2: fine-tuning continuation, quant_enabled=True (real chain active), 15 epochs, ENET_LR=0.003 (3x default) ==="
+export ENET26_9_W24_S14W12_NONNEG_BLOCK_BLOCK_BITS_FILE="$HOME/LightM-UNet/${BLOCK_BITS_FILE}"
+export ENET26_9_W24_S14W12_NONNEG_BLOCK_LEAKY_SLOPE_MAP_FILE="$HOME/LightM-UNet/${SLOPE_MAP_FILE}"
+export ENET26_9_W24_S14W12_NONNEG_BLOCK_PRETRAINED_CHECKPOINT="${CALIBRATED_CHECKPOINT}"
+export ENET26_9_W24_S14W12_NONNEG_BLOCK_LEAKY_INTERNAL_BITS=8
+unset ENET26_9_W24_S14W12_NONNEG_BLOCK_QUANT_LEAKY_FROM_EPOCH
+unset ENET26_9_W24_S14W12_NONNEG_BLOCK_ALPHA_LR_SCALE
+export ENET_LR=0.003
+export ENET_EPOCHS=150
+export ENET_MAX_EPOCHS_TO_RUN=15
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    echo "checkpoint_final.pth already exists at ${ENET_OUTPUT_FOLDER} -- skipping training."
+else
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+fi
+
+echo "Done: ${RUN_NAME}. Compare per-epoch Pseudo dice (especially the 3rd class) directly against the default-LR sibling job's own log to judge whether the higher LR woke it up."
