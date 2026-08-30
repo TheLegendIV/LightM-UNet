@@ -7,7 +7,7 @@
 #SBATCH --gpus=1
 #SBATCH --mem=32G
 #SBATCH --time=05:00:00
-#SBATCH --array=0-2
+#SBATCH --array=0-1
 #SBATCH --output=logs/%x_%a_%j.out
 #SBATCH --error=logs/%x_%a_%j.err
 
@@ -45,26 +45,45 @@ set -e
 #      them). d4/d8/d16 stay DSCNoProjectionBottleneck. Bottleneck depth 8
 #      (unchanged from plain dense_dilation -- no extra slots added, d=2's
 #      own slot just changes CLASS).
-#   2: 8_2_relu_w24_no_reg_d8d16_projected -- context_pattern=
-#      dense_dilation_d8_d16_projected (NEW pattern): same idea, but d=8
-#      AND d=16 become real dilated projected RegularBottlenecks instead,
-#      d=2/d=4 stay DSCNoProjectionBottleneck (no proj + DSC, unchanged).
-#      Bottleneck depth 8 (unchanged).
+#   2: 8_2_relu_w24_no_reg_d8d16_projected -- DISABLED for this submission
+#      (commented out of the arrays below, --array=0-1 only). context_
+#      pattern=dense_dilation_d8_d16_projected (NEW pattern): same idea,
+#      but d=8 AND d=16 become real dilated projected RegularBottlenecks
+#      instead, d=2/d=4 stay DSCNoProjectionBottleneck (no proj + DSC,
+#      unchanged). Bottleneck depth 8 (unchanged).
 #
-# None of the 3 tasks has a matching results.csv row yet. All 3 verified:
-# ENet.py's own self-test suite passes unchanged (112+ existing configs,
-# confirming the reg_bottleneck dilation fix is backward-compatible), a
-# targeted check confirms both new patterns build the exact intended block
-# type + dilation rate at every stage2 slot, and all 3 smoke-tested (1
-# epoch, docker, ENET_MAX_EPOCHS_TO_RUN=1) with a clean exit code -- see
-# this session's own transcript for both.
+# Task 2 (8_2_relu_w24_no_reg_d8d16_projected) is commented out of the
+# array below FOR NOW -- only 0 and 1 run this submission. It's already
+# smoke-tested clean (see below) and ready to re-enable later: uncomment
+# its line in each of the 3 arrays and change --array back to 0-2.
+#
+# All 3 tasks (including the currently-disabled 2) verified: ENet.py's own
+# self-test suite passes unchanged (112+ existing configs, confirming the
+# reg_bottleneck dilation fix is backward-compatible), a targeted check
+# confirms both new patterns build the exact intended block type +
+# dilation rate at every stage2 slot, and all 3 smoke-tested (1 epoch,
+# docker, ENET_MAX_EPOCHS_TO_RUN=1) with a clean exit code -- see this
+# session's own transcript for both. None of the 3 tasks has a matching
+# results.csv row yet.
 
 DATASET_ID=509
 DATASET_NAME="Dataset509_ARCADE_1x1_4c"
 
-CONFIG_NAMES=(8_2_relu_w24_reg 8_2_relu_w24_no_reg_d2_projected 8_2_relu_w24_no_reg_d8d16_projected)
-CONTEXT_PATTERN_ARR=(dense_dilation_reg_interleaved dense_dilation_d2_projected dense_dilation_d8_d16_projected)
-BOTTLENECKS_ARR=("4,11,11,2,1" "4,8,8,2,1" "4,8,8,2,1")
+CONFIG_NAMES=(
+    8_2_relu_w24_reg
+    8_2_relu_w24_no_reg_d2_projected
+    # 8_2_relu_w24_no_reg_d8d16_projected
+)
+CONTEXT_PATTERN_ARR=(
+    dense_dilation_reg_interleaved
+    dense_dilation_d2_projected
+    # dense_dilation_d8_d16_projected
+)
+BOTTLENECKS_ARR=(
+    "4,11,11,2,1"
+    "4,8,8,2,1"
+    # "4,8,8,2,1"
+)
 
 TASK_ID=${SLURM_ARRAY_TASK_ID}
 CONFIG_NAME="${CONFIG_NAMES[$TASK_ID]}"
@@ -155,7 +174,7 @@ echo "=== Collecting results into compression/results.csv ==="
 cd "$HOME/LightM-UNet"
 python compression/collect_results.py \
     --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
-    --stage 8_2_relu_w24_reg_ablation \
+    --stage 8_2_relu_w24_projected_slots_ablation \
     --dataset-name "${DATASET_NAME}" \
     --dataset-id "${DATASET_ID}" \
     --channels "${ENET_CHANNELS}" \
