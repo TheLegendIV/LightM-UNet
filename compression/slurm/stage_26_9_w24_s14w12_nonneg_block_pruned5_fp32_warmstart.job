@@ -1,0 +1,169 @@
+#!/bin/bash
+#SBATCH --job-name=26_9_pruned5_fp32_warmstart
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# FP32 structural-pruning ablation for 26_9_w24_s14w12_nonneg_block: removes
+# the 5 lowest-combined-sensitivity blocks found by HAWQ Hutchinson-trace
+# analysis (block_sensitivity_26_9_w24_s14w12_nonneg_block.json) -- stage3.1,
+# regular4.1, stage3.6, stage3.3, stage3.7 -- via ENet.py's own
+# apply_block_pruning (nn.Identity() replacement), same mechanism
+# collect_results.py/ptq_block.py already use for PTQ-only pruning probes.
+#
+# A local-Docker PTQ-only probe (calibrate INT8, no retraining) of this same
+# 5-block removal collapsed dice from FP32's 0.7584 to 0.2467 -- catastrophic,
+# far worse than the blocks' low sensitivity ranking would suggest. This job
+# tests whether a REAL FP32 retrain (not just PTQ calibration) can recover
+# most of that lost accuracy once the remaining blocks get a real chance to
+# compensate for the removed capacity.
+#
+# Warm-started from the full (unpruned) FP32 26_9_w24_s14w12_nonneg_block's
+# own completed 150-epoch checkpoint via nnU-Net's own -pretrained_weights
+# flag: enet/nnunetv2/run/load_pretrained_weights.py transfers by iterating
+# the CURRENT (already-pruned) network's own state_dict keys, so the 5
+# missing blocks' keys are never looked up in the source checkpoint at all --
+# no special-casing needed, this "just works" for a pruned target network.
+# Every surviving block starts from real trained weights instead of cold
+# random init.
+#
+# NOT smoke-tested locally yet before this HPC submission (mirrors this
+# architecture's own stage job precedent of deferring smoke tests) --
+# ENET_PRUNED_BLOCKS + -pretrained_weights are both independently exercised
+# code paths already (PTQ pruning probe + every other warm-started 26_9 QAT
+# job this session), so the combination's risk here is low, but watch the
+# first ~30s of the log for the pretrained-weights skip-summary print
+# (load_pretrained_weights.py) to confirm the 5 pruned blocks' keys show up
+# under "Skipped ... key(s) absent from the pretrained checkpoint" and
+# nothing else unexpected is skipped.
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+
+RUN_NAME="26_9_w24_s14w12_nonneg_block_pruned5_fp32_warmstart"
+TRAINER_CLASS="nnUNetTrainerENet"
+PRUNE_BLOCKS="stage3.1,regular4.1,stage3.6,stage3.3,stage3.7"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- ENet trainer knobs -- identical recipe to stage_26_9_w24_s14w12_nonneg_
+#    block.job, plus ENET_PRUNED_BLOCKS ------------------------------------
+export ENET_CHANNELS="4,12,24,12,4"
+export ENET_BOTTLENECKS="4,8,8,2,1"
+export ENET_CONTEXT_PATTERN="dense_dilation"
+export ENET_DECODER_TYPE="upsample_conv"
+export ENET_USE_PRELU=1
+export ENET_PRELU_VARIANT="nonneg_block"
+export ENET_USE_DILATED=1
+export ENET_USE_ASYMMETRIC=0
+export ENET_USE_STRIDED=1
+export ENET_USE_DSC=0
+export ENET_SEPARABLE_DILATED=1
+export ENET_DSC_NO_PROJECTION=0
+export ENET_PRUNED_BLOCKS="${PRUNE_BLOCKS}"
+export ENET_EPOCHS=150
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+PRETRAINED_CKPT="$nnUNet_results/${DATASET_NAME}/nnUNetTrainerENet_26_9_w24_s14w12_nonneg_block__nnUNetPlans__2d/fold_0/checkpoint_final.pth"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Run: ${RUN_NAME}"
+echo "ENET_CHANNELS=${ENET_CHANNELS} ENET_PRELU_VARIANT=${ENET_PRELU_VARIANT}"
+echo "ENET_PRUNED_BLOCKS=${ENET_PRUNED_BLOCKS}"
+echo "Warm-start checkpoint: ${PRETRAINED_CKPT}"
+echo "Output folder: ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+if [ ! -f "${PRETRAINED_CKPT}" ]; then
+    echo "ERROR: warm-start checkpoint not found at ${PRETRAINED_CKPT} -- this job requires it (warm start explicitly requested)." >&2
+    exit 1
+fi
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Checking for a COMPLETED checkpoint for ${RUN_NAME} ==="
+# Only checkpoint_final.pth (written once, at the very end of a finished
+# num_epochs-epoch run) counts as "already trained" -- checkpoint_best.pth
+# gets written as early as epoch 0, see stage_8's own job file for the
+# incident this guards against.
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    echo "checkpoint_final.pth already exists at ${ENET_OUTPUT_FOLDER} -- skipping training, going straight to collect_results.py."
+else
+    echo "=== Start training: ${RUN_NAME} (warm-started from ${PRETRAINED_CKPT}) ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}" -pretrained_weights "${PRETRAINED_CKPT}"
+    echo "Training finished for ${RUN_NAME}."
+
+    echo "=== Archiving checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+fi
+
+echo "=== Collecting results into compression/results.csv ==="
+cd "$HOME/LightM-UNet"
+python compression/collect_results.py \
+    --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+    --stage 26_s5_6_probe_family_pruning \
+    --dataset-name "${DATASET_NAME}" \
+    --dataset-id "${DATASET_ID}" \
+    --channels "${ENET_CHANNELS}" \
+    --bottlenecks "${ENET_BOTTLENECKS}" \
+    --decoder-type "${ENET_DECODER_TYPE}" \
+    --use-dilated "${ENET_USE_DILATED}" \
+    --use-asymmetric "${ENET_USE_ASYMMETRIC}" \
+    --use-strided "${ENET_USE_STRIDED}" \
+    --use-dsc "${ENET_USE_DSC}" \
+    --separable-dilated "${ENET_SEPARABLE_DILATED}" \
+    --context-pattern "${ENET_CONTEXT_PATTERN}" \
+    --use-prelu "${ENET_USE_PRELU}" \
+    --prelu-variant "${ENET_PRELU_VARIANT}" \
+    --dsc-no-projection "${ENET_DSC_NO_PROJECTION}" \
+    --pruned-blocks "${PRUNE_BLOCKS}" \
+    --trainer-class "${TRAINER_CLASS}"
+
+echo "Done: ${RUN_NAME}."

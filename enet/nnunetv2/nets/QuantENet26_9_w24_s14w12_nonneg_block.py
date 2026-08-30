@@ -1,39 +1,57 @@
 """Hardcoded, per-BOTTLENECK-BLOCK-W/A-only Brevitas-quantized ENet for the
-nnUNetTrainerENet_26_9_w24_s14w12_nonneg_block checkpoint (compression/hawq/
-config_26_9_w24_s14w12_nonneg_block.py: 26_5_w24's own recipe with
-stage1/stage4 additionally widened 8 -> 12, CHANNELS=4,8,24,8,4 ->
-4,12,24,12,4) -- built for compression/hawq/block_sensitivity.py +
-finn_block_costs.py + ilp_search.py's per-block HAWQ search
-(compression/hawq/block_bits_26_9_w24_s14w12_nonneg_block_acc1x_joint.json),
-one level finer than a per-STAGE-group search: every one of this
-architecture's 29 individual bottleneck blocks gets its OWN independent
-weight_bit_width/act_bit_width.
+nnUNetTrainerENet_26_9_w24_s14w12_nonneg_block checkpoint (compression/slurm/
+stage_26_9_w24_s14w12_nonneg_block.job: 26_5_w24's own recipe with stage1/
+stage4 also widened 8 -> 12, CHANNELS=4,8,24,8,4 -> 4,12,24,12,4) -- built
+for compression/hawq/block_sensitivity.py + finn_block_costs.py +
+ilp_search.py's per-block HAWQ search (compression/hawq/
+block_bits_26_9_w24_s14w12_nonneg_block_acc1x_joint.json), one level finer
+than QuantENet23_1.py's per-STAGE-group search: every one of this
+architecture's 29 individual bottleneck blocks (see compression/hawq/
+block_utils.py's enumerate_blocks) gets its OWN independent
+weight_bit_width/act_bit_width, not one shared value across an entire
+5-way stage group.
 
 Deliberately narrow, same philosophy as QuantENet26_5_w24.py: every
 architecture axis (channels, bottlenecks_per_stage, context_pattern,
 decoder_type, use_asymmetric, use_dsc, separable_dilated) is hardcoded to
-this config's own architecture, so an automated per-block bit-width sweep
-can never accidentally build the wrong network. The only knobs are
-block_weight_bits/block_act_bits (one entry per BLOCK_NAMES below).
+this checkpoint's own architecture (see compression/hawq/
+config_26_9_w24_s14w12_nonneg_block.py), so an automated per-block
+bit-width sweep can never accidentally build the wrong network. The only
+knobs are block_weight_bits/block_act_bits (one entry per BLOCK_NAMES
+below).
 
-PReLU: UNLIKE 26_5_w24 (prelu_variant="standard", real per-channel PReLU,
-whose leaky_slope_map is only a post-hoc per-channel average -- known to
-collapse accuracy if deployed standalone, see QuantENet26_5_w24.py's own
-big warning), this config was deliberately trained with
-prelu_variant="nonneg_block" -- ONE shared learnable NonNegativePReLU(1)
-scalar per bottleneck block, the exact same real, TRAINED value
-extract_leaky_slope_map.py's --prelu-variant nonneg_block path pulls out
-losslessly (no averaging, no approximation -- see
-compression/hawq/config_26_9_w24_s14w12_nonneg_block.py's own docstring
-for the "deliberate departure so this line is losslessly FINN-deployable"
-rationale). A from_pretrained call using that real slope map is therefore
-NOT expected to reproduce 26_5_w24's known post-hoc-average collapse.
+PReLU: unlike 26_5_w24 (prelu_variant="standard", real per-CHANNEL PReLU,
+requiring a lossy post-hoc average to get one scalar per block),
+26_9_w24_s14w12_nonneg_block was trained directly with
+prelu_variant="nonneg_block" -- one REAL TRAINED learnable scalar per
+BLOCK, cleanly extractable losslessly via compression/post-quantization/
+extract_leaky_slope_map.py's default --prelu-variant nonneg_block path
+(same situation as QuantENetS19Block.py/QuantENet23_1.py, not
+QuantENet26_5_w24.py's own lossy-average warning).
 
 Reuses QuantENet.py's block classes (QuantInitialBlock,
 QuantDownsamplingBottleneck, QuantRegularBottleneck, QuantUpsamplingBottleneck)
-directly, and QuantENet26_5_w24.py's own _make_block_shallow_stage/
-_make_block_context_stage pattern (dense_dilation, no reg-bookend/
-dsc_no_projection/asymmetric slots -- this config uses none of them).
+directly -- rather than duplicating their Brevitas wiring -- but does NOT
+reuse its _make_shallow_stage/_make_context_stage staticmethods, since both
+take one (weight_bit_width, act_bit_width) pair for an entire stage; this
+file's own _make_block_shallow_stage/_make_block_context_stage below look up
+a fresh pair per loop index instead, scoped to just the context_pattern
+("dense_dilation") and flags (separable_dilated=True, everything else off)
+this architecture actually uses -- not full parity with QuantENet.py's own
+scoped subset (no dsc_no_projection/asymmetric/reg-bookend handling here,
+none of it applies to this config).
+
+internal_bit_width (optional, default None): when set (e.g. 8), forces
+every QuantDecomposedLeakyAct site's own internal pre_quant/act_pos
+quantizers to that fixed bit-width regardless of the block's real,
+per-block act_bit_width -- out_quant (the real boundary the next layer
+matches) is unchanged. See QuantDecomposedLeakyAct's own internal_bit_width
+comment in QuantENet.py, and this architecture's trainer's
+ENET26_9_W24_S14W12_NONNEG_BLOCK_LEAKY_INTERNAL_BITS docstring, for the
+full rationale (three chained low-bit fake-quantizers compounding rounding
+error was isolated as the likely cause of this architecture's own QAT
+collapse, independent of the slope itself). None (default) is byte-for-byte
+identical to this parameter not existing.
 """
 from __future__ import annotations
 
@@ -68,12 +86,14 @@ USE_ASYMMETRIC = False
 USE_STRIDED = True
 USE_DSC = False
 SEPARABLE_DILATED = True
-PRELU_VARIANT = "nonneg_block"  # real trained per-block scalar -- see module docstring
+PRELU_VARIANT = "nonneg_block"
 
-# One entry per individual bottleneck block -- identical naming/count to
-# QuantENet26_5_w24's own BLOCK_NAMES (BOTTLENECKS_PER_STAGE unchanged,
-# only channel widths differ). proj2_to_3 absent: stage2_channels ==
-# stage3_channels (24 == 24) here too.
+# One entry per individual bottleneck block (block_utils.enumerate_blocks's
+# own naming convention: leaf modules get their own attr name, multi-block
+# containers get "<attr>.<index>") -- 29 total, confirmed against
+# compression/hawq/finn_block_costs_26_9_w24_s14w12_nonneg_block.json's own
+# 29 keys. proj2_to_3 is absent: stage2_channels == stage3_channels
+# (24 == 24) here, so ENet.py builds it as nn.Identity() (nothing to quantize).
 BLOCK_NAMES = (
     "initial", "down1",
     "regular1.0", "regular1.1", "regular1.2", "regular1.3",
@@ -86,21 +106,27 @@ BLOCK_NAMES = (
 
 def _make_block_shallow_stage(
     channels: int, n_ops: int, block_weight_bits: dict[str, int], block_act_bits: dict[str, int], dropout_p: float,
-    name_prefix: str, slope_map: dict[str, float],
+    name_prefix: str, slope_map: dict[str, float], trainable_slope: bool = True,
+    internal_bit_width: int | None = None, fused_leaky: bool = False, alpha_bit_width: int = 8,
 ) -> nn.Sequential:
     """regular1/regular4/regular5: plain QuantRegularBottleneck repeats,
     each with its OWN (w, a, negative_slope) looked up by
-    "<name_prefix>.<i>". trainable_slope=True (the transferred nonneg_block
-    scalar is a real trained value, but this is a per-block INT2/4/8 PTQ
-    build -- letting the slope stay a trainable Parameter, same as every
-    other per-block HAWQ QuantENet file in this repo, costs nothing since
-    no further training happens here; PTQ calibration only touches
-    quantizer scales, not this parameter)."""
+    "<name_prefix>.<i>" -- the per-block generalization of
+    QuantENet._make_shallow_stage's single shared pair. Scoped to just this
+    config's own flags (use_dsc=False, dsc_no_projection=False -- neither
+    applies to this architecture). trainable_slope defaults to True (lets
+    real QAT gradients keep adapting the slope) -- pass False to freeze
+    each block's slope at its slope_map value (or QuantDecomposedLeakyAct's
+    own default init if unmapped), same toggle QuantENetS19Block.py has.
+    internal_bit_width: see QuantDecomposedLeakyAct's own docstring in
+    QuantENet.py -- decouples pre_quant/act_pos's own precision from this
+    block's real, possibly very low act_bit_width."""
     return nn.Sequential(*[
         QuantRegularBottleneck(
             channels, block_weight_bits[f"{name_prefix}.{i}"], block_act_bits[f"{name_prefix}.{i}"],
             dropout_p=dropout_p, use_dsc=False, negative_slope=slope_map.get(f"{name_prefix}.{i}"),
-            trainable_slope=True,
+            trainable_slope=trainable_slope, internal_bit_width=internal_bit_width,
+            fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
         )
         for i in range(n_ops)
     ])
@@ -108,10 +134,16 @@ def _make_block_shallow_stage(
 
 def _make_block_context_stage(
     channels: int, n_ops: int, block_weight_bits: dict[str, int], block_act_bits: dict[str, int], name_prefix: str,
-    slope_map: dict[str, float],
+    slope_map: dict[str, float], trainable_slope: bool = True, internal_bit_width: int | None = None,
+    fused_leaky: bool = False, alpha_bit_width: int = 8,
 ) -> nn.Sequential:
     """stage2/stage3 under context_pattern="dense_dilation" (every slot
-    dilated, 2/4/8/16 repeated twice over 8 slots, separable_dilated=True)."""
+    dilated, 2/4/8/16 repeated twice over 8 slots, separable_dilated=True --
+    see ENet.py's DENSE_DILATION_PATTERN) -- the per-block generalization of
+    QuantENet._make_context_stage's single shared pair, scoped to just this
+    one pattern (this architecture never uses reg-bookend/dsc_no_projection/
+    asymmetric slots). trainable_slope/internal_bit_width, same
+    rationale/default as _make_block_shallow_stage above."""
     ops = []
     for i in range(n_ops):
         kwargs = dict(DENSE_DILATION_PATTERN[i % len(DENSE_DILATION_PATTERN)])
@@ -119,7 +151,8 @@ def _make_block_context_stage(
         ops.append(QuantRegularBottleneck(
             channels, block_weight_bits[block_name], block_act_bits[block_name],
             dropout_p=0.1, use_dsc=False, separable_dilated=SEPARABLE_DILATED,
-            negative_slope=slope_map.get(block_name), trainable_slope=True, **kwargs,
+            negative_slope=slope_map.get(block_name), trainable_slope=trainable_slope,
+            internal_bit_width=internal_bit_width, fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width, **kwargs,
         ))
     return nn.Sequential(*ops)
 
@@ -128,11 +161,15 @@ class QuantENet26_9_w24_s14w12_nonneg_block(nn.Module):
     """Per-BLOCK-W/A quantized mirror of
     nnUNetTrainerENet_26_9_w24_s14w12_nonneg_block. block_weight_bits/
     block_act_bits: dict[str, int], exactly one entry per BLOCK_NAMES key,
-    each one of {2, 4, 8}. No defaulting for missing keys."""
+    each one of {2, 4, 8} (the candidate set compression/hawq/ilp_search.py
+    chooses from). No defaulting for missing keys -- same "an incomplete
+    dict is a bug in the caller" philosophy QuantENet26_5_w24 already uses,
+    just at this architecture's own widths."""
 
     def __init__(
         self, block_weight_bits: dict[str, int], block_act_bits: dict[str, int],
-        leaky_slope_map: dict[str, float] | None = None,
+        leaky_slope_map: dict[str, float] | None = None, trainable_slope: bool = True,
+        internal_bit_width: int | None = None, fused_leaky: bool = False, alpha_bit_width: int = 8,
     ):
         super().__init__()
         missing_w = [b for b in BLOCK_NAMES if b not in block_weight_bits]
@@ -151,26 +188,43 @@ class QuantENet26_9_w24_s14w12_nonneg_block(nn.Module):
 
         w, a = block_weight_bits["initial"], block_act_bits["initial"]
         self.initial = QuantInitialBlock(
-            IN_CHANNELS, initial_ch, w, a, negative_slope=slope_map.get("initial"), trainable_slope=True,
+            IN_CHANNELS, initial_ch, w, a, negative_slope=slope_map.get("initial"), trainable_slope=trainable_slope,
+            internal_bit_width=internal_bit_width, fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
         )
 
         w, a = block_weight_bits["down1"], block_act_bits["down1"]
         self.down1 = QuantDownsamplingBottleneck(
             initial_ch, stage1_ch, w, a, dropout_p=0.01, use_strided=USE_STRIDED,
-            negative_slope=slope_map.get("down1"), trainable_slope=True,
+            negative_slope=slope_map.get("down1"), trainable_slope=trainable_slope,
+            internal_bit_width=internal_bit_width, fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
         )
-        self.regular1 = _make_block_shallow_stage(stage1_ch, n_stage1, block_weight_bits, block_act_bits, 0.01, "regular1", slope_map)
+        self.regular1 = _make_block_shallow_stage(
+            stage1_ch, n_stage1, block_weight_bits, block_act_bits, 0.01, "regular1", slope_map,
+            trainable_slope=trainable_slope, internal_bit_width=internal_bit_width,
+            fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
+        )
 
         w, a = block_weight_bits["down2"], block_act_bits["down2"]
         self.down2 = QuantDownsamplingBottleneck(
             stage1_ch, stage23_ch, w, a, dropout_p=0.1, use_strided=USE_STRIDED,
-            negative_slope=slope_map.get("down2"), trainable_slope=True,
+            negative_slope=slope_map.get("down2"), trainable_slope=trainable_slope,
+            internal_bit_width=internal_bit_width, fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
         )
-        self.stage2 = _make_block_context_stage(stage23_ch, n_stage2, block_weight_bits, block_act_bits, "stage2", slope_map)
-        self.stage3 = _make_block_context_stage(stage23_ch, n_stage3, block_weight_bits, block_act_bits, "stage3", slope_map)
+        self.stage2 = _make_block_context_stage(
+            stage23_ch, n_stage2, block_weight_bits, block_act_bits, "stage2", slope_map,
+            trainable_slope=trainable_slope, internal_bit_width=internal_bit_width,
+            fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
+        )
+        self.stage3 = _make_block_context_stage(
+            stage23_ch, n_stage3, block_weight_bits, block_act_bits, "stage3", slope_map,
+            trainable_slope=trainable_slope, internal_bit_width=internal_bit_width,
+            fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
+        )
 
-        # Decoder is always plain QuantReLU, regardless of leaky_slope_map --
-        # same rule every other QuantENet family file in this repo uses.
+        # Decoder (regular4/regular5/up4/up5) is always plain QuantReLU,
+        # regardless of leaky_slope_map -- same rule every other file in
+        # this repo's QuantENet family uses (ENet.py's own decoder hardcodes
+        # relu=True, prelu_variant is an encoder/context-only axis).
         w, a = block_weight_bits["up4"], block_act_bits["up4"]
         self.up4 = QuantUpsamplingBottleneck(stage23_ch, stage4_ch, w, a)
         self.regular4 = _make_block_shallow_stage(stage4_ch, n_regular4, block_weight_bits, block_act_bits, 0.1, "regular4", {})
@@ -186,6 +240,8 @@ class QuantENet26_9_w24_s14w12_nonneg_block(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # DECODER_TYPE is fixed to "upsample_conv" -- no pooling indices used
+        # (mirrors QuantENet26_5_w24.forward's own upsample_conv-only branch).
         input_size = x.shape[2:]
         x = self.initial(x)
         x, _indices1, size1 = self.down1(x)
@@ -207,16 +263,16 @@ class QuantENet26_9_w24_s14w12_nonneg_block(nn.Module):
     @classmethod
     def from_pretrained(
         cls, checkpoint_path: str | Path, block_weight_bits: dict[str, int], block_act_bits: dict[str, int],
-        leaky_slope_map: dict[str, float] | None = None,
+        leaky_slope_map: dict[str, float] | None = None, trainable_slope: bool = True,
+        internal_bit_width: int | None = None, fused_leaky: bool = False, alpha_bit_width: int = 8,
     ) -> "QuantENet26_9_w24_s14w12_nonneg_block":
         """Builds the quantized model, then transfers FP32 conv/BN weights
         from an nnU-Net ENet checkpoint by direct name+shape match
-        (strict=False) -- same pattern as QuantENet26_5_w24.from_pretrained.
-        Unlike that file's own big warning, leaky_slope_map here is expected
-        to be the REAL trained nonneg_block scalar (not a post-hoc average),
-        so this transfer is a sound basis for PTQ calibration, not just a
-        QAT warm-start init."""
-        model = cls(block_weight_bits, block_act_bits, leaky_slope_map)
+        (strict=False) -- same pattern as QuantENet26_5_w24.from_pretrained."""
+        model = cls(
+            block_weight_bits, block_act_bits, leaky_slope_map, trainable_slope=trainable_slope,
+            internal_bit_width=internal_bit_width, fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
+        )
         checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
         source_state_dict = checkpoint["network_weights"]
         model_state_dict = model.state_dict()
@@ -234,7 +290,9 @@ class QuantENet26_9_w24_s14w12_nonneg_block(nn.Module):
             f"QuantENet26_9_w24_s14w12_nonneg_block.from_pretrained({checkpoint_path}, "
             f"leaky_slope_map={'set' if leaky_slope_map else 'None'}): transferred {len(transferable)}/"
             f"{len(model_state_dict)} model keys ({n_shape_mismatch} shape mismatches, "
-            f"{len(missing)} left uninitialized -- expected for Brevitas-only quantizer params)."
+            f"{len(missing)} left uninitialized -- expected for Brevitas-only quantizer params, plus every "
+            f"real nonneg_block scalar regardless -- this checkpoint's own NonNegativePReLU(1) shape never "
+            f"matches a QuantReLU/QuantDecomposedLeakyAct site's own params either way)."
         )
         return model
 
@@ -250,7 +308,7 @@ if __name__ == "__main__":
         out = model(dummy)
     out_t = out.value if hasattr(out, "value") else out
     assert out_t.shape == (1, OUT_CHANNELS, 512, 512), f"got {tuple(out_t.shape)}"
-    print(f"Homogeneous 8-bit build+forward OK, output shape {tuple(out_t.shape)}")
+    print(f"Homogeneous W8A8 build+forward OK, output shape {tuple(out_t.shape)}")
 
     try:
         QuantENet26_9_w24_s14w12_nonneg_block({"initial": 8}, homogeneous_a)
@@ -260,13 +318,46 @@ if __name__ == "__main__":
     print("Missing-block-key validation: OK")
 
     from nnunetv2.nets.QuantENet import QuantDecomposedLeakyAct
+
     slope_map = {"initial": 0.5, "stage2.0": 0.25}
     slope_model = QuantENet26_9_w24_s14w12_nonneg_block(homogeneous_w, homogeneous_a, leaky_slope_map=slope_map)
     assert isinstance(slope_model.initial.act, QuantDecomposedLeakyAct), "initial should use the mapped slope"
     assert isinstance(slope_model.stage2[0].out_act, QuantDecomposedLeakyAct), "stage2.0 should use the mapped slope"
     assert not isinstance(slope_model.regular4[0].out_act, QuantDecomposedLeakyAct), "regular4 (decoder) must stay plain QuantReLU regardless of the map"
     assert not isinstance(slope_model.stage2[1].out_act, QuantDecomposedLeakyAct), "stage2.1 (unmapped) should stay plain QuantReLU"
-    print("leaky_slope_map wiring verified.")
+    print("leaky_slope_map wiring verified (mapped block -> QuantDecomposedLeakyAct, unmapped/decoder -> plain QuantReLU).")
+
+    # internal_bit_width: default (None) must be byte-for-byte unchanged
+    # behavior (all three quantizers at the real, low act_bit_width); when
+    # set, pre_quant/act_pos must move to the fixed internal bit-width while
+    # out_quant stays pinned at the real act_bit_width. QuantDecomposedLeakyAct
+    # has no top-level .act_quant (unlike plain QuantReLU/QuantIdentity
+    # blocks) -- must reach into .pre_quant/.act_pos/.out_quant individually.
+    low_bit_a = dict(homogeneous_a)
+    low_bit_a["initial"] = 2  # exercise a real low-bit boundary, not just W8A8
+
+    default_model = QuantENet26_9_w24_s14w12_nonneg_block(
+        homogeneous_w, low_bit_a, leaky_slope_map={"initial": 0.5},
+    )
+    leaky = default_model.initial.act
+    assert isinstance(leaky, QuantDecomposedLeakyAct)
+    assert leaky.pre_quant.act_quant.bit_width().item() == 2, "default internal_bit_width=None must leave pre_quant at act_bit_width (2)"
+    assert leaky.act_pos.act_quant.bit_width().item() == 2, "default internal_bit_width=None must leave act_pos at act_bit_width (2)"
+    assert leaky.out_quant.act_quant.bit_width().item() == 2, "out_quant is always act_bit_width regardless"
+    print("internal_bit_width default (None): pre_quant/act_pos/out_quant all at act_bit_width (2), unchanged -- OK")
+
+    internal8_model = QuantENet26_9_w24_s14w12_nonneg_block(
+        homogeneous_w, low_bit_a, leaky_slope_map={"initial": 0.5}, internal_bit_width=8,
+    )
+    leaky8 = internal8_model.initial.act
+    assert leaky8.pre_quant.act_quant.bit_width().item() == 8, "internal_bit_width=8 must force pre_quant to 8-bit"
+    assert leaky8.act_pos.act_quant.bit_width().item() == 8, "internal_bit_width=8 must force act_pos to 8-bit"
+    assert leaky8.out_quant.act_quant.bit_width().item() == 2, "out_quant must stay at the REAL act_bit_width (2), never overridden"
+    with torch.no_grad():
+        out8 = internal8_model(dummy)
+    out8_t = out8.value if hasattr(out8, "value") else out8
+    assert out8_t.shape == (1, OUT_CHANNELS, 512, 512), f"internal_bit_width=8: build+forward failed, got {tuple(out8_t.shape)}"
+    print("internal_bit_width=8 override verified: pre_quant/act_pos forced to 8-bit, out_quant stays at real act_bit_width (2), build+forward OK")
 
     fp32 = ENet(
         in_channels=IN_CHANNELS, out_channels=OUT_CHANNELS, channels=CHANNELS,
@@ -278,7 +369,7 @@ if __name__ == "__main__":
     for attr in ["regular1", "stage2", "stage3", "regular4", "regular5"]:
         fp32_len, quant_len = len(getattr(fp32, attr)), len(getattr(model, attr))
         assert fp32_len == quant_len, f"topology drift in {attr}: ENet={fp32_len} QuantENet26_9_w24_s14w12_nonneg_block={quant_len}"
-    assert isinstance(fp32.proj2_to_3, nn.Identity), "expected proj2_to_3 to be Identity (stage2/3 channels match)"
+    assert isinstance(fp32.proj2_to_3, nn.Identity), "expected proj2_to_3 to be Identity (stage2/3 channels match) -- BLOCK_NAMES assumes this"
     print("Topology parity vs ENet.py (26_9_w24_s14w12_nonneg_block config): OK")
 
     print("QuantENet26_9_w24_s14w12_nonneg_block self-test PASSED.")
