@@ -249,6 +249,46 @@ def step_force_dsp(model, cfg=None):
     return model
 
 
+def step_fix_weight_dtype_bipolar_bug(model, cfg=None):
+    """FINN's own MinimizeWeightBitWidth.minimize_weight_bit_width() picks
+    BIPOLAR based only on weights.min() (via DataType.get_smallest_possible),
+    without verifying weights.max() also fits BIPOLAR's exact {-1, +1} set.
+    Some HAWQ-quantized layers legitimately produce a {-1, 0} weight tensor
+    (a valid 2-bit-range encoding, not true bipolar) -- this crashes later in
+    step_hw_codegen's make_weight_file (array2hexstring assertion) with no
+    node identity in the traceback. Detect any such mis-assigned BIPOLAR
+    weightDataType and correct it to the smallest INT type that actually
+    fits every observed weight value."""
+    import numpy as np
+    from qonnx.core.datatype import DataType
+
+    n_fixed = 0
+    for node in model.graph.node:
+        if node.op_type not in WEIGHT_OP_TYPES:
+            continue
+        inst = getCustomOp(node)
+        wdt_name = inst.get_nodeattr("weightDataType")
+        if wdt_name != "BIPOLAR":
+            continue
+        w = model.get_initializer(node.input[1])
+        if w is None or np.all((w == -1.0) | (w == 1.0)):
+            continue
+        w_min, w_max = float(w.min()), float(w.max())
+        for cand in ["INT2", "INT3", "INT4", "INT5", "INT6", "INT7", "INT8"]:
+            dt = DataType[cand]
+            if dt.allowed(w_min) and dt.allowed(w_max):
+                inst.set_nodeattr("weightDataType", cand)
+                print(f"[step_fix_weight_dtype_bipolar_bug] {node.name}: BIPOLAR -> {cand} "
+                      f"(w_min={w_min}, w_max={w_max})")
+                n_fixed += 1
+                break
+        else:
+            raise RuntimeError(f"{node.name}: could not find a valid INT dtype for w_min={w_min}, w_max={w_max}")
+    if n_fixed:
+        print(f"[step_fix_weight_dtype_bipolar_bug] fixed {n_fixed} mis-assigned BIPOLAR weightDataType node(s)")
+    return model
+
+
 def _build_one_partition_with_folding_and_dsp(dataflow_model_filename, cfg, prefix, folding_config_file):
     part_cfg = dataclasses.replace(cfg, folding_config_file=folding_config_file)
 
@@ -259,6 +299,7 @@ def _build_one_partition_with_folding_and_dsp(dataflow_model_filename, cfg, pref
     kernel_model = step_target_fps_parallelization(kernel_model, part_cfg)
     kernel_model = step_apply_folding_config(kernel_model, part_cfg)
     kernel_model = step_minimize_bit_width(kernel_model, part_cfg)
+    kernel_model = step_fix_weight_dtype_bipolar_bug(kernel_model, part_cfg)
     kernel_model = step_force_dsp(kernel_model, part_cfg)
     kernel_model = step_hw_codegen(kernel_model, part_cfg)
     kernel_model = step_hw_ipgen(kernel_model, part_cfg)

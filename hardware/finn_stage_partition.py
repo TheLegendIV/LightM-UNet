@@ -137,7 +137,20 @@ def _shrink_boundary_past_sandwiched_nonhw(model, prev_boundary, boundary):
     (forbidden)."""
     nodes = list(model.graph.node)
     for idx in range(prev_boundary, boundary):
-        if not _is_fpgadataflow_node(nodes[idx]) and idx + 1 < boundary:
+        node = nodes[idx]
+        if _is_fpgadataflow_node(node):
+            continue
+        # only a genuine sandwich if it has a REAL HW predecessor (via an
+        # actual graph edge, not list-adjacency) already inside this same
+        # partition's range -- a bare top-level graph-input tap (e.g. the
+        # network's own input Transpose(s), which have no node predecessor
+        # at all) must NOT trigger this.
+        preds = model.find_direct_predecessors(node) or []
+        has_hw_pred_in_range = any(
+            _is_fpgadataflow_node(p) and prev_boundary <= _node_index(model, p) < idx
+            for p in preds
+        )
+        if has_hw_pred_in_range and idx + 1 < boundary:
             return idx + 1
     return boundary
 

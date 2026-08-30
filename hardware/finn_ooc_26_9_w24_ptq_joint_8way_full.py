@@ -137,20 +137,52 @@ def resolve_folding_entry(logical_name, per_layer):
     return None, None
 
 
-def derive_fallback_pe_simd(logical_name, per_layer):
+def derive_fallback_pe_simd(logical_name, per_layer, node=None):
     """For shortcut_proj/main_up nodes HAWQ's folding search never saw (they
     don't exist in the trainable model -- FINN-export-only additions):
-    shortcut_proj/main_up share the exact same MW as their block's reduce.0
-    (same block-input channel count) and the exact same MH as expand.0 (same
-    block-output channel count), so borrowing SIMD from reduce.0 and PE from
-    expand.0 is always divisibility-safe (both are already-valid divisors of
-    that same MW/MH) and far better tuned than a blind PE=SIMD=1 fallback."""
+    shortcut_proj/main_up were ASSUMED to share the exact same MW as their
+    block's reduce.0 and the exact same MH as expand.0, so borrowing SIMD from
+    reduce.0 and PE from expand.0 was assumed divisibility-safe. This turned
+    out to be FALSE for down2.shortcut_proj/up4.main_up/up5.main_up (their
+    real MH is the block's *internal* reduced channel count, not the block's
+    output channel count) -- so the naive PE/SIMD is clamped down to the
+    largest divisor of the node's ACTUAL MH/MW (read from the node itself)
+    that does not exceed the naive value, guaranteeing divisibility while
+    staying as close as possible to the intended parallelism."""
     prefix = logical_name.split(".")[0]
     reduce_entry = per_layer.get(f"{prefix}.reduce.0")
     expand_entry = per_layer.get(f"{prefix}.expand.0")
     if reduce_entry is not None and expand_entry is not None:
-        return {"PE": expand_entry["pe"], "SIMD": reduce_entry["simd"]}, f"{prefix}.{{reduce,expand}}.0"
+        pe, simd = expand_entry["pe"], reduce_entry["simd"]
+        source = f"{prefix}.{{reduce,expand}}.0"
+        if node is not None:
+            inst = getCustomOp(node)
+            mh, mw = _get_pe_simd_bounds(inst)
+            safe_pe, safe_simd = _largest_divisor_leq(mh, pe), _largest_divisor_leq(mw, simd)
+            if (safe_pe, safe_simd) != (pe, simd):
+                source += f" (clamped PE {pe}->{safe_pe} for MH={mh}, SIMD {simd}->{safe_simd} for MW={mw})"
+            pe, simd = safe_pe, safe_simd
+        return {"PE": pe, "SIMD": simd}, source
     return {"PE": 1, "SIMD": 1}, None
+
+
+def _largest_divisor_leq(n, cap):
+    cap = max(1, min(cap, n))
+    for d in range(cap, 0, -1):
+        if n % d == 0:
+            return d
+    return 1
+
+
+def _get_pe_simd_bounds(inst):
+    """Returns (mh_or_channels, mw_or_kernelsize) that PE/SIMD must divide,
+    covering both MVAU (MH/MW) and VVAU (Channels/Kernel) nodeattr schemas."""
+    try:
+        return inst.get_nodeattr("MH"), inst.get_nodeattr("MW")
+    except AttributeError:
+        pass
+    k_h, k_w = inst.get_nodeattr("Kernel")
+    return inst.get_nodeattr("Channels"), k_h * k_w
 
 
 def build_partition_folding_config(preamble_dir, partition_idx, sdp_node_name, partition_model_fn, logical_names, pool_names, per_layer, output_dir):
@@ -184,14 +216,27 @@ def build_partition_folding_config(preamble_dir, partition_idx, sdp_node_name, p
             # divisibility-safe PE/SIMD from the same block's reduce.0/expand.0
             # entries instead of trusting FINN's auto target-fps folding (which
             # has been observed to pick an invalid SIMD for these nodes).
-            fallback, source = derive_fallback_pe_simd(logical_name, per_layer)
+            fallback, source = derive_fallback_pe_simd(logical_name, per_layer, node)
             folding_config[node.name] = fallback
             print(f"[partition {partition_idx}]  {node.name:30s} {node.op_type:12s} <- {logical_name:25s} "
                   f"(derived from {source}) PE={fallback['PE']} SIMD={fallback['SIMD']}")
             continue
-        folding_config[node.name] = {"PE": entry["pe"], "SIMD": entry["simd"]}
+        pe, simd = entry["pe"], entry["simd"]
+        # Defensive clamp: the HAWQ folding search's per_layer entry may have been
+        # computed against a slightly different channel dimensioning than this
+        # actual graph's node -- if PE/SIMD wouldn't divide the node's real MH/MW,
+        # clamp down to the largest valid divisor instead of crashing later in
+        # MinimizeAccumulatorWidth.
+        inst = getCustomOp(node)
+        mh, mw = _get_pe_simd_bounds(inst)
+        safe_pe, safe_simd = _largest_divisor_leq(mh, pe), _largest_divisor_leq(mw, simd)
+        if (safe_pe, safe_simd) != (pe, simd):
+            print(f"[partition {partition_idx}]  {node.name:30s} {node.op_type:12s} <- {logical_name:25s} "
+                  f"({json_key:25s}) CLAMPED PE {pe}->{safe_pe} (MH={mh}), SIMD {simd}->{safe_simd} (MW={mw})")
+        pe, simd = safe_pe, safe_simd
+        folding_config[node.name] = {"PE": pe, "SIMD": simd}
         print(f"[partition {partition_idx}]  {node.name:30s} {node.op_type:12s} <- {logical_name:25s} "
-              f"({json_key:25s}) PE={entry['pe']} SIMD={entry['simd']}")
+              f"({json_key:25s}) PE={pe} SIMD={simd}")
     if unmatched:
         print(f"[partition {partition_idx}] WARNING: {len(unmatched)} unmatched logical names "
               f"(derived fallback PE/SIMD applied): {unmatched}")
@@ -208,6 +253,46 @@ def step_force_dsp(model, cfg=None):
     return model
 
 
+def step_fix_weight_dtype_bipolar_bug(model, cfg=None):
+    """FINN's own MinimizeWeightBitWidth.minimize_weight_bit_width() picks
+    BIPOLAR based only on weights.min() (via DataType.get_smallest_possible),
+    without verifying weights.max() also fits BIPOLAR's exact {-1, +1} set.
+    Some HAWQ-quantized layers legitimately produce a {-1, 0} weight tensor
+    (a valid 2-bit-range encoding, not true bipolar) -- this crashes later in
+    step_hw_codegen's make_weight_file (array2hexstring assertion) with no
+    node identity in the traceback. Detect any such mis-assigned BIPOLAR
+    weightDataType and correct it to the smallest INT type that actually
+    fits every observed weight value."""
+    import numpy as np
+    from qonnx.core.datatype import DataType
+
+    n_fixed = 0
+    for node in model.graph.node:
+        if node.op_type not in WEIGHT_OP_TYPES:
+            continue
+        inst = getCustomOp(node)
+        wdt_name = inst.get_nodeattr("weightDataType")
+        if wdt_name != "BIPOLAR":
+            continue
+        w = model.get_initializer(node.input[1])
+        if w is None or np.all((w == -1.0) | (w == 1.0)):
+            continue
+        w_min, w_max = float(w.min()), float(w.max())
+        for cand in ["INT2", "INT3", "INT4", "INT5", "INT6", "INT7", "INT8"]:
+            dt = DataType[cand]
+            if dt.allowed(w_min) and dt.allowed(w_max):
+                inst.set_nodeattr("weightDataType", cand)
+                print(f"[step_fix_weight_dtype_bipolar_bug] {node.name}: BIPOLAR -> {cand} "
+                      f"(w_min={w_min}, w_max={w_max})")
+                n_fixed += 1
+                break
+        else:
+            raise RuntimeError(f"{node.name}: could not find a valid INT dtype for w_min={w_min}, w_max={w_max}")
+    if n_fixed:
+        print(f"[step_fix_weight_dtype_bipolar_bug] fixed {n_fixed} mis-assigned BIPOLAR weightDataType node(s)")
+    return model
+
+
 def _build_one_partition_with_folding_and_dsp(dataflow_model_filename, cfg, prefix, folding_config_file):
     part_cfg = dataclasses.replace(cfg, folding_config_file=folding_config_file)
 
@@ -218,6 +303,7 @@ def _build_one_partition_with_folding_and_dsp(dataflow_model_filename, cfg, pref
     kernel_model = step_target_fps_parallelization(kernel_model, part_cfg)
     kernel_model = step_apply_folding_config(kernel_model, part_cfg)
     kernel_model = step_minimize_bit_width(kernel_model, part_cfg)
+    kernel_model = step_fix_weight_dtype_bipolar_bug(kernel_model, part_cfg)
     kernel_model = step_force_dsp(kernel_model, part_cfg)
     kernel_model = step_hw_codegen(kernel_model, part_cfg)
     kernel_model = step_hw_ipgen(kernel_model, part_cfg)
