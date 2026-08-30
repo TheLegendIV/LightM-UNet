@@ -162,9 +162,23 @@ class QuantDecomposedLeakyAct(nn.Module):
 
     def __init__(
         self, channels: int, act_bit_width: int, negative_slope: float, trainable_slope: bool = False,
-        internal_bit_width: int | None = None,
+        internal_bit_width: int | None = None, out_bit_width: int | None = None,
     ):
         super().__init__()
+        # OPT-IN, default-None (byte-for-byte identical to this parameter not
+        # existing). Unlike internal_bit_width above, this DOES override
+        # out_quant -- the real deployed boundary the next layer matches --
+        # decoupling it from the block's real, per-block act_bit_width. This
+        # is NOT a free hardware knob the way internal_bit_width is: raising
+        # out_quant's bit-width changes the actual number of MultiThreshold
+        # levels FINN must synthesize at this site (2**bits-1 thresholds per
+        # channel), so it directly trades LUT/BRAM budget for training
+        # stability. Exists purely for the PTQ feasibility sweep asking
+        # whether the leaky sites' collapse is fixable by precision alone
+        # (vs. requiring the quant_enabled=False warm-start recipe) --
+        # see compression/post-quantization/calibrate_noquant_to_decomposed.py's
+        # --out-bit-width sweep.
+        self.out_bit_width = out_bit_width
         # OPT-IN, default-None (act_bit_width is used for pre_quant/act_pos
         # too, preserving every existing caller's behavior unchanged). When
         # set, forces pre_quant/act_pos -- this module's own TWO INTERNAL
@@ -205,7 +219,10 @@ class QuantDecomposedLeakyAct(nn.Module):
         else:
             self.register_buffer("alpha", torch.full((1, channels, 1, 1), float(negative_slope)))
             self.register_buffer("one_minus_alpha", torch.full((1, channels, 1, 1), 1.0 - float(negative_slope)))
-        self.out_quant = qnn.QuantIdentity(bit_width=act_bit_width, act_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
+        self.out_quant = qnn.QuantIdentity(
+            bit_width=out_bit_width if out_bit_width is not None else act_bit_width,
+            act_quant=Int8ActPerTensorFloat, return_quant_tensor=True,
+        )
         # OPT-IN, default-True (preserves every existing caller's behavior
         # unchanged unless explicitly toggled via set_quant_enabled below).
         # When False: skip pre_quant/act_pos/out_quant entirely and compute
@@ -445,6 +462,7 @@ class QuantFusedLeakyAct(nn.Module):
 def _quant_block_act(
     channels: int, act_bit_width: int, negative_slope: float | None, trainable_slope: bool = False,
     internal_bit_width: int | None = None, fused_leaky: bool = False, alpha_bit_width: int = 8,
+    out_bit_width: int | None = None,
 ) -> nn.Module:
     """Picks plain QuantReLU (negative_slope=None, the default -- matches
     every existing QuantENet config), the FINN-verified decomposed-leaky
@@ -463,6 +481,7 @@ def _quant_block_act(
         )
     return QuantDecomposedLeakyAct(
         channels, act_bit_width, negative_slope, trainable_slope=trainable_slope, internal_bit_width=internal_bit_width,
+        out_bit_width=out_bit_width,
     )
 
 
@@ -471,6 +490,7 @@ class QuantInitialBlock(nn.Module):
         self, in_channels: int, out_channels: int, weight_bit_width: int, act_bit_width: int,
         negative_slope: float | None = None, trainable_slope: bool = False,
         internal_bit_width: int | None = None, fused_leaky: bool = False, alpha_bit_width: int = 8,
+        out_bit_width: int | None = None,
     ):
         super().__init__()
         if out_channels <= in_channels:
@@ -481,7 +501,7 @@ class QuantInitialBlock(nn.Module):
         self.bn = nn.BatchNorm2d(out_channels)
         self.act = _quant_block_act(
             out_channels, act_bit_width, negative_slope, trainable_slope=trainable_slope, internal_bit_width=internal_bit_width,
-            fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
+            fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width, out_bit_width=out_bit_width,
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -496,12 +516,13 @@ class QuantRegularBottleneck(nn.Module):
         asymmetric: bool = False, dropout_p: float = 0.1, use_dsc: bool = False,
         separable_dilated: bool = False, negative_slope: float | None = None, trainable_slope: bool = False,
         internal_bit_width: int | None = None, fused_leaky: bool = False, alpha_bit_width: int = 8,
+        out_bit_width: int | None = None,
     ):
         super().__init__()
         internal_channels = max(1, channels // internal_ratio)
         _act = lambda ch: _quant_block_act(  # noqa: E731
             ch, act_bit_width, negative_slope, trainable_slope=trainable_slope, internal_bit_width=internal_bit_width,
-            fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
+            fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width, out_bit_width=out_bit_width,
         )
 
         self.reduce = nn.Sequential(
@@ -618,13 +639,13 @@ class QuantDownsamplingBottleneck(nn.Module):
         self, in_channels: int, out_channels: int, weight_bit_width: int, act_bit_width: int, internal_ratio: int = 4,
         dropout_p: float = 0.01, use_strided: bool = True, negative_slope: float | None = None,
         trainable_slope: bool = False, internal_bit_width: int | None = None,
-        fused_leaky: bool = False, alpha_bit_width: int = 8,
+        fused_leaky: bool = False, alpha_bit_width: int = 8, out_bit_width: int | None = None,
     ):
         super().__init__()
         internal_channels = max(1, out_channels // internal_ratio)
         _act = lambda ch: _quant_block_act(  # noqa: E731
             ch, act_bit_width, negative_slope, trainable_slope=trainable_slope, internal_bit_width=internal_bit_width,
-            fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
+            fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width, out_bit_width=out_bit_width,
         )
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2, return_indices=True)
         if use_strided:

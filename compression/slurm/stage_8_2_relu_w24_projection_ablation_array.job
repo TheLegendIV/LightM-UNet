@@ -1,0 +1,175 @@
+#!/bin/bash
+#SBATCH --job-name=stage_8_2_relu_w24_reg_ablation
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=05:00:00
+#SBATCH --array=0-2
+#SBATCH --output=logs/%x_%a_%j.out
+#SBATCH --error=logs/%x_%a_%j.err
+
+set -e
+
+# S8.2 (nnUNetTrainerENet_8_2_relu, dice=0.8218, compression/results.csv's
+# own 8_reginterleaved_isolation row: channels 4,16,32,32,16,4, ReLU,
+# dsc_no_projection=1 unscoped, context_pattern=dense_dilation_reg_
+# interleaved) re-run at S26_9's own widened context (channels 4,12,24,12,4
+# instead of S8.2's native width -- context width 24 instead of 32, same
+# "_w24" naming convention 26_5_w24/26_9_w24 already use). All 3 tasks keep
+# S8.2's own defining traits unchanged (ReLU, dsc_no_projection=1 unscoped)
+# -- the axis varied is whether/where the context stage's dilated slots get
+# a real projected RegularBottleneck (full-rank inner conv, real reduce/
+# expand, restoring genuine cross-channel mixing at that rate) instead of
+# DSCNoProjectionBottleneck (no proj + DSC, the plain dense_dilation
+# default under dsc_no_projection=1 -- depthwise-only, no cross-channel
+# mixing except via the trailing pointwise 1x1):
+#
+#   0: 8_2_relu_w24_reg -- context_pattern=dense_dilation_reg_interleaved
+#      (S8.2's own pattern: [reg,d2,d4,d8,d16] x2 + trailing reg, 11 slots
+#      -- see ENet.py's DENSE_DILATION_REG_INTERLEAVED_PATTERN), bottleneck
+#      depth 11 (native for this pattern). The reg bookends are plain
+#      (non-dilated) projected RegularBottlenecks, separate slots from the
+#      d2/d4/d8/d16 DSC-no-proj ones.
+#   1: 8_2_relu_w24_no_reg_d2_projected -- context_pattern=
+#      dense_dilation_d2_projected (NEW pattern, see ENet.py): plain
+#      dense_dilation's own 8-slot layout (d2,d4,d8,d16 x2, no separate reg
+#      slots at all), but the d=2 rate ITSELF becomes a real, DILATED
+#      projected RegularBottleneck (needed a small ENet.py fix: the
+#      existing reg_bottleneck sentinel used to hardcode dilation=1,
+#      couldn't represent "a dilated slot that's ALSO projected" -- now
+#      reads dilation/padding off the slot dict when present, byte-
+#      identical for every existing reg-bookend pattern which never sets
+#      them). d4/d8/d16 stay DSCNoProjectionBottleneck. Bottleneck depth 8
+#      (unchanged from plain dense_dilation -- no extra slots added, d=2's
+#      own slot just changes CLASS).
+#   2: 8_2_relu_w24_no_reg_d8d16_projected -- context_pattern=
+#      dense_dilation_d8_d16_projected (NEW pattern): same idea, but d=8
+#      AND d=16 become real dilated projected RegularBottlenecks instead,
+#      d=2/d=4 stay DSCNoProjectionBottleneck (no proj + DSC, unchanged).
+#      Bottleneck depth 8 (unchanged).
+#
+# None of the 3 tasks has a matching results.csv row yet. All 3 verified:
+# ENet.py's own self-test suite passes unchanged (112+ existing configs,
+# confirming the reg_bottleneck dilation fix is backward-compatible), a
+# targeted check confirms both new patterns build the exact intended block
+# type + dilation rate at every stage2 slot, and all 3 smoke-tested (1
+# epoch, docker, ENET_MAX_EPOCHS_TO_RUN=1) with a clean exit code -- see
+# this session's own transcript for both.
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+
+CONFIG_NAMES=(8_2_relu_w24_reg 8_2_relu_w24_no_reg_d2_projected 8_2_relu_w24_no_reg_d8d16_projected)
+CONTEXT_PATTERN_ARR=(dense_dilation_reg_interleaved dense_dilation_d2_projected dense_dilation_d8_d16_projected)
+BOTTLENECKS_ARR=("4,11,11,2,1" "4,8,8,2,1" "4,8,8,2,1")
+
+TASK_ID=${SLURM_ARRAY_TASK_ID}
+CONFIG_NAME="${CONFIG_NAMES[$TASK_ID]}"
+RUN_NAME="${CONFIG_NAME}"
+TRAINER_CLASS="nnUNetTrainerENet"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- ENet trainer knobs -- S8.2 at width 24, one thing changed per task ------
+export ENET_CHANNELS="4,12,24,12,4"
+export ENET_BOTTLENECKS="${BOTTLENECKS_ARR[$TASK_ID]}"
+export ENET_CONTEXT_PATTERN="${CONTEXT_PATTERN_ARR[$TASK_ID]}"
+export ENET_DECODER_TYPE="upsample_conv"
+export ENET_USE_PRELU=0
+export ENET_USE_DILATED=1
+export ENET_USE_ASYMMETRIC=0
+export ENET_USE_STRIDED=1
+export ENET_USE_DSC=0
+export ENET_DSC_NO_PROJECTION=1
+export ENET_DSC_NO_PROJECTION_CONTEXT_ONLY=0
+export ENET_REG_BOOKEND_DSC=0
+export ENET_EPOCHS=150
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Array task: ${TASK_ID} -> ${RUN_NAME}"
+echo "ENET_CONTEXT_PATTERN=${ENET_CONTEXT_PATTERN} ENET_BOTTLENECKS=${ENET_BOTTLENECKS}"
+echo "Output folder: ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Checking for a COMPLETED checkpoint for ${RUN_NAME} ==="
+# Only checkpoint_final.pth counts as "already trained" -- checkpoint_best.pth
+# is written as early as epoch 0 (see stage_8_reginterleaved_isolation_
+# array.job's own RETRY NOTES for the incident this guard was fixed for).
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    echo "checkpoint_final.pth already exists at ${ENET_OUTPUT_FOLDER} -- skipping training, going straight to collect_results.py."
+else
+    echo "=== Start training: ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+    echo "Training finished for ${RUN_NAME}."
+
+    echo "=== Archiving checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+fi
+
+echo "=== Collecting results into compression/results.csv ==="
+cd "$HOME/LightM-UNet"
+python compression/collect_results.py \
+    --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+    --stage 8_2_relu_w24_reg_ablation \
+    --dataset-name "${DATASET_NAME}" \
+    --dataset-id "${DATASET_ID}" \
+    --channels "${ENET_CHANNELS}" \
+    --bottlenecks "${ENET_BOTTLENECKS}" \
+    --decoder-type "${ENET_DECODER_TYPE}" \
+    --use-dilated "${ENET_USE_DILATED}" \
+    --use-asymmetric "${ENET_USE_ASYMMETRIC}" \
+    --use-strided "${ENET_USE_STRIDED}" \
+    --use-dsc "${ENET_USE_DSC}" \
+    --context-pattern "${ENET_CONTEXT_PATTERN}" \
+    --use-prelu "${ENET_USE_PRELU}" \
+    --dsc-no-projection "${ENET_DSC_NO_PROJECTION}" \
+    --dsc-no-projection-context-only "${ENET_DSC_NO_PROJECTION_CONTEXT_ONLY}" \
+    --reg-bookend-dsc "${ENET_REG_BOOKEND_DSC}" \
+    --trainer-class "${TRAINER_CLASS}"
+
+echo "Done: ${RUN_NAME}."

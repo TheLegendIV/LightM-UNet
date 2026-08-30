@@ -88,11 +88,12 @@ def dump_layer_geometry(model: nn.Module, input_hw: tuple[int, int]) -> list[Lay
             kh, kw = _pair(module.kernel_size)
             sh, sw = _pair(module.stride)
             dh, dw = _pair(getattr(module, "dilation", 1))
+            groups = getattr(module, "groups", 1)
             geometries.append(LayerGeometry(
                 op_type=op_type, name=name, stage="network",
                 cin=x.shape[1], hin=x.shape[2], win=x.shape[3],
                 cout=output.shape[1], hout=output.shape[2], wout=output.shape[3],
-                kh=kh, kw=kw, sh=sh, sw=sw, dh=dh, dw=dw,
+                kh=kh, kw=kw, sh=sh, sw=sw, dh=dh, dw=dw, groups=groups,
             ))
         return hook
 

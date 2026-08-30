@@ -191,6 +191,21 @@ class LayerGeometry:
     sw: int
     dh: int = 1
     dw: int = 1
+    groups: int = 1
+    # groups=1 (default) is byte-for-byte identical to this field not
+    # existing. groups=cin=cout is a true depthwise conv (see ENet.py's
+    # DSCNoProjectionBottleneck/RegularBottleneck's use_dsc branch): each
+    # output channel reduces over only cin/groups input channels, NOT the
+    # full cin -- previously silently treated as a DENSE conv (Q=cin*kh*kw
+    # instead of the real (cin/groups)*kh*kw), overstating LUT/BRAM/PE/SIMD
+    # by a factor of ~groups for every depthwise layer in any DSC/
+    # dsc_no_projection architecture (S8/S10/S13/S15/S16/S19-DSC variants,
+    # 22_dsc_projected). Does NOT affect swu_bram18 (the sliding-window
+    # buffer still holds all cin input channels' worth of pixels regardless
+    # of grouping) or any architecture that never sets groups>1 (e.g. the
+    # 26_9_w24_s14w12_nonneg_block family, which uses separable_dilated's
+    # (k,1)+(1,k) DENSE factoring, not grouped convs -- unaffected by this
+    # fix either way).
 
 
 def _k_eff(kh: int, dh: int) -> int:
@@ -199,7 +214,7 @@ def _k_eff(kh: int, dh: int) -> int:
 
 def _pq_for_folding(layer: LayerGeometry, folding: Folding) -> tuple[int, int]:
     if folding == FOLDING_UNFOLDED:
-        return layer.cin * layer.kh * layer.kw, layer.cout  # Q, P: whole reduction + all output channels/cycle
+        return (layer.cin // layer.groups) * layer.kh * layer.kw, layer.cout  # Q, P: whole reduction + all output channels/cycle
     if folding == FOLDING_SERIAL:
         return 1, 1  # Q, P: one reduction element, one output channel/cycle -- minimum resource, maximum latency
     raise ValueError(f"Unknown folding {folding!r}, expected one of {FOLDING_UNFOLDED!r}/{FOLDING_SERIAL!r}.")
@@ -210,7 +225,7 @@ def max_pe(layer: LayerGeometry) -> int:
 
 
 def max_simd(layer: LayerGeometry) -> int:
-    return layer.cin * layer.kh * layer.kw
+    return (layer.cin // layer.groups) * layer.kh * layer.kw
 
 
 def divisors(n: int) -> list[int]:
@@ -259,7 +274,7 @@ def conv_cost_pe_simd(
     # SWU depends on M/kernel/stride/dilation/channels/A ONLY -- NOT on P or Q,
     # i.e. NOT on folding. Identical across every (PE, SIMD) choice.
     swu_bram18 = M * (math.ceil(k_eff / layer.sh) + 1) * math.ceil(layer.sh * layer.win / 512) * math.ceil(layer.cin * A / 36)
-    omega = (layer.kh * layer.kw * layer.cin * layer.cout) / (Q * P)
+    omega = (layer.kh * layer.kw * (layer.cin // layer.groups) * layer.cout) / (Q * P)
     mem_width = Q * W * P
     if ram_style == RAM_STYLE_ULTRA:
         wm_bram18 = 0

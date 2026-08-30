@@ -70,6 +70,13 @@ def main() -> None:
     parser.add_argument("--block-bits-file", required=True, type=Path)
     parser.add_argument("--leaky-slope-map-file", required=True, type=Path)
     parser.add_argument("--internal-bit-width", type=int, default=8)
+    parser.add_argument("--out-bit-width", type=int, default=None,
+                         help="Overrides out_quant's bit-width network-wide (default: real per-block act_bit_width, "
+                              "unchanged). Diagnostic-only knob for the PTQ feasibility sweep asking whether the "
+                              "leaky sites' collapse is fixable by precision alone at the ONE boundary that actually "
+                              "propagates forward (unlike --internal-bit-width, which only touches pre_quant/act_pos "
+                              "and is free in hardware) -- NOT free: raising this changes the real number of "
+                              "MultiThreshold levels FINN would need to synthesize at every leaky site.")
     parser.add_argument("--plans-name", default="nnUNetPlans")
     parser.add_argument("--configuration", default="2d")
     parser.add_argument("--fold", type=int, default=0)
@@ -91,7 +98,7 @@ def main() -> None:
     print(f"Loading source (quant_enabled=False trained) checkpoint: {source_checkpoint_path}")
     quant_model = QuantENet26_9_w24_s14w12_nonneg_block.from_pretrained(
         source_checkpoint_path, block_bits["stage_weight_bits"], block_bits["stage_act_bits"], leaky_slope_map,
-        trainable_slope=True, internal_bit_width=args.internal_bit_width,
+        trainable_slope=True, internal_bit_width=args.internal_bit_width, out_bit_width=args.out_bit_width,
     )
 
     print(f"Calibrating on real preprocessed images (device={args.device})...")

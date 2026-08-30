@@ -65,6 +65,46 @@ DENSE_DILATION_PATTERN: tuple[dict, ...] = (
     {"padding": 16, "dilation": 16},
 )
 
+# DENSE_DILATION_PATTERN, but the d=2 slot ALSO carries "reg_bottleneck":
+# True -- under dsc_no_projection=True this makes d=2 a real, DILATED
+# RegularBottleneck (real reduce/expand projection, full-rank inner conv,
+# restoring genuine cross-channel mixing at that rate) instead of a
+# DSCNoProjectionBottleneck, while d=4/d=8/d=16 stay DSCNoProjectionBottleneck
+# (no projection, depthwise+pointwise) same as plain dense_dilation. Needs
+# _make_context_stage's dsc_no_projection branch to read dilation/padding
+# off the reg_bottleneck slot itself (existing reg_bottleneck slots
+# elsewhere, e.g. DENSE_DILATION_REG_INTERLEAVED_PATTERN's bookends, never
+# set dilation, so they still default to 1/non-dilated, byte-identical to
+# before this pattern was added). Only meaningful under dsc_no_projection=
+# True; under dsc_no_projection=False the "reg_bottleneck" key alone (with
+# no other change) has no distinguishable effect vs plain dense_dilation --
+# RegularBottleneck is already what every slot builds there.
+DENSE_DILATION_D2_PROJECTED_PATTERN: tuple[dict, ...] = (
+    {"reg_bottleneck": True, "padding": 2, "dilation": 2},
+    {"padding": 4, "dilation": 4},
+    {"padding": 8, "dilation": 8},
+    {"padding": 16, "dilation": 16},
+    {"reg_bottleneck": True, "padding": 2, "dilation": 2},
+    {"padding": 4, "dilation": 4},
+    {"padding": 8, "dilation": 8},
+    {"padding": 16, "dilation": 16},
+)
+
+# Same idea as DENSE_DILATION_D2_PROJECTED_PATTERN, but the OTHER two rates
+# (d=8, d=16) get the real-RegularBottleneck-with-projection treatment
+# instead, and d=2/d=4 stay DSCNoProjectionBottleneck (no proj + DSC)
+# unchanged from plain dense_dilation.
+DENSE_DILATION_D8_D16_PROJECTED_PATTERN: tuple[dict, ...] = (
+    {"padding": 2, "dilation": 2},
+    {"padding": 4, "dilation": 4},
+    {"reg_bottleneck": True, "padding": 8, "dilation": 8},
+    {"reg_bottleneck": True, "padding": 16, "dilation": 16},
+    {"padding": 2, "dilation": 2},
+    {"padding": 4, "dilation": 4},
+    {"reg_bottleneck": True, "padding": 8, "dilation": 8},
+    {"reg_bottleneck": True, "padding": 16, "dilation": 16},
+)
+
 # "Schedule A" from compression/gridding_investigation/: replaces DENSE_
 # DILATION_PATTERN's (2,4,8,16) -- every consecutive pair of which shares a
 # factor of 2 -- with the fully pairwise-coprime (1,5,7,17). Same sum (30),
@@ -917,7 +957,8 @@ class ENet(nn.Module):
         valid_context_patterns = (
             "default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_lead1",
             "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing", "d16_reg_interleaved",
-            "dense_dilation_reg_interleaved_double_mid",
+            "dense_dilation_reg_interleaved_double_mid", "dense_dilation_d2_projected",
+            "dense_dilation_d8_d16_projected",
         )
         if context_pattern not in valid_context_patterns:
             raise ValueError(f"context_pattern must be one of {valid_context_patterns}, got {context_pattern!r}.")
@@ -1185,6 +1226,10 @@ class ENet(nn.Module):
             pattern = D16_REG_INTERLEAVED_PATTERN
         elif self.context_pattern == "dense_dilation_reg_interleaved_double_mid":
             pattern = DENSE_DILATION_REG_INTERLEAVED_DOUBLE_MID_PATTERN
+        elif self.context_pattern == "dense_dilation_d2_projected":
+            pattern = DENSE_DILATION_D2_PROJECTED_PATTERN
+        elif self.context_pattern == "dense_dilation_d8_d16_projected":
+            pattern = DENSE_DILATION_D8_D16_PROJECTED_PATTERN
         else:
             pattern = CONTEXT_STAGE_PATTERN
 
@@ -1205,10 +1250,19 @@ class ENet(nn.Module):
                     # DSC WITH the projection kept, testing whether the
                     # same factoring that (with NO projection) helps the
                     # dilated slots also pays off here once projection is
-                    # retained.
+                    # retained. dilation/padding default to 1 (every
+                    # existing reg_bottleneck slot -- the reg-interleaved
+                    # family's bookends -- carries no dilation key at all,
+                    # so this stays byte-identical to before DENSE_DILATION_
+                    # D2_PROJECTED_PATTERN/DENSE_DILATION_D8_D16_PROJECTED_
+                    # PATTERN started setting both keys alongside
+                    # reg_bottleneck to make a specific dilation rate a
+                    # real, DILATED projected RegularBottleneck instead of
+                    # a plain non-dilated spacer block).
                     ops.append(RegularBottleneck(
                         channels, dropout_p=0.1, use_dsc=self.reg_bookend_dsc, relu=not self.use_prelu,
                         double_projections=self.double_projections, prelu_variant=self.prelu_variant,
+                        dilation=kwargs.get("dilation", 1), padding=kwargs.get("padding", 1),
                     ))
                     continue
                 if kwargs.get("asymmetric", False):

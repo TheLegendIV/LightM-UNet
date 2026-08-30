@@ -358,6 +358,9 @@ class nnUNetTrainerENetQuant26_9_w24_s14w12_nonneg_blockBlock(nnUNetTrainerENet)
         fused_leaky = os.environ.get("ENET26_9_W24_S14W12_NONNEG_BLOCK_FUSED_LEAKY", "0") != "0"
         alpha_bit_width = int(os.environ.get("ENET26_9_W24_S14W12_NONNEG_BLOCK_ALPHA_BIT_WIDTH", "8"))
 
+        out_bits_str = os.environ.get("ENET26_9_W24_S14W12_NONNEG_BLOCK_LEAKY_OUT_BITS")
+        out_bit_width = int(out_bits_str) if out_bits_str else None
+
         gumbel_slope = os.environ.get("ENET26_9_W24_S14W12_NONNEG_BLOCK_GUMBEL_SLOPE", "0") != "0"
 
         pretrained_checkpoint = os.environ.get("ENET26_9_W24_S14W12_NONNEG_BLOCK_PRETRAINED_CHECKPOINT")
@@ -365,13 +368,13 @@ class nnUNetTrainerENetQuant26_9_w24_s14w12_nonneg_blockBlock(nnUNetTrainerENet)
             model = QuantENet26_9_w24_s14w12_nonneg_block.from_pretrained(
                 pretrained_checkpoint, block_bits["stage_weight_bits"], block_bits["stage_act_bits"], leaky_slope_map,
                 trainable_slope=trainable_slope, internal_bit_width=internal_bit_width,
-                fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
+                fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width, out_bit_width=out_bit_width,
             )
         else:
             model = QuantENet26_9_w24_s14w12_nonneg_block(
                 block_bits["stage_weight_bits"], block_bits["stage_act_bits"], leaky_slope_map,
                 trainable_slope=trainable_slope, internal_bit_width=internal_bit_width,
-                fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
+                fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width, out_bit_width=out_bit_width,
             )
 
         if gumbel_slope:
@@ -382,6 +385,28 @@ class nnUNetTrainerENetQuant26_9_w24_s14w12_nonneg_blockBlock(nnUNetTrainerENet)
             for module in model.modules():
                 if isinstance(module, QuantDecomposedLeakyAct):
                     module.enable_gumbel_slope(levels=_GUMBEL_LEVELS, tau=_GUMBEL_TAU0)
+
+        # QuantDecomposedLeakyAct defaults to quant_enabled=True at __init__.
+        # During TRAINING, on_epoch_start() below re-derives the correct
+        # value every epoch from QUANT_LEAKY_FROM_EPOCH, including epoch 0
+        # (called before the first training forward pass), so this branch is
+        # redundant-but-harmless there. During pure INFERENCE (e.g.
+        # nnUNetv2_predict_from_modelfolder), on_epoch_start() never fires at
+        # all -- so without this, a freshly-built model here would silently
+        # stay at quant_enabled=True regardless of the env var, and then fail
+        # to load a quant_enabled=False-trained checkpoint: Brevitas's
+        # PARAMETER_FROM_STATS scaling never materializes pre_quant/act_pos/
+        # out_quant's own scale nn.Parameter until the module is actually
+        # forward-called at least once, so a checkpoint trained entirely with
+        # quant_enabled=False (those submodules never invoked) genuinely
+        # lacks those state_dict keys. Applying epoch 0's own state here
+        # matches a fresh reconstruction to what the checkpoint actually is.
+        quant_leaky_from_epoch = int(
+            os.environ.get("ENET26_9_W24_S14W12_NONNEG_BLOCK_QUANT_LEAKY_FROM_EPOCH", "0")
+        )
+        for module in model.modules():
+            if isinstance(module, QuantDecomposedLeakyAct):
+                module.set_quant_enabled(0 >= quant_leaky_from_epoch)
 
         prune_blocks_str = os.environ.get("ENET26_9_W24_S14W12_NONNEG_BLOCK_PRUNE_BLOCKS")
         if prune_blocks_str:

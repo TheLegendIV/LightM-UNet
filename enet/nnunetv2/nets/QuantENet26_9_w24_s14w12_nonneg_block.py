@@ -108,6 +108,7 @@ def _make_block_shallow_stage(
     channels: int, n_ops: int, block_weight_bits: dict[str, int], block_act_bits: dict[str, int], dropout_p: float,
     name_prefix: str, slope_map: dict[str, float], trainable_slope: bool = True,
     internal_bit_width: int | None = None, fused_leaky: bool = False, alpha_bit_width: int = 8,
+    out_bit_width: int | None = None,
 ) -> nn.Sequential:
     """regular1/regular4/regular5: plain QuantRegularBottleneck repeats,
     each with its OWN (w, a, negative_slope) looked up by
@@ -126,7 +127,7 @@ def _make_block_shallow_stage(
             channels, block_weight_bits[f"{name_prefix}.{i}"], block_act_bits[f"{name_prefix}.{i}"],
             dropout_p=dropout_p, use_dsc=False, negative_slope=slope_map.get(f"{name_prefix}.{i}"),
             trainable_slope=trainable_slope, internal_bit_width=internal_bit_width,
-            fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
+            fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width, out_bit_width=out_bit_width,
         )
         for i in range(n_ops)
     ])
@@ -135,7 +136,7 @@ def _make_block_shallow_stage(
 def _make_block_context_stage(
     channels: int, n_ops: int, block_weight_bits: dict[str, int], block_act_bits: dict[str, int], name_prefix: str,
     slope_map: dict[str, float], trainable_slope: bool = True, internal_bit_width: int | None = None,
-    fused_leaky: bool = False, alpha_bit_width: int = 8,
+    fused_leaky: bool = False, alpha_bit_width: int = 8, out_bit_width: int | None = None,
 ) -> nn.Sequential:
     """stage2/stage3 under context_pattern="dense_dilation" (every slot
     dilated, 2/4/8/16 repeated twice over 8 slots, separable_dilated=True --
@@ -152,7 +153,8 @@ def _make_block_context_stage(
             channels, block_weight_bits[block_name], block_act_bits[block_name],
             dropout_p=0.1, use_dsc=False, separable_dilated=SEPARABLE_DILATED,
             negative_slope=slope_map.get(block_name), trainable_slope=trainable_slope,
-            internal_bit_width=internal_bit_width, fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width, **kwargs,
+            internal_bit_width=internal_bit_width, fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
+            out_bit_width=out_bit_width, **kwargs,
         ))
     return nn.Sequential(*ops)
 
@@ -170,6 +172,7 @@ class QuantENet26_9_w24_s14w12_nonneg_block(nn.Module):
         self, block_weight_bits: dict[str, int], block_act_bits: dict[str, int],
         leaky_slope_map: dict[str, float] | None = None, trainable_slope: bool = True,
         internal_bit_width: int | None = None, fused_leaky: bool = False, alpha_bit_width: int = 8,
+        out_bit_width: int | None = None,
     ):
         super().__init__()
         missing_w = [b for b in BLOCK_NAMES if b not in block_weight_bits]
@@ -190,6 +193,7 @@ class QuantENet26_9_w24_s14w12_nonneg_block(nn.Module):
         self.initial = QuantInitialBlock(
             IN_CHANNELS, initial_ch, w, a, negative_slope=slope_map.get("initial"), trainable_slope=trainable_slope,
             internal_bit_width=internal_bit_width, fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
+            out_bit_width=out_bit_width,
         )
 
         w, a = block_weight_bits["down1"], block_act_bits["down1"]
@@ -197,11 +201,12 @@ class QuantENet26_9_w24_s14w12_nonneg_block(nn.Module):
             initial_ch, stage1_ch, w, a, dropout_p=0.01, use_strided=USE_STRIDED,
             negative_slope=slope_map.get("down1"), trainable_slope=trainable_slope,
             internal_bit_width=internal_bit_width, fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
+            out_bit_width=out_bit_width,
         )
         self.regular1 = _make_block_shallow_stage(
             stage1_ch, n_stage1, block_weight_bits, block_act_bits, 0.01, "regular1", slope_map,
             trainable_slope=trainable_slope, internal_bit_width=internal_bit_width,
-            fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
+            fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width, out_bit_width=out_bit_width,
         )
 
         w, a = block_weight_bits["down2"], block_act_bits["down2"]
@@ -209,16 +214,17 @@ class QuantENet26_9_w24_s14w12_nonneg_block(nn.Module):
             stage1_ch, stage23_ch, w, a, dropout_p=0.1, use_strided=USE_STRIDED,
             negative_slope=slope_map.get("down2"), trainable_slope=trainable_slope,
             internal_bit_width=internal_bit_width, fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
+            out_bit_width=out_bit_width,
         )
         self.stage2 = _make_block_context_stage(
             stage23_ch, n_stage2, block_weight_bits, block_act_bits, "stage2", slope_map,
             trainable_slope=trainable_slope, internal_bit_width=internal_bit_width,
-            fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
+            fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width, out_bit_width=out_bit_width,
         )
         self.stage3 = _make_block_context_stage(
             stage23_ch, n_stage3, block_weight_bits, block_act_bits, "stage3", slope_map,
             trainable_slope=trainable_slope, internal_bit_width=internal_bit_width,
-            fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
+            fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width, out_bit_width=out_bit_width,
         )
 
         # Decoder (regular4/regular5/up4/up5) is always plain QuantReLU,
@@ -265,6 +271,7 @@ class QuantENet26_9_w24_s14w12_nonneg_block(nn.Module):
         cls, checkpoint_path: str | Path, block_weight_bits: dict[str, int], block_act_bits: dict[str, int],
         leaky_slope_map: dict[str, float] | None = None, trainable_slope: bool = True,
         internal_bit_width: int | None = None, fused_leaky: bool = False, alpha_bit_width: int = 8,
+        out_bit_width: int | None = None,
     ) -> "QuantENet26_9_w24_s14w12_nonneg_block":
         """Builds the quantized model, then transfers FP32 conv/BN weights
         from an nnU-Net ENet checkpoint by direct name+shape match
@@ -272,6 +279,7 @@ class QuantENet26_9_w24_s14w12_nonneg_block(nn.Module):
         model = cls(
             block_weight_bits, block_act_bits, leaky_slope_map, trainable_slope=trainable_slope,
             internal_bit_width=internal_bit_width, fused_leaky=fused_leaky, alpha_bit_width=alpha_bit_width,
+            out_bit_width=out_bit_width,
         )
         checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
         source_state_dict = checkpoint["network_weights"]
