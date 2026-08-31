@@ -60,6 +60,23 @@ STAGE_MODULE_ATTRS = {
 
 
 class nnUNetTrainerCombinedQuantENet_8_2_relu_no_reg_d2_projected(nnUNetTrainerENet):
+    def load_checkpoint(self, filename_or_checkpoint) -> None:
+        """Same Brevitas parameter-scaling re-materialization quirk
+        nnUNetTrainerENetQuant.py/nnUNetTrainerENetQuant26_5_w24Block.py/
+        nnUNetTrainerENetQuant26_9_w24_s14w12_nonneg_blockBlock.py already
+        document and fix -- only bites a resumed (--c) run. Confirmed by
+        direct repro this session: resuming via --c from a checkpoint
+        calibrate_8_2_relu_no_reg_d2_projected.py saved on CPU threw
+        "Expected all tensors to be on the same device, but found at least
+        two devices, cuda:0 and cpu" inside Brevitas's own quant conv
+        forward (int_torch_handler.py's quant_output_scale_impl) the moment
+        real training resumed -- load_state_dict re-creates/re-attaches
+        some of Brevitas's own scale parameters at whatever device the
+        SAVED tensor was on, not the model's already-.to(device) state, so
+        an explicit re-move after loading is required."""
+        super().load_checkpoint(filename_or_checkpoint)
+        self.network = self.network.to(self.device)
+
     @staticmethod
     def build_network_architecture(
         plans_manager: PlansManager,

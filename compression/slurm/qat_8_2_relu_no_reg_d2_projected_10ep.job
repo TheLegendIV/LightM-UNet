@@ -27,12 +27,26 @@ set -e
 # checkpoint, never the raw FP32 one directly.
 #
 # ENET_EPOCHS=150 sets the REAL PolyLR schedule length; ENET_MAX_EPOCHS_TO_
-# RUN=10 caps THIS submission to the first 10 of those 150 -- resubmit this
-# exact same script to continue (checkpoint_final.pth existing = fully done,
-# skip straight to collect_results; checkpoint_latest.pth existing with no
-# checkpoint_final.pth = partially done, resume via nnU-Net's own --c flag).
-# Raise/remove ENET_MAX_EPOCHS_TO_RUN once this initial 10-epoch diagnostic
-# looks healthy, to run the remaining epochs in fewer submissions.
+# RUN is a RELATIVE cap (nnUNetTrainerENet.run_training's own max_epoch =
+# min(self.num_epochs, self.current_epoch + self._max_epochs_to_run) --
+# self.num_epochs itself is NEVER touched, so the LR schedule is exactly a
+# real, uninterrupted 150-epoch curve regardless of how many submissions it
+# takes) -- resubmit this exact same script to continue, it correctly
+# resumes from wherever current_epoch left off.
+#
+# CORRECTED (this session): nnUNetTrainerENet's own on_train_start writes
+# checkpoint_final.pth at WHATEVER current_epoch ENET_MAX_EPOCHS_TO_RUN
+# stopped it at -- NOT only once the real 150-epoch schedule truly
+# completes -- and run_training.py's own --c flag already checks
+# checkpoint_final.pth FIRST (before checkpoint_latest.pth) when deciding
+# what to resume from (see maybe_load_checkpoint). So "checkpoint_final.pth
+# exists" does NOT mean "fully done" by itself -- an earlier version of
+# this job's own bash gate treated it that way and would have silently
+# skipped straight to collect_results.py on a 10/150-epoch checkpoint. The
+# gate below now checks the checkpoint's own current_epoch against
+# ENET_EPOCHS instead, and always resumes via --c when more real epochs
+# remain (--c loads the FULL optimizer/LR-scheduler state too, so this is a
+# genuine continuous session, not a fresh restart at the base LR).
 #
 # Built this session: nnUNetTrainerCombinedQuantENet_8_2_relu_no_reg_d2_
 # projected.py (a new, narrow QAT trainer on CombinedQuantENet, no leaky-
@@ -103,11 +117,11 @@ else
         --stage-bits-file "${STAGE_BITS_FILE}"
 fi
 
-echo "=== STEP 2: real QAT fine-tuning, 150-epoch schedule, this submission runs 10 ==="
+echo "=== STEP 2: real QAT fine-tuning, 150-epoch schedule, this submission runs 20 more ==="
 export ENET_STAGE_BITS_FILE="$HOME/LightM-UNet/${STAGE_BITS_FILE}"
 export ENET_PRETRAINED_CHECKPOINT="${CALIBRATED_CHECKPOINT}"
 export ENET_EPOCHS=150
-export ENET_MAX_EPOCHS_TO_RUN=10
+export ENET_MAX_EPOCHS_TO_RUN=20
 export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
 
 cd "$HOME/LightM-UNet/enet"
@@ -123,21 +137,38 @@ if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
        "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
 fi
 
-echo "=== Checking for a COMPLETED or PARTIAL checkpoint for ${RUN_NAME} ==="
+echo "=== Checking training progress for ${RUN_NAME} ==="
+EXISTING_CHECKPOINT=""
 if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
-    echo "checkpoint_final.pth already exists at ${ENET_OUTPUT_FOLDER} -- fully done (150/150 epochs), skipping training."
+    EXISTING_CHECKPOINT="${ENET_OUTPUT_FOLDER}/checkpoint_final.pth"
 elif [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
-    echo "checkpoint_latest.pth exists -- resuming with --c."
-    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}" --c
-else
-    echo "=== Start training: ${RUN_NAME} ==="
+    EXISTING_CHECKPOINT="${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth"
+fi
+
+if [ -z "$EXISTING_CHECKPOINT" ]; then
+    echo "=== Start training (fresh): ${RUN_NAME} ==="
     nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+else
+    # A saved checkpoint's own current_epoch, NOT just its existence, is
+    # what determines whether the real 150-epoch schedule is actually done
+    # -- see this job's own header note (checkpoint_final.pth gets written
+    # at whatever epoch ENET_MAX_EPOCHS_TO_RUN stops at, not only at a true
+    # 150/150 finish).
+    CURRENT_EPOCH=$(cd "$HOME/LightM-UNet" && python -c "import torch; print(torch.load('${EXISTING_CHECKPOINT}', map_location='cpu', weights_only=False)['current_epoch'])")
+    echo "Existing checkpoint (${EXISTING_CHECKPOINT}) is at epoch ${CURRENT_EPOCH}/${ENET_EPOCHS}."
+    if [ "$CURRENT_EPOCH" -ge "$ENET_EPOCHS" ]; then
+        echo "Real 150-epoch schedule already complete -- skipping training."
+    else
+        echo "=== Resuming training with --c (continues the SAME 150-epoch LR schedule from epoch ${CURRENT_EPOCH}) ==="
+        nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}" --c
+    fi
 fi
 echo "Training step finished for ${RUN_NAME} (this submission's epoch budget)."
 
-echo "=== Collecting results into compression/results.csv (only meaningful once checkpoint_final.pth exists -- i.e. after resubmitting until 150/150 epochs complete) ==="
+echo "=== Collecting results into compression/results.csv (only meaningful once the real 150-epoch schedule is complete) ==="
 cd "$HOME/LightM-UNet"
-if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+FINAL_EPOCH=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)['current_epoch'])" 2>/dev/null || echo -1)
+if [ "$FINAL_EPOCH" -ge "$ENET_EPOCHS" ]; then
     python compression/collect_results.py \
         --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
         --stage 8_2_relu_no_reg_d2_projected_qat \
@@ -152,7 +183,7 @@ if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
         --quant-bits 8 \
         --trainer-class "${TRAINER_CLASS}"
 else
-    echo "Not yet at checkpoint_final.pth -- skipping collect_results.py (resubmit this job to continue training)."
+    echo "Only at epoch ${FINAL_EPOCH}/${ENET_EPOCHS} -- skipping collect_results.py (resubmit this job to continue training)."
 fi
 
 echo "Done: ${RUN_NAME}."
