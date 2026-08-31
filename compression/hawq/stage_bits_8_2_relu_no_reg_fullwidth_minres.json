@@ -1,0 +1,30 @@
+{
+  "status": "Optimal",
+  "stage_weight_bits": {
+    "initial": 4,
+    "stage1": 4,
+    "context": 2,
+    "stage4": 4,
+    "stage5": 4
+  },
+  "stage_act_bits": {
+    "initial": 8,
+    "stage1": 2,
+    "context": 2,
+    "stage4": 2,
+    "stage5": 4
+  },
+  "_diagnostics": {
+    "total_lut_calibrated": 1154365.5013959222,
+    "xczu7ev_lut_budget": 230400,
+    "lut_pct_of_budget": 501.0266933142023,
+    "total_bram18k_calibrated": 1551.1151570682327,
+    "xczu7ev_bram18k_budget": 624,
+    "bram_pct_of_budget": 248.57614696606294,
+    "hard_lut": false,
+    "hard_bram": false,
+    "min_act_bits": null,
+    "sensitivity_weight": 1.0,
+    "note": "JOINT (w,a)-pair search (--joint): LUT/BRAM looked up at the exact chosen (w,a) pair (no two-pass approximation), sensitivity is the additive sensitivity_w+sensitivity_a approximation (see solve_joint_bits docstring). LUT/BRAM are a soft penalty in the objective, NOT a hard constraint."
+  }
+}
