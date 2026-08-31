@@ -65,6 +65,8 @@ from nnunetv2.nets.ENet import (
     DENSE_DILATION_PATTERN,
     DENSE_DILATION_REG_INTERLEAVED_PATTERN,
     DENSE_DILATION_REG_INTERLEAVED_DOUBLE_MID_PATTERN,
+    DENSE_DILATION_D2_PROJECTED_PATTERN,
+    DENSE_DILATION_D8_D16_PROJECTED_PATTERN,
 )
 from nnunetv2.nets.QuantENet import (
     QuantDownsamplingBottleneck,
@@ -77,6 +79,7 @@ from nnunetv2.nets.QuantENet import (
 VALID_CONTEXT_PATTERNS = (
     "default", "dense_dilation", "dense_dilation_reg_interleaved",
     "dense_dilation_reg_interleaved_double_mid",
+    "dense_dilation_d2_projected", "dense_dilation_d8_d16_projected",
 )
 
 
@@ -119,6 +122,36 @@ def expand_uniform_bits(weight_bit_width: int, act_bit_width: int, block_names: 
         {b: weight_bit_width for b in block_names},
         {b: act_bit_width for b in block_names},
     )
+
+
+def expand_stage_bits(
+    stage_weight_bits: dict[str, int], stage_act_bits: dict[str, int],
+    stage_module_attrs: dict[str, tuple[str, ...]], block_names: tuple[str, ...],
+) -> tuple[dict, dict]:
+    """Broadcasts a per-STAGE (w, a) pair (e.g. compression/hawq/ilp_search.py's
+    stage_bits_*.json output: {"stage_weight_bits": {...}, "stage_act_bits":
+    {...}}, one entry per one of the 5 HAWQ stage groups) to every individual
+    block within that stage, via the same stage->block membership map
+    compression/hawq/config_*.py's own STAGE_MODULE_ATTRS defines (e.g.
+    "context": ("down2", "stage2", "stage3")) -- a block's own stage is
+    whichever STAGE_MODULE_ATTRS entry's prefix its block_names name starts
+    with (block_names are of the form "<attr>.<i>" or a bare "<attr>" for
+    single-block attrs like "initial"/"down1"/"down2"/"up4"/"up5"/"final").
+    The exact expand_stage_bits gap expand_uniform_bits's own docstring
+    flagged ("add ... here if/when a real caller needs it")."""
+    attr_to_stage = {
+        attr: stage for stage, attrs in stage_module_attrs.items() for attr in attrs
+    }
+
+    def _stage_of(block_name: str) -> str:
+        attr = block_name.split(".")[0]
+        if attr not in attr_to_stage:
+            raise ValueError(f"Block {block_name!r}'s own attr {attr!r} is not in any stage_module_attrs entry.")
+        return attr_to_stage[attr]
+
+    block_weight_bits = {b: stage_weight_bits[_stage_of(b)] for b in block_names}
+    block_act_bits = {b: stage_act_bits[_stage_of(b)] for b in block_names}
+    return block_weight_bits, block_act_bits
 
 
 def _make_block_shallow_stage(
@@ -179,6 +212,10 @@ def _make_block_context_stage(
         pattern = DENSE_DILATION_REG_INTERLEAVED_PATTERN
     elif context_pattern == "dense_dilation_reg_interleaved_double_mid":
         pattern = DENSE_DILATION_REG_INTERLEAVED_DOUBLE_MID_PATTERN
+    elif context_pattern == "dense_dilation_d2_projected":
+        pattern = DENSE_DILATION_D2_PROJECTED_PATTERN
+    elif context_pattern == "dense_dilation_d8_d16_projected":
+        pattern = DENSE_DILATION_D8_D16_PROJECTED_PATTERN
     else:
         pattern = CONTEXT_STAGE_PATTERN
 
@@ -190,10 +227,19 @@ def _make_block_context_stage(
             kwargs = dict(pattern[i % len(pattern)])
             block_name = f"{name_prefix}.{i}"
             w, a = block_weight_bits[block_name], block_act_bits[block_name]
-            if kwargs.pop("reg_bottleneck", False):
+            if kwargs.get("reg_bottleneck", False):
+                # dilation/padding default to 1 (every existing reg_bottleneck
+                # slot -- the reg-interleaved family's bookends -- carries no
+                # dilation key at all), byte-identical to before DENSE_DILATION_
+                # D2_PROJECTED_PATTERN/DENSE_DILATION_D8_D16_PROJECTED_PATTERN
+                # started setting both alongside reg_bottleneck to make a
+                # specific rate a real, DILATED projected RegularBottleneck
+                # instead of a plain non-dilated spacer block -- see ENet.py's
+                # own identical fix/comment on this same sentinel.
                 ops.append(QuantRegularBottleneck(
                     channels, w, a, dropout_p=0.1, use_dsc=False,
                     negative_slope=slope_map.get(block_name), trainable_slope=trainable_slope,
+                    dilation=kwargs.get("dilation", 1), padding=kwargs.get("padding", 1),
                 ))
                 continue
             if kwargs.get("asymmetric", False):
