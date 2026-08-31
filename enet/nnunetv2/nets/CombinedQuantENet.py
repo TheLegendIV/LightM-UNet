@@ -67,6 +67,7 @@ from nnunetv2.nets.ENet import (
     DENSE_DILATION_REG_INTERLEAVED_DOUBLE_MID_PATTERN,
     DENSE_DILATION_D2_PROJECTED_PATTERN,
     DENSE_DILATION_D8_D16_PROJECTED_PATTERN,
+    DENSE_DILATION_D2_REGULAR_PATTERN,
 )
 from nnunetv2.nets.QuantENet import (
     QuantDownsamplingBottleneck,
@@ -80,6 +81,7 @@ VALID_CONTEXT_PATTERNS = (
     "default", "dense_dilation", "dense_dilation_reg_interleaved",
     "dense_dilation_reg_interleaved_double_mid",
     "dense_dilation_d2_projected", "dense_dilation_d8_d16_projected",
+    "dense_dilation_d2_regular",
 )
 
 
@@ -216,6 +218,8 @@ def _make_block_context_stage(
         pattern = DENSE_DILATION_D2_PROJECTED_PATTERN
     elif context_pattern == "dense_dilation_d8_d16_projected":
         pattern = DENSE_DILATION_D8_D16_PROJECTED_PATTERN
+    elif context_pattern == "dense_dilation_d2_regular":
+        pattern = DENSE_DILATION_D2_REGULAR_PATTERN
     else:
         pattern = CONTEXT_STAGE_PATTERN
 

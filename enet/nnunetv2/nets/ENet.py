@@ -65,6 +65,31 @@ DENSE_DILATION_PATTERN: tuple[dict, ...] = (
     {"padding": 16, "dilation": 16},
 )
 
+# DENSE_DILATION_PATTERN, but the d=2 slots are replaced with dilation=1
+# ("regular", non-dilated) -- NOT removed from the schedule (still 8 slots,
+# same depth) and NOT given a real projection (unlike DENSE_DILATION_D2_
+# PROJECTED_PATTERN's own reg_bottleneck sentinel) -- under dsc_no_
+# projection=True this slot is STILL a DSCNoProjectionBottleneck (no
+# reduce/expand, depthwise+pointwise), just at dilation=1 instead of 2, so
+# no new code is needed in _make_context_stage at all (no reg_bottleneck
+# key anywhere in this pattern). A depthwise conv's weight tensor shape
+# (channels, 1, kh, kw) does not depend on dilation -- dilation only changes
+# how that SAME kernel is applied spatially -- so an existing checkpoint
+# trained with real d=2 dilation at these slots (e.g. nnUNetTrainerENet_
+# 8_2_relu_no_reg_fullwidth) transfers onto this pattern by plain name+shape
+# match, no architecture-level incompatibility, even though the two are
+# numerically different functions once actually applied.
+DENSE_DILATION_D2_REGULAR_PATTERN: tuple[dict, ...] = (
+    {"padding": 1, "dilation": 1},
+    {"padding": 4, "dilation": 4},
+    {"padding": 8, "dilation": 8},
+    {"padding": 16, "dilation": 16},
+    {"padding": 1, "dilation": 1},
+    {"padding": 4, "dilation": 4},
+    {"padding": 8, "dilation": 8},
+    {"padding": 16, "dilation": 16},
+)
+
 # DENSE_DILATION_PATTERN, but the d=2 slot ALSO carries "reg_bottleneck":
 # True -- under dsc_no_projection=True this makes d=2 a real, DILATED
 # RegularBottleneck (real reduce/expand projection, full-rank inner conv,
@@ -958,7 +983,7 @@ class ENet(nn.Module):
             "default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_lead1",
             "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing", "d16_reg_interleaved",
             "dense_dilation_reg_interleaved_double_mid", "dense_dilation_d2_projected",
-            "dense_dilation_d8_d16_projected",
+            "dense_dilation_d8_d16_projected", "dense_dilation_d2_regular",
         )
         if context_pattern not in valid_context_patterns:
             raise ValueError(f"context_pattern must be one of {valid_context_patterns}, got {context_pattern!r}.")
@@ -1012,9 +1037,15 @@ class ENet(nn.Module):
                 "ENet expects five bottleneck-count values: stage1, stage2, stage3, stage4(regular4), "
                 "stage5(regular5)."
             )
-        if (stage1_channels % 4 != 0 or stage2_channels % 4 != 0 or stage3_channels % 4 != 0
-                or stage4_channels % 4 != 0 or stage5_channels % 4 != 0):
-            raise ValueError("ENet stage channels must be divisible by 4 for bottleneck reduction.")
+        # Every internal_ratio=4 reduction site (RegularBottleneck/
+        # DownsamplingBottleneck/UpsamplingBottleneck) computes
+        # `max(1, channels // internal_ratio)` -- a safe floor for ANY
+        # positive channel count, not just multiples of 4. A non-multiple
+        # (e.g. 10) just yields a reduction ratio that isn't exactly 1/4
+        # (10 // 4 == 2, i.e. 1/5) -- not a construction failure. Confirmed
+        # safe and intentionally exercised by e.g. channels=(4,10,20,10,4).
+        if stage1_channels < 1 or stage2_channels < 1 or stage3_channels < 1 or stage4_channels < 1 or stage5_channels < 1:
+            raise ValueError("ENet stage channels must all be positive.")
         if initial_channels <= in_channels:
             raise ValueError("ENet initial channels must exceed input channels.")
         if decoder_type not in ("max_unpool", "upsample_conv"):
@@ -1230,6 +1261,8 @@ class ENet(nn.Module):
             pattern = DENSE_DILATION_D2_PROJECTED_PATTERN
         elif self.context_pattern == "dense_dilation_d8_d16_projected":
             pattern = DENSE_DILATION_D8_D16_PROJECTED_PATTERN
+        elif self.context_pattern == "dense_dilation_d2_regular":
+            pattern = DENSE_DILATION_D2_REGULAR_PATTERN
         else:
             pattern = CONTEXT_STAGE_PATTERN
 

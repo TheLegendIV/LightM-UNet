@@ -1,0 +1,171 @@
+#!/bin/bash
+#SBATCH --job-name=qat_8_2_relu_d2_regular_fromfp32_50ep
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=06:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# New architecture variant: nnUNetTrainerENet_8_2_relu_no_reg_fullwidth's own
+# topology (channels 4,16,32,16,4, ReLU, dsc_no_projection=1 unscoped), but
+# with the two d=2 context-stage slots replaced by dilation=1 ("regular",
+# non-dilated) DSCNoProjectionBottlenecks instead of dilation=2
+# (ENet.py's new context_pattern="dense_dilation_d2_regular" -- d=4/d=8/d=16
+# slots unchanged). This is NOT the earlier "drop d=2 from the schedule
+# entirely" idea (that would shrink the context stage to 6 slots and change
+# every downstream shape) -- it keeps the same 8-slot depth, so the FP32
+# checkpoint's own weights transfer onto it unchanged: a depthwise conv's
+# weight tensor shape does not depend on dilation, only on how the SAME
+# kernel is applied spatially. Verified locally this session: 368/368 model
+# keys transfer with 0 shape mismatches from nnUNetTrainerENet_8_2_relu_
+# no_reg_fullwidth's real FP32 checkpoint.
+#
+# Per the user's own request ("prepare a fine tune session with warmstarted
+# keys (FP32) do 50 epochs lets see how much it recovers"), this job SKIPS
+# calibration entirely and warm-starts real QAT training DIRECTLY from that
+# raw FP32 checkpoint, at the DEFAULT LR (0.001) -- no LR override was
+# requested for this specific job, unlike the fullwidth sibling's own
+# fromfp32_highlr job (0.005). If this run also looks stuck, the fullwidth
+# sibling's own local proxy result (LR=0.005 clearly unsticking training)
+# is the natural next lever to pull here too.
+#
+# Uses the NEW nnUNetTrainerCombinedQuantENet_8_2_relu_d2_regular trainer.
+# HAWQ per-stage bits are REUSED from the fullwidth sibling's own stage_bits
+# file (compression/hawq/stage_bits_8_2_relu_no_reg_fullwidth_minres.json)
+# -- NOT freshly computed for this exact d2_regular pattern -- since every
+# other S8.2 variant checked this session converged on the same assignment
+# (context weights=2, several acts=2, everything else 4-bit). This is a
+# flagged assumption, not a verified result for this specific architecture.
+#
+# ENET_EPOCHS=150 sets the REAL PolyLR schedule length (same convention as
+# every other diagnostic job this session); ENET_MAX_EPOCHS_TO_RUN=50 caps
+# THIS submission to the first 50 epochs. Resume logic mirrors every sibling
+# job's own current_epoch-vs-ENET_EPOCHS gate (checkpoint_final.pth can
+# exist at a PARTIAL epoch count, --c needed to continue, and the trainer's
+# own load_checkpoint() override handles the Brevitas cuda/cpu
+# re-materialization quirk on such a resume).
+#
+# Smoke-tested locally (1 epoch, docker, ENET_MAX_EPOCHS_TO_RUN=1, warm-
+# starting directly from the real FP32 checkpoint, no calibration step at
+# all) before this job was submitted.
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+TRAINER_CLASS="nnUNetTrainerCombinedQuantENet_8_2_relu_d2_regular"
+FP32_SOURCE_NET_NAME="nnUNetTrainerENet_8_2_relu_no_reg_fullwidth"
+RUN_NAME="8_2_relu_d2_regular_qat_fromfp32"
+STAGE_BITS_FILE="compression/hawq/stage_bits_8_2_relu_no_reg_fullwidth_minres.json"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+
+FP32_CHECKPOINT="$nnUNet_results/${DATASET_NAME}/${FP32_SOURCE_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
+echo "=== Checking FP32 source checkpoint exists ==="
+if [ ! -f "$FP32_CHECKPOINT" ]; then
+    echo "ERROR: FP32 source checkpoint not found: $FP32_CHECKPOINT -- run stage_8_2_relu_no_reg_fullwidth.job first." >&2
+    exit 1
+fi
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet"
+
+echo "=== Real QAT training, NO calibration step -- warm-started directly from FP32, default LR ==="
+export ENET_STAGE_BITS_FILE="$HOME/LightM-UNet/${STAGE_BITS_FILE}"
+export ENET_PRETRAINED_CHECKPOINT="${FP32_CHECKPOINT}"
+export ENET_EPOCHS=150
+export ENET_MAX_EPOCHS_TO_RUN=50
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Checking training progress for ${RUN_NAME} ==="
+EXISTING_CHECKPOINT=""
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    EXISTING_CHECKPOINT="${ENET_OUTPUT_FOLDER}/checkpoint_final.pth"
+elif [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
+    EXISTING_CHECKPOINT="${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth"
+fi
+
+if [ -z "$EXISTING_CHECKPOINT" ]; then
+    echo "=== Start training (fresh): ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+else
+    CURRENT_EPOCH=$(cd "$HOME/LightM-UNet" && python -c "import torch; print(torch.load('${EXISTING_CHECKPOINT}', map_location='cpu', weights_only=False)['current_epoch'])")
+    echo "Existing checkpoint (${EXISTING_CHECKPOINT}) is at epoch ${CURRENT_EPOCH}/${ENET_EPOCHS}."
+    if [ "$CURRENT_EPOCH" -ge "$ENET_EPOCHS" ]; then
+        echo "Real 150-epoch schedule already complete -- skipping training."
+    else
+        echo "=== Resuming training with --c (continues the SAME 150-epoch LR schedule from epoch ${CURRENT_EPOCH}) ==="
+        nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}" --c
+    fi
+fi
+echo "Training step finished for ${RUN_NAME} (this submission's epoch budget)."
+
+echo "=== Collecting results into compression/results.csv (only meaningful once the real 150-epoch schedule is complete) ==="
+cd "$HOME/LightM-UNet"
+FINAL_EPOCH=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)['current_epoch'])" 2>/dev/null || echo -1)
+if [ "$FINAL_EPOCH" -ge "$ENET_EPOCHS" ]; then
+    python compression/collect_results.py \
+        --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+        --stage 8_2_relu_d2_regular_qat_fromfp32 \
+        --dataset-name "${DATASET_NAME}" \
+        --dataset-id "${DATASET_ID}" \
+        --channels 4,16,32,16,4 \
+        --bottlenecks 4,8,8,2,1 \
+        --decoder-type upsample_conv \
+        --use-asymmetric 0 \
+        --context-pattern dense_dilation_d2_regular \
+        --separable-dilated 0 \
+        --quant-bits 8 \
+        --trainer-class "${TRAINER_CLASS}"
+else
+    echo "Only at epoch ${FINAL_EPOCH}/${ENET_EPOCHS} -- skipping collect_results.py (resubmit this job to continue training)."
+fi
+
+echo "Done: ${RUN_NAME}."

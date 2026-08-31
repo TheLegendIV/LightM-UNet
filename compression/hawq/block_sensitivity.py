@@ -72,10 +72,17 @@ def load_config(config_module: str) -> None:
 
 
 def build_fp32_model(checkpoint_path: Path) -> ENet:
+    # OPTIONAL config globals -- see sensitivity.py's own build_fp32_model
+    # for the full rationale (not repeated here): every pre-S8.2 config_*.py
+    # never defines these (PReLU + plain projected bottlenecks), so .get()
+    # falls back to ENet.py's own defaults, unchanged for them.
     model = ENet(
         in_channels=IN_CHANNELS, out_channels=OUT_CHANNELS, channels=CHANNELS, bottlenecks_per_stage=BOTTLENECKS_PER_STAGE,
         decoder_type=DECODER_TYPE, use_asymmetric=USE_ASYMMETRIC, context_pattern=CONTEXT_PATTERN,
-        separable_dilated=SEPARABLE_DILATED, use_prelu=True, prelu_variant=PRELU_VARIANT,
+        separable_dilated=SEPARABLE_DILATED, use_prelu=globals().get("USE_PRELU", True), prelu_variant=PRELU_VARIANT,
+        use_dsc=globals().get("USE_DSC", False), dsc_no_projection=globals().get("DSC_NO_PROJECTION", False),
+        dsc_no_projection_context_only=globals().get("DSC_NO_PROJECTION_CONTEXT_ONLY", False),
+        reg_bookend_dsc=globals().get("REG_BOOKEND_DSC", False),
     )
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     model.load_state_dict(checkpoint["network_weights"], strict=True)
