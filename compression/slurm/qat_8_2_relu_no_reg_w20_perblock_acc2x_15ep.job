@@ -98,7 +98,7 @@ echo "=== STEP 2: real QAT fine-tuning, 150-epoch schedule, this submission runs
 export ENET_BLOCK_BITS_FILE="$HOME/LightM-UNet/${BLOCK_BITS_FILE}"
 export ENET_PRETRAINED_CHECKPOINT="${CALIBRATED_CHECKPOINT}"
 export ENET_EPOCHS=150
-export ENET_MAX_EPOCHS_TO_RUN=135
+export ENET_MAX_EPOCHS_TO_RUN=60
 export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
 
 cd "$HOME/LightM-UNet/enet"
