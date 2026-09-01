@@ -962,6 +962,7 @@ class ENet(nn.Module):
         use_asymmetric: bool = True,
         use_strided: bool = True,
         use_dsc: bool = False,
+        dsc_internal_ratio: int = 4,
         context_pattern: ContextPattern = "default",
         use_prelu: bool = True,
         prelu_variant: PReluVariant = "standard",
@@ -1060,6 +1061,22 @@ class ENet(nn.Module):
         self.use_asymmetric = use_asymmetric
         self.use_strided = use_strided
         self.use_dsc = use_dsc
+        # RegularBottleneck's own `internal_ratio` (default 4, every hardcoded
+        # call site below matched that default before this parameter existed
+        # -- byte-identical for every existing config that doesn't pass this
+        # explicitly). Threaded into every RegularBottleneck(...) call site
+        # in this class regardless of whether that specific slot uses DSC or
+        # a dense inner conv -- for the intended use (a config that sets
+        # use_dsc=True unscoped, dsc_no_projection=False, plain dense_dilation,
+        # no reg bookends/merge_dilated_pairs/dsc_dilated_only) every one of
+        # those call sites uses DSC anyway, so this uniformly controls "how
+        # much projection (Cin=C/r reduce, Cout=C expand) wraps the
+        # depthwise+pointwise pair" -- the "projection before/after DSC with
+        # factor r" experiment. A config that mixes DSC and dense slots (e.g.
+        # dsc_dilated_only) would apply the SAME ratio to both instead of
+        # only the DSC ones -- not exercised by any config that sets this to
+        # anything but the default 4 so far.
+        self.dsc_internal_ratio = dsc_internal_ratio
         self.context_pattern: ContextPattern = context_pattern
         # Encoder activation: PReLU by default (paper-faithful, see
         # RegularBottleneck/UpsamplingBottleneck's own `relu` flags, which
@@ -1157,6 +1174,7 @@ class ENet(nn.Module):
         else:
             self.regular5 = nn.Sequential(
                 *[RegularBottleneck(stage5_channels, dropout_p=0.1, relu=True, use_dsc=use_dsc,
+                                     internal_ratio=self.dsc_internal_ratio,
                                      double_projections=double_projections, prelu_variant=self.prelu_variant)
                   for _ in range(n_regular5)]
             )
@@ -1294,6 +1312,7 @@ class ENet(nn.Module):
                     # a plain non-dilated spacer block).
                     ops.append(RegularBottleneck(
                         channels, dropout_p=0.1, use_dsc=self.reg_bookend_dsc, relu=not self.use_prelu,
+                        internal_ratio=self.dsc_internal_ratio,
                         double_projections=self.double_projections, prelu_variant=self.prelu_variant,
                         dilation=kwargs.get("dilation", 1), padding=kwargs.get("padding", 1),
                     ))
@@ -1342,6 +1361,7 @@ class ENet(nn.Module):
                     # Odd leftover slot (only possible if n_ops is odd) --
                     # falls back to one plain RegularBottleneck for it.
                     ops.append(RegularBottleneck(channels, dropout_p=0.1, use_dsc=self.use_dsc,
+                                                  internal_ratio=self.dsc_internal_ratio,
                                                   relu=not self.use_prelu, prelu_variant=self.prelu_variant,
                                                   double_projections=self.double_projections, **first_kwargs))
                     i += 1
@@ -1369,6 +1389,7 @@ class ENet(nn.Module):
                 use_dsc_here = self.use_dsc or (self.dsc_dilated_only and is_dilated)
             ops.append(RegularBottleneck(
                 channels, dropout_p=0.1, use_dsc=use_dsc_here, relu=not self.use_prelu,
+                internal_ratio=self.dsc_internal_ratio,
                 separable_dilated=self.separable_dilated, double_projections=self.double_projections,
                 prelu_variant=self.prelu_variant, **kwargs,
             ))
@@ -1409,6 +1430,7 @@ class ENet(nn.Module):
         else:
             return nn.Sequential(
                 *[RegularBottleneck(channels, dropout_p=dropout_p, use_dsc=self.use_dsc, relu=relu,
+                                     internal_ratio=self.dsc_internal_ratio,
                                      double_projections=self.double_projections, prelu_variant=self.prelu_variant)
                   for _ in range(n_ops)]
             )
@@ -1418,6 +1440,7 @@ class ENet(nn.Module):
             if kwargs.get("dilation", 1) != 1 and not self.use_dilated:
                 kwargs = {}
             ops.append(RegularBottleneck(channels, dropout_p=dropout_p, use_dsc=self.use_dsc, relu=relu,
+                                          internal_ratio=self.dsc_internal_ratio,
                                           double_projections=self.double_projections,
                                           prelu_variant=self.prelu_variant, **kwargs))
         return nn.Sequential(*ops)

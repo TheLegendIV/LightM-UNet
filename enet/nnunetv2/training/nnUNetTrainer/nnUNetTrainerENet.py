@@ -178,6 +178,7 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
             use_asymmetric=_parse_bool_env("ENET_USE_ASYMMETRIC", True),
             use_strided=_parse_bool_env("ENET_USE_STRIDED", True),
             use_dsc=_parse_bool_env("ENET_USE_DSC", False),
+            dsc_internal_ratio=int(os.environ.get("ENET_DSC_INTERNAL_RATIO", "4")),
             context_pattern=context_pattern,
             use_prelu=_parse_bool_env("ENET_USE_PRELU", True),
             prelu_variant=prelu_variant,
