@@ -1,62 +1,62 @@
 #!/bin/bash
-#SBATCH --job-name=qat_8_2_relu_no_reg_w20_perblock_acc2x_15ep
+#SBATCH --job-name=qat_8_2_relu_no_reg_w20_ilp_acc1x_ft15ep
 #SBATCH --partition=gpu_mig
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gpus=1
 #SBATCH --mem=32G
-#SBATCH --time=03:00:00
+#SBATCH --time=02:00:00
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
 
 set -e
 
-# Same as qat_8_2_relu_no_reg_w20_perblock_acc1x_15ep.job (see that job's
-# own header for the full calibration/resumability rationale -- not
-# repeated here), but consuming the acc2x (sensitivity_weight=2.0, more
-# accuracy-favoring) per-block bit assignment instead of acc1x:
-# compression/hawq/block_bits_8_2_relu_no_reg_w20_acc2x_joint.json -- found
-# Optimal: down1 bumped to weight=8 (vs acc1x's 4), stage3.3 bumped to
-# weight=4/act=2 (vs acc1x's 2/4), regular4.0/4.1 dropped to act=2 (vs
-# acc1x's 4) -- real folding shows 100.0% LUT / 29.1% BRAM / ~28.5ms
-# hard-capped (vs acc1x's ~23.0ms -- acc2x costs ~24% more latency at the
-# same LUT budget for its extra accuracy-preserving bit bumps).
+# Real per-block HAWQ ILP bit assignment (acc1x, sensitivity_weight=1.0)
+# PTQ->QAT fine-tune for nnUNetTrainerENet_8_2_relu_no_reg_w20, for the
+# FP32/8bit/8bit+FT/4bit/4bit+FT/2bit/2bit+FT/ILP/ILP+FT comparison table
+# requested this session. Real per-block bits (one independent (weight,
+# act) pair per individual bottleneck block, NOT uniform) live in
+# compression/hawq/block_bits_8_2_relu_no_reg_w20_acc1x_joint.json -- found
+# Optimal: all 16 context blocks at uniform 2-bit weights, mixed 2/4-bit
+# activations elsewhere. Real folding at this bit-width is Optimal at a
+# 100% hard LUT/BRAM cap: 100.0% LUT / 25.8% BRAM / ~23.0ms @ 100MHz (see
+# compression/hawq/folding_block_8_2_relu_no_reg_w20_acc1x_hardcap100.json)
+# -- the fastest deployable folding of any S8.2 variant checked this
+# session.
 #
 # Reuses the SAME generic calibrate_8_2_relu_no_reg_w20_perblock.py script
-# and nnUNetTrainerCombinedQuantENet_8_2_relu_no_reg_w20_perblock trainer
-# as the acc1x job -- both are already bit-assignment-agnostic (take the
-# block-bits file as a --block-bits-file arg / ENET_BLOCK_BITS_FILE env var
-# respectively), so no new Python code was needed, only this job's own
-# BLOCK_BITS_FILE/CALIBRATED_NET_NAME/RUN_NAME pointing at the acc2x
-# assignment and a separate output folder from the acc1x run (does not
-# touch/interfere with it).
+# and nnUNetTrainerCombinedQuantENet_8_2_relu_no_reg_w20_perblock trainer as
+# every other w20 per-block job this session -- both are bit-assignment-
+# agnostic. The calibrated checkpoint (nnUNetTrainerCombinedQuantENet_8_2_
+# relu_no_reg_w20_perblock_calibrated) was already built earlier this
+# session (real calibration) -- STEP 1 below will detect it already exists
+# and skip straight to STEP 2.
 #
-# ENET_MAX_EPOCHS_TO_RUN=150 (was 60): this is a RELATIVE cap
-# (max_epoch = min(ENET_EPOCHS, current_epoch + ENET_MAX_EPOCHS_TO_RUN)),
-# so setting it >= ENET_EPOCHS makes every future resubmission always
-# target the TRUE end of the 150-epoch schedule regardless of whatever
-# epoch it's currently sitting at, instead of stopping at an arbitrary
-# earlier point that then needs recalculating by hand each time. Real
-# incident that prompted this: an earlier submission with =60 correctly
-# advanced this net from a repaired epoch-50 base to epoch 110, but 110 is
-# still short of the real 150-epoch schedule -- with the fixed value here,
-# the NEXT resubmission finishes the remaining 40 epochs (fits comfortably
-# in the SBATCH --time budget below) and lands exactly on 150. Safe even if
-# a submission ever gets killed mid-run by the --time wall clock: the
-# self-healing checkpoint_final.pth-vs-checkpoint_latest.pth promotion
-# above (added after a real incident where this job's own checkpoint_
-# final.pth went stale relative to checkpoint_latest.pth) means no
-# resubmission can silently lose progress anymore, regardless of exactly
-# where a kill happens to land.
+# Same 2-step structure and self-healing checkpoint_final.pth-vs-
+# checkpoint_latest.pth promotion as qat_8_2_relu_no_reg_w20_perblock_
+# acc2x_15ep.job (see that job's own header for the full incident/rationale
+# -- a real SLURM-timeout-mid-run left that job's checkpoint_final.pth
+# stale relative to checkpoint_latest.pth; this check makes recovery
+# automatic on every resubmission of any job using this pattern).
+#
+# ENET_EPOCHS=15 -- a genuine COMPLETE 15-epoch PolyLR schedule (LR decays
+# to ~0 by epoch 15), not a 15-epoch peek into a longer 150-epoch schedule
+# (where LR would still sit at ~99% of its initial value at epoch 15 --
+# barely-started training, not real fine-tuning convergence). Deliberately
+# different convention from this session's earlier exploratory QAT jobs
+# (all peeked into a 150-epoch schedule) -- this one is for a real
+# FP32/8bit/8bit+FT/4bit/4bit+FT/2bit/2bit+FT/ILP/ILP+FT comparison table,
+# where "15 epochs of fine-tuning" should mean an actual complete
+# fine-tuning phase. Standard LR (no ENET_LR override).
 
 DATASET_ID=509
 DATASET_NAME="Dataset509_ARCADE_1x1_4c"
 TRAINER_CLASS="nnUNetTrainerCombinedQuantENet_8_2_relu_no_reg_w20_perblock"
 FP32_SOURCE_NET_NAME="nnUNetTrainerENet_8_2_relu_no_reg_w20"
-CALIBRATED_NET_NAME="nnUNetTrainerCombinedQuantENet_8_2_relu_no_reg_w20_perblock_acc2x_calibrated"
-RUN_NAME="8_2_relu_no_reg_w20_perblock_acc2x_qat"
-BLOCK_BITS_FILE="compression/hawq/block_bits_8_2_relu_no_reg_w20_acc2x_joint.json"
+CALIBRATED_NET_NAME="nnUNetTrainerCombinedQuantENet_8_2_relu_no_reg_w20_perblock_calibrated"
+RUN_NAME="8_2_relu_no_reg_w20_ilp_acc1x_ft15ep"
+BLOCK_BITS_FILE="compression/hawq/block_bits_8_2_relu_no_reg_w20_acc1x_joint.json"
 
 mkdir -p logs
 
@@ -112,11 +112,10 @@ else
         --block-bits-file "${BLOCK_BITS_FILE}"
 fi
 
-echo "=== STEP 2: real QAT fine-tuning, 150-epoch schedule, this submission runs 15 ==="
+echo "=== STEP 2: real QAT fine-tuning, complete 15-epoch schedule ==="
 export ENET_BLOCK_BITS_FILE="$HOME/LightM-UNet/${BLOCK_BITS_FILE}"
 export ENET_PRETRAINED_CHECKPOINT="${CALIBRATED_CHECKPOINT}"
-export ENET_EPOCHS=150
-export ENET_MAX_EPOCHS_TO_RUN=150
+export ENET_EPOCHS=15
 export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
 
 cd "$HOME/LightM-UNet/enet"
@@ -133,20 +132,6 @@ if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
 fi
 
 echo "=== Self-healing check: promote checkpoint_latest.pth over a STALE checkpoint_final.pth ==="
-# nnUNetv2_train --c ALWAYS resumes from checkpoint_final.pth if it exists
-# (see run_training.py's own maybe_load_checkpoint -- checkpoint_latest.pth
-# is only ever consulted as a fallback when checkpoint_final.pth is
-# missing entirely). checkpoint_final.pth only gets (re)written when a
-# training run's own epoch loop returns NORMALLY; checkpoint_latest.pth
-# gets written every epoch regardless. If a submission's own SBATCH --time
-# wall-clock limit kills the job mid-run (real, confirmed incident: a
-# 60-epoch resume submission got killed partway through, leaving
-# checkpoint_latest.pth genuinely at epoch 50 while checkpoint_final.pth
-# stayed stuck at the PRIOR submission's own clean 15-epoch stop), the next
-# --c resume would silently reload the stale, far-behind checkpoint_final.pth
-# and throw away every real epoch of progress in between -- exactly what
-# happened here before this fix (repaired once by hand this session; this
-# check makes that recovery automatic and permanent going forward).
 if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ] && [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
     FINAL_EPOCH_CHECK=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)['current_epoch'])")
     LATEST_EPOCH_CHECK=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth', map_location='cpu', weights_only=False)['current_epoch'])")
@@ -172,21 +157,21 @@ else
     CURRENT_EPOCH=$(cd "$HOME/LightM-UNet" && python -c "import torch; print(torch.load('${EXISTING_CHECKPOINT}', map_location='cpu', weights_only=False)['current_epoch'])")
     echo "Existing checkpoint (${EXISTING_CHECKPOINT}) is at epoch ${CURRENT_EPOCH}/${ENET_EPOCHS}."
     if [ "$CURRENT_EPOCH" -ge "$ENET_EPOCHS" ]; then
-        echo "Real 150-epoch schedule already complete -- skipping training."
+        echo "Real 15-epoch schedule already complete -- skipping training."
     else
-        echo "=== Resuming training with --c (continues the SAME 150-epoch LR schedule from epoch ${CURRENT_EPOCH}) ==="
+        echo "=== Resuming training with --c (continues the SAME 15-epoch LR schedule from epoch ${CURRENT_EPOCH}) ==="
         nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}" --c
     fi
 fi
 echo "Training step finished for ${RUN_NAME} (this submission's epoch budget)."
 
-echo "=== Collecting results into compression/results.csv (only meaningful once the real 150-epoch schedule is complete) ==="
+echo "=== Collecting results into compression/results.csv (only meaningful once the real 15-epoch schedule is complete) ==="
 cd "$HOME/LightM-UNet"
 FINAL_EPOCH=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)['current_epoch'])" 2>/dev/null || echo -1)
 if [ "$FINAL_EPOCH" -ge "$ENET_EPOCHS" ]; then
     python compression/collect_results.py \
         --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
-        --stage 8_2_relu_no_reg_w20_perblock_acc2x_qat \
+        --stage 8_2_relu_no_reg_w20_ilp_acc1x_ft15ep \
         --dataset-name "${DATASET_NAME}" \
         --dataset-id "${DATASET_ID}" \
         --channels 4,10,20,10,4 \
