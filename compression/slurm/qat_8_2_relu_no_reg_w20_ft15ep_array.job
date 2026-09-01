@@ -1,0 +1,213 @@
+#!/bin/bash
+#SBATCH --job-name=qat_8_2_relu_no_reg_w20_ft15ep
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=02:00:00
+#SBATCH --array=0-3
+#SBATCH --output=logs/%x_%a_%j.out
+#SBATCH --error=logs/%x_%a_%j.err
+
+set -e
+
+# Array version of this net's own 4 individual PTQ->QAT fine-tune jobs
+# (qat_8_2_relu_no_reg_w20_uniform_int{8,4,2}_15ep.job and qat_8_2_relu_
+# no_reg_w20_ilp_acc2x_ft15ep.job), for the FP32/8bit/8bit+FT/4bit/
+# 4bit+FT/2bit/2bit+FT/ILP/ILP+FT comparison table requested this session.
+# All 4 tasks reuse the SAME generic calibrate_8_2_relu_no_reg_w20_
+# perblock.py script and nnUNetTrainerCombinedQuantENet_8_2_relu_no_reg_
+# w20_perblock trainer -- both are bit-assignment-agnostic, so only the
+# bit-assignment file and net names vary per array index:
+#
+#   0: uniform int8 (W8A8 everywhere) -- real folding at 100% hard LUT/BRAM
+#      cap is INFEASIBLE even at best folding (not a number to report).
+#   1: uniform int4 (W4A4 everywhere) -- real folding Optimal: 100.0% LUT /
+#      43.4% BRAM / ~47.3ms @ 100MHz.
+#   2: uniform int2 (W2A2 everywhere) -- real folding Optimal: 99.6% LUT /
+#      15.2% BRAM / ~12.8ms @ 100MHz.
+#   3: real per-block HAWQ ILP bit assignment, acc2x (sensitivity_weight=
+#      2.0 -- the reference ILP assignment for this table per explicit
+#      request; NOT uniform, one independent (weight, act) pair per
+#      individual bottleneck block) -- real folding Optimal: 100.0% LUT /
+#      29.1% BRAM / ~28.5ms @ 100MHz.
+#
+# All 4 calibrated checkpoints already exist (built earlier this session,
+# real calibration on real data) -- STEP 1 below will detect each one
+# already exists and skip straight to STEP 2 for every task.
+#
+# ENET_EPOCHS=15 -- a genuine COMPLETE 15-epoch PolyLR schedule (LR decays
+# to ~0 by epoch 15), not a peek into a longer schedule -- see qat_8_2_
+# relu_no_reg_w20_uniform_int8_15ep.job's own header for the full rationale
+# (not repeated here). Standard LR (no ENET_LR override).
+#
+# Same self-healing checkpoint_final.pth-vs-checkpoint_latest.pth
+# promotion as every other w20 QAT job this session (see qat_8_2_relu_
+# no_reg_w20_perblock_acc2x_15ep.job's own header for the real incident
+# that prompted it) -- applies independently per array task (each task has
+# its own separate output folder).
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+TRAINER_CLASS="nnUNetTrainerCombinedQuantENet_8_2_relu_no_reg_w20_perblock"
+FP32_SOURCE_NET_NAME="nnUNetTrainerENet_8_2_relu_no_reg_w20"
+
+BLOCK_BITS_ARR=(
+    "compression/hawq/block_bits_8_2_relu_no_reg_w20_uniform_int8.json"
+    "compression/hawq/block_bits_8_2_relu_no_reg_w20_uniform_int4.json"
+    "compression/hawq/block_bits_8_2_relu_no_reg_w20_uniform_int2.json"
+    "compression/hawq/block_bits_8_2_relu_no_reg_w20_acc2x_joint.json"
+)
+CALIBRATED_NET_ARR=(
+    nnUNetTrainerCombinedQuantENet_8_2_relu_no_reg_w20_uniform_int8_calibrated
+    nnUNetTrainerCombinedQuantENet_8_2_relu_no_reg_w20_uniform_int4_calibrated
+    nnUNetTrainerCombinedQuantENet_8_2_relu_no_reg_w20_uniform_int2_calibrated
+    nnUNetTrainerCombinedQuantENet_8_2_relu_no_reg_w20_perblock_acc2x_calibrated
+)
+RUN_NAME_ARR=(
+    8_2_relu_no_reg_w20_uniform_int8_ft15ep
+    8_2_relu_no_reg_w20_uniform_int4_ft15ep
+    8_2_relu_no_reg_w20_uniform_int2_ft15ep
+    8_2_relu_no_reg_w20_ilp_acc2x_ft15ep
+)
+QUANT_BITS_ARR=(8 4 2 8)
+
+TASK_ID=${SLURM_ARRAY_TASK_ID}
+BLOCK_BITS_FILE="${BLOCK_BITS_ARR[$TASK_ID]}"
+CALIBRATED_NET_NAME="${CALIBRATED_NET_ARR[$TASK_ID]}"
+RUN_NAME="${RUN_NAME_ARR[$TASK_ID]}"
+QUANT_BITS_LABEL="${QUANT_BITS_ARR[$TASK_ID]}"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Array task: ${TASK_ID} -> ${RUN_NAME}"
+echo "BLOCK_BITS_FILE=${BLOCK_BITS_FILE}"
+
+FP32_CHECKPOINT="$nnUNet_results/${DATASET_NAME}/${FP32_SOURCE_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
+echo "=== Checking FP32 source checkpoint exists ==="
+if [ ! -f "$FP32_CHECKPOINT" ]; then
+    echo "ERROR: FP32 source checkpoint not found: $FP32_CHECKPOINT -- run stage_8_2_relu_no_reg_w20.job first." >&2
+    exit 1
+fi
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet"
+
+CALIBRATED_CHECKPOINT="$nnUNet_results/${DATASET_NAME}/${CALIBRATED_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
+echo "=== STEP 1: calibrate (warm-start from the real FP32 checkpoint; skip if already done) ==="
+if [ -f "$CALIBRATED_CHECKPOINT" ]; then
+    echo "Calibrated checkpoint already exists at ${CALIBRATED_CHECKPOINT} -- skipping calibration."
+else
+    python compression/post-quantization/calibrate_8_2_relu_no_reg_w20_perblock.py \
+        --source-net-name "${FP32_SOURCE_NET_NAME}" \
+        --out-net-name "${CALIBRATED_NET_NAME}" \
+        --dataset-name "${DATASET_NAME}" \
+        --block-bits-file "${BLOCK_BITS_FILE}"
+fi
+
+echo "=== STEP 2: real QAT fine-tuning, complete 15-epoch schedule ==="
+export ENET_BLOCK_BITS_FILE="$HOME/LightM-UNet/${BLOCK_BITS_FILE}"
+export ENET_PRETRAINED_CHECKPOINT="${CALIBRATED_CHECKPOINT}"
+export ENET_EPOCHS=15
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Self-healing check: promote checkpoint_latest.pth over a STALE checkpoint_final.pth ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ] && [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
+    FINAL_EPOCH_CHECK=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)['current_epoch'])")
+    LATEST_EPOCH_CHECK=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth', map_location='cpu', weights_only=False)['current_epoch'])")
+    if [ "$LATEST_EPOCH_CHECK" -gt "$FINAL_EPOCH_CHECK" ]; then
+        echo "checkpoint_final.pth (epoch ${FINAL_EPOCH_CHECK}) is STALE relative to checkpoint_latest.pth (epoch ${LATEST_EPOCH_CHECK}) -- promoting latest, backing up the stale final."
+        cp "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" "${ENET_OUTPUT_FOLDER}/checkpoint_final_STALE_epoch${FINAL_EPOCH_CHECK}_backup.pth"
+        cp "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth"
+    fi
+fi
+
+echo "=== Checking training progress for ${RUN_NAME} ==="
+EXISTING_CHECKPOINT=""
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    EXISTING_CHECKPOINT="${ENET_OUTPUT_FOLDER}/checkpoint_final.pth"
+elif [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
+    EXISTING_CHECKPOINT="${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth"
+fi
+
+if [ -z "$EXISTING_CHECKPOINT" ]; then
+    echo "=== Start training (fresh): ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+else
+    CURRENT_EPOCH=$(cd "$HOME/LightM-UNet" && python -c "import torch; print(torch.load('${EXISTING_CHECKPOINT}', map_location='cpu', weights_only=False)['current_epoch'])")
+    echo "Existing checkpoint (${EXISTING_CHECKPOINT}) is at epoch ${CURRENT_EPOCH}/${ENET_EPOCHS}."
+    if [ "$CURRENT_EPOCH" -ge "$ENET_EPOCHS" ]; then
+        echo "Real 15-epoch schedule already complete -- skipping training."
+    else
+        echo "=== Resuming training with --c (continues the SAME 15-epoch LR schedule from epoch ${CURRENT_EPOCH}) ==="
+        nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}" --c
+    fi
+fi
+echo "Training step finished for ${RUN_NAME} (this submission's epoch budget)."
+
+echo "=== Collecting results into compression/results.csv (only meaningful once the real 15-epoch schedule is complete) ==="
+cd "$HOME/LightM-UNet"
+FINAL_EPOCH=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)['current_epoch'])" 2>/dev/null || echo -1)
+if [ "$FINAL_EPOCH" -ge "$ENET_EPOCHS" ]; then
+    python compression/collect_results.py \
+        --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+        --stage "${RUN_NAME}" \
+        --dataset-name "${DATASET_NAME}" \
+        --dataset-id "${DATASET_ID}" \
+        --channels 4,10,20,10,4 \
+        --bottlenecks 4,8,8,2,1 \
+        --decoder-type upsample_conv \
+        --use-asymmetric 0 \
+        --context-pattern dense_dilation \
+        --separable-dilated 0 \
+        --quant-bits "${QUANT_BITS_LABEL}" \
+        --trainer-class "${TRAINER_CLASS}"
+else
+    echo "Only at epoch ${FINAL_EPOCH}/${ENET_EPOCHS} -- skipping collect_results.py (resubmit this job to continue training)."
+fi
+
+echo "Done: ${RUN_NAME}."
