@@ -816,7 +816,24 @@ class DSCNoProjectionBottleneck(nn.Module):
     (stage1/regular1, stage2, stage3, regular4, regular5) when
     ENet(dsc_no_projection=True). Not combinable with asymmetric slots
     (same constraint RegularBottleneck's own use_dsc already has -- callers
-    must set use_asymmetric=0)."""
+    must set use_asymmetric=0).
+
+    dsc_separable=True (Stage 18) additionally factors the depthwise KxK
+    pass itself into a (K,1)+(1,K) depthwise PAIR (dilation applied to
+    both, same convention _dilatable_conv_block's own separable_dilated
+    branch already uses for RegularBottleneck's plain/dilated conv), each
+    followed by its own BN+activation, still ending in the same pointwise
+    1x1+BN channel mix. Unlike separable_dilated (a no-op at dilation=1,
+    since a plain dilation=1 3x3 already has an asymmetric-bottleneck
+    alternative doing the same K^2->2K factoring elsewhere in this module),
+    DSCNoProjectionBottleneck has no such alternative at dilation=1 --
+    asymmetric is disallowed here entirely -- so this applies at every
+    dilation rate, not just dilated slots. K^2 depthwise MACs -> 2K per
+    channel, same reduction the spatial-separable literature (e.g.
+    MobileNet's own depthwise factoring taken one step further) predicts,
+    on top of DSC's existing channel-wise factoring -- i.e. a SECOND,
+    independent axis of the same "factor the conv" idea DSC already
+    applies on the channel axis."""
 
     def __init__(
         self,
@@ -827,17 +844,32 @@ class DSCNoProjectionBottleneck(nn.Module):
         dropout_p: float = 0.1,
         relu: bool = False,
         prelu_variant: PReluVariant = "standard",
+        dsc_separable: bool = False,
     ):
         super().__init__()
         shared_act = NonNegativePReLU(1) if (prelu_variant == "nonneg_block" and not relu) else None
-        self.conv = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=kernel_size, padding=padding,
-                      dilation=dilation, groups=channels, bias=False),
-            nn.BatchNorm2d(channels),
-            _activation(channels, relu, prelu_variant, shared_act),
-            nn.Conv2d(channels, channels, kernel_size=1, bias=False),
-            nn.BatchNorm2d(channels),
-        )
+        if dsc_separable:
+            self.conv = nn.Sequential(
+                nn.Conv2d(channels, channels, kernel_size=(kernel_size, 1), padding=(padding, 0),
+                          dilation=dilation, groups=channels, bias=False),
+                nn.BatchNorm2d(channels),
+                _activation(channels, relu, prelu_variant, shared_act),
+                nn.Conv2d(channels, channels, kernel_size=(1, kernel_size), padding=(0, padding),
+                          dilation=dilation, groups=channels, bias=False),
+                nn.BatchNorm2d(channels),
+                _activation(channels, relu, prelu_variant, shared_act),
+                nn.Conv2d(channels, channels, kernel_size=1, bias=False),
+                nn.BatchNorm2d(channels),
+            )
+        else:
+            self.conv = nn.Sequential(
+                nn.Conv2d(channels, channels, kernel_size=kernel_size, padding=padding,
+                          dilation=dilation, groups=channels, bias=False),
+                nn.BatchNorm2d(channels),
+                _activation(channels, relu, prelu_variant, shared_act),
+                nn.Conv2d(channels, channels, kernel_size=1, bias=False),
+                nn.BatchNorm2d(channels),
+            )
         self.dropout = nn.Dropout2d(p=dropout_p)
         self.out_act = _activation(channels, relu, prelu_variant, shared_act)
 
@@ -978,6 +1010,7 @@ class ENet(nn.Module):
         dsc_no_projection_context_only: bool = False,
         reg_bookend_dsc: bool = False,
         merge_reg_boundary: bool = False,
+        dsc_separable: bool = False,
     ):
         super().__init__()
         valid_context_patterns = (
@@ -1004,6 +1037,13 @@ class ENet(nn.Module):
                 "merge_reg_boundary only has an effect under dsc_no_projection=True -- it shifts "
                 "_make_context_stage's dsc_no_projection branch's pattern indexing for stage3 only, "
                 "meaningless for the plain (projected) loop."
+            )
+        if dsc_separable and not dsc_no_projection:
+            raise ValueError(
+                "dsc_separable only has an effect under dsc_no_projection=True -- it factors "
+                "DSCNoProjectionBottleneck's own depthwise KxK pass into a (K,1)+(1,K) pair, "
+                "meaningless for RegularBottleneck's own use_dsc=True branch (that branch's "
+                "depthwise conv is unaffected by this flag)."
             )
         valid_prelu_variants = ("standard", "leaky", "nonneg", "nonneg_block")
         if prelu_variant not in valid_prelu_variants:
@@ -1135,6 +1175,12 @@ class ENet(nn.Module):
         # bottleneck depth by 1 to keep the same trailing reg positioned
         # correctly (e.g. 11 -> 10 for dense_dilation_reg_interleaved).
         self.merge_reg_boundary = merge_reg_boundary
+        # Stage 18: factor DSCNoProjectionBottleneck's own depthwise KxK
+        # into a (K,1)+(1,K) pair (see that class's own docstring) -- a
+        # second, independent factoring axis on top of DSC's existing
+        # channel-wise (depthwise/pointwise) one. Validated above to
+        # require dsc_no_projection=True.
+        self.dsc_separable = dsc_separable
 
         n_stage1, n_stage2, n_stage3, n_regular4, n_regular5 = self.bottlenecks_per_stage
 
@@ -1169,7 +1215,8 @@ class ENet(nn.Module):
         if dsc_no_projection and not dsc_no_projection_context_only:
             self.regular5 = nn.Sequential(
                 *[DSCNoProjectionBottleneck(stage5_channels, dropout_p=0.1, relu=True,
-                                             prelu_variant=self.prelu_variant) for _ in range(n_regular5)]
+                                             prelu_variant=self.prelu_variant,
+                                             dsc_separable=dsc_separable) for _ in range(n_regular5)]
             )
         else:
             self.regular5 = nn.Sequential(
@@ -1330,6 +1377,7 @@ class ENet(nn.Module):
                 ops.append(DSCNoProjectionBottleneck(
                     channels, kernel_size=3, padding=dilation, dilation=dilation,
                     dropout_p=0.1, relu=not self.use_prelu, prelu_variant=self.prelu_variant,
+                    dsc_separable=self.dsc_separable,
                 ))
             return TwoBlockSkipStage(ops) if self.two_block_skip else nn.Sequential(*ops)
 
@@ -1421,7 +1469,8 @@ class ENet(nn.Module):
         if self.dsc_no_projection and not self.dsc_no_projection_context_only:
             return nn.Sequential(
                 *[DSCNoProjectionBottleneck(channels, dropout_p=dropout_p, relu=relu,
-                                             prelu_variant=self.prelu_variant) for _ in range(n_ops)]
+                                             prelu_variant=self.prelu_variant,
+                                             dsc_separable=self.dsc_separable) for _ in range(n_ops)]
             )
         if self.shallow_dilation_wide:
             pattern = SHALLOW_DILATION_WIDE_DENSE_PATTERN if self.shallow_dilation_dense else SHALLOW_DILATION_WIDE_PATTERN
@@ -2762,3 +2811,62 @@ if __name__ == "__main__":
     assert len(lead1_no_stage3.stage3) == 0, f"lead1+no-stage3: stage3 has {len(lead1_no_stage3.stage3)} blocks, expected 0"
 
     print("ENet dense_dilation_lead1 self-test PASSED: 10-slot pattern verified (d=1 lead-in, exact dilation order preserved), forward pass checked, composes cleanly with stage3 removed.")
+
+    # Stage 18 -- dsc_separable: factors DSCNoProjectionBottleneck's own
+    # depthwise KxK into a (K,1)+(1,K) depthwise pair (see that class's own
+    # docstring) -- a validation check plus S8.2-"no_reg"-shaped configs
+    # (dsc_no_projection=True, dense_dilation, native + U4 width) at both
+    # dsc_separable=False (byte-identical to before this stage) and =True.
+    try:
+        ENet(in_channels=1, out_channels=5, channels=U4_CHANNELS, dsc_separable=True, use_prelu=False)
+        raise AssertionError("18: expected ValueError with dsc_no_projection=False (default), got none")
+    except ValueError:
+        pass
+
+    dsc_sep_off = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS, decoder_type="upsample_conv",
+        use_prelu=False, use_asymmetric=False, dsc_no_projection=True, dsc_separable=False,
+        context_pattern="dense_dilation",
+    ).eval()
+    dsc_sep_on = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS, decoder_type="upsample_conv",
+        use_prelu=False, use_asymmetric=False, dsc_no_projection=True, dsc_separable=True,
+        context_pattern="dense_dilation",
+    ).eval()
+    with torch.no_grad():
+        assert dsc_sep_off(dummy).shape == (1, 5, 512, 512)
+        assert dsc_sep_on(dummy).shape == (1, 5, 512, 512)
+
+    for stage_name in ("regular1", "stage2", "stage3", "regular4", "regular5"):
+        off_stage, on_stage = getattr(dsc_sep_off, stage_name), getattr(dsc_sep_on, stage_name)
+        assert len(off_stage) == len(on_stage) > 0, f"18: {stage_name} block-count mismatch"
+        for i, (off_block, on_block) in enumerate(zip(off_stage, on_stage)):
+            assert type(off_block) is DSCNoProjectionBottleneck and type(on_block) is DSCNoProjectionBottleneck, (
+                f"18: {stage_name}[{i}] expected DSCNoProjectionBottleneck on both sides"
+            )
+            assert len(off_block.conv) == 5, f"18: {stage_name}[{i}] (off) conv has {len(off_block.conv)} modules, expected 5"
+            assert off_block.conv[0].kernel_size == (3, 3) and off_block.conv[0].groups == off_block.conv[0].in_channels, (
+                f"18: {stage_name}[{i}] (off) expected a plain depthwise 3x3 first"
+            )
+            assert len(on_block.conv) == 8, f"18: {stage_name}[{i}] (on) conv has {len(on_block.conv)} modules, expected 8"
+            assert on_block.conv[0].kernel_size == (3, 1) and on_block.conv[0].groups == on_block.conv[0].in_channels, (
+                f"18: {stage_name}[{i}] (on) expected a depthwise (3,1) first"
+            )
+            assert on_block.conv[3].kernel_size == (1, 3) and on_block.conv[3].groups == on_block.conv[3].in_channels, (
+                f"18: {stage_name}[{i}] (on) expected a depthwise (1,3) fourth"
+            )
+            assert on_block.conv[6].kernel_size == (1, 1) and on_block.conv[6].groups == 1, (
+                f"18: {stage_name}[{i}] (on) expected a pointwise 1x1 seventh"
+            )
+            # Dilation carried through to BOTH factored passes, matching
+            # _dilatable_conv_block's own separable_dilated convention.
+            assert on_block.conv[0].dilation == off_block.conv[0].dilation, (
+                f"18: {stage_name}[{i}] dilation mismatch between (on) first pass and (off) monolithic conv"
+            )
+            assert on_block.conv[3].dilation == off_block.conv[0].dilation, (
+                f"18: {stage_name}[{i}] dilation mismatch between (on) second pass and (off) monolithic conv"
+            )
+
+    print("ENet Stage-18 dsc_separable self-test PASSED: validation-without-dsc_no_projection checked, "
+          "5 stages compared block-for-block (off: plain depthwise KxK, on: depthwise (K,1)+(1,K) pair), "
+          "dilation preserved on both factored passes, forward pass checked on both.")

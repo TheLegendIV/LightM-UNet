@@ -142,6 +142,7 @@ def run_inference(
     dsc_no_projection_context_only: bool = False,
     reg_bookend_dsc: bool = False,
     merge_reg_boundary: bool = False,
+    dsc_separable: bool = False,
     pruned_blocks: str | None = None,
 ) -> Path:
     """Uses `nnUNetv2_predict_from_modelfolder` (-m <exact folder>), NOT
@@ -197,6 +198,7 @@ def run_inference(
     env["ENET_DSC_NO_PROJECTION_CONTEXT_ONLY"] = "1" if dsc_no_projection_context_only else "0"
     env["ENET_REG_BOOKEND_DSC"] = "1" if reg_bookend_dsc else "0"
     env["ENET_MERGE_REG_BOUNDARY"] = "1" if merge_reg_boundary else "0"
+    env["ENET_DSC_SEPARABLE"] = "1" if dsc_separable else "0"
     if quant_bits != 32:
         # Picked up by nnUNetTrainerENetQuant.build_network_architecture,
         # dynamically imported via the checkpoint's own stored trainer_name
@@ -432,6 +434,7 @@ def main() -> None:
     parser.add_argument("--dsc-no-projection-context-only", type=int, default=0, choices=[0, 1], help="Stage 8.1: narrows --dsc-no-projection's scope to stage2/stage3 only -- regular1/regular4/regular5 revert to normal projected bottlenecks (needs --dsc-no-projection 1 also set).")
     parser.add_argument("--reg-bookend-dsc", type=int, default=0, choices=[0, 1], help="Stage 8.3: applies DSC (with projection kept) to context_pattern=dense_dilation_reg_interleaved's reg-bookend slots, instead of leaving them full-rank. No-op without that context_pattern and --dsc-no-projection 1.")
     parser.add_argument("--merge-reg-boundary", type=int, default=0, choices=[0, 1], help="S15-derived probe: skips stage3's own leading reg-bookend (shifts its pattern-index origin by +1) so it doesn't sit directly next to stage2's trailing reg with nothing dilated between them -- relies on stage2's own trailing reg to cover the seam alone. Shrink stage3's own bottleneck depth by 1 to compensate (e.g. 11 -> 10 for dense_dilation_reg_interleaved). Needs --dsc-no-projection 1. See ENet.py's merge_reg_boundary.")
+    parser.add_argument("--dsc-separable", type=int, default=0, choices=[0, 1], help="Stage 18: factors DSCNoProjectionBottleneck's own depthwise KxK into a (K,1)+(1,K) depthwise pair, applied at every dilation rate. Needs --dsc-no-projection 1. See ENet.py's dsc_separable.")
     parser.add_argument("--separable-dilated", type=int, default=0, choices=[0, 1], help="Stage 4.4.2: factor every dilated 3x3 in the context pattern into a (3,1)+(1,3) pair, same dilation on both passes.")
     parser.add_argument("--merge-dilated-pairs", type=int, default=0, choices=[0, 1], help="Stage 4.4.3: fuse each (regular-or-asymmetric, dilated) context-pattern PAIR into one block with a shared reduce/expand -- halves stage2/3's block count.")
     parser.add_argument("--dsc-dilated-only", type=int, default=0, choices=[0, 1], help="Stage 4.4.4: depthwise-separable ONLY on the context pattern's dilated slots, independent of --use-dsc.")
@@ -488,6 +491,7 @@ def main() -> None:
         dsc_no_projection_context_only=bool(args.dsc_no_projection_context_only),
         reg_bookend_dsc=bool(args.reg_bookend_dsc),
         merge_reg_boundary=bool(args.merge_reg_boundary),
+        dsc_separable=bool(args.dsc_separable),
     )
     if args.pruned_blocks:
         apply_block_pruning(fp32_model, [name.strip() for name in args.pruned_blocks.split(",") if name.strip()])
@@ -567,6 +571,7 @@ def main() -> None:
             dsc_no_projection_context_only=bool(args.dsc_no_projection_context_only),
             reg_bookend_dsc=bool(args.reg_bookend_dsc),
             merge_reg_boundary=bool(args.merge_reg_boundary),
+            dsc_separable=bool(args.dsc_separable),
             pruned_blocks=args.pruned_blocks,
         )
     labels_ts_dir = NNUNET_RAW / dataset_name / "labelsTs"
@@ -614,6 +619,7 @@ def main() -> None:
             + f",shallow_dilation_dense={args.shallow_dilation_dense}"
             + f",dsc_no_projection_context_only={args.dsc_no_projection_context_only},reg_bookend_dsc={args.reg_bookend_dsc}"
             + f",merge_reg_boundary={args.merge_reg_boundary}"
+            + f",dsc_separable={args.dsc_separable}"
             + f",pruned_blocks={args.pruned_blocks}"
         ),
         "quant_bits": args.quant_bits,

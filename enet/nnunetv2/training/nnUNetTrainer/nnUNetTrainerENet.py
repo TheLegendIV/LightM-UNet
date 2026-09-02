@@ -196,6 +196,7 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
             dsc_no_projection_context_only=_parse_bool_env("ENET_DSC_NO_PROJECTION_CONTEXT_ONLY", False),
             reg_bookend_dsc=_parse_bool_env("ENET_REG_BOOKEND_DSC", False),
             merge_reg_boundary=_parse_bool_env("ENET_MERGE_REG_BOUNDARY", False),
+            dsc_separable=_parse_bool_env("ENET_DSC_SEPARABLE", False),
         )
 
         # FINN-deployable follow-up to prelu_variant="leaky": overrides the

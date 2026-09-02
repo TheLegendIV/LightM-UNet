@@ -83,6 +83,7 @@ def build_fp32_model(checkpoint_path: Path) -> ENet:
         use_dsc=globals().get("USE_DSC", False), dsc_no_projection=globals().get("DSC_NO_PROJECTION", False),
         dsc_no_projection_context_only=globals().get("DSC_NO_PROJECTION_CONTEXT_ONLY", False),
         reg_bookend_dsc=globals().get("REG_BOOKEND_DSC", False),
+        dsc_separable=globals().get("DSC_SEPARABLE", False),
     )
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     model.load_state_dict(checkpoint["network_weights"], strict=True)

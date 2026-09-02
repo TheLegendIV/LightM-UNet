@@ -168,6 +168,7 @@ def main() -> None:
         use_dsc=globals().get("USE_DSC", False), dsc_no_projection=globals().get("DSC_NO_PROJECTION", False),
         dsc_no_projection_context_only=globals().get("DSC_NO_PROJECTION_CONTEXT_ONLY", False),
         reg_bookend_dsc=globals().get("REG_BOOKEND_DSC", False),
+        dsc_separable=globals().get("DSC_SEPARABLE", False),
     )
     geometries = dump_layer_geometry(model, INPUT_HW)
     print(f"Traced {len(geometries)} Conv2d/ConvTranspose2d/MaxPool2d layers across {len(STAGE_NAMES)} stages. Folding: {folding}")
