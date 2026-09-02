@@ -155,6 +155,141 @@ def _shrink_boundary_past_sandwiched_nonhw(model, prev_boundary, boundary):
     return boundary
 
 
+def _shrink_boundary_past_open_fork(model, prev_boundary, boundary):
+    """FINN's per-partition stitching (CreateStitchedIP/CreateDataflowPartition)
+    assumes exactly ONE stream crosses each partition boundary. A residual
+    block's `DuplicateStreams` (fork: 1 input -> 2 outputs, one for the main
+    conv path, one for the shortcut) is only reconverged into a single stream
+    again by its matching `AddStreams` later on -- if a naive node-count cut
+    (e.g. find_stage23_quarter_boundaries' even quartering) lands strictly
+    BETWEEN a DuplicateStreams and its matching AddStreams, the departing
+    partition ends with 2 dangling output tensors (both produced by the same
+    DuplicateStreams node) instead of 1. This doesn't fail at partition-
+    assignment time -- it silently produces a 2-output partition sub-model,
+    then crashes much later, deep inside a ProcessPoolExecutor worker, as
+    `AssertionError: No producer for output global_out` inside
+    CreateStitchedIP's `step_set_fifo_depths` (its internal rtlsim-based FIFO
+    depth search needs a stitched IP too), with NO partition/node identity in
+    the traceback. Found 2026-09-01 on `8_2_relu_no_reg_w20`'s stage2/3
+    quarter-1/quarter-2 cut (landed right after `DuplicateStreams_9`, before
+    its corresponding AddStreams in the next quarter).
+
+    Only safe to apply within a range that's already confirmed to have a net
+    fork depth of 0 end-to-end (e.g. the whole stage2/3 quarter range) --
+    NOT every DuplicateStreams in this network is closed by a literal
+    AddStreams (found 2026-09-01: `up4`/`up5`'s own main/reduce fork and the
+    network's very last fork before `final` reconverge some other way, e.g.
+    fused into a later BatchNorm/Threshold during streamlining, not a plain
+    binary add -- 30 DuplicateStreams vs only 27 AddStreams in this model).
+    So if scanning forward never finds a closing AddStreams, this is NOT a
+    boundary artifact -- give up and return the ORIGINAL boundary unchanged
+    rather than asserting/crashing.
+
+    Fix: track fork "depth" across [prev_boundary, boundary) --
+    DuplicateStreams opens one (+1), AddStreams closes one (-1). If depth is
+    nonzero at `boundary` (an unresolved fork would cross the cut), keep
+    scanning forward past `boundary` until depth returns to 0 (i.e. until the
+    matching AddStreams is found), then cut right after that node instead --
+    keeping the whole fork+join pair inside the same partition."""
+    nodes = list(model.graph.node)
+    depth = 0
+    for idx in range(prev_boundary, boundary):
+        op_type = nodes[idx].op_type
+        if op_type.startswith("DuplicateStreams"):
+            depth += 1
+        elif op_type.startswith("AddStreams"):
+            depth -= 1
+    if depth <= 0:
+        return boundary
+    idx = boundary
+    while depth > 0:
+        if idx >= len(nodes):
+            print(
+                "[_shrink_boundary_past_open_fork] WARNING: no closing "
+                "AddStreams found for an open fork spanning boundary %d -- "
+                "this fork apparently never closes via a literal AddStreams "
+                "(not a boundary artifact), leaving boundary unchanged."
+                % boundary
+            )
+            return boundary
+        op_type = nodes[idx].op_type
+        if op_type.startswith("DuplicateStreams"):
+            depth += 1
+        elif op_type.startswith("AddStreams"):
+            depth -= 1
+        idx += 1
+    return idx
+
+
+def validate_partition_single_output(parent_model):
+    """Fail-fast structural check mirroring the EXACT assertions
+    CreateStitchedIP itself makes on a partition's own raw sub-model
+    (pre-specialize, as written by CreateDataflowPartition) --
+    see finn/transformation/fpgadataflow/create_stitched_ip.py:
+        for output in model.graph.output:
+            assert model.find_producer(output.name) is not None, \
+                "No producer for output " + output.name
+        for input in model.graph.input:
+            cons = model.find_consumers(input.name)
+            assert cons != [], "No consumer for input " + input.name
+            assert len(cons) == 1, "Multiple consumers for input " + input.name
+    NOTE: a partition legitimately CAN have >1 graph input/output -- e.g.
+    this network's very last DuplicateStreams fork (before `final`) is only
+    reconverged by a non-HW `Mul` (dequant scale) living in the PARENT
+    graph outside any partition, so the last HW partition genuinely ends
+    with 2 real, valid outputs (verified 2026-09-01: both have in-partition
+    producers). An earlier version of this check asserted a blanket
+    `== 1` count for inputs/outputs, which is what CreateStitchedIP
+    actually requires in the COMMON case but is stricter than the real
+    invariant -- it false-positived on this exact legitimate multi-output
+    partition. The true bug class (found 2026-09-01, `8_2_relu_no_reg_w20`
+    8-way build) is a boundary cut landing mid-fork such that a declared
+    output/input references a tensor whose true producer/consumer ended up
+    in a DIFFERENT partition -- i.e. exactly the two conditions above, not
+    a raw count. This crashes hours later, deep inside a
+    ProcessPoolExecutor worker, as `AssertionError: No producer for output
+    global_out` (`global_out`/`global_in` are GENERIC per-model names
+    GiveReadableTensorNames assigns to output[0]/input[0] of ANY model it's
+    applied to -- not literally the overall network's final tensor), with
+    NO partition/node identity in the traceback. Call this immediately
+    after step_create_dataflow_partition_multi, BEFORE dispatching the
+    expensive (hours-long, per-partition Vivado) parallel build -- this
+    check itself only loads small pre-specialize ONNX graphs, so it costs
+    seconds, not hours, catching a boundary bug immediately instead of
+    hours into synthesis."""
+    from qonnx.core.modelwrapper import ModelWrapper
+
+    sdp_nodes = parent_model.get_nodes_by_op_type("StreamingDataflowPartition")
+    bad = []
+    for i, sdp_node in enumerate(sdp_nodes):
+        fn = getCustomOp(sdp_node).get_nodeattr("model")
+        sub_model = ModelWrapper(fn)
+        problems = []
+        for outp in sub_model.graph.output:
+            if sub_model.find_producer(outp.name) is None:
+                problems.append(f"output {outp.name}: no in-partition producer")
+        for inp in sub_model.graph.input:
+            n_cons = len(sub_model.find_consumers(inp.name))
+            if n_cons != 1:
+                problems.append(f"input {inp.name}: {n_cons} in-partition consumers (need 1)")
+        if problems:
+            bad.append((i, sdp_node.name, fn, problems))
+    if bad:
+        detail = "; ".join(f"partition {i} ({name}): {problems} (file={fn})" for i, name, fn, problems in bad)
+        raise AssertionError(
+            "validate_partition_single_output: %d of %d partitions violate "
+            "CreateStitchedIP's producer/consumer invariant -- a partition "
+            "boundary landed mid-fork (a declared input/output references a "
+            "tensor produced/consumed in a DIFFERENT partition). This WILL "
+            "crash CreateStitchedIP hours into the build if not fixed now. "
+            "Offending partitions: %s" % (len(bad), len(sdp_nodes), detail)
+        )
+    print(
+        "[validate_partition_single_output] OK: all %d partitions satisfy "
+        "CreateStitchedIP's producer/consumer invariant" % len(sdp_nodes)
+    )
+
+
 def assign_stage_partition_ids(model, cfg=None):
     """Custom build step: sets the 'partition_id' nodeattr on every
     fpgadataflow node according to the 5-stage split described above.
@@ -238,6 +373,50 @@ def find_stage23_quarter_boundaries(down2_start, up4_start):
     return cuts
 
 
+def compute_8way_boundaries(model):
+    """Single source of truth for the 8-way partition boundaries -- extracted
+    2026-09-01 so `assign_stage_partition_ids_8way` (which actually splits
+    the graph) and `load_all_partition_logical_names` in
+    finn_ooc_..._8way_full.py (which maps HAWQ conv-order logical names onto
+    partitions for folding-config generation) can NEVER diverge again. Found
+    the hard way: `load_all_partition_logical_names` used to recompute
+    boundaries via a bare `find_stage_boundaries` +
+    `find_stage23_quarter_boundaries` call, WITHOUT the
+    `_shrink_boundary_past_sandwiched_nonhw`/`_shrink_boundary_past_open_fork`
+    fixes -- so once those fixes started actually moving down1_start/
+    down2_start/up4_start/up5_start (2026-09-01's fork-shrink fix), the two
+    boundary sets silently diverged (e.g. down1_start=7 here vs the real,
+    shrunk 21 used by the actual split), corrupting the logical-name-to-
+    weight-node positional mapping and crashing
+    `build_partition_folding_config` with a node-count/name-count mismatch.
+    `model` must be the SAME pre-partition checkpoint (post
+    step_enet_convert_to_hw, pre step_create_dataflow_partition_multi) in
+    both call sites for the result to be meaningful. Returns a dict with
+    keys down1_start/down2_start/q2_start/q3_start/q4_start/up4_start/
+    up5_start."""
+    down1_start, down2_start, up4_start, up5_start = find_stage_boundaries(model)
+    down1_start = _shrink_boundary_past_sandwiched_nonhw(model, 0, down1_start)
+    down1_start = _shrink_boundary_past_open_fork(model, 0, down1_start)
+    down2_start = _shrink_boundary_past_sandwiched_nonhw(model, down1_start, down2_start)
+    down2_start = _shrink_boundary_past_open_fork(model, down1_start, down2_start)
+    up4_start = _shrink_boundary_past_sandwiched_nonhw(model, down2_start, up4_start)
+    up4_start = _shrink_boundary_past_open_fork(model, down2_start, up4_start)
+    up5_start = _shrink_boundary_past_sandwiched_nonhw(model, up4_start, up5_start)
+    up5_start = _shrink_boundary_past_open_fork(model, up4_start, up5_start)
+    q2_start, q3_start, q4_start = find_stage23_quarter_boundaries(down2_start, up4_start)
+    q2_start = _shrink_boundary_past_sandwiched_nonhw(model, down2_start, q2_start)
+    q2_start = _shrink_boundary_past_open_fork(model, down2_start, q2_start)
+    q3_start = _shrink_boundary_past_sandwiched_nonhw(model, q2_start, q3_start)
+    q3_start = _shrink_boundary_past_open_fork(model, q2_start, q3_start)
+    q4_start = _shrink_boundary_past_sandwiched_nonhw(model, q3_start, q4_start)
+    q4_start = _shrink_boundary_past_open_fork(model, q3_start, q4_start)
+    return {
+        "down1_start": down1_start, "down2_start": down2_start,
+        "q2_start": q2_start, "q3_start": q3_start, "q4_start": q4_start,
+        "up4_start": up4_start, "up5_start": up5_start,
+    }
+
+
 def assign_stage_partition_ids_8way(model, cfg=None):
     """8-way variant of assign_stage_partition_ids: same initial/stage1/
     stage4/stage5 boundaries as the 5-way split, but stage2/3 is further
@@ -263,15 +442,14 @@ def assign_stage_partition_ids_8way(model, cfg=None):
     # block's two parallel branches, 2026-08-28).
     model = model.transform(SortGraph())
 
-    down1_start, down2_start, up4_start, up5_start = find_stage_boundaries(model)
-    down1_start = _shrink_boundary_past_sandwiched_nonhw(model, 0, down1_start)
-    down2_start = _shrink_boundary_past_sandwiched_nonhw(model, down1_start, down2_start)
-    up4_start = _shrink_boundary_past_sandwiched_nonhw(model, down2_start, up4_start)
-    up5_start = _shrink_boundary_past_sandwiched_nonhw(model, up4_start, up5_start)
-    q2_start, q3_start, q4_start = find_stage23_quarter_boundaries(down2_start, up4_start)
-    q2_start = _shrink_boundary_past_sandwiched_nonhw(model, down2_start, q2_start)
-    q3_start = _shrink_boundary_past_sandwiched_nonhw(model, q2_start, q3_start)
-    q4_start = _shrink_boundary_past_sandwiched_nonhw(model, q3_start, q4_start)
+    boundaries = compute_8way_boundaries(model)
+    down1_start = boundaries["down1_start"]
+    down2_start = boundaries["down2_start"]
+    q2_start = boundaries["q2_start"]
+    q3_start = boundaries["q3_start"]
+    q4_start = boundaries["q4_start"]
+    up4_start = boundaries["up4_start"]
+    up5_start = boundaries["up5_start"]
 
     counts = [0] * 8
     n_skipped = 0
