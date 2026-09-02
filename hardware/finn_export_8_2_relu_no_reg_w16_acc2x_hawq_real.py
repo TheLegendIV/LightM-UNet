@@ -23,17 +23,17 @@ own QAT-trained CombinedQuantENet (data/nnUNet_results/Dataset509_ARCADE_1x1_
 (same block_bits file, same common_kwargs the trainer itself uses), THEN
 transferred into the FINN-safe mirror below via transfer_weights().
 
-FRESH (not transferable) components -- same "topology fix" every export in
-this repo already documents (see hardware/README.md):
-  - initial: FINN-safe uses a single stride-2 conv producing the FULL
-    out_channels directly, no MaxPool-branch concat -- the real model's
-    QuantInitialBlock.conv only produces (out_channels - in_channels)
-    channels (concatenated with a pooled in_channels branch), so its
-    channel count doesn't match the FINN-safe conv's shape at all. No
-    partial transfer is possible here (unlike finn_export_26_9_w24_hawq_
-    joint_ptq.py's FINNInitialBlockHAWQ, which keeps the real concat
-    topology and so CAN transfer initial's weights) -- initial stays
-    fresh-initialized (torch.manual_seed(0)).
+UPDATE: `initial` now uses a real Concat-based FINNInitialBlockHAWQ (ported
+from finn_export_26_9_w24_hawq_joint_ptq.py's own, which already had this)
+instead of the single-full-out_channels-conv simplification every other
+export in this repo still uses -- its conv+bn ARE now transferred (BN
+split by channel index into conv_bn/pool_bn, exact/lossless), only the
+branch-local trailing activations + requant stay fresh (different
+classes), same as every other block below.
+
+FRESH (not transferable) components -- same "topology fix" every OTHER
+export in this repo still documents (see hardware/README.md) except this
+file's own `initial`, fixed above:
   - down1/down2.shortcut_proj (NEW learned 1x1 projection -- real model's
     downsampling shortcut is parameter-free MaxPool+zero-pad).
   - up4/up5.main_up/main_bn (NEW learned conv-transpose replacing the real
@@ -99,19 +99,47 @@ BLOCK_NAMES = (
 # ---------------------------------------------------------------------------
 
 class FINNInitialBlockHAWQ(nn.Module):
-    """Single stride-2 conv producing the full channel count directly (no
-    MaxPool-branch concat) -- same topology fix every export in this repo
-    uses (see hardware/README.md). NOT transferable from the real model's
-    concat-based QuantInitialBlock -- see module docstring."""
+    """Structurally identical to the real ENet InitialBlock: a learned conv
+    branch (in_ch -> out_ch-in_ch) and a parameter-free MaxPool branch
+    (in_ch -> in_ch) merged via FINN's StreamingConcat -- FINN's Concat HW op
+    only supports the last/channel axis (finn.custom_op.fpgadataflow.concat.
+    StreamingConcat), which is exactly the axis torch.cat(dim=1) uses here,
+    so this is directly buildable (unlike the single full-out_ch conv this
+    class used before, which could never reuse the real trained initial.conv
+    -- wrong shape, always fresh-initialized -- see
+    hardware/finn_export_26_9_w24_hawq_joint_ptq.py's own FINNInitialBlockHAWQ,
+    the working reference this is ported from).
+
+    The real model's single BN(out_ch) (applied AFTER the concat) is split
+    by channel index into two per-branch affines -- BN is per-channel, so
+    slicing the trained weight/bias/running stats by index is an exact,
+    lossless transfer, not an approximation. Each branch then needs its own
+    trailing activation quantizer BEFORE the concat (FINN's InferConcatLayer
+    requires every concat input to already be a coherent quantized integer
+    type -- a raw pre-BN conv accumulator or a plain float can't be a concat
+    input), then both are forced onto the SAME const-scale requant grid
+    (the same self.requant-shared-instance trick already used at every
+    residual Add in this file) immediately before the concat -- FINN's
+    StreamingConcat has no per-stream rescale, it just concatenates raw
+    integers, so both halves must already share one scale."""
 
     def __init__(self, in_ch: int, out_ch: int, weight_bits: int, act_bits: int):
         super().__init__()
-        self.conv = _quant_conv2d(in_ch, out_ch, weight_bits, kernel_size=3, stride=2, padding=1)
-        self.bn = nn.BatchNorm2d(out_ch)
-        self.act = _plain_relu_factory(out_ch, act_bits)
+        self.conv_ch = out_ch - in_ch
+        self.conv = _quant_conv2d(in_ch, self.conv_ch, weight_bits, kernel_size=3, stride=2, padding=1)
+        self.conv_bn = nn.BatchNorm2d(self.conv_ch)
+        self.conv_act = _plain_relu_factory(self.conv_ch, act_bits)
+
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.pool_bn = nn.BatchNorm2d(in_ch)
+        self.pool_act = _plain_relu_factory(in_ch, act_bits)
+
+        self.requant = _requant_factory(act_bits)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.act(self.bn(self.conv(x)))
+        conv_out = self.requant(_val(self.conv_act(self.conv_bn(self.conv(x)))))
+        pool_out = self.requant(_val(self.pool_act(self.pool_bn(self.pool(x)))))
+        return torch.cat([conv_out, pool_out], dim=1)
 
 
 class FINNDownsamplingBottleneckHAWQ(nn.Module):
@@ -352,6 +380,30 @@ def _fresh(note: str, report: list[str]) -> None:
     report.append(f"  [FRESH] {note}")
 
 
+def _transfer_initial(dst, src, name: str, report: list[str]) -> None:
+    """src (QuantInitialBlock) is conv/pool/bn(out_ch)/act -- structurally
+    identical to dst except the single combined BN, which dst splits into
+    conv_bn[0:conv_ch]/pool_bn[conv_ch:] (BN is per-channel, so this exact
+    index slice is lossless -- not an approximation). Ported from
+    hardware/finn_export_26_9_w24_hawq_joint_ptq.py's own _transfer_initial."""
+    dst.conv.load_state_dict(src.conv.state_dict())
+    report.append(f"  [OK]    {name}.conv weight: {src.conv.weight.numel()} params transferred")
+    conv_ch = dst.conv_ch
+    with torch.no_grad():
+        dst.conv_bn.weight.copy_(src.bn.weight[:conv_ch])
+        dst.conv_bn.bias.copy_(src.bn.bias[:conv_ch])
+        dst.conv_bn.running_mean.copy_(src.bn.running_mean[:conv_ch])
+        dst.conv_bn.running_var.copy_(src.bn.running_var[:conv_ch])
+        dst.pool_bn.weight.copy_(src.bn.weight[conv_ch:])
+        dst.pool_bn.bias.copy_(src.bn.bias[conv_ch:])
+        dst.pool_bn.running_mean.copy_(src.bn.running_mean[conv_ch:])
+        dst.pool_bn.running_var.copy_(src.bn.running_var[conv_ch:])
+    report.append(f"  [OK]    {name}.bn split into conv_bn[0:{conv_ch}]/pool_bn[{conv_ch}:] "
+                  f"(exact per-channel slice of the real trained BN, lossless)")
+    _fresh(f"{name}.conv_act/.pool_act/.requant (trailing activations -- same fresh-init "
+           f"convention as every other block's trailing activation in this file)", report)
+
+
 def _transfer_dsc_no_projection(dst, src, name: str, report: list[str]) -> None:
     """dst.conv = [dwconv, BN, act, pwconv, BN, act]; src.conv (real
     QuantDSCNoProjectionBottleneck) = [dwconv, BN, act, pwconv, BN] (its
@@ -386,14 +438,12 @@ def transfer_weights(dst: FINNQuantENet8w16HAWQ, src: CombinedQuantENet) -> list
     """Transfers every structurally-identical conv/BN pair from the real,
     QAT-trained-checkpoint-loaded `src` into the FINN-safe `dst`, leaving
     the topology-mismatched components (see module docstring) at their
-    fresh-init values. `initial` is entirely FRESH -- see module docstring
-    for why no partial transfer is possible for this family's initial
-    block (unlike finn_export_26_9_w24_hawq_joint_ptq.py's)."""
+    fresh-init values. `initial` is now ALSO transferred (real Concat-based
+    topology, see FINNInitialBlockHAWQ's own docstring) -- previously left
+    entirely fresh due to a topology mismatch that no longer exists."""
     report: list[str] = []
 
-    _fresh("initial (topology mismatch: FINN-safe conv produces the FULL out_channels "
-           "directly, real QuantInitialBlock.conv only produces out_channels-in_channels "
-           "channels for its concat-with-pooled-input branch -- no valid partial transfer)", report)
+    _transfer_initial(dst.initial, src.initial, "initial", report)
 
     _transfer_downsampling(dst.down1, src.down1, "down1", report)
     for i, (d, s) in enumerate(zip(dst.regular1, src.regular1)):

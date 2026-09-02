@@ -1,0 +1,167 @@
+#!/bin/bash
+#SBATCH --job-name=stage_8_2_dscproj_r4_finish150
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=10:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# Finishes nnUNetTrainerENet_8_2_relu_no_reg_dscproj_r4 (see
+# stage_8_2_relu_no_reg_dscproj_r_array.job's own header for the full
+# architecture rationale -- r=4, RegularBottleneck+use_dsc real reduce/
+# expand projection at C/4 internal width, native S8.2 full-width channels
+# (4,16,32,16,4)) -- currently at epoch 50/150 (that array job's own
+# ENET_MAX_EPOCHS_TO_RUN=50 cap, per the original "perform 50 epoch tests"
+# request). This job runs the REMAINING 100 epochs (50 -> 150) in ONE
+# submission instead of another 50-epoch-capped increment -- NO
+# ENET_MAX_EPOCHS_TO_RUN set here, so training just continues straight
+# through to the real ENET_EPOCHS=150 schedule end. --time=10:00:00 (double
+# the array job's own 05:00:00 for its 50-epoch submissions) to comfortably
+# cover 100 epochs; if SLURM still cuts it off early, the same self-healing
+# + --c resume logic below makes resubmitting this exact job safe -- it
+# picks up from whatever checkpoint_final.pth/checkpoint_latest.pth
+# actually reached and continues toward 150, same as every other
+# multi-submission job this session.
+#
+# Does NOT touch r=2/r=8 (those stay on the original array job's own
+# 50-epoch-per-submission cadence) -- this is a standalone job for r=4 only.
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+TRAINER_CLASS="nnUNetTrainerENet"
+R=4
+RUN_NAME="8_2_relu_no_reg_dscproj_r${R}"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- ENet trainer knobs -- S8.2 native width, plain dense_dilation, DSC+projection at ratio r=4
+export ENET_CHANNELS="4,16,32,16,4"
+export ENET_BOTTLENECKS="4,8,8,2,1"
+export ENET_CONTEXT_PATTERN="dense_dilation"
+export ENET_DECODER_TYPE="upsample_conv"
+export ENET_USE_PRELU=0
+export ENET_USE_DILATED=1
+export ENET_USE_ASYMMETRIC=0
+export ENET_USE_STRIDED=1
+export ENET_USE_DSC=1
+export ENET_DSC_INTERNAL_RATIO="${R}"
+export ENET_DSC_NO_PROJECTION=0
+export ENET_DSC_NO_PROJECTION_CONTEXT_ONLY=0
+export ENET_REG_BOOKEND_DSC=0
+export ENET_EPOCHS=150
+# NOTE: no ENET_MAX_EPOCHS_TO_RUN here (unlike the original array job's own
+# =50) -- this submission trains all the way to the real 150-epoch end.
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Output folder: ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Self-healing check: promote checkpoint_latest.pth over a STALE checkpoint_final.pth ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ] && [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
+    FINAL_EPOCH_CHECK=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)['current_epoch'])")
+    LATEST_EPOCH_CHECK=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth', map_location='cpu', weights_only=False)['current_epoch'])")
+    if [ "$LATEST_EPOCH_CHECK" -gt "$FINAL_EPOCH_CHECK" ]; then
+        echo "checkpoint_final.pth (epoch ${FINAL_EPOCH_CHECK}) is STALE relative to checkpoint_latest.pth (epoch ${LATEST_EPOCH_CHECK}) -- promoting latest, backing up the stale final."
+        cp "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" "${ENET_OUTPUT_FOLDER}/checkpoint_final_STALE_epoch${FINAL_EPOCH_CHECK}_backup.pth"
+        cp "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth"
+    fi
+fi
+
+echo "=== Checking training progress for ${RUN_NAME} ==="
+EXISTING_CHECKPOINT=""
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    EXISTING_CHECKPOINT="${ENET_OUTPUT_FOLDER}/checkpoint_final.pth"
+elif [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
+    EXISTING_CHECKPOINT="${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth"
+fi
+
+if [ -z "$EXISTING_CHECKPOINT" ]; then
+    echo "ERROR: no existing checkpoint found at ${ENET_OUTPUT_FOLDER} -- this job is meant to FINISH an already-started run (expected epoch 50/150 from stage_8_2_relu_no_reg_dscproj_r_array.job), not start fresh." >&2
+    exit 1
+else
+    CURRENT_EPOCH=$(cd "$HOME/LightM-UNet" && python -c "import torch; print(torch.load('${EXISTING_CHECKPOINT}', map_location='cpu', weights_only=False)['current_epoch'])")
+    echo "Existing checkpoint (${EXISTING_CHECKPOINT}) is at epoch ${CURRENT_EPOCH}/${ENET_EPOCHS}."
+    if [ "$CURRENT_EPOCH" -ge "$ENET_EPOCHS" ]; then
+        echo "Real 150-epoch schedule already complete -- skipping training."
+    else
+        echo "=== Resuming training with --c: epoch ${CURRENT_EPOCH} -> ${ENET_EPOCHS} (no per-submission cap) ==="
+        nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}" --c
+    fi
+fi
+echo "Training step finished for ${RUN_NAME}."
+
+echo "=== Collecting results into compression/results.csv (only meaningful once the real 150-epoch schedule is complete) ==="
+cd "$HOME/LightM-UNet"
+FINAL_EPOCH=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)['current_epoch'])" 2>/dev/null || echo -1)
+if [ "$FINAL_EPOCH" -ge "$ENET_EPOCHS" ]; then
+    python compression/collect_results.py \
+        --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+        --stage "8_2_relu_no_reg_dscproj_r${R}" \
+        --dataset-name "${DATASET_NAME}" \
+        --dataset-id "${DATASET_ID}" \
+        --channels "${ENET_CHANNELS}" \
+        --bottlenecks "${ENET_BOTTLENECKS}" \
+        --decoder-type "${ENET_DECODER_TYPE}" \
+        --use-dilated "${ENET_USE_DILATED}" \
+        --use-asymmetric "${ENET_USE_ASYMMETRIC}" \
+        --use-strided "${ENET_USE_STRIDED}" \
+        --use-dsc "${ENET_USE_DSC}" \
+        --context-pattern "${ENET_CONTEXT_PATTERN}" \
+        --use-prelu "${ENET_USE_PRELU}" \
+        --dsc-no-projection "${ENET_DSC_NO_PROJECTION}" \
+        --dsc-no-projection-context-only "${ENET_DSC_NO_PROJECTION_CONTEXT_ONLY}" \
+        --reg-bookend-dsc "${ENET_REG_BOOKEND_DSC}" \
+        --trainer-class "${TRAINER_CLASS}"
+else
+    echo "Only at epoch ${FINAL_EPOCH}/${ENET_EPOCHS} -- skipping collect_results.py (resubmit this job to continue training)."
+fi
+
+echo "Done: ${RUN_NAME} (r=${R})."
