@@ -141,8 +141,8 @@ from config_23_1 import (  # noqa: E402
 )
 from finn_block_costs import dump_block_layer_geometry  # noqa: E402
 from finn_cost_model import (  # noqa: E402
-    RAM_STYLE_BLOCK, RAM_STYLE_ULTRA, LayerGeometry, calibrated_bram18k, calibrated_lut, divisors,
-    layer_cost_pe_simd, max_pe, max_simd,
+    RAM_STYLE_BLOCK, RAM_STYLE_ULTRA, LayerGeometry, MEM_MODE_DECOUPLED, calibrated_bram18k, calibrated_lut,
+    divisors, is_depthwise, layer_cost_pe_simd, max_pe, max_simd, swu_max_simd_depthwise,
 )
 from finn_stage_costs import INPUT_HW, dump_layer_geometry  # noqa: E402
 
@@ -184,6 +184,24 @@ def candidate_folds(layer: LayerGeometry) -> list[tuple[int, int, str]]:
         (pe, simd, ram_style)
         for pe in divisors(max_pe(layer)) for simd in divisors(max_simd(layer)) for ram_style in RAM_STYLES
     ]
+
+
+def candidate_swu_simd(layer: LayerGeometry) -> list[int]:
+    """The preceding ConvolutionInputGenerator's (SWU's) own SIMD candidates
+    for a depthwise layer -- divisors of channels (==
+    swu_max_simd_depthwise(layer)), the SAME finite domain as this layer's
+    own VVAU PE (divisors(max_pe(layer)), since max_pe(layer)==layer.cout==
+    swu_max_simd_depthwise(layer) for a depthwise layer) -- both must be
+    able to agree exactly under solve_folding_nodewise's coupling
+    constraint. Only meaningful for a depthwise layer; callers must guard
+    with is_depthwise(layer) first (a non-depthwise/MaxPool layer has no
+    SWU-SIMD-must-equal-VVAU-PE coupling to model)."""
+    return divisors(swu_max_simd_depthwise(layer))
+
+
+# FMPadding's own SIMD candidates -- identical domain/meaning to the SWU's
+# (FMPadding feeds the SWU directly, chained to the SAME channel count).
+candidate_fmpad_simd = candidate_swu_simd
 
 
 def layer_bits(layer: LayerGeometry, stage_bits: dict | None, weight_bits: int, act_bits: int) -> tuple[int, int]:
@@ -322,6 +340,18 @@ def solve_folding(
                     }
                     break
 
+    return _build_result(status_name, result_per_layer, hard_lut, hard_bram)
+
+
+def _build_result(status_name: str, result_per_layer: dict, hard_lut: float | None, hard_bram: float | None) -> dict:
+    """Shared by solve_folding and solve_folding_nodewise -- both produce a
+    result_per_layer dict whose entries carry the SAME flat cost keys
+    (total_lut, swu_bram18, wm_bram18, wm_uram18, cycles, weight_bits,
+    act_bits) via **cost_fields, regardless of whether pe/simd/ram_style
+    sit at the top level (solve_folding, and solve_folding_nodewise's own
+    non-depthwise/maxpool entries) or nested under "vvau"/"swu"/"fmpadding"
+    (solve_folding_nodewise's depthwise_vvau_slot entries) -- so this
+    diagnostics computation is byte-for-byte identical either way."""
     total_lut_raw = sum(v["total_lut"] for v in result_per_layer.values())
     total_bram_raw = sum(v["swu_bram18"] + v["wm_bram18"] for v in result_per_layer.values())
     total_uram = sum(v.get("wm_uram18", 0) for v in result_per_layer.values())
@@ -371,6 +401,167 @@ def solve_folding(
     }
 
 
+def solve_folding_nodewise(
+    geometries: list[LayerGeometry], stage_bits: dict | None, weight_bits: int, act_bits: int,
+    lut_weight: float, bram_weight: float, hard_lut: float | None = None, hard_bram: float | None = None,
+) -> dict:
+    """Like solve_folding, but for a depthwise Conv2d layer (is_depthwise),
+    splits the single (PE, SIMD, ram_style) decision into the THREE real
+    FINN nodes it actually becomes after step_specialize_layers -- FMPadding
+    -> ConvolutionInputGenerator (SWU) -> VVAU, in that topological order --
+    instead of one shared tuple, with explicit PuLP equality constraints
+    chaining FMPadding's SIMD to the SWU's SIMD, and the SWU's SIMD to the
+    VVAU's own PE. This is real FINN's depthwise folding convention: the
+    SWU's channel-interleaved output stream must match the VVAU's channel-
+    parallel input lanes 1:1, since each depthwise channel is an
+    independent compute lane with no cross-channel reduction (unlike an
+    MVAU, whose SIMD folds a real reduction dimension and has no such
+    coupling requirement to its own preceding SWU).
+
+    Non-depthwise Conv2d/ConvTranspose2d layers keep EXACTLY solve_folding's
+    treatment -- one shared (PE, SIMD, ram_style) tuple -- now additionally
+    tagged "mem_mode": MEM_MODE_DECOUPLED (this cost model's own
+    wm_bram18/wm_uram18 formulas already assume a BRAM/URAM-backed weight
+    tile, i.e. decoupled mem_mode, today -- this just makes that assumption
+    explicit in the output for the FINN bridge to write onto the real
+    node). MaxPool2d is unchanged too, just labeled "node_type": "maxpool"
+    since it maps to a real StreamingMaxPool_hls node with only a "PE"
+    attribute, no SIMD/ram_style/mem_mode at all.
+
+    x_swu/x_fmpad carry NO objective coefficient -- this cost model's own
+    SWU cost term (swu_bram18/swu_lut) is explicitly documented as folding-
+    independent (a fixed cost, not a function of PE/SIMD at all -- see
+    finn_cost_model.py's own module docstring), so these are pure
+    structure-shaping variables pinned by the coupling constraints below,
+    not cost-search variables. Do not "fix" this by giving them an
+    objective coefficient without first giving finn_cost_model.py a real
+    SIMD-dependent SWU cost formula to search over."""
+    x_mvau: dict[tuple, pulp.LpVariable] = {}
+    x_vvau: dict[tuple, pulp.LpVariable] = {}
+    x_swu: dict[tuple[str, int], pulp.LpVariable] = {}
+    x_fmpad: dict[tuple[str, int], pulp.LpVariable] = {}
+    layer_costs: dict[str, dict[tuple[int, int, str], dict]] = {}
+    raw_cycles: dict[tuple, float] = {}
+    raw_lut: dict[tuple, float] = {}
+    raw_bram: dict[tuple, float] = {}
+
+    for layer in geometries:
+        w_bits, a_bits = layer_bits(layer, stage_bits, weight_bits, act_bits)
+        folds = candidate_folds(layer)
+        costs = {
+            (pe, simd, ram_style): layer_cost_pe_simd(layer, w_bits, a_bits, pe, simd, ram_style)
+            for pe, simd, ram_style in folds
+        }
+        layer_costs[layer.name] = costs
+        depthwise = is_depthwise(layer)
+        compute_x = x_vvau if depthwise else x_mvau
+        var_prefix = "vvau" if depthwise else "mvau"
+        for pe, simd, ram_style in folds:
+            fold_key = (pe, simd, ram_style)
+            key = (layer.name, pe, simd, ram_style)
+            raw_cycles[key] = costs[fold_key]["cycles"]
+            raw_lut[key] = calibrated_lut(costs[fold_key]["total_lut"], w_bits, a_bits)
+            raw_bram[key] = calibrated_bram18k(costs[fold_key]["swu_bram18"] + costs[fold_key]["wm_bram18"], w_bits, a_bits)
+            compute_x[key] = pulp.LpVariable(f"x_{var_prefix}_{layer.name}_{pe}_{simd}_{ram_style}", cat=pulp.LpBinary)
+        if depthwise:
+            for simd in candidate_swu_simd(layer):
+                x_swu[(layer.name, simd)] = pulp.LpVariable(f"x_swu_{layer.name}_{simd}", cat=pulp.LpBinary)
+            for simd in candidate_fmpad_simd(layer):
+                x_fmpad[(layer.name, simd)] = pulp.LpVariable(f"x_fmpad_{layer.name}_{simd}", cat=pulp.LpBinary)
+
+    cycles_norm = _normalize(raw_cycles)
+    lut_norm = _normalize(raw_lut)
+    bram_norm = _normalize(raw_bram)
+
+    prob = pulp.LpProblem("HAWQ_folding_nodewise", pulp.LpMinimize)
+    for layer in geometries:
+        folds = candidate_folds(layer)
+        depthwise = is_depthwise(layer)
+        compute_x = x_vvau if depthwise else x_mvau
+        var_prefix = "vvau" if depthwise else "mvau"
+        prob += (
+            pulp.lpSum(compute_x[(layer.name, pe, simd, ram_style)] for pe, simd, ram_style in folds) == 1,
+            f"one_{var_prefix}_{layer.name}",
+        )
+        if depthwise:
+            swu_opts = candidate_swu_simd(layer)
+            fmpad_opts = candidate_fmpad_simd(layer)
+            prob += pulp.lpSum(x_swu[(layer.name, s)] for s in swu_opts) == 1, f"one_swu_{layer.name}"
+            prob += pulp.lpSum(x_fmpad[(layer.name, s)] for s in fmpad_opts) == 1, f"one_fmpad_{layer.name}"
+            # "SIMD of the preceding ConvolutionInputGenerator is explicitly
+            # set equal to that VVAU's PE":
+            prob += (
+                pulp.lpSum(s * x_swu[(layer.name, s)] for s in swu_opts)
+                == pulp.lpSum(pe * compute_x[(layer.name, pe, simd, ram_style)] for pe, simd, ram_style in folds)
+            ), f"swu_simd_eq_vvau_pe_{layer.name}"
+            # "SIMD of the FMPadding block ahead of that is chained to the
+            # same value" (chained via SWU, matching the real topological
+            # order FMPadding -> SWU -> VVAU):
+            prob += (
+                pulp.lpSum(s * x_fmpad[(layer.name, s)] for s in fmpad_opts)
+                == pulp.lpSum(s * x_swu[(layer.name, s)] for s in swu_opts)
+            ), f"fmpad_simd_eq_swu_simd_{layer.name}"
+
+    # Objective sums only over the compute-engine terms (x_mvau/x_vvau) --
+    # x_swu/x_fmpad are omitted entirely (not zero-weighted), per this
+    # function's own docstring.
+    prob += pulp.lpSum(
+        xv * (cycles_norm[key] + lut_weight * lut_norm[key] + bram_weight * bram_norm[key])
+        for compute_x in (x_mvau, x_vvau) for key, xv in compute_x.items()
+    )
+
+    if hard_lut is not None:
+        prob += pulp.lpSum(
+            xv * raw_lut[key] for compute_x in (x_mvau, x_vvau) for key, xv in compute_x.items()
+        ) <= hard_lut * XCZU7EV["LUT"], "hard_lut_budget"
+    if hard_bram is not None:
+        prob += pulp.lpSum(
+            xv * raw_bram[key] for compute_x in (x_mvau, x_vvau) for key, xv in compute_x.items()
+        ) <= hard_bram * XCZU7EV["BRAM_18K"], "hard_bram_budget"
+
+    status = prob.solve(pulp.PULP_CBC_CMD(msg=0, timeLimit=300, gapRel=0.01))
+    status_name = pulp.LpStatus[status]
+    result_per_layer = {}
+    if status_name == "Optimal":
+        for layer in geometries:
+            w_bits, a_bits = layer_bits(layer, stage_bits, weight_bits, act_bits)
+            depthwise = is_depthwise(layer)
+            compute_x = x_vvau if depthwise else x_mvau
+            chosen = None
+            for pe, simd, ram_style in candidate_folds(layer):
+                if pulp.value(compute_x[(layer.name, pe, simd, ram_style)]) > 0.5:
+                    chosen = (pe, simd, ram_style)
+                    break
+            pe, simd, ram_style = chosen
+            cost_fields = layer_costs[layer.name][(pe, simd, ram_style)]
+            if layer.op_type == "MaxPool2d":
+                result_per_layer[layer.name] = {
+                    "node_type": "maxpool", "stage": layer.stage, "pe": pe,
+                    "weight_bits": w_bits, "act_bits": a_bits,
+                    **cost_fields,
+                }
+            elif not depthwise:
+                result_per_layer[layer.name] = {
+                    "node_type": "mvau", "stage": layer.stage, "pe": pe, "simd": simd, "ram_style": ram_style,
+                    "mem_mode": MEM_MODE_DECOUPLED,
+                    "weight_bits": w_bits, "act_bits": a_bits,
+                    **cost_fields,
+                }
+            else:
+                swu_simd = next(s for s in candidate_swu_simd(layer) if pulp.value(x_swu[(layer.name, s)]) > 0.5)
+                fmpad_simd = next(s for s in candidate_fmpad_simd(layer) if pulp.value(x_fmpad[(layer.name, s)]) > 0.5)
+                result_per_layer[layer.name] = {
+                    "node_type": "depthwise_vvau_slot", "stage": layer.stage,
+                    "weight_bits": w_bits, "act_bits": a_bits,
+                    "fmpadding": {"simd": fmpad_simd},
+                    "swu": {"simd": swu_simd},
+                    "vvau": {"pe": pe, "simd": simd, "ram_style": ram_style, "mem_mode": MEM_MODE_DECOUPLED},
+                    **cost_fields,
+                }
+
+    return _build_result(status_name, result_per_layer, hard_lut, hard_bram)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", default="config_23_1",
@@ -405,6 +596,16 @@ def main() -> None:
                               "gets written to --out-file same as an Optimal result would.")
     parser.add_argument("--hard-bram", type=float, nargs="?", const=1.0, default=None, metavar="FRACTION",
                          help="Same as --hard-lut, for calibrated BRAM_18K.")
+    parser.add_argument("--node-level", action="store_true",
+                         help="EXPERIMENTAL, developed/verified against --config config_8_2_relu_no_reg_w16 -- "
+                              "splits each depthwise Conv2d's single folding decision into FINN's real 3-node "
+                              "shape (FMPadding SIMD == SWU SIMD == VVAU PE, chained via explicit PuLP equality "
+                              "constraints; VVAU's own SIMD independently divides kh*kw) instead of one shared "
+                              "(PE, SIMD, ram_style) tuple, and tags every non-depthwise Conv2d/ConvTranspose2d "
+                              "with mem_mode=internal_decoupled. Non-depthwise/MaxPool2d layers are unaffected "
+                              "either way -- see solve_folding_nodewise's own docstring. Requires the groups= "
+                              "fix in finn_block_costs.py/finn_stage_costs.py (already applied) to compute a "
+                              "correct VVAU PE/SIMD domain for depthwise layers.")
     parser.add_argument("--out-file", type=Path, default=Path("compression/hawq/folding_23_1_w8a8.json"))
     args = parser.parse_args()
     if args.out_file is None:
@@ -437,11 +638,19 @@ def main() -> None:
     else:
         geometries = dump_layer_geometry(model, INPUT_HW)
     n_candidates = sum(len(candidate_folds(g)) for g in geometries)
-    print(f"Traced {len(geometries)} layers ({args.granularity} granularity), {n_candidates} total "
-          f"(layer, PE, SIMD) candidates. "
-          f"Bits: {'per-' + args.granularity + ' from ' + str(args.stage_bits_file) if stage_bits else f'uniform W{args.weight_bits}A{args.act_bits}'}. Solving...")
+    if args.node_level:
+        n_depthwise = sum(1 for g in geometries if is_depthwise(g))
+        n_candidates += sum(len(candidate_swu_simd(g)) + len(candidate_fmpad_simd(g)) for g in geometries if is_depthwise(g))
+        print(f"Traced {len(geometries)} layers ({args.granularity} granularity, {n_depthwise} depthwise -> "
+              f"FMPadding+SWU+VVAU node-level), {n_candidates} total (layer, PE, SIMD[, SWU-SIMD, FMPad-SIMD]) "
+              f"candidates. Bits: {'per-' + args.granularity + ' from ' + str(args.stage_bits_file) if stage_bits else f'uniform W{args.weight_bits}A{args.act_bits}'}. Solving...")
+    else:
+        print(f"Traced {len(geometries)} layers ({args.granularity} granularity), {n_candidates} total "
+              f"(layer, PE, SIMD) candidates. "
+              f"Bits: {'per-' + args.granularity + ' from ' + str(args.stage_bits_file) if stage_bits else f'uniform W{args.weight_bits}A{args.act_bits}'}. Solving...")
 
-    result = solve_folding(
+    solve_fn = solve_folding_nodewise if args.node_level else solve_folding
+    result = solve_fn(
         geometries, stage_bits, args.weight_bits, args.act_bits, args.lut_weight, args.bram_weight,
         hard_lut=args.hard_lut, hard_bram=args.hard_bram,
     )

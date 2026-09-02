@@ -208,6 +208,52 @@ class LayerGeometry:
     # fix either way).
 
 
+def is_depthwise(layer: LayerGeometry) -> bool:
+    """True for a real grouped-depthwise Conv2d (groups>1) -- the shape
+    that becomes a FINN VVAU (Vector-Vector-Activation-Unit) node instead
+    of an MVAU, with its own PE/SIMD folding domain (see
+    swu_max_simd_depthwise below) and its own preceding SWU/FMPadding
+    coupling constraint (compression/hawq/folding_ilp.py's
+    solve_folding_nodewise). This repo only ever constructs FULLY
+    depthwise convs (groups == cin == cout, one filter per channel) via
+    ENet.py's DSCNoProjectionBottleneck / RegularBottleneck(use_dsc=True)
+    -- assert that shape defensively rather than silently mis-handling a
+    partial-group conv, which this file's VVAU domain helpers don't
+    support and no config in this repo ever produces."""
+    if layer.op_type != "Conv2d" or layer.groups <= 1:
+        return False
+    assert layer.groups == layer.cin == layer.cout, (
+        f"{layer.name}: partial-group conv (groups={layer.groups}, cin={layer.cin}, "
+        f"cout={layer.cout}) is not a supported VVAU shape -- only fully depthwise "
+        f"(groups==cin==cout) convs are modeled here."
+    )
+    return True
+
+
+def swu_max_simd_depthwise(layer: LayerGeometry) -> int:
+    """The preceding ConvolutionInputGenerator's (SWU's) own SIMD must
+    divide IFMChannels -- for a depthwise layer that's cin==cout==groups
+    (the channel count), NOT cin*kh*kw (that's the MVAU-SIMD constraint for
+    a DENSE conv, a different axis -- see hardware/finn_native_cost_
+    estimator.py's own module docstring for the real-FINN source-derived
+    note on this mismatch). Deliberately the SAME domain as this layer's
+    own VVAU PE (max_pe(layer)==layer.cout) -- solve_folding_nodewise's
+    coupling constraint requires an SWU SIMD choice and a VVAU PE choice to
+    be able to agree exactly."""
+    return layer.cout
+
+
+MEM_MODE_DECOUPLED = "internal_decoupled"  # real FINN v0.10.1 mem_mode nodeattr
+                                            # value for MVAU/VVAU nodes whose
+                                            # weights are streamed from BRAM/
+                                            # URAM rather than embedded as LUT/
+                                            # FF constants (confirmed against a
+                                            # real generated auto_folding_
+                                            # config.json -- the informal name
+                                            # "decoupled" is this version's
+                                            # stale/pre-rename name for it).
+
+
 def _k_eff(kh: int, dh: int) -> int:
     return (kh - 1) * dh + 1
 

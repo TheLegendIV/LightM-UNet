@@ -1,10 +1,4 @@
-"""HYPOTHETICAL architecture -- no trained checkpoint exists for this combo
-yet. This config exists purely so finn_block_costs.py/folding_ilp.py can
-trace real geometry at this exact architecture for a hardware-cost
-estimate -- do NOT attempt to run block_sensitivity.py against it, there is
-no real checkpoint to load.
-
-w16 width (4,8,16,8,4), plain dense_dilation context (native depth 8, no
+"""w16 width (4,8,16,8,4), plain dense_dilation context (native depth 8, no
 reg-interleaved bookends -- "no reg"), plain ReLU (use_prelu=False), and
 dsc_no_projection SCOPED TO CONTEXT ONLY (dsc_no_projection_context_only=
 True) -- unlike nnUNetTrainerENet_8_2_relu_no_reg_w16 (unscoped
@@ -12,14 +6,24 @@ dsc_no_projection=True), regular1/regular4/regular5 here stay REAL
 projected RegularBottleneck blocks with real ReLU ("rest is normal ENet
 style"); only stage2/stage3's dilated slots become DSCNoProjectionBottleneck.
 
+UPDATE: a real checkpoint now exists (trained to a complete 150-epoch
+schedule, dice=0.7282, see compression/results.csv's own
+8_2_relu_w16_no_reg_context_only row) -- block_sensitivity.py CAN be run
+against this config directly now. The note below about
+hypothetical_w16_no_reg_context_only.py's fallback-bits approximation is
+kept for historical context only; prefer a real
+block_sensitivity_8_2_relu_w16_no_reg_context_only.json search over that
+flat-W8A8-fallback approximation whenever both exist.
+
 See compression/hawq/hypothetical_w16_no_reg_context_only.py for how the
-per-block bit assignment is approximated (reusing block_bits_8_2_relu_
-no_reg_w16_acc2x_min4_joint.json, computed for the UNSCOPED sibling's own
-architecture, not this exact one -- no real sensitivity exists for a real
-RegularBottleneck+ReLU combination at this width)."""
+per-block bit assignment was PREVIOUSLY approximated, before a real
+checkpoint existed (reusing block_bits_8_2_relu_no_reg_w16_acc2x_min4_
+joint.json, computed for the UNSCOPED sibling's own architecture, not this
+exact one, plus a flat W8A8 fallback for the 7 real RegularBottleneck
+blocks that sibling doesn't have)."""
 from __future__ import annotations
 
-NET_NAME = "nnUNetTrainerENet_8_2_relu_w16_no_reg_context_only"  # HYPOTHETICAL -- no such checkpoint exists
+NET_NAME = "nnUNetTrainerENet_8_2_relu_w16_no_reg_context_only"
 IN_CHANNELS = 1
 OUT_CHANNELS = 5  # labels: background, LAD, RCA, LCX, LM
 CHANNELS = (4, 8, 16, 8, 4)  # initial, stage1, stage2/3 (context), stage4, stage5

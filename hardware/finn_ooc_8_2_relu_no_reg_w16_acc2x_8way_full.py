@@ -86,6 +86,15 @@ FOLDING_BLOCK_FILE = os.path.join(
     base.ENET_DIR, "folding_block_8_2_relu_no_reg_w16_acc2x_min4_hardcap100.json"
 )
 WEIGHT_OP_TYPES = ("MVAU_hls", "MVAU_rtl", "VVAU_hls", "VVAU_rtl")
+VVAU_OP_TYPES = ("VVAU_hls", "VVAU_rtl")
+# Real FINN node types for the sliding-window unit and its preceding padding
+# block, feeding a VVAU -- see compression/hawq/folding_ilp.py's
+# solve_folding_nodewise, whose "depthwise_vvau_slot" output entries this
+# bridge now also writes onto these two node types (previously left
+# entirely at FINN's own auto-folding default; see this file's own
+# find_preceding_swu_fmpad docstring for how they're located).
+SWU_OP_TYPES = ("ConvolutionInputGenerator_hls", "ConvolutionInputGenerator_rtl")
+FMPAD_OP_TYPES = ("FMPadding_hls", "FMPadding_rtl", "FMPadding_Pixel")
 
 PARTITION_RANGE_ORDER = [
     "down1_start", "down2_start", "q2_start", "q3_start", "q4_start", "up4_start", "up5_start",
@@ -198,6 +207,31 @@ def _get_pe_simd_bounds(inst):
     return inst.get_nodeattr("Channels"), k_h * k_w
 
 
+def find_preceding_swu_fmpad(all_nodes, name_to_idx, vvau_node):
+    """For a VVAU node, locate its immediately-preceding SWU
+    (ConvolutionInputGenerator_*) and FMPadding_* node by walking backward
+    from the VVAU's own position in the FULL (unfiltered) graph.node list.
+    Real FINN's step_specialize_layers always emits a depthwise conv's
+    three nodes back-to-back, in the fixed order [FMPadding_i,
+    ConvolutionInputGenerator_i, VVAU_j] -- confirmed against a real
+    generated auto_folding_config.json (literal adjacency, no other node
+    type in between) -- so this expects EXACTLY the two nodes immediately
+    before the VVAU to be SWU then FMPadding, and raises loud rather than
+    silently mismatching if that's not what's found (same "do NOT proceed
+    blindly" policy this file already uses for the main MVAU/VVAU zip)."""
+    idx = name_to_idx[vvau_node.name]
+    if idx < 2:
+        raise RuntimeError(f"{vvau_node.name}: expected 2 preceding nodes (FMPadding, SWU), only {idx} nodes before it")
+    swu_node, fmpad_node = all_nodes[idx - 1], all_nodes[idx - 2]
+    if swu_node.op_type not in SWU_OP_TYPES:
+        raise RuntimeError(f"{vvau_node.name}: expected an SWU node immediately before it, got "
+                            f"{swu_node.op_type} ({swu_node.name})")
+    if fmpad_node.op_type not in FMPAD_OP_TYPES:
+        raise RuntimeError(f"{vvau_node.name}: expected an FMPadding node 2 positions before it, got "
+                            f"{fmpad_node.op_type} ({fmpad_node.name})")
+    return fmpad_node, swu_node
+
+
 def build_partition_folding_config(preamble_dir, partition_idx, sdp_node_name, partition_model_fn, logical_names, pool_names, per_layer, output_dir):
     kernel_model = ModelWrapper(partition_model_fn)
     print(f"[partition {partition_idx}] loaded raw model: {len(kernel_model.graph.node)} nodes")
@@ -211,7 +245,9 @@ def build_partition_folding_config(preamble_dir, partition_idx, sdp_node_name, p
     kernel_model = step_target_fps_parallelization(kernel_model, dummy_cfg)
     kernel_model = kernel_model.transform(GiveUniqueNodeNames())
 
-    weight_nodes = [n for n in kernel_model.graph.node if n.op_type in WEIGHT_OP_TYPES]
+    all_nodes = list(kernel_model.graph.node)
+    name_to_idx = {n.name: i for i, n in enumerate(all_nodes)}
+    weight_nodes = [n for n in all_nodes if n.op_type in WEIGHT_OP_TYPES]
     print(f"[partition {partition_idx}] {len(weight_nodes)} weight nodes vs {len(logical_names)} logical names "
           f"(+{len(pool_names)} pool-type, skipped: {pool_names})")
     if len(weight_nodes) != len(logical_names):
@@ -221,6 +257,7 @@ def build_partition_folding_config(preamble_dir, partition_idx, sdp_node_name, p
 
     folding_config = {"Defaults": {}}
     unmatched = []
+    n_swu_fmpad = 0
     for node, logical_name in zip(weight_nodes, logical_names):
         entry, json_key = resolve_folding_entry(logical_name, per_layer)
         if entry is None:
@@ -234,12 +271,20 @@ def build_partition_folding_config(preamble_dir, partition_idx, sdp_node_name, p
             print(f"[partition {partition_idx}]  {node.name:30s} {node.op_type:12s} <- {logical_name:25s} "
                   f"(derived from {source}) PE={fallback['PE']} SIMD={fallback['SIMD']}")
             continue
-        pe, simd = entry["pe"], entry["simd"]
+
+        node_type = entry.get("node_type")  # None for a legacy solve_folding-shaped entry
+        # For a solve_folding_nodewise "depthwise_vvau_slot" entry, the
+        # compute node's own (PE, SIMD, ram_style, mem_mode) live under
+        # entry["vvau"] instead of the flat top level -- everything else
+        # (clamping, printing) is otherwise identical to the "mvau"/legacy
+        # case below.
+        compute_entry = entry["vvau"] if node_type == "depthwise_vvau_slot" else entry
+        pe, simd = compute_entry["pe"], compute_entry["simd"]
         # Defensive clamp: the HAWQ folding search's per_layer entry may have been
         # computed against a slightly different channel dimensioning than this
-        # actual graph's node -- if PE/SIMD wouldn't divide the node's real MH/MW,
-        # clamp down to the largest valid divisor instead of crashing later in
-        # MinimizeAccumulatorWidth.
+        # actual graph's node -- if PE/SIMD wouldn't divide the node's real MH/MW
+        # (or Channels/Kernel, for a VVAU), clamp down to the largest valid
+        # divisor instead of crashing later in MinimizeAccumulatorWidth.
         inst = getCustomOp(node)
         mh, mw = _get_pe_simd_bounds(inst)
         safe_pe, safe_simd = _largest_divisor_leq(mh, pe), _largest_divisor_leq(mw, simd)
@@ -247,12 +292,55 @@ def build_partition_folding_config(preamble_dir, partition_idx, sdp_node_name, p
             print(f"[partition {partition_idx}]  {node.name:30s} {node.op_type:12s} <- {logical_name:25s} "
                   f"({json_key:25s}) CLAMPED PE {pe}->{safe_pe} (MH={mh}), SIMD {simd}->{safe_simd} (MW={mw})")
         pe, simd = safe_pe, safe_simd
-        folding_config[node.name] = {"PE": pe, "SIMD": simd}
+        node_config = {"PE": pe, "SIMD": simd}
+        # ram_style/mem_mode were already present in the ILP's own per-layer
+        # output but previously discarded here (only pe/simd were ever
+        # read) -- write them through now whenever the entry carries them
+        # (both the legacy solve_folding shape and solve_folding_nodewise's
+        # "mvau"/"vvau" sub-entries carry ram_style; only the latter also
+        # carries mem_mode).
+        if "ram_style" in compute_entry:
+            node_config["ram_style"] = compute_entry["ram_style"]
+        if "mem_mode" in compute_entry:
+            node_config["mem_mode"] = compute_entry["mem_mode"]
+        folding_config[node.name] = node_config
+        extra = "".join(f" {k}={v}" for k, v in node_config.items() if k not in ("PE", "SIMD"))
         print(f"[partition {partition_idx}]  {node.name:30s} {node.op_type:12s} <- {logical_name:25s} "
-              f"({json_key:25s}) PE={pe} SIMD={simd}")
+              f"({json_key:25s}) PE={pe} SIMD={simd}{extra}")
+
+        if node_type == "depthwise_vvau_slot":
+            # "The SIMD of the preceding ConvolutionInputGenerator is
+            # explicitly set equal to that VVAU's PE" / "The SIMD of the
+            # FMPadding block ahead of that is chained to the same value"
+            # -- the ILP already decided and enforced both equalities
+            # (compression/hawq/folding_ilp.py's solve_folding_nodewise).
+            # IMPORTANT: force SWU/FMPadding's SIMD to the VVAU's own FINAL
+            # (post-clamp) `pe`, not blindly copy entry["swu"]["simd"] --
+            # if the defensive MH/MW clamp above changed the VVAU's PE
+            # (dimensioning drift between the HAWQ-traced model and this
+            # real exported node), copying the ILP's now-stale SWU/
+            # FMPadding value would silently reintroduce the exact
+            # SIMD-mismatch this whole feature exists to eliminate. Sanity-
+            # check the ILP's own invariant held before any clamping first.
+            if entry["swu"]["simd"] != compute_entry["pe"] or entry["fmpadding"]["simd"] != entry["swu"]["simd"]:
+                print(f"[partition {partition_idx}] WARNING: {logical_name}'s own ILP entry violates the "
+                      f"fmpadding.simd==swu.simd==vvau.pe invariant BEFORE clamping "
+                      f"(fmpadding={entry['fmpadding']['simd']}, swu={entry['swu']['simd']}, vvau.pe="
+                      f"{compute_entry['pe']}) -- investigate compression/hawq/folding_ilp.py's own solve; "
+                      f"forcing to the clamped VVAU PE below regardless.")
+            fmpad_node, swu_node = find_preceding_swu_fmpad(all_nodes, name_to_idx, node)
+            folding_config[swu_node.name] = {"SIMD": pe}
+            folding_config[fmpad_node.name] = {"SIMD": pe}
+            n_swu_fmpad += 1
+            print(f"[partition {partition_idx}]  {swu_node.name:30s} {swu_node.op_type:12s} <- {logical_name:25s} "
+                  f"(SWU, coupled to {node.name}'s PE) SIMD={pe}")
+            print(f"[partition {partition_idx}]  {fmpad_node.name:30s} {fmpad_node.op_type:12s} <- {logical_name:25s} "
+                  f"(FMPadding, chained to {swu_node.name}'s SIMD) SIMD={pe}")
     if unmatched:
         print(f"[partition {partition_idx}] WARNING: {len(unmatched)} unmatched logical names "
               f"(derived fallback PE/SIMD applied): {unmatched}")
+    if n_swu_fmpad:
+        print(f"[partition {partition_idx}] bridged {n_swu_fmpad} FMPadding+SWU pair(s) for depthwise VVAU slots")
     return folding_config, len(unmatched)
 
 

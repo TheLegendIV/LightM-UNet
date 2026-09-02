@@ -130,7 +130,15 @@ def native_conv_cost_pe_simd(
     term from finn_cost_model.py's analytical formula (see module
     docstring for why SWU stays analytical)."""
     analytical = analytical_conv_cost_pe_simd(layer, weight_bits, act_bits, pe, simd)
-    mw = layer.cin * layer.kh * layer.kw
+    # groups-aware reduction width -- was `layer.cin * layer.kh * layer.kw`
+    # unconditionally, which overstates a depthwise conv's (groups>1) real
+    # weight-matrix width by a factor of `groups` (same bug this session
+    # fixed at the geometry-dump level in finn_block_costs.py/
+    # finn_stage_costs.py -- see finn_cost_model.py's LayerGeometry.groups
+    # docstring). This still always builds an MVAU_hls synthetic node (never
+    # VVAU_hls) -- correct reduction width, but not a real VVAU cost model;
+    # see this file's own module docstring for why that's deferred.
+    mw = (layer.cin // layer.groups) * layer.kh * layer.kw
     mh = layer.cout
     inst = _mvau_node(mw, mh, pe, simd, weight_bits, act_bits, [layer.hout * layer.wout], ram_style)
     mvu_lut = inst.lut_estimation()

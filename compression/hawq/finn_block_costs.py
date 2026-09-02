@@ -76,6 +76,7 @@ def dump_block_layer_geometry(model: nn.Module, input_hw: tuple[int, int]) -> li
                 cin=x.shape[1], hin=x.shape[2], win=x.shape[3],
                 cout=output.shape[1], hout=output.shape[2], wout=output.shape[3],
                 kh=kh, kw=kw, sh=sh, sw=sw, dh=dh, dw=dw,
+                groups=getattr(module, "groups", 1),
             ))
         return hook
 
