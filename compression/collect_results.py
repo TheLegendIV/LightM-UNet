@@ -49,6 +49,7 @@ sys.path.insert(0, str(PACKAGE_ROOT))
 sys.path.insert(0, str(ANALYSIS_ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from nnunetv2.nets.ENet import ENet, apply_block_pruning  # noqa: E402
+from nnunetv2.nets.ERFNet import ERFNet  # noqa: E402
 from nnunetv2.nets.QuantENet import QuantENet  # noqa: E402
 import segmentation_topology as topo  # noqa: E402
 from utils import count_bops, count_buffer_elements, count_flops, count_params  # noqa: E402
@@ -388,6 +389,18 @@ def main() -> None:
                          help="Informational only (not consumed by this script -- kept for parity with "
                               "the training job's own DATASET_ID, same convention as --trainer-class).")
     parser.add_argument("--trainer-class", default="nnUNetTrainerENet", help="Informational only (not used for inference -- see run_inference's docstring). Kept for parity with the training job's -tr flag.")
+    parser.add_argument("--model-class", default="enet", choices=["enet", "erfnet"],
+                         help="Which nn.Module to build for FLOPs/params/buffer-element counting -- 'enet' "
+                              "(default) builds ENet with every --use-*/--context-pattern/... flag below; "
+                              "'erfnet' builds ERFNet.py's own ERFNet instead (ignores every ENet-specific "
+                              "flag -- --channels still applies, using ERFNet.py's own 5-value convention: "
+                              "initial/stage1/context/stage4/stage5, --bottlenecks is ignored since ERFNet's "
+                              "own depth is --erfnet-stage1-depth/--erfnet-context-depth/--erfnet-decoder-depth "
+                              "instead). Only 'enet' supports --quant-bits != 32 (ERFNet has no Quant* "
+                              "counterpart in this repo yet).")
+    parser.add_argument("--erfnet-stage1-depth", type=int, default=5, help="ERFNet.py's own stage1_depth (default: the real architecture's own 5). Only used with --model-class erfnet.")
+    parser.add_argument("--erfnet-context-depth", type=int, default=8, help="ERFNet.py's own context_depth (default: the real architecture's own 8). Only used with --model-class erfnet.")
+    parser.add_argument("--erfnet-decoder-depth", type=int, default=2, help="ERFNet.py's own decoder_depth (default: the real architecture's own 2). Only used with --model-class erfnet.")
     parser.add_argument("--stage", required=True, help="e.g. stage1, stage1b, stage2, early_probe.")
     parser.add_argument("--channels", required=True, type=parse_channels)
     parser.add_argument("--bottlenecks", default="4,8,8,2,1", type=lambda v: parse_tuple5(v, "bottlenecks"))
@@ -462,40 +475,57 @@ def main() -> None:
     if args.out_channels is None:
         args.out_channels = len(read_dataset_labels(dataset_name))
 
-    # FLOPs/MACs always come from the plain FP32 ENet: thop silently
-    # undercounts a QuantENet by ~40x (doesn't recognize Brevitas's quant
-    # layers as countable ops -- measured, see utils.count_bops's
-    # docstring), and MAC count is topology-determined, not quantization-
-    # determined (verified topology-identical between ENet/QuantENet).
-    fp32_model = ENet(
-        in_channels=args.in_channels,
-        out_channels=args.out_channels,
-        channels=args.channels,
-        bottlenecks_per_stage=args.bottlenecks,
-        decoder_type=args.decoder_type,
-        use_dilated=bool(args.use_dilated),
-        use_asymmetric=bool(args.use_asymmetric),
-        use_strided=bool(args.use_strided),
-        use_dsc=bool(args.use_dsc),
-        context_pattern=args.context_pattern,
-        use_prelu=bool(args.use_prelu),
-        prelu_variant=args.prelu_variant,
-        shallow_dilation=bool(args.shallow_dilation),
-        separable_dilated=bool(args.separable_dilated),
-        merge_dilated_pairs=bool(args.merge_dilated_pairs),
-        dsc_dilated_only=bool(args.dsc_dilated_only),
-        double_projections=bool(args.double_projections),
-        two_block_skip=bool(args.two_block_skip),
-        dsc_no_projection=bool(args.dsc_no_projection),
-        shallow_dilation_wide=bool(args.shallow_dilation_wide),
-        shallow_dilation_dense=bool(args.shallow_dilation_dense),
-        dsc_no_projection_context_only=bool(args.dsc_no_projection_context_only),
-        reg_bookend_dsc=bool(args.reg_bookend_dsc),
-        merge_reg_boundary=bool(args.merge_reg_boundary),
-        dsc_separable=bool(args.dsc_separable),
-    )
-    if args.pruned_blocks:
-        apply_block_pruning(fp32_model, [name.strip() for name in args.pruned_blocks.split(",") if name.strip()])
+    if args.model_class == "erfnet":
+        if args.quant_bits != 32:
+            raise ValueError("--model-class erfnet only supports --quant-bits 32 -- ERFNet has no Quant* counterpart in this repo yet.")
+        if args.pruned_blocks:
+            raise ValueError("--pruned-blocks is ENet-specific (apply_block_pruning targets ENet's own named blocks) -- not supported with --model-class erfnet.")
+        # FLOPs/MACs/params all come from the plain FP32 ERFNet -- no
+        # Quant* counterpart exists yet, so (unlike the ENet branch below)
+        # there's no separate quant_model construction to worry about.
+        fp32_model = ERFNet(
+            in_channels=args.in_channels,
+            out_channels=args.out_channels,
+            channels=args.channels,
+            stage1_depth=args.erfnet_stage1_depth,
+            context_depth=args.erfnet_context_depth,
+            decoder_depth=args.erfnet_decoder_depth,
+        )
+    else:
+        # FLOPs/MACs always come from the plain FP32 ENet: thop silently
+        # undercounts a QuantENet by ~40x (doesn't recognize Brevitas's quant
+        # layers as countable ops -- measured, see utils.count_bops's
+        # docstring), and MAC count is topology-determined, not quantization-
+        # determined (verified topology-identical between ENet/QuantENet).
+        fp32_model = ENet(
+            in_channels=args.in_channels,
+            out_channels=args.out_channels,
+            channels=args.channels,
+            bottlenecks_per_stage=args.bottlenecks,
+            decoder_type=args.decoder_type,
+            use_dilated=bool(args.use_dilated),
+            use_asymmetric=bool(args.use_asymmetric),
+            use_strided=bool(args.use_strided),
+            use_dsc=bool(args.use_dsc),
+            context_pattern=args.context_pattern,
+            use_prelu=bool(args.use_prelu),
+            prelu_variant=args.prelu_variant,
+            shallow_dilation=bool(args.shallow_dilation),
+            separable_dilated=bool(args.separable_dilated),
+            merge_dilated_pairs=bool(args.merge_dilated_pairs),
+            dsc_dilated_only=bool(args.dsc_dilated_only),
+            double_projections=bool(args.double_projections),
+            two_block_skip=bool(args.two_block_skip),
+            dsc_no_projection=bool(args.dsc_no_projection),
+            shallow_dilation_wide=bool(args.shallow_dilation_wide),
+            shallow_dilation_dense=bool(args.shallow_dilation_dense),
+            dsc_no_projection_context_only=bool(args.dsc_no_projection_context_only),
+            reg_bookend_dsc=bool(args.reg_bookend_dsc),
+            merge_reg_boundary=bool(args.merge_reg_boundary),
+            dsc_separable=bool(args.dsc_separable),
+        )
+        if args.pruned_blocks:
+            apply_block_pruning(fp32_model, [name.strip() for name in args.pruned_blocks.split(",") if name.strip()])
     # FINN sliding-window-buffer memory estimate (activation elements, not
     # bits -- see utils.count_buffer_elements's own docstring). Always from
     # the FP32 reference model, same rationale as MACs below: buffer size is
@@ -608,20 +638,25 @@ def main() -> None:
         # trained network, so stamping it here for quant rows would silently
         # misrepresent the real architecture.
         "ops_flags": (
-            f"dilated={args.use_dilated},asymmetric={args.use_asymmetric},strided={args.use_strided},dsc={args.use_dsc},context_pattern={args.context_pattern},prelu="
-            + ("n/a(quant-forces-relu)" if args.quant_bits != 32 else str(args.use_prelu))
-            + ",prelu_variant="
-            + ("n/a(quant-forces-relu)" if args.quant_bits != 32 else args.prelu_variant)
-            + f",leaky_slope={args.leaky_slope},leaky_slope_map={args.leaky_slope_map}"
-            + f",shallow_dilation={args.shallow_dilation},separable_dilated={args.separable_dilated}"
-            + f",merge_dilated_pairs={args.merge_dilated_pairs},dsc_dilated_only={args.dsc_dilated_only}"
-            + f",double_projections={args.double_projections},two_block_skip={args.two_block_skip}"
-            + f",dsc_no_projection={args.dsc_no_projection},shallow_dilation_wide={args.shallow_dilation_wide}"
-            + f",shallow_dilation_dense={args.shallow_dilation_dense}"
-            + f",dsc_no_projection_context_only={args.dsc_no_projection_context_only},reg_bookend_dsc={args.reg_bookend_dsc}"
-            + f",merge_reg_boundary={args.merge_reg_boundary}"
-            + f",dsc_separable={args.dsc_separable}"
-            + f",pruned_blocks={args.pruned_blocks}"
+            (
+                f"model_class=erfnet,erfnet_stage1_depth={args.erfnet_stage1_depth},"
+                f"erfnet_context_depth={args.erfnet_context_depth},erfnet_decoder_depth={args.erfnet_decoder_depth}"
+            ) if args.model_class == "erfnet" else (
+                f"dilated={args.use_dilated},asymmetric={args.use_asymmetric},strided={args.use_strided},dsc={args.use_dsc},context_pattern={args.context_pattern},prelu="
+                + ("n/a(quant-forces-relu)" if args.quant_bits != 32 else str(args.use_prelu))
+                + ",prelu_variant="
+                + ("n/a(quant-forces-relu)" if args.quant_bits != 32 else args.prelu_variant)
+                + f",leaky_slope={args.leaky_slope},leaky_slope_map={args.leaky_slope_map}"
+                + f",shallow_dilation={args.shallow_dilation},separable_dilated={args.separable_dilated}"
+                + f",merge_dilated_pairs={args.merge_dilated_pairs},dsc_dilated_only={args.dsc_dilated_only}"
+                + f",double_projections={args.double_projections},two_block_skip={args.two_block_skip}"
+                + f",dsc_no_projection={args.dsc_no_projection},shallow_dilation_wide={args.shallow_dilation_wide}"
+                + f",shallow_dilation_dense={args.shallow_dilation_dense}"
+                + f",dsc_no_projection_context_only={args.dsc_no_projection_context_only},reg_bookend_dsc={args.reg_bookend_dsc}"
+                + f",merge_reg_boundary={args.merge_reg_boundary}"
+                + f",dsc_separable={args.dsc_separable}"
+                + f",pruned_blocks={args.pruned_blocks}"
+            )
         ),
         "quant_bits": args.quant_bits,
         "params": total_params,
