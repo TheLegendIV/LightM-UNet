@@ -68,6 +68,7 @@ from nnunetv2.nets.ENet import (
     DENSE_DILATION_D2_PROJECTED_PATTERN,
     DENSE_DILATION_D8_D16_PROJECTED_PATTERN,
     DENSE_DILATION_D2_REGULAR_PATTERN,
+    DENSE_DILATION_REG_TRAILING_PATTERN,
 )
 from nnunetv2.nets.QuantENet import (
     QuantDownsamplingBottleneck,
@@ -81,7 +82,7 @@ VALID_CONTEXT_PATTERNS = (
     "default", "dense_dilation", "dense_dilation_reg_interleaved",
     "dense_dilation_reg_interleaved_double_mid",
     "dense_dilation_d2_projected", "dense_dilation_d8_d16_projected",
-    "dense_dilation_d2_regular",
+    "dense_dilation_d2_regular", "dense_dilation_reg_trailing",
 )
 
 
@@ -220,6 +221,8 @@ def _make_block_context_stage(
         pattern = DENSE_DILATION_D8_D16_PROJECTED_PATTERN
     elif context_pattern == "dense_dilation_d2_regular":
         pattern = DENSE_DILATION_D2_REGULAR_PATTERN
+    elif context_pattern == "dense_dilation_reg_trailing":
+        pattern = DENSE_DILATION_REG_TRAILING_PATTERN
     else:
         pattern = CONTEXT_STAGE_PATTERN
 
@@ -262,7 +265,16 @@ def _make_block_context_stage(
     ops = []
     for i in range(n_ops):
         kwargs = dict(pattern[i % len(pattern)])
-        kwargs.pop("reg_bottleneck", False)  # only meaningful under dsc_no_projection, see branch above
+        # DENSE_DILATION_REG_TRAILING_PATTERN's own reg-bookend slot (the
+        # S27 family's trailing-consolidation block) -- forces a genuine
+        # non-DSC QuantRegularBottleneck here regardless of the global
+        # use_dsc, matching ENet.py's own identical sentinel handling in
+        # its "plain" (non-dsc_no_projection) loop. No-op (use_dsc_here ==
+        # use_dsc already) for every config exercised so far (S12/S27's own
+        # use_dsc=False) -- only matters for a hypothetical use_dsc=True +
+        # dense_dilation_reg_trailing config, not independently verified.
+        is_reg_bookend = kwargs.pop("reg_bottleneck", False)
+        use_dsc_here = False if is_reg_bookend else use_dsc
         if kwargs.get("dilation", 1) != 1 and not use_dilated:
             kwargs = {}
         if kwargs.get("asymmetric", False) and not use_asymmetric:
@@ -270,7 +282,7 @@ def _make_block_context_stage(
         block_name = f"{name_prefix}.{i}"
         ops.append(QuantRegularBottleneck(
             channels, block_weight_bits[block_name], block_act_bits[block_name],
-            dropout_p=0.1, use_dsc=use_dsc, separable_dilated=separable_dilated,
+            dropout_p=0.1, use_dsc=use_dsc_here, separable_dilated=separable_dilated,
             negative_slope=slope_map.get(block_name), trainable_slope=trainable_slope, **kwargs,
         ))
     return nn.Sequential(*ops)
