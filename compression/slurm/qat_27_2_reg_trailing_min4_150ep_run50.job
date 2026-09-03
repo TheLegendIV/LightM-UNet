@@ -1,0 +1,218 @@
+#!/bin/bash
+#SBATCH --job-name=qat_27_2_reg_trailing_min4_150ep_run50
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=09:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# Real per-block HAWQ min4 bit assignment for nnUNetTrainerENet_27_2_reg_
+# trailing ("S27.2"), same as qat_27_2_reg_trailing_min4_ft15ep.job -- see
+# that job's own header for the architecture/bit-assignment rationale, not
+# repeated here.
+#
+# THIS JOB EXISTS TO AVOID A REAL MISTAKE MADE IN qat_27_2_reg_trailing_
+# min4_ft15ep.job: that job's own ENET_EPOCHS got hand-edited mid-run
+# (15 -> 35) to "add 35 more epochs on top of the 15 already done", but
+# PolyLRScheduler (enet/nnunetv2/training/lr_scheduler/polylr.py) is
+# STATELESS -- every epoch's LR is recomputed fresh from `initial_lr *
+# (1 - epoch/ENET_EPOCHS)^0.9`, and load_checkpoint() never restores any
+# scheduler state (there isn't any) -- only current_epoch + optimizer
+# state. Changing ENET_EPOCHS on a resumed run therefore does NOT extend
+# the existing decay curve; it silently BUILDS A DIFFERENT ONE (max_steps
+# changes), producing a real LR discontinuity at the resume point (a jump
+# back UP from near-zero, then a fresh decay to the NEW ceiling) -- that
+# checkpoint's own training history is a two-schedule hybrid, not a clean
+# 35- or 50-epoch PolyLR run.
+#
+# The correct tool for "run more epochs without reshaping the curve" is
+# ENET_MAX_EPOCHS_TO_RUN (nnUNetTrainerENet.py's own run_training() override
+# -- caps how many epochs THIS SUBMISSION executes while leaving
+# self.num_epochs, and therefore the whole LR schedule's shape, exactly as
+# a real full run would see it). Same pattern this repo already uses
+# elsewhere (see compression/slurm/archive/stage_8_2_relu_no_reg_dscproj_r_
+# array.job's own header) -- ENET_EPOCHS=150 sets the REAL, full PolyLR
+# schedule denominator; ENET_MAX_EPOCHS_TO_RUN=50 stops the loop after 50
+# of those 150 real epochs, on the FIRST 50/150 of a genuine 150-epoch
+# decay curve (still ~47% of initial_lr at epoch 50: (1-50/150)^0.9 ≈
+# 0.694) -- a deliberately GENTLER decay than a dedicated 50-epoch-total
+# schedule would give at the same epoch count, not a truncated one.
+#
+# Starts from the ALREADY-BUILT calibrated checkpoint (nnUNetTrainerCombined
+# QuantENet_27_2_reg_trailing_min4_calibrated -- STEP 1 detects it and skips
+# recalibrating), NOT the epoch-35 hybrid-schedule checkpoint from the
+# other job -- this is a clean, from-calibration restart with the correct
+# schedule shape from the very first epoch, not a continuation of the
+# contaminated run.
+#
+# To run MORE than 50 of the 150 real epochs later: resubmit this job (or a
+# copy) with ENET_MAX_EPOCHS_TO_RUN raised (or unset, to run the rest of
+# the real 150) -- leave ENET_EPOCHS at 150 so the curve's shape never
+# changes again. The self-healing checkpoint_final.pth-vs-checkpoint_latest.pth
+# promotion below (same convention every multi-submission job in this repo
+# uses) means resubmitting is always safe.
+#
+# collect_results.py fires once epoch 50 (this submission's own target) is
+# reached -- NOT gated on the full 150 the way stage_8_2_relu_no_reg_
+# dscproj_r_array.job's own multi-resubmission pattern is, since this is
+# meant to stand alone as a 50-epoch checkpoint, not a march toward 150.
+#
+# --time=09:00:00: scaled from qat_27_2_reg_trailing_min4_ft15ep.job's own
+# 02:30:00-for-15-epochs budget (~50/15 x 2.5h = 8h20m, rounded up for
+# margin) -- not yet measured against this exact trainer's own real
+# per-iteration rate.
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+TRAINER_CLASS="nnUNetTrainerCombinedQuantENet_27_2_reg_trailing_perblock"
+FP32_SOURCE_NET_NAME="nnUNetTrainerENet_27_2_reg_trailing"
+CALIBRATED_NET_NAME="nnUNetTrainerCombinedQuantENet_27_2_reg_trailing_min4_calibrated"
+RUN_NAME="27_2_reg_trailing_min4_150ep_run50"
+BLOCK_BITS_FILE="compression/hawq/artifacts/block_bits_27_2_reg_trailing_min4.json"
+RUN_EPOCHS=50
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+
+FP32_CHECKPOINT="$nnUNet_results/${DATASET_NAME}/${FP32_SOURCE_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
+echo "=== Checking FP32 source checkpoint exists ==="
+if [ ! -f "$FP32_CHECKPOINT" ]; then
+    echo "ERROR: FP32 source checkpoint not found: $FP32_CHECKPOINT -- run the S27 array job (stage_27_separable_dense_relu_trailing_array.job, task 1) first." >&2
+    exit 1
+fi
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet"
+
+CALIBRATED_CHECKPOINT="$nnUNet_results/${DATASET_NAME}/${CALIBRATED_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
+echo "=== STEP 1: calibrate (warm-start from the real FP32 checkpoint; skip if already done) ==="
+if [ -f "$CALIBRATED_CHECKPOINT" ]; then
+    echo "Calibrated checkpoint already exists at ${CALIBRATED_CHECKPOINT} -- skipping calibration."
+else
+    python compression/post-quantization/calibrate_27_2_reg_trailing_perblock.py \
+        --source-net-name "${FP32_SOURCE_NET_NAME}" \
+        --out-net-name "${CALIBRATED_NET_NAME}" \
+        --dataset-name "${DATASET_NAME}" \
+        --block-bits-file "${BLOCK_BITS_FILE}"
+fi
+
+echo "=== STEP 2: real QAT fine-tuning -- REAL 150-epoch PolyLR schedule, this submission runs ${RUN_EPOCHS} ==="
+export ENET_BLOCK_BITS_FILE="$HOME/LightM-UNet/${BLOCK_BITS_FILE}"
+export ENET_PRETRAINED_CHECKPOINT="${CALIBRATED_CHECKPOINT}"
+export ENET_EPOCHS=150
+export ENET_MAX_EPOCHS_TO_RUN=${RUN_EPOCHS}
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Self-healing check: promote checkpoint_latest.pth over a STALE checkpoint_final.pth ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ] && [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
+    FINAL_EPOCH_CHECK=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)['current_epoch'])")
+    LATEST_EPOCH_CHECK=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth', map_location='cpu', weights_only=False)['current_epoch'])")
+    if [ "$LATEST_EPOCH_CHECK" -gt "$FINAL_EPOCH_CHECK" ]; then
+        echo "checkpoint_final.pth (epoch ${FINAL_EPOCH_CHECK}) is STALE relative to checkpoint_latest.pth (epoch ${LATEST_EPOCH_CHECK}) -- promoting latest, backing up the stale final."
+        cp "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" "${ENET_OUTPUT_FOLDER}/checkpoint_final_STALE_epoch${FINAL_EPOCH_CHECK}_backup.pth"
+        cp "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth"
+    fi
+fi
+
+echo "=== Checking training progress for ${RUN_NAME} ==="
+EXISTING_CHECKPOINT=""
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    EXISTING_CHECKPOINT="${ENET_OUTPUT_FOLDER}/checkpoint_final.pth"
+elif [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
+    EXISTING_CHECKPOINT="${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth"
+fi
+
+if [ -z "$EXISTING_CHECKPOINT" ]; then
+    echo "=== Start training (fresh): ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+else
+    CURRENT_EPOCH=$(cd "$HOME/LightM-UNet" && python -c "import torch; print(torch.load('${EXISTING_CHECKPOINT}', map_location='cpu', weights_only=False)['current_epoch'])")
+    echo "Existing checkpoint (${EXISTING_CHECKPOINT}) is at epoch ${CURRENT_EPOCH} (this submission's own target: ${RUN_EPOCHS} of ${ENET_EPOCHS} real epochs)."
+    if [ "$CURRENT_EPOCH" -ge "$RUN_EPOCHS" ]; then
+        echo "This submission's ${RUN_EPOCHS}-epoch target already reached -- skipping training."
+    else
+        echo "=== Resuming training with --c (SAME 150-epoch schedule, ENET_MAX_EPOCHS_TO_RUN caps this submission at ${RUN_EPOCHS}) ==="
+        nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}" --c
+    fi
+fi
+echo "Training step finished for ${RUN_NAME} (this submission's epoch budget)."
+
+echo "=== Collecting results into compression/results.csv (fires once this submission's own ${RUN_EPOCHS}-epoch target is reached -- NOT gated on the full 150) ==="
+cd "$HOME/LightM-UNet"
+FINAL_EPOCH=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)['current_epoch'])" 2>/dev/null || echo -1)
+if [ "$FINAL_EPOCH" -ge "$RUN_EPOCHS" ]; then
+    python compression/collect_results.py \
+        --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+        --stage 27_2_reg_trailing_min4_150ep_run50 \
+        --dataset-name "${DATASET_NAME}" \
+        --dataset-id "${DATASET_ID}" \
+        --channels 4,16,32,16,4 \
+        --bottlenecks 4,10,10,2,1 \
+        --decoder-type upsample_conv \
+        --use-asymmetric 0 \
+        --context-pattern dense_dilation_reg_trailing \
+        --separable-dilated 1 \
+        --quant-bits 32 \
+        --trainer-class "${TRAINER_CLASS}"
+    # --quant-bits 32 is a deliberate placeholder that sidesteps a real gap:
+    # QuantENet.py (unlike CombinedQuantENet.py, fixed this session) does
+    # NOT support context_pattern="dense_dilation_reg_trailing" yet, and
+    # collect_results.py only builds a QuantENet for its own params count
+    # when --quant-bits != 32 -- 32 skips that branch entirely and uses the
+    # FP32 ENet count instead (same escape hatch qat_s19_acc2x_fixed2.job's
+    # own collect_results.py call already uses, for the same reason: this
+    # row's REAL per-block bits live in block_bits_27_2_reg_trailing_min4.json,
+    # not this row's own params/flops/bops columns anyway).
+else
+    echo "Only at epoch ${FINAL_EPOCH}/${RUN_EPOCHS} -- skipping collect_results.py (resubmit this job to continue toward the ${RUN_EPOCHS}-epoch target)."
+fi
+
+echo "Done: ${RUN_NAME}."
