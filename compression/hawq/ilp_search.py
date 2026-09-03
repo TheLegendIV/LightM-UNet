@@ -113,6 +113,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -162,22 +163,62 @@ def stage_costs_for_axis(
     return _finn_cost(finn_costs, stage, other_bits[stage], bit, metric)
 
 
-def _normalize(values: dict[tuple[str, int], float]) -> dict[tuple[str, int], float]:
+def _percentile(sorted_values: list[float], pct: float) -> float:
+    """Linear-interpolation percentile (matches numpy.percentile's default
+    'linear' method) -- no numpy dependency needed for this one calculation.
+    `sorted_values` must already be sorted ascending. pct=0 returns the min,
+    pct=100 returns the max (so _normalize's own robust_pct=0.0 default
+    reduces to exactly the old plain-min/max behavior)."""
+    if not sorted_values:
+        raise ValueError("Cannot compute a percentile of an empty sequence.")
+    if len(sorted_values) == 1:
+        return sorted_values[0]
+    rank = (pct / 100) * (len(sorted_values) - 1)
+    lo_idx, hi_idx = math.floor(rank), math.ceil(rank)
+    if lo_idx == hi_idx:
+        return sorted_values[lo_idx]
+    frac = rank - lo_idx
+    return sorted_values[lo_idx] + frac * (sorted_values[hi_idx] - sorted_values[lo_idx])
+
+
+def _normalize(
+    values: dict[tuple[str, int], float], robust_pct: float = 0.0,
+) -> dict[tuple[str, int], float]:
     """Min-max scale to [0,1] -- puts sensitivity, LUT, and BRAM cost, which
     differ by several orders of magnitude, on a comparable footing so
     --lut-weight/--bram-weight are meaningful single knobs rather than
-    requiring the caller to know each quantity's raw scale."""
-    lo, hi = min(values.values()), max(values.values())
+    requiring the caller to know each quantity's raw scale.
+
+    robust_pct (default 0.0 -- IDENTICAL to this function's original plain-
+    min/max behavior): when > 0, anchors the [0,1] range to the
+    [robust_pct, 100-robust_pct] PERCENTILES instead of the literal min and
+    max, then CLIPS anything beyond those bounds to 0/1. Plain min-max lets
+    a single outlier value (e.g. one block's own Hutchinson-trace
+    sensitivity estimate coming out unusually large relative to every other
+    block -- confirmed to happen in practice: S27.2's own `down1` sensitivity
+    came out ~3.2x higher than S12's, which alone set the normalization
+    ceiling for all 32 OTHER S27.2 blocks) single-handedly set the scale for
+    every other value being normalized here, compressing their own
+    normalized spread toward 0 and silently weakening their term's real
+    influence in the ILP's objective sum. A percentile-clipped scale caps
+    how much any one point (however extreme) can do that -- unlike a log
+    transform (which only dampens an outlier's leverage, not bounds it),
+    this gives a hard ceiling: once a value is past the clip percentile, it
+    contributes the same normalized 0/1 regardless of how much MORE extreme
+    it gets. --robust-normalize-pct on the CLI threads through to here."""
+    vals = sorted(values.values())
+    lo = _percentile(vals, robust_pct)
+    hi = _percentile(vals, 100 - robust_pct)
     span = hi - lo
     if span == 0:
         return {k: 0.0 for k in values}
-    return {k: (v - lo) / span for k, v in values.items()}
+    return {k: min(1.0, max(0.0, (v - lo) / span)) for k, v in values.items()}
 
 
 def solve_axis(
     sensitivity: dict, finn_costs: dict, stage_names: tuple[str, ...], axis: str, other_bits: dict[str, int],
     lut_weight: float, bram_weight: float, candidate_bits: tuple[int, ...] | None = None,
-    sensitivity_weight: float = 1.0,
+    sensitivity_weight: float = 1.0, robust_normalize_pct: float = 0.0,
 ) -> tuple[dict[str, int], float, float]:
     """One MIP: pick a bit-width per stage on `axis` ('weight' or 'act'),
     minimizing sensitivity_weight*normalized_sensitivity +
@@ -200,7 +241,11 @@ def solve_axis(
     candidate wins), this is mathematically redundant with just dividing
     lut_weight/bram_weight by the same factor -- it exists purely so
     "weight accuracy more/less" is one direct dial instead of two knobs
-    that have to be moved in lockstep."""
+    that have to be moved in lockstep.
+
+    robust_normalize_pct: see _normalize's own docstring -- passed through
+    unchanged to all three (sensitivity/LUT/BRAM) normalization calls below.
+    Default 0.0 (plain min/max, byte-for-byte the original behavior)."""
     bits = candidate_bits if candidate_bits is not None else CANDIDATE_BITS
     sens_key = "sensitivity_w" if axis == "weight" else "sensitivity_a"
 
@@ -215,9 +260,9 @@ def solve_axis(
         (s, b): stage_costs_for_axis(finn_costs, s, b, axis, other_bits, metric="bram18k")
         for s in stage_names for b in bits
     }
-    sens_norm = _normalize(raw_sensitivity)
-    lut_norm = _normalize(raw_lut)
-    bram_norm = _normalize(raw_bram)
+    sens_norm = _normalize(raw_sensitivity, robust_normalize_pct)
+    lut_norm = _normalize(raw_lut, robust_normalize_pct)
+    bram_norm = _normalize(raw_bram, robust_normalize_pct)
 
     prob = pulp.LpProblem(f"HAWQ_stage_bits_{axis}", pulp.LpMinimize)
     x = {
@@ -251,7 +296,7 @@ XCZU7EV_BRAM_18K = 624  # real chip budget, see finn_cost_model.py's own docstri
 
 def solve_stage_bits(
     sensitivity: dict, finn_costs: dict, stage_names: tuple[str, ...], lut_weight: float, bram_weight: float,
-    min_act_bits: int | None = None, sensitivity_weight: float = 1.0,
+    min_act_bits: int | None = None, sensitivity_weight: float = 1.0, robust_normalize_pct: float = 0.0,
 ) -> dict:
     """Two-pass: solve weights first holding activations at the highest
     candidate bit (a conservative "don't let an unsolved activation choice
@@ -275,11 +320,14 @@ def solve_stage_bits(
     not a settled fix.
 
     sensitivity_weight: see solve_axis's own docstring -- passed through
-    unchanged to both the weight and act passes."""
+    unchanged to both the weight and act passes.
+
+    robust_normalize_pct: see _normalize's own docstring -- passed through
+    unchanged to both passes' own _normalize calls."""
     default_act = {s: CANDIDATE_BITS[-1] for s in stage_names}
     stage_weight_bits, w_lut, w_bram = solve_axis(
         sensitivity, finn_costs, stage_names, "weight", default_act, lut_weight, bram_weight,
-        sensitivity_weight=sensitivity_weight,
+        sensitivity_weight=sensitivity_weight, robust_normalize_pct=robust_normalize_pct,
     )
     act_candidate_bits = (
         tuple(b for b in CANDIDATE_BITS if b >= min_act_bits) if min_act_bits is not None else None
@@ -287,6 +335,7 @@ def solve_stage_bits(
     stage_act_bits, a_lut, a_bram = solve_axis(
         sensitivity, finn_costs, stage_names, "act", stage_weight_bits, lut_weight, bram_weight,
         candidate_bits=act_candidate_bits, sensitivity_weight=sensitivity_weight,
+        robust_normalize_pct=robust_normalize_pct,
     )
     # NOT w_lut+a_lut / w_bram+a_bram -- those are partial sums computed
     # under two DIFFERENT "other axis" assumptions (the weight pass assumed
@@ -313,6 +362,7 @@ def solve_stage_bits(
             "bram_pct_of_budget": 100 * total_bram / XCZU7EV_BRAM_18K,
             "min_act_bits": min_act_bits,
             "sensitivity_weight": sensitivity_weight,
+            "robust_normalize_pct": robust_normalize_pct,
             "note": "LUT and BRAM are BOTH a penalty in the objective (lut_weight/bram_weight), NOT a "
                     "hard constraint -- solve_stage_bits (the two-pass method) doesn't support a hard "
                     "constraint at all, see solve_joint_bits's own docstring for why; pass --joint "
@@ -328,7 +378,7 @@ def solve_stage_bits(
 def solve_joint_bits(
     sensitivity: dict, finn_costs: dict, stage_names: tuple[str, ...], lut_weight: float, bram_weight: float,
     hard_lut: bool = False, hard_bram: bool = False, min_act_bits: int | None = None,
-    sensitivity_weight: float = 1.0,
+    sensitivity_weight: float = 1.0, robust_normalize_pct: float = 0.0,
 ) -> dict:
     """One combined MIP: pick a (weight_bit, act_bit) PAIR per stage jointly,
     instead of solve_stage_bits's two independent per-axis passes
@@ -384,7 +434,10 @@ def solve_joint_bits(
 
     sensitivity_weight: see solve_axis's own docstring -- same semantics,
     applied to the additive sensitivity_w+sensitivity_a approximation used
-    here."""
+    here.
+
+    robust_normalize_pct: see _normalize's own docstring -- passed through
+    unchanged to all three normalization calls below."""
     act_bits_allowed = (
         tuple(b for b in CANDIDATE_BITS if b >= min_act_bits) if min_act_bits is not None else CANDIDATE_BITS
     )
@@ -402,9 +455,9 @@ def solve_joint_bits(
         (s, w, a): _finn_cost(finn_costs, s, w, a, "bram18k")
         for s in stage_names for w, a in candidate_pairs
     }
-    sens_norm = _normalize(raw_sensitivity)
-    lut_norm = _normalize(raw_lut)
-    bram_norm = _normalize(raw_bram)
+    sens_norm = _normalize(raw_sensitivity, robust_normalize_pct)
+    lut_norm = _normalize(raw_lut, robust_normalize_pct)
+    bram_norm = _normalize(raw_bram, robust_normalize_pct)
 
     prob = pulp.LpProblem("HAWQ_joint_bits", pulp.LpMinimize)
     x = {
