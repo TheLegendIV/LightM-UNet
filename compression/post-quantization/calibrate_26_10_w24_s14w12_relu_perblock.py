@@ -25,7 +25,7 @@ artifact on its own.
 
 Usage:
     python compression/post-quantization/calibrate_26_10_w24_s14w12_relu_perblock.py \\
-        --block-bits-file compression/hawq/block_bits_26_10_w24_s14w12_relu_acc1x_min4_joint.json \\
+        --block-bits-file compression/hawq/artifacts/block_bits_26_10_w24_s14w12_relu_acc1x_min4_joint.json \\
         --out-net-name nnUNetTrainerCombinedQuantENet_26_10_w24_s14w12_relu_min4_calibrated
 """
 from __future__ import annotations

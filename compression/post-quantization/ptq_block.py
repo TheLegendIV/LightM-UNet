@@ -18,7 +18,7 @@ flagged choice, not a like-for-like nonneg_block substitute):
         --model 26_5_w24 \\
         --source-net-name nnUNetTrainerENet_26_5_w24 \\
         --out-net-name nnUNetTrainerENetQuant_26_5_w24_ptq_block \\
-        --block-bits-file compression/hawq/block_bits_26_5_w24.json \\
+        --block-bits-file compression/hawq/artifacts/block_bits_26_5_w24.json \\
         --leaky-slope-map-file compression/post-quantization/slope_maps/26_5_w24.json
 
 Usage (S19, real trained nonneg_block slopes):
@@ -26,7 +26,7 @@ Usage (S19, real trained nonneg_block slopes):
         --model s19 \\
         --source-net-name nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid \\
         --out-net-name nnUNetTrainerENetQuantS19_ptq_block \\
-        --block-bits-file compression/hawq/block_bits_s19.json \\
+        --block-bits-file compression/hawq/artifacts/block_bits_s19.json \\
         --leaky-slope-map-file compression/post-quantization/slope_maps/19_reginterleaved_separable_nonneg_block_double_mid.json \\
         --source-checkpoint-name checkpoint_final.pth
 
@@ -47,13 +47,13 @@ comparison -- real trained nonneg_block slopes):
         --model 26_9_w24_s14w12_nonneg_block \\
         --source-net-name nnUNetTrainerENet_26_9_w24_s14w12_nonneg_block \\
         --out-net-name nnUNetTrainerENetQuant_26_9_ptq_int8 \\
-        --block-bits-file compression/hawq/block_bits_26_9_w24_s14w12_nonneg_block_int8.json \\
+        --block-bits-file compression/hawq/artifacts/block_bits_26_9_w24_s14w12_nonneg_block_int8.json \\
         --leaky-slope-map-file compression/post-quantization/slope_maps/26_9_w24_s14w12_nonneg_block.json
     python compression/post-quantization/ptq_block.py \\
         --model 26_9_w24_s14w12_nonneg_block \\
         --source-net-name nnUNetTrainerENet_26_9_w24_s14w12_nonneg_block \\
         --out-net-name nnUNetTrainerENetQuant_26_9_ptq_int8_pruned5 \\
-        --block-bits-file compression/hawq/block_bits_26_9_w24_s14w12_nonneg_block_int8.json \\
+        --block-bits-file compression/hawq/artifacts/block_bits_26_9_w24_s14w12_nonneg_block_int8.json \\
         --leaky-slope-map-file compression/post-quantization/slope_maps/26_9_w24_s14w12_nonneg_block.json \\
         --prune-blocks stage3.1,regular4.1,stage3.6,stage3.3,stage3.7
 """

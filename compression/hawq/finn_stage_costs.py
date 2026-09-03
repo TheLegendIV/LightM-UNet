@@ -16,7 +16,7 @@ step at all.
 
 Usage:
     python compression/hawq/finn_stage_costs.py \\
-        --out-file compression/hawq/finn_stage_costs.json
+        --out-file compression/hawq/artifacts/finn_stage_costs.json
 """
 from __future__ import annotations
 
@@ -155,7 +155,7 @@ def main() -> None:
     # configs get a name suffix, so this stays backward compatible.
     config_suffix = "" if args.config == "config_23_1" else f"_{args.config.removeprefix('config_')}"
     default_name = f"finn_stage_costs{config_suffix}" + ("_serial" if folding == FOLDING_SERIAL else "")
-    out_file = args.out_file or Path(f"compression/hawq/{default_name}.json")
+    out_file = args.out_file or Path(f"compression/hawq/artifacts/{default_name}.json")
 
     # OPTIONAL config globals -- see sensitivity.py's build_fp32_model for
     # the full rationale (every existing config_*.py never defines these,

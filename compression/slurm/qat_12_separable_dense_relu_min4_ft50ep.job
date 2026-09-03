@@ -63,7 +63,7 @@ TRAINER_CLASS="nnUNetTrainerCombinedQuantENet_12_separable_dense_relu_perblock"
 FP32_SOURCE_NET_NAME="nnUNetTrainerENet_12_separable_dense_relu"
 CALIBRATED_NET_NAME="nnUNetTrainerCombinedQuantENet_12_separable_dense_relu_min4_calibrated"
 RUN_NAME="12_separable_dense_relu_min4_ft50ep"
-BLOCK_BITS_FILE="compression/hawq/block_bits_12_separable_dense_relu_min4.json"
+BLOCK_BITS_FILE="compression/hawq/artifacts/block_bits_12_separable_dense_relu_min4.json"
 
 mkdir -p logs
 

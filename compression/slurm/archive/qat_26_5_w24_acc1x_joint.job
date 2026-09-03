@@ -1,0 +1,193 @@
+#!/bin/bash
+#SBATCH --job-name=qat_26_5_w24_acc1x_joint
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=08:00:00
+# Same architecture/compute graph as qat_26_5_w24_block_bits.job (only the
+# per-block bit-width ints differ) -- that job's own real HPC run completed
+# all 150 epochs within 08:00:00 without a resume, so the same budget
+# applies here.
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# CANDIDATE for beating 26_5_w24's own existing per-block QAT result
+# (block_bits_26_5_w24.json, real dice=0.6806) -- goal is to push past
+# dice=0.72 (S19/S5.6's own fixed2 results reached 0.7481/0.7732 with a
+# similar per-block approach). This is compression/hawq/ilp_search.py
+# --joint --sensitivity-weight 1.0, run WITHOUT any --fix-bits exclusion
+# (unlike S19/S5.6's own acc2x_fixed2 -- deliberately tried first without
+# forcing any block to W8A8, to see whether this narrower architecture's
+# own natural search already avoids the down1/up5 outlier-normalization
+# problem those two hit).
+#
+# RESULT: it does. Unconstrained, this search landed on a real, moderate
+# per-block mix (down1/initial/up5 all W4A4, context stage W4A2, only
+# regular4.0/regular5.0 at W2 weight, final/regular5.0 at A8) -- NOT the
+# extreme "everything collapses to one cheap value" pattern S19-joint/
+# S5.6-joint hit before their own fixed2 correction. Real folding check:
+# this is the FIRST per-block bit assignment in this whole investigation
+# that fits the STANDARD 70%/80% LUT/BRAM cap directly, with real margin
+# (LUT 70.0%, BRAM 15.9%, 2,637,824 cycles = 26.4ms @ 100MHz) -- faster
+# than even the original working per-block baselines' own ~3.09M-cycle
+# figures, and comfortably deployable without the 100%-cap/no-margin
+# compromise S19/S5.6's own fixed2 configs needed.
+#
+# WHY NO --fix-bits HERE: 26_5_w24 is architecturally IDENTICAL to S5.6
+# (same BOTTLENECKS_PER_STAGE=(4,8,8,2,1), same context_pattern=
+# dense_dilation, same separable_dilated=1, same prelu_variant=standard --
+# confirmed by direct config diff) except channel width (CHANNELS=
+# (4,8,24,8,4) here vs S5.6's (4,16,32,16,4), roughly half at stage1/
+# stage4, 0.75x at the context stage) -- narrower activations apparently
+# give the ILP enough natural headroom that the down1/up5 outlier-
+# sensitivity distortion (which forced S19/S5.6 into the fixed2 workaround)
+# doesn't dominate the normalization here the same way. Confirmed via
+# direct sensitivity-data check before running: down1/initial/final/
+# regular5.0/up5 DO show up as this architecture's own top-10 sensitivity
+# outliers too (same qualitative pattern) -- they just don't need forcing
+# to W8A8 to get a workable result at this width.
+#
+# WARM START: 26_5_w24's own FP32 checkpoint_best.pth -- same source
+# qat_26_5_w24_block_bits.job's own run uses (that job's own header notes
+# checkpoint_best over checkpoint_final for this specific lineage).
+#
+# TRAINABLE SLOPE: QuantENet26_5_w24.py now passes trainable_slope=True at
+# every encoder activation site (2026-08-27, same fix already applied to
+# QuantENetS19Block.py/QuantENet5_6Block.py) -- this architecture's own
+# leaky_slope_map is a post-hoc per-channel average (prelu_variant=
+# "standard"), same known-approximate situation as S5.6's own map, so
+# there's no principled reason to freeze it once real QAT gradients could
+# correct it. This session already confirmed (on S19) that trainable vs.
+# frozen slope makes no measurable difference on a bit assignment that
+# already trains well -- applied here mainly for consistency across the
+# per-block QAT family, not because this config showed any sign of the
+# stuck-training problem.
+#
+# Confirmed via local docker check: from_pretrained now transfers 721/820
+# keys (0 shape mismatches) -- fewer total keys than the pre-trainable-slope
+# build's own 721/919, since one_minus_alpha is no longer a separately
+# stored buffer (computed dynamically instead), same reduction every other
+# architecture's own trainable-slope switch showed. 83/83
+# QuantDecomposedLeakyAct sites confirmed trainable (nn.Parameter,
+# requires_grad=True), and a real forward+backward+optimizer step
+# completes end to end ("Training done.").
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+
+RUN_NAME="26_5_w24_qat_acc1x_joint"
+TRAINER_CLASS="nnUNetTrainerENetQuant26_5_w24Block"
+
+SOURCE_NET_NAME="nnUNetTrainerENet_26_5_w24"
+BLOCK_BITS_FILE="compression/hawq/artifacts/block_bits_26_5_w24_acc1x_joint.json"
+SLOPE_MAP_FILE="compression/post-quantization/slope_maps/26_5_w24.json"
+SOURCE_CHECKPOINT="data/nnUNet_results/Dataset509_ARCADE_1x1_4c/${SOURCE_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- HAWQ per-block QAT knobs ---------------------------------------------------
+export ENET26_5_W24_BLOCK_BITS_FILE="$HOME/LightM-UNet/${BLOCK_BITS_FILE}"
+export ENET26_5_W24_LEAKY_SLOPE_MAP_FILE="$HOME/LightM-UNet/${SLOPE_MAP_FILE}"
+export ENET26_5_W24_PRETRAINED_CHECKPOINT="$HOME/LightM-UNet/${SOURCE_CHECKPOINT}"
+# Full 150-epoch budget, nnU-Net's real default 250 iterations/epoch.
+export ENET_EPOCHS=150
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Run: ${RUN_NAME} (full ${ENET_EPOCHS}-epoch run)"
+echo "Block bits file:       ${ENET26_5_W24_BLOCK_BITS_FILE}"
+echo "Slope map file:        ${ENET26_5_W24_LEAKY_SLOPE_MAP_FILE}"
+echo "Warm-start checkpoint: ${ENET26_5_W24_PRETRAINED_CHECKPOINT}"
+echo "Output folder:         ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+echo "=== Checking required input files exist ==="
+for f in "$ENET26_5_W24_BLOCK_BITS_FILE" "$ENET26_5_W24_LEAKY_SLOPE_MAP_FILE" "$ENET26_5_W24_PRETRAINED_CHECKPOINT"; do
+    if [ ! -f "$f" ]; then
+        echo "ERROR: required file not found: $f" >&2
+        exit 1
+    fi
+done
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Checking for a COMPLETED checkpoint for ${RUN_NAME} ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    echo "checkpoint_final.pth already exists at ${ENET_OUTPUT_FOLDER} -- skipping training."
+else
+    echo "=== Start training (QAT): ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+    echo "Training finished for ${RUN_NAME}."
+
+    echo "=== Archiving checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+fi
+
+echo "=== Collecting results into compression/results.csv ==="
+cd "$HOME/LightM-UNet"
+SLOPE_MAP_JSON=$(python -c "import json; print(json.dumps(json.load(open('${SLOPE_MAP_FILE}'))))")
+python compression/collect_results.py \
+    --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+    --stage experiment_26_5_w24_qat_acc1x_joint \
+    --dataset-name "${DATASET_NAME}" \
+    --dataset-id "${DATASET_ID}" \
+    --channels 4,8,24,8,4 \
+    --bottlenecks 4,8,8,2,1 \
+    --decoder-type upsample_conv \
+    --use-asymmetric 0 \
+    --context-pattern dense_dilation \
+    --separable-dilated 1 \
+    --leaky-slope-map "$SLOPE_MAP_JSON" \
+    --quant-bits 32 \
+    --trainer-class "${TRAINER_CLASS}"
+# --quant-bits 32 here is a deliberate placeholder, same rationale as every
+# other per-block job's own note -- real per-block params/bops/LUT/BRAM
+# live in compression/hawq/artifacts/finn_block_costs_26_5_w24.json /
+# block_bits_26_5_w24_acc1x_joint.json, not this row's own params/flops/
+# bops columns.
+
+echo "Done: ${RUN_NAME}."

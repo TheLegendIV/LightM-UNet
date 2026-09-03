@@ -1,0 +1,198 @@
+#!/bin/bash
+#SBATCH --job-name=qat_s19_block_bits
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=10:00:00
+# See the WALLTIME WARNING below before submitting -- this --time is a
+# placeholder, not a real estimate for 150 real epochs. A local docker
+# smoke test (weak shared 4GB RTX 2050, NOT this partition's real GPU) timed
+# epoch 0 (2 iterations) at ~279s/2 iterations (~139.5s/iteration) for THIS
+# architecture (S19 is bigger than 26_5_w24 -- 37 blocks vs 29, more
+# Brevitas quant ops per forward pass) -- at that rate, 150 epochs x
+# nnU-Net's default 250 iterations/epoch (37500 total) would be ~1453
+# HOURS (~60.5 days). Do not submit this as a single job without first
+# either (a) getting a real per-iteration timing number on the actual
+# target GPU, (b) cutting ENET_ITERATIONS_PER_EPOCH down (the same lever
+# hawq_23_1_qat_stage_bits.job already pulled, to 60/epoch), or (c)
+# chaining multiple resumed jobs via nnU-Net's own --c flag (see
+# resume_hawq_23_1_qat_stage_bits.job's pattern) -- this job does none of
+# those automatically, per explicit request for a genuine 150-epoch/
+# default-iterations run.
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# QAT (quantization-aware training) of the HAWQ-searched PER-BLOCK (not
+# per-stage) W/A quantization scheme (compression/hawq/artifacts/block_bits_s19.json,
+# one independent weight/activation bit-width per individual ENet bottleneck
+# -- see compression/hawq/block_utils.py's enumerate_blocks, 37 blocks for
+# this architecture) on nnUNetTrainerENet_19_reginterleaved_separable_
+# nonneg_block_double_mid's ("S19") exact architecture -- the same
+# architecture nnUNetTrainerENetQuant23_1's own per-STAGE (5-group) QAT
+# already targets, just with S19's own trained checkpoint here instead of
+# 23_1's continuation checkpoint, and finer per-block granularity. Uses
+# nnUNetTrainerENetQuantS19Block (enet/nnunetv2/training/nnUNetTrainer/
+# nnUNetTrainerENetQuantS19Block.py).
+#
+# WALLTIME WARNING: see the #SBATCH block above -- ~1453 real-hour estimate
+# at locally-measured rates, do not submit as-is without adjusting per that
+# note.
+#
+# Decomposed nonneg-PReLU activation (QuantDecomposedLeakyAct,
+# ENET_S19_LEAKY_SLOPE_MAP_FILE below): unlike 26_5_w24, S19 genuinely IS
+# prelu_variant="nonneg_block" -- one real TRAINED learnable scalar per
+# block, extracted losslessly via compression/post-quantization/
+# extract_leaky_slope_map.py (already run for this checkpoint, see
+# compression/post-quantization/slope_maps/
+# 19_reginterleaved_separable_nonneg_block_double_mid.json). NOT optional --
+# skipping it silently builds plain QuantReLU everywhere, a genuine
+# architecture mismatch on top of quantization (ptq_s19_double_mid_int8.job's
+# own documented incident: dice=0.4383 with no slope map vs. the real
+# number with one).
+#
+# Uses checkpoint_final.pth as the warm-start source (NOT checkpoint_best.pth)
+# -- same convention ptq_s19_double_mid_int8.job's own header already
+# establishes for this specific checkpoint: S19's own converged_flag=False
+# (dice still trending up in its last ~30 logged epochs) makes the true
+# end-of-training state the more representative thing to build from.
+#
+# Confirmed via local docker smoke test (nnUNetv2_train, 1 epoch/2
+# iterations against Dataset509_ARCADE_1x1_4c, ENET_DISABLE_CHECKPOINTING=1,
+# killed before nnU-Net's own post-training full-validation pass rather than
+# waiting it out -- Brevitas inference is also much slower per-case than
+# FP32, and that pass isn't part of what a smoke test needs to verify):
+# nnUNetTrainerENetQuantS19Block builds and runs a real forward+backward+
+# optimizer step (train_loss logged, checkpoint saved) without error.
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+
+RUN_NAME="s19_qat_block_bits"
+TRAINER_CLASS="nnUNetTrainerENetQuantS19Block"
+
+SOURCE_NET_NAME="nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid"
+# NOTE (2026-08-25): this job already COMPLETED (real dice=0.7458, see
+# compression/configs/s19_per_block_qat_results.md) using block_bits_s19.json
+# AS IT EXISTED AT THAT TIME. The live file has since been overwritten by
+# later ILP reruns (recalibration fixes, then a 16-bit-candidate
+# experiment) and no longer matches what this run actually trained with --
+# the REAL historical bit assignment is preserved at
+# compression/hawq/artifacts/block_bits_s19_validated.json (reconstructed from the
+# results.md table) if this job is ever re-referenced for comparison.
+BLOCK_BITS_FILE="compression/hawq/artifacts/block_bits_s19.json"
+SLOPE_MAP_FILE="compression/post-quantization/slope_maps/19_reginterleaved_separable_nonneg_block_double_mid.json"
+SOURCE_CHECKPOINT="data/nnUNet_results/Dataset509_ARCADE_1x1_4c/${SOURCE_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_final.pth"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- HAWQ per-block QAT knobs ---------------------------------------------------
+export ENET_S19_BLOCK_BITS_FILE="$HOME/LightM-UNet/${BLOCK_BITS_FILE}"
+export ENET_S19_LEAKY_SLOPE_MAP_FILE="$HOME/LightM-UNet/${SLOPE_MAP_FILE}"
+export ENET_S19_PRETRAINED_CHECKPOINT="$HOME/LightM-UNet/${SOURCE_CHECKPOINT}"
+# Full 150-epoch budget, nnU-Net's real default 250 iterations/epoch --
+# ENET_ITERATIONS_PER_EPOCH deliberately left UNSET, see WALLTIME WARNING
+# above.
+export ENET_EPOCHS=150
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Run: ${RUN_NAME}"
+echo "Block bits file:       ${ENET_S19_BLOCK_BITS_FILE}"
+echo "Slope map file:        ${ENET_S19_LEAKY_SLOPE_MAP_FILE}"
+echo "Warm-start checkpoint: ${ENET_S19_PRETRAINED_CHECKPOINT}"
+echo "Output folder:         ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+echo "=== Checking required input files exist ==="
+for f in "$ENET_S19_BLOCK_BITS_FILE" "$ENET_S19_LEAKY_SLOPE_MAP_FILE" "$ENET_S19_PRETRAINED_CHECKPOINT"; do
+    if [ ! -f "$f" ]; then
+        echo "ERROR: required file not found: $f" >&2
+        echo "  (run compression/hawq/block_sensitivity.py -> finn_block_costs.py -> ilp_search.py, and/or" >&2
+        echo "   compression/post-quantization/extract_leaky_slope_map.py, first)" >&2
+        exit 1
+    fi
+done
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Checking for a COMPLETED checkpoint for ${RUN_NAME} ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    echo "checkpoint_final.pth already exists at ${ENET_OUTPUT_FOLDER} -- skipping training."
+else
+    echo "=== Start training (QAT): ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+    echo "Training finished for ${RUN_NAME}."
+
+    echo "=== Archiving checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+fi
+
+echo "=== Collecting results into compression/results.csv ==="
+cd "$HOME/LightM-UNet"
+SLOPE_MAP_JSON=$(python -c "import json; print(json.dumps(json.load(open('${SLOPE_MAP_FILE}'))))")
+python compression/collect_results.py \
+    --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+    --stage experiment_s19_qat_block_bits \
+    --dataset-name "${DATASET_NAME}" \
+    --dataset-id "${DATASET_ID}" \
+    --channels 4,16,32,16,4 \
+    --bottlenecks 4,12,12,2,1 \
+    --decoder-type upsample_conv \
+    --use-asymmetric 0 \
+    --context-pattern dense_dilation_reg_interleaved_double_mid \
+    --separable-dilated 1 \
+    --leaky-slope-map "$SLOPE_MAP_JSON" \
+    --quant-bits 32 \
+    --trainer-class "${TRAINER_CLASS}"
+# --quant-bits 32 here is a deliberate placeholder, same rationale as
+# qat_26_5_w24_block_bits.job's own note: collect_results.py has no
+# per-block-aware cost path, so this row's params/flops/bops columns are
+# an FP32 stand-in, NOT the real per-block-quantized cost. Real numbers
+# already live in compression/hawq/artifacts/finn_block_costs_23_1.json /
+# block_bits_s19.json / folding_block_s19.json.
+
+echo "Done: ${RUN_NAME}."

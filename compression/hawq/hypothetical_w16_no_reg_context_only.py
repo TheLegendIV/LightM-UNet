@@ -54,7 +54,7 @@ print(f"Enumerated {len(blocks)} blocks, {n_params} params:")
 for name, module in blocks.items():
     print(f"  {name}: {type(module).__name__}")
 
-with open(REPO_ROOT / "compression/hawq/block_bits_8_2_relu_no_reg_w16_acc2x_min4_joint.json") as f:
+with open(REPO_ROOT / "compression/hawq/artifacts/block_bits_8_2_relu_no_reg_w16_acc2x_min4_joint.json") as f:
     donor_bits = json.load(f)
 
 stage_weight_bits, stage_act_bits = {}, {}

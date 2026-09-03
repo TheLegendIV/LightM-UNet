@@ -1,0 +1,174 @@
+#!/bin/bash
+#SBATCH --job-name=stage_mobilenetv3
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=10:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# MobileNetV3-Large (Howard et al., 2019), a genuine architecture (not an
+# ENet variant -- see enet/nnunetv2/nets/MobileNetV3.py's own module
+# docstring for the full verification writeup, checked against the real
+# TensorFlow-slim source cloned into this repo's own models/ directory).
+# Real published backbone depth (5 stride-2 downsamples, /32 total) --
+# same explicit "full paper fidelity, not truncated to this repo's usual
+# /8" choice as MobileNetV2. Real 15-block (t,c,k,s,se,act) schedule
+# (squeeze-excite on 8/15 blocks, ReLU->hard-swish activation switch
+# partway through), width_mult=1.0 (the real base "MobileNetV3-Large 1.0"
+# architecture -- MOBILENET_WIDTH_MULT env var below, not overridden
+# here).
+#
+# Decoder is this repo's OWN addition, same rationale/design as
+# MobileNetV2.py's own (see that file's module docstring, and
+# MobileNetV3.py's own for the V3-specific channel/activation schedule)
+# -- 5 plain hard-swish upsample stages, no skip connections.
+#
+# 4,310,677 params, 7.77 GFLOPs at (1,512,512) -- same "real classification
+# -backbone scale, not a small embedded design" caveat as MobileNetV2's own
+# job header (comparable total params to V2 despite fewer FLOPs, thanks to
+# the SE blocks' own extra parameters at modest compute cost).
+#
+# TRAINING REGIME: deliberately NOT the paper's own recipe (RMSProp,
+# exponential LR decay, dropout, ImageNet-scale batch/schedule) -- this
+# repo's OWN existing single-stage AdamW/PolyLR pipeline
+# (nnUNetTrainerENet's own configure_optimizers/run_training, inherited
+# unchanged by nnUNetTrainerMobileNetV3), identical training procedure to
+# every other architecture already in compression/results.csv ("standard
+# settings we used for all other nets").
+#
+# --time=10:00:00: NOT yet measured against this architecture's own real
+# per-iteration rate (never trained before) -- same estimate as
+# MobileNetV2's own job (comparable FLOPs), with the same self-healing
+# checkpoint_final.pth-vs-checkpoint_latest.pth promotion as every other
+# multi-submission job in this repo in case this estimate is short.
+#
+# Not yet smoke-tested through a real nnUNetv2_train epoch -- only
+# construction + forward-pass verified locally (MobileNetV3.py's own
+# self-test) and a real params/FLOPs/buffer-element count via compression/
+# collect_results.py's --model-class mobilenetv3 path (also verified
+# locally).
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+
+RUN_NAME="mobilenetv3"
+TRAINER_CLASS="nnUNetTrainerMobileNetV3"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- MobileNetV3 trainer knobs -- real base architecture (width_mult=1.0,
+#    MobileNetV3.py's own default, not overridden here) ---------------------
+export MOBILENET_WIDTH_MULT=1.0
+export ENET_EPOCHS=150
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Run: ${RUN_NAME}"
+echo "Output folder: ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Self-healing check: promote checkpoint_latest.pth over a STALE checkpoint_final.pth ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ] && [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
+    FINAL_EPOCH_CHECK=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)['current_epoch'])")
+    LATEST_EPOCH_CHECK=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth', map_location='cpu', weights_only=False)['current_epoch'])")
+    if [ "$LATEST_EPOCH_CHECK" -gt "$FINAL_EPOCH_CHECK" ]; then
+        echo "checkpoint_final.pth (epoch ${FINAL_EPOCH_CHECK}) is STALE relative to checkpoint_latest.pth (epoch ${LATEST_EPOCH_CHECK}) -- promoting latest, backing up the stale final."
+        cp "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" "${ENET_OUTPUT_FOLDER}/checkpoint_final_STALE_epoch${FINAL_EPOCH_CHECK}_backup.pth"
+        cp "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth"
+    fi
+fi
+
+echo "=== Checking training progress for ${RUN_NAME} ==="
+EXISTING_CHECKPOINT=""
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    EXISTING_CHECKPOINT="${ENET_OUTPUT_FOLDER}/checkpoint_final.pth"
+elif [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
+    EXISTING_CHECKPOINT="${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth"
+fi
+
+if [ -z "$EXISTING_CHECKPOINT" ]; then
+    echo "=== Start training (fresh): ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+else
+    CURRENT_EPOCH=$(cd "$HOME/LightM-UNet" && python -c "import torch; print(torch.load('${EXISTING_CHECKPOINT}', map_location='cpu', weights_only=False)['current_epoch'])")
+    echo "Existing checkpoint (${EXISTING_CHECKPOINT}) is at epoch ${CURRENT_EPOCH}/${ENET_EPOCHS}."
+    if [ "$CURRENT_EPOCH" -ge "$ENET_EPOCHS" ]; then
+        echo "Real 150-epoch schedule already complete -- skipping training."
+    else
+        echo "=== Resuming training with --c (continues the SAME 150-epoch LR schedule from epoch ${CURRENT_EPOCH}) ==="
+        nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}" --c
+    fi
+fi
+echo "Training step finished for ${RUN_NAME} (this submission's epoch budget)."
+
+echo "=== Archiving checkpoints + logs to \$HOME/models (only once the real 150-epoch schedule is complete) ==="
+FINAL_EPOCH=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)['current_epoch'])" 2>/dev/null || echo -1)
+if [ "$FINAL_EPOCH" -ge "$ENET_EPOCHS" ]; then
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+
+    echo "=== Collecting results into compression/results.csv ==="
+    cd "$HOME/LightM-UNet"
+    python compression/collect_results.py \
+        --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+        --stage mobilenetv3 \
+        --dataset-name "${DATASET_NAME}" \
+        --dataset-id "${DATASET_ID}" \
+        --model-class mobilenetv3 \
+        --mobilenet-width-mult "${MOBILENET_WIDTH_MULT}" \
+        --channels 4,16,32,16,4 \
+        --trainer-class "${TRAINER_CLASS}"
+    # --channels is a required-but-ignored placeholder here (collect_results.py's
+    # own argparse requires it; --model-class mobilenetv3 never reads it -- see
+    # that flag's own help text).
+else
+    echo "Only at epoch ${FINAL_EPOCH}/${ENET_EPOCHS} -- skipping archive/collect_results.py (resubmit this job to continue training)."
+fi
+
+echo "Done: ${RUN_NAME}."

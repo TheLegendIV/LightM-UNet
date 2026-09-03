@@ -48,7 +48,7 @@ Usage:
         --net-name nnUNetTrainerENet_23_1_s19_warmstart_4c \\
         --checkpoint-name checkpoint_best.pth \\
         --n-batches 8 --n-probes 10 \\
-        --out-file compression/hawq/sensitivity_23_1.json
+        --out-file compression/hawq/artifacts/sensitivity_23_1.json
 """
 from __future__ import annotations
 
@@ -337,7 +337,7 @@ def main() -> None:
 
     load_config(args.config)  # populates CHANNELS/BOTTLENECKS_PER_STAGE/STAGE_NAMES/NET_NAME/... as module globals
     net_name = args.net_name or NET_NAME
-    out_file = args.out_file or Path(f"compression/hawq/sensitivity_{args.config.removeprefix('config_')}.json")
+    out_file = args.out_file or Path(f"compression/hawq/artifacts/sensitivity_{args.config.removeprefix('config_')}.json")
 
     checkpoint_path = (
         NNUNET_RESULTS / args.dataset_name / f"{net_name}__{args.plans_name}__{args.configuration}"

@@ -18,7 +18,7 @@ its own -- see compression/slurm/qat_8_2_relu_no_reg_d2_projected_10ep.job.
 
 Usage:
     python compression/post-quantization/calibrate_8_2_relu_no_reg_d2_projected.py \\
-        --stage-bits-file compression/hawq/stage_bits_8_2_relu_no_reg_d2_projected_minres.json \\
+        --stage-bits-file compression/hawq/artifacts/stage_bits_8_2_relu_no_reg_d2_projected_minres.json \\
         --out-net-name nnUNetTrainerCombinedQuantENet_8_2_relu_no_reg_d2_projected_calibrated
 """
 from __future__ import annotations

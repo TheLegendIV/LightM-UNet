@@ -50,6 +50,8 @@ sys.path.insert(0, str(ANALYSIS_ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from nnunetv2.nets.ENet import ENet, apply_block_pruning  # noqa: E402
 from nnunetv2.nets.ERFNet import ERFNet  # noqa: E402
+from nnunetv2.nets.MobileNetV2 import MobileNetV2  # noqa: E402
+from nnunetv2.nets.MobileNetV3 import MobileNetV3  # noqa: E402
 from nnunetv2.nets.QuantENet import QuantENet  # noqa: E402
 import segmentation_topology as topo  # noqa: E402
 from utils import count_bops, count_buffer_elements, count_flops, count_params  # noqa: E402
@@ -389,18 +391,22 @@ def main() -> None:
                          help="Informational only (not consumed by this script -- kept for parity with "
                               "the training job's own DATASET_ID, same convention as --trainer-class).")
     parser.add_argument("--trainer-class", default="nnUNetTrainerENet", help="Informational only (not used for inference -- see run_inference's docstring). Kept for parity with the training job's -tr flag.")
-    parser.add_argument("--model-class", default="enet", choices=["enet", "erfnet"],
+    parser.add_argument("--model-class", default="enet", choices=["enet", "erfnet", "mobilenetv2", "mobilenetv3"],
                          help="Which nn.Module to build for FLOPs/params/buffer-element counting -- 'enet' "
                               "(default) builds ENet with every --use-*/--context-pattern/... flag below; "
                               "'erfnet' builds ERFNet.py's own ERFNet instead (ignores every ENet-specific "
                               "flag -- --channels still applies, using ERFNet.py's own 5-value convention: "
                               "initial/stage1/context/stage4/stage5, --bottlenecks is ignored since ERFNet's "
                               "own depth is --erfnet-stage1-depth/--erfnet-context-depth/--erfnet-decoder-depth "
-                              "instead). Only 'enet' supports --quant-bits != 32 (ERFNet has no Quant* "
+                              "instead); 'mobilenetv2'/'mobilenetv3' build MobileNetV2.py's/MobileNetV3.py's own "
+                              "real (t,c,n,s)/15-block architecture instead (ignores --channels/--bottlenecks "
+                              "entirely -- width is --mobilenet-width-mult, the real paper's own scaling knob). "
+                              "Only 'enet' supports --quant-bits != 32 (none of the others have a Quant* "
                               "counterpart in this repo yet).")
     parser.add_argument("--erfnet-stage1-depth", type=int, default=5, help="ERFNet.py's own stage1_depth (default: the real architecture's own 5). Only used with --model-class erfnet.")
     parser.add_argument("--erfnet-context-depth", type=int, default=8, help="ERFNet.py's own context_depth (default: the real architecture's own 8). Only used with --model-class erfnet.")
     parser.add_argument("--erfnet-decoder-depth", type=int, default=2, help="ERFNet.py's own decoder_depth (default: the real architecture's own 2). Only used with --model-class erfnet.")
+    parser.add_argument("--mobilenet-width-mult", type=float, default=1.0, help="MobileNetV2.py's/MobileNetV3.py's own width_mult (default: the real base 1.0 architecture). Only used with --model-class mobilenetv2/mobilenetv3.")
     parser.add_argument("--stage", required=True, help="e.g. stage1, stage1b, stage2, early_probe.")
     parser.add_argument("--channels", required=True, type=parse_channels)
     parser.add_argument("--bottlenecks", default="4,8,8,2,1", type=lambda v: parse_tuple5(v, "bottlenecks"))
@@ -490,6 +496,17 @@ def main() -> None:
             stage1_depth=args.erfnet_stage1_depth,
             context_depth=args.erfnet_context_depth,
             decoder_depth=args.erfnet_decoder_depth,
+        )
+    elif args.model_class in ("mobilenetv2", "mobilenetv3"):
+        if args.quant_bits != 32:
+            raise ValueError(f"--model-class {args.model_class} only supports --quant-bits 32 -- no Quant* counterpart in this repo yet.")
+        if args.pruned_blocks:
+            raise ValueError(f"--pruned-blocks is ENet-specific -- not supported with --model-class {args.model_class}.")
+        model_cls = MobileNetV2 if args.model_class == "mobilenetv2" else MobileNetV3
+        fp32_model = model_cls(
+            in_channels=args.in_channels,
+            out_channels=args.out_channels,
+            width_mult=args.mobilenet_width_mult,
         )
     else:
         # FLOPs/MACs always come from the plain FP32 ENet: thop silently
@@ -642,6 +659,8 @@ def main() -> None:
                 f"model_class=erfnet,erfnet_stage1_depth={args.erfnet_stage1_depth},"
                 f"erfnet_context_depth={args.erfnet_context_depth},erfnet_decoder_depth={args.erfnet_decoder_depth}"
             ) if args.model_class == "erfnet" else (
+                f"model_class={args.model_class},mobilenet_width_mult={args.mobilenet_width_mult}"
+            ) if args.model_class in ("mobilenetv2", "mobilenetv3") else (
                 f"dilated={args.use_dilated},asymmetric={args.use_asymmetric},strided={args.use_strided},dsc={args.use_dsc},context_pattern={args.context_pattern},prelu="
                 + ("n/a(quant-forces-relu)" if args.quant_bits != 32 else str(args.use_prelu))
                 + ",prelu_variant="

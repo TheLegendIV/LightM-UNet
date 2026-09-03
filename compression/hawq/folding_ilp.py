@@ -1,6 +1,6 @@
 """Per-LAYER folding ILP -- for a given architecture (--config) and,
 optionally, a per-stage bit-width assignment already chosen by ilp_search.py
-(--stage-bits-file, e.g. compression/hawq/stage_bits_26_5_w24.json), answers
+(--stage-bits-file, e.g. compression/hawq/artifacts/stage_bits_26_5_w24.json), answers
 "what PE/SIMD (folding) per layer minimizes latency". Folding is a separate
 design axis from the per-stage bit-width search in ilp_search.py -- this
 script takes bit-width as GIVEN (either uniform --weight-bits/--act-bits, the
@@ -43,7 +43,7 @@ first calibration point:
     BRAM_18K:     906 real  vs.   1,495 this-model-at-FOLDING_SERIAL -> 0.606x (under, whole design)
 A SECOND real data point (hardware/results.csv's
 `s19_hawq_block_partition_2_ooc_synth` row) is a real per-block HAWQ bit
-assignment (the actual historical compression/hawq/block_bits_s19.json used
+assignment (the actual historical compression/hawq/artifacts/block_bits_s19.json used
 for that build, NOT necessarily whatever the file on disk holds now -- this
 repo's own ILP has been rerun/recalibrated multiple times since, so the
 bits/folding a real hardware build was synthesized with have to be pulled
@@ -105,11 +105,11 @@ in which case an Optimal result's totals are a guarantee, not just a
 steering signal, per the module's own reasoning above.
 
 Usage (per-STAGE bits, the original 5-group W8A8/mixed case):
-    python compression/hawq/folding_ilp.py --out-file compression/hawq/folding_23_1_w8a8.json
+    python compression/hawq/folding_ilp.py --out-file compression/hawq/artifacts/folding_23_1_w8a8.json
     python compression/hawq/folding_ilp.py --config config_26_5_w24 \\
-        --stage-bits-file compression/hawq/stage_bits_26_5_w24.json \\
+        --stage-bits-file compression/hawq/artifacts/stage_bits_26_5_w24.json \\
         --lut-weight 1.0 --bram-weight 1.0 \\
-        --out-file compression/hawq/folding_26_5_w24.json
+        --out-file compression/hawq/artifacts/folding_26_5_w24.json
 
 Usage (per-BLOCK bits -- ilp_search.py's finer-grained output, one
 independent choice per ENet bottleneck instead of one shared choice per
@@ -118,9 +118,9 @@ gets tagged by its owning BLOCK, matching --stage-bits-file's own per-block
 keys, not the 5 stage names):
     python compression/hawq/folding_ilp.py --config config_26_5_w24 \\
         --granularity block \\
-        --stage-bits-file compression/hawq/block_bits_26_5_w24.json \\
+        --stage-bits-file compression/hawq/artifacts/block_bits_26_5_w24.json \\
         --lut-weight 1.0 --bram-weight 1.0 \\
-        --out-file compression/hawq/folding_block_26_5_w24.json
+        --out-file compression/hawq/artifacts/folding_block_26_5_w24.json
 """
 from __future__ import annotations
 
@@ -568,7 +568,7 @@ def main() -> None:
                          help="Which compression/hawq/config_*.py to load -- e.g. config_23_1 or config_26_5_w24.")
     parser.add_argument("--stage-bits-file", type=Path, default=None,
                          help="ilp_search.py output ({'stage_weight_bits': {...}, 'stage_act_bits': {...}}) "
-                              "for a real per-stage bit assignment -- e.g. compression/hawq/stage_bits_26_5_w24.json. "
+                              "for a real per-stage bit assignment -- e.g. compression/hawq/artifacts/stage_bits_26_5_w24.json. "
                               "Omit to fall back to uniform --weight-bits/--act-bits everywhere (this file's "
                               "original W8A8 behavior).")
     parser.add_argument("--weight-bits", type=int, default=8, help="Uniform fallback when --stage-bits-file is not given.")
@@ -606,11 +606,11 @@ def main() -> None:
                               "either way -- see solve_folding_nodewise's own docstring. Requires the groups= "
                               "fix in finn_block_costs.py/finn_stage_costs.py (already applied) to compute a "
                               "correct VVAU PE/SIMD domain for depthwise layers.")
-    parser.add_argument("--out-file", type=Path, default=Path("compression/hawq/folding_23_1_w8a8.json"))
+    parser.add_argument("--out-file", type=Path, default=Path("compression/hawq/artifacts/folding_23_1_w8a8.json"))
     args = parser.parse_args()
     if args.out_file is None:
         suffix = args.config.removeprefix("config_")
-        args.out_file = Path(f"compression/hawq/folding_{suffix}_w8a8.json")
+        args.out_file = Path(f"compression/hawq/artifacts/folding_{suffix}_w8a8.json")
 
     if args.config != "config_23_1":
         load_config(args.config)

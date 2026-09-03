@@ -26,7 +26,7 @@ deployable artifact on its own.
 
 Usage:
     python compression/post-quantization/calibrate_8_2_relu_w16_no_reg_context_only_perblock.py \\
-        --block-bits-file compression/hawq/block_bits_8_2_relu_w16_no_reg_context_only_manual.json \\
+        --block-bits-file compression/hawq/artifacts/block_bits_8_2_relu_w16_no_reg_context_only_manual.json \\
         --out-net-name nnUNetTrainerCombinedQuantENet_8_2_relu_w16_no_reg_context_only_manual_calibrated
 """
 from __future__ import annotations

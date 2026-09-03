@@ -1,0 +1,165 @@
+#!/bin/bash
+#SBATCH --job-name=resume_qat_5_6_block_bits
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=10:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# Continuation of qat_5_6_block_bits.job, prepared PREEMPTIVELY as a safety
+# net (not yet confirmed needed by a real run at the time this was written)
+# -- qat_5_6_block_bits.job's own header notes its sibling
+# qat_26_5_w24_block_bits.job finished all 150 epochs within a single
+# 08:00:00 job on real HPC hardware, but S5.6's own stage2/3 is wider (32 vs
+# 26_5_w24's narrowed 24) so a somewhat higher real per-iteration cost is
+# expected -- this resume job exists in case qat_5_6_block_bits.job's own
+# --time=10:00:00 (already more generous than 26_5_w24's own 08:00:00)
+# still isn't enough. Same stale-checkpoint_latest.pth handling as
+# resume_qat_s19_block_bits.job/resume_qat_s19_block_bits_joint.job's own
+# precedent -- see either's header for the full explanation (checkpoint_
+# latest.pth only refreshes on nnU-Net's own periodic save_every cadence,
+# while checkpoint_best.pth updates on every new-best-EMA epoch, so
+# checkpoint_best.pth can be further along at a walltime cutoff; nnUNetv2_train
+# --c always prefers checkpoint_latest.pth when present, so resuming as-is
+# could silently throw away real progress).
+#
+# IMPORTANT: every ENET5_6_*/ENET_* knob below must stay byte-identical to
+# the original qat_5_6_block_bits.job. ENET5_6_PRETRAINED_CHECKPOINT is
+# deliberately NOT set here -- the real trained weights get restored
+# wholesale via --c's own load_checkpoint() call right after
+# build_network_architecture runs, so the initial shell's weight VALUES
+# don't matter on a resume, only its shape (block bits/slope map) does.
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+
+RUN_NAME="5_6_qat_block_bits"
+TRAINER_CLASS="nnUNetTrainerENetQuant5_6Block"
+
+BLOCK_BITS_FILE="compression/hawq/artifacts/block_bits_5_6.json"
+SLOPE_MAP_FILE="compression/post-quantization/slope_maps/5_6_separable_dense_dilation.json"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- HAWQ per-block QAT knobs (must match the original job -- see header) ----
+export ENET5_6_BLOCK_BITS_FILE="$HOME/LightM-UNet/${BLOCK_BITS_FILE}"
+export ENET5_6_LEAKY_SLOPE_MAP_FILE="$HOME/LightM-UNet/${SLOPE_MAP_FILE}"
+export ENET_EPOCHS=150
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Run: ${RUN_NAME} (resume)"
+echo "Block bits file: ${ENET5_6_BLOCK_BITS_FILE}"
+echo "Slope map file:  ${ENET5_6_LEAKY_SLOPE_MAP_FILE}"
+echo "Output folder:   ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet"
+
+echo "=== Checking required input files exist ==="
+for f in "$ENET5_6_BLOCK_BITS_FILE" "$ENET5_6_LEAKY_SLOPE_MAP_FILE"; do
+    if [ ! -f "$f" ]; then
+        echo "ERROR: required file not found: $f" >&2
+        exit 1
+    fi
+done
+
+echo "=== Checking training state for ${RUN_NAME} ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    echo "checkpoint_final.pth already exists -- training already reached ${ENET_EPOCHS} epochs, skipping straight to the Dice check."
+elif [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" ] || [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_best.pth" ]; then
+    echo "=== Checking whether checkpoint_best.pth is further along than checkpoint_latest.pth ==="
+    python3 - <<PYEOF
+import os
+import shutil
+import torch
+
+folder = "${ENET_OUTPUT_FOLDER}"
+latest = os.path.join(folder, "checkpoint_latest.pth")
+best = os.path.join(folder, "checkpoint_best.pth")
+
+if os.path.isfile(latest) and os.path.isfile(best):
+    latest_epoch = torch.load(latest, map_location="cpu", weights_only=False)["current_epoch"]
+    best_epoch = torch.load(best, map_location="cpu", weights_only=False)["current_epoch"]
+    print(f"checkpoint_latest.pth resumes at epoch {latest_epoch}")
+    print(f"checkpoint_best.pth   resumes at epoch {best_epoch}")
+    if best_epoch > latest_epoch:
+        archived = os.path.join(folder, f"checkpoint_latest_epoch{latest_epoch}_preresume.pth")
+        print(f"checkpoint_best.pth is further along -- archiving stale checkpoint_latest.pth "
+              f"to {os.path.basename(archived)} and promoting checkpoint_best.pth to checkpoint_latest.pth")
+        shutil.copy2(latest, archived)
+        shutil.copy2(best, latest)
+    else:
+        print("checkpoint_latest.pth is already at or past checkpoint_best.pth's epoch -- leaving as-is")
+elif os.path.isfile(best):
+    print("No checkpoint_latest.pth found, but checkpoint_best.pth exists -- promoting it.")
+    shutil.copy2(best, latest)
+else:
+    print("No checkpoint_best.pth found -- resuming from checkpoint_latest.pth as-is.")
+PYEOF
+
+    echo "=== Resuming training (QAT) from checkpoint_latest.pth: ${RUN_NAME} ==="
+    cd "$HOME/LightM-UNet/enet"
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}" --c
+    echo "Training finished for ${RUN_NAME}."
+
+    echo "=== Archiving checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+else
+    echo "ERROR: no checkpoint_latest.pth, checkpoint_best.pth, or checkpoint_final.pth at ${ENET_OUTPUT_FOLDER} -- nothing to resume from." >&2
+    exit 1
+fi
+
+echo "=== Collecting results into compression/results.csv ==="
+cd "$HOME/LightM-UNet"
+SLOPE_MAP_JSON=$(python -c "import json; print(json.dumps(json.load(open('${SLOPE_MAP_FILE}'))))")
+python compression/collect_results.py \
+    --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+    --stage experiment_5_6_qat_block_bits \
+    --dataset-name "${DATASET_NAME}" \
+    --dataset-id "${DATASET_ID}" \
+    --channels 4,16,32,16,4 \
+    --bottlenecks 4,8,8,2,1 \
+    --decoder-type upsample_conv \
+    --use-asymmetric 0 \
+    --context-pattern dense_dilation \
+    --separable-dilated 1 \
+    --leaky-slope-map "$SLOPE_MAP_JSON" \
+    --quant-bits 32 \
+    --trainer-class "${TRAINER_CLASS}"
+
+echo "Done: ${RUN_NAME}."

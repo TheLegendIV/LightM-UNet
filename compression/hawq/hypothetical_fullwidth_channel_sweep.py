@@ -81,7 +81,7 @@ WIDTHS = {
     "(4,10,20,10,4) -- exactly as requested, div-by-4 check bypassed": (4, 10, 20, 10, 4),
 }
 
-with open(REPO_ROOT / "compression/hawq/block_bits_8_2_relu_no_reg_fullwidth_acc1x_joint.json") as f:
+with open(REPO_ROOT / "compression/hawq/artifacts/block_bits_8_2_relu_no_reg_fullwidth_acc1x_joint.json") as f:
     bits = json.load(f)
 stage_bits = {"stage_weight_bits": bits["stage_weight_bits"], "stage_act_bits": bits["stage_act_bits"]}
 

@@ -1,0 +1,180 @@
+#!/bin/bash
+#SBATCH --job-name=resume_qat_s19_block_bits
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=10:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# Continuation of qat_s19_block_bits.job: that job's --time=10:00:00
+# walltime ran out mid-training -- checkpoint_latest.pth stopped at epoch
+# 100/150, no checkpoint_final.pth was ever written.
+#
+# Same stale-checkpoint_latest.pth issue resume_hawq_23_1_qat_stage_bits.job's
+# own header already documents (see that job for the general explanation):
+# checkpoint_latest.pth only refreshes on nnU-Net's own periodic save_every
+# cadence, while checkpoint_best.pth updates on every new-best-EMA epoch --
+# confirmed directly on THIS run's own checkpoints: checkpoint_latest.pth's
+# stored current_epoch=100, checkpoint_best.pth's is 135 (still trending up
+# at the cutoff: last 5 logged ema_fg_dice values were 0.7068, 0.7069,
+# 0.7087, 0.7093, 0.7111 -- not converged). nnUNetv2_train --c always prefers
+# checkpoint_latest.pth when present, so resuming as-is would silently throw
+# away epochs 100-135. Same fix as that precedent job: compare each
+# checkpoint's stored 'current_epoch' at submit time and promote
+# checkpoint_best.pth over checkpoint_latest.pth (archiving the stale file
+# first) only if it's actually further along, so this script stays correct
+# even if it's reused after a differently-timed cutoff.
+#
+# IMPORTANT: every ENET_S19_*/ENET_* knob below must stay byte-identical to
+# the original qat_s19_block_bits.job (mismatched block-bits/slope-map files
+# would break state_dict loading against the per-block-quantized architecture;
+# a different ENET_EPOCHS would change the PolyLRScheduler's endpoint and
+# silently invalidate the "continuation" property). ENET_S19_PRETRAINED_
+# CHECKPOINT is deliberately NOT set here (same omission
+# resume_hawq_23_1_qat_stage_bits.job's own resume makes) -- the real trained
+# weights get restored wholesale via --c's own load_checkpoint() call right
+# after build_network_architecture runs, so the initial shell's weight
+# VALUES don't matter on a resume, only its shape (channels/bottlenecks/
+# bits/slope-map) does.
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+
+RUN_NAME="s19_qat_block_bits"
+TRAINER_CLASS="nnUNetTrainerENetQuantS19Block"
+
+# NOTE (2026-08-25): the historical bit assignment this resume actually
+# used is preserved at compression/hawq/artifacts/block_bits_s19_validated.json -- the
+# live block_bits_s19.json has since been overwritten by later ILP reruns.
+BLOCK_BITS_FILE="compression/hawq/artifacts/block_bits_s19.json"
+SLOPE_MAP_FILE="compression/post-quantization/slope_maps/19_reginterleaved_separable_nonneg_block_double_mid.json"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- HAWQ per-block QAT knobs (must match the original job -- see header) ----
+export ENET_S19_BLOCK_BITS_FILE="$HOME/LightM-UNet/${BLOCK_BITS_FILE}"
+export ENET_S19_LEAKY_SLOPE_MAP_FILE="$HOME/LightM-UNet/${SLOPE_MAP_FILE}"
+export ENET_EPOCHS=150
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Run: ${RUN_NAME} (resume)"
+echo "Block bits file: ${ENET_S19_BLOCK_BITS_FILE}"
+echo "Slope map file:  ${ENET_S19_LEAKY_SLOPE_MAP_FILE}"
+echo "Output folder:   ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet"
+
+echo "=== Checking required input files exist ==="
+for f in "$ENET_S19_BLOCK_BITS_FILE" "$ENET_S19_LEAKY_SLOPE_MAP_FILE"; do
+    if [ ! -f "$f" ]; then
+        echo "ERROR: required file not found: $f" >&2
+        echo "  (run compression/hawq/block_sensitivity.py -> finn_block_costs.py -> ilp_search.py, and/or" >&2
+        echo "   compression/post-quantization/extract_leaky_slope_map.py first)" >&2
+        exit 1
+    fi
+done
+
+echo "=== Checking training state for ${RUN_NAME} ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    echo "checkpoint_final.pth already exists -- training already reached ${ENET_EPOCHS} epochs, skipping straight to the Dice check."
+elif [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" ] || [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_best.pth" ]; then
+    echo "=== Checking whether checkpoint_best.pth is further along than checkpoint_latest.pth ==="
+    python3 - <<PYEOF
+import os
+import shutil
+import torch
+
+folder = "${ENET_OUTPUT_FOLDER}"
+latest = os.path.join(folder, "checkpoint_latest.pth")
+best = os.path.join(folder, "checkpoint_best.pth")
+
+if os.path.isfile(latest) and os.path.isfile(best):
+    latest_epoch = torch.load(latest, map_location="cpu", weights_only=False)["current_epoch"]
+    best_epoch = torch.load(best, map_location="cpu", weights_only=False)["current_epoch"]
+    print(f"checkpoint_latest.pth resumes at epoch {latest_epoch}")
+    print(f"checkpoint_best.pth   resumes at epoch {best_epoch}")
+    if best_epoch > latest_epoch:
+        archived = os.path.join(folder, f"checkpoint_latest_epoch{latest_epoch}_preresume.pth")
+        print(f"checkpoint_best.pth is further along -- archiving stale checkpoint_latest.pth "
+              f"to {os.path.basename(archived)} and promoting checkpoint_best.pth to checkpoint_latest.pth")
+        shutil.copy2(latest, archived)
+        shutil.copy2(best, latest)
+    else:
+        print("checkpoint_latest.pth is already at or past checkpoint_best.pth's epoch -- leaving as-is")
+elif os.path.isfile(best):
+    print("No checkpoint_latest.pth found, but checkpoint_best.pth exists -- promoting it.")
+    shutil.copy2(best, latest)
+else:
+    print("No checkpoint_best.pth found -- resuming from checkpoint_latest.pth as-is.")
+PYEOF
+
+    echo "=== Resuming training (QAT) from checkpoint_latest.pth: ${RUN_NAME} ==="
+    cd "$HOME/LightM-UNet/enet"
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}" --c
+    echo "Training finished for ${RUN_NAME}."
+
+    echo "=== Archiving checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+else
+    echo "ERROR: no checkpoint_latest.pth, checkpoint_best.pth, or checkpoint_final.pth at ${ENET_OUTPUT_FOLDER} -- nothing to resume from." >&2
+    exit 1
+fi
+
+echo "=== Post-training Dice check (compression/hawq/eval_dice.py's evaluate(), adapted usage -- same convention resume_hawq_23_1_qat_stage_bits.job's own tail uses) ==="
+cd "$HOME/LightM-UNet"
+python -c "
+import torch, json
+from nnunetv2.nets.QuantENetS19Block import QuantENetS19Block, OUT_CHANNELS
+import sys
+sys.path.insert(0, 'compression/hawq')
+from eval_dice import evaluate
+with open('${BLOCK_BITS_FILE}') as f: bits = json.load(f)
+with open('${SLOPE_MAP_FILE}') as f: slope_map = json.load(f)
+ckpt = torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)
+model = QuantENetS19Block(bits['stage_weight_bits'], bits['stage_act_bits'], slope_map)
+model.load_state_dict(ckpt['network_weights'], strict=False)
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+model.to(device)
+with open('data/nnUNet_preprocessed/${DATASET_NAME}/splits_final.json') as f:
+    val_cases = json.load(f)[0]['val']
+result = evaluate(model, val_cases, device, OUT_CHANNELS)
+print(json.dumps(result, indent=2))
+"
+
+echo "Done: ${RUN_NAME}."

@@ -12,9 +12,9 @@ the shortcut.
 
 Usage:
     python compression/hawq/make_block_bits_override.py \\
-        --base compression/hawq/block_bits_s19_acc2x.json \\
+        --base compression/hawq/artifacts/block_bits_s19_acc2x.json \\
         --override regular5.0.weight_bits=8 \\
-        --out compression/hawq/block_bits_s19_acc2x_regular5_0_w8.json
+        --out compression/hawq/artifacts/block_bits_s19_acc2x_regular5_0_w8.json
 """
 from __future__ import annotations
 

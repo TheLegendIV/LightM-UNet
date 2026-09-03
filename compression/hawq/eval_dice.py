@@ -1,5 +1,5 @@
 """Ad-hoc Dice check for the HAWQ-searched QuantENet23_1 scheme
-(compression/hawq/stage_bits_23_1.json) against the FP32 23_1 baseline, on
+(compression/hawq/artifacts/stage_bits_23_1.json) against the FP32 23_1 baseline, on
 the real held-out fold_0 validation split (data/nnUNet_preprocessed/.../
 splits_final.json, 200 cases).
 
@@ -137,7 +137,7 @@ def calibrate_quant_model(model: QuantENet23_1, n_images: int, device: str, seed
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--stage-bits-file", type=Path, default=Path("compression/hawq/stage_bits_23_1.json"))
+    parser.add_argument("--stage-bits-file", type=Path, default=Path("compression/hawq/artifacts/stage_bits_23_1.json"))
     parser.add_argument("--slope-map-file", type=Path, default=Path("compression/post-quantization/slope_maps/23_1_s19_warmstart_4c.json"))
     parser.add_argument("--checkpoint-name", default="checkpoint_best.pth")
     parser.add_argument("--n-val-cases", type=int, default=200)

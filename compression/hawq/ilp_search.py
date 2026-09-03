@@ -86,19 +86,19 @@ not bit-width alone.
 
 Usage (per-STAGE, the original 5-group search):
     python compression/hawq/ilp_search.py \\
-        --sensitivity-file compression/hawq/sensitivity_23_1.json \\
-        --finn-cost-file compression/hawq/finn_stage_costs.json \\
+        --sensitivity-file compression/hawq/artifacts/sensitivity_23_1.json \\
+        --finn-cost-file compression/hawq/artifacts/finn_stage_costs.json \\
         --lut-weight 1.0 --bram-weight 1.0 \\
-        --out-file compression/hawq/stage_bits_23_1.json
+        --out-file compression/hawq/artifacts/stage_bits_23_1.json
 
 Usage (per-BLOCK -- one independent choice per ENet bottleneck instead of
 one shared choice per 5-way stage group; --sensitivity-file/--finn-cost-file
 just need to point at block_sensitivity.py/finn_block_costs.py's own output
 instead of sensitivity.py/finn_stage_costs.py's):
     python compression/hawq/ilp_search.py \\
-        --sensitivity-file compression/hawq/block_sensitivity_26_5_w24.json \\
-        --finn-cost-file compression/hawq/finn_block_costs_26_5_w24.json \\
-        --out-file compression/hawq/block_bits_26_5_w24.json
+        --sensitivity-file compression/hawq/artifacts/block_sensitivity_26_5_w24.json \\
+        --finn-cost-file compression/hawq/artifacts/finn_block_costs_26_5_w24.json \\
+        --out-file compression/hawq/artifacts/block_bits_26_5_w24.json
 
 The set of names being solved over (stages or blocks) is NOT hardcoded --
 it's read directly from --sensitivity-file's own top-level keys (which must
@@ -483,8 +483,8 @@ def solve_joint_bits(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--sensitivity-file", type=Path, default=Path("compression/hawq/sensitivity_23_1.json"))
-    parser.add_argument("--finn-cost-file", type=Path, default=Path("compression/hawq/finn_stage_costs.json"))
+    parser.add_argument("--sensitivity-file", type=Path, default=Path("compression/hawq/artifacts/sensitivity_23_1.json"))
+    parser.add_argument("--finn-cost-file", type=Path, default=Path("compression/hawq/artifacts/finn_stage_costs.json"))
     parser.add_argument("--lut-weight", type=float, default=1.0,
                          help="Weight on normalized (calibrated) LUT cost in the objective, added to "
                               "normalized sensitivity (both in [0,1]) -- 0 disables LUT entirely. See "
@@ -548,7 +548,7 @@ def main() -> None:
                               "would otherwise dominate the normalization scale) can meaningfully change "
                               "which bits get chosen for the remaining free blocks, not just remove one "
                               "degree of freedom. E.g. --fix-bits initial=8 --fix-bits down1=8.")
-    parser.add_argument("--out-file", type=Path, default=Path("compression/hawq/stage_bits_23_1.json"))
+    parser.add_argument("--out-file", type=Path, default=Path("compression/hawq/artifacts/stage_bits_23_1.json"))
     args = parser.parse_args()
 
     if (args.hard_lut or args.hard_bram) and not args.joint:

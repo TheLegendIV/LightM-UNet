@@ -24,7 +24,7 @@ on its own -- see compression/slurm/qat_8_2_relu_no_reg_w20_perblock_acc1x_15ep.
 
 Usage:
     python compression/post-quantization/calibrate_8_2_relu_no_reg_w20_perblock.py \\
-        --block-bits-file compression/hawq/block_bits_8_2_relu_no_reg_w20_acc1x_joint.json \\
+        --block-bits-file compression/hawq/artifacts/block_bits_8_2_relu_no_reg_w20_acc1x_joint.json \\
         --out-net-name nnUNetTrainerCombinedQuantENet_8_2_relu_no_reg_w20_perblock_calibrated
 """
 from __future__ import annotations

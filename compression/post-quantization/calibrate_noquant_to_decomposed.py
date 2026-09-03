@@ -38,7 +38,7 @@ Usage:
     python compression/post-quantization/calibrate_noquant_to_decomposed.py \\
         --source-net-name nnUNetTrainerENetQuant26_9_w24_s14w12_nonneg_blockBlock_acc1x_joint_noquant_damped_zeroslope_5ep \\
         --out-net-name nnUNetTrainerENetQuant_26_9_noquant_zeroslope_internal8_calibrated \\
-        --block-bits-file compression/hawq/block_bits_26_9_w24_s14w12_nonneg_block_acc1x_joint.json \\
+        --block-bits-file compression/hawq/artifacts/block_bits_26_9_w24_s14w12_nonneg_block_acc1x_joint.json \\
         --leaky-slope-map-file compression/post-quantization/slope_maps/26_9_w24_s14w12_nonneg_block_zeroed.json \\
         --internal-bit-width 8
 """

@@ -58,7 +58,7 @@ CONFIGS = [
     {
         "label": "S19-twopass (validated, control -- QAT'd to real dice=0.7458)",
         "fp32_net_name": "nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid",
-        "block_bits_file": REPO_ROOT / "compression/hawq/block_bits_s19_validated.json",
+        "block_bits_file": REPO_ROOT / "compression/hawq/artifacts/block_bits_s19_validated.json",
         "slope_map_file": REPO_ROOT / "compression/post-quantization/slope_maps/19_reginterleaved_separable_nonneg_block_double_mid.json",
         "quant_class": QuantENetS19Block,
         "fp32_kwargs": dict(
@@ -71,7 +71,7 @@ CONFIGS = [
     {
         "label": "S19-joint",
         "fp32_net_name": "nnUNetTrainerENet_19_reginterleaved_separable_nonneg_block_double_mid",
-        "block_bits_file": REPO_ROOT / "compression/hawq/block_bits_s19_joint.json",
+        "block_bits_file": REPO_ROOT / "compression/hawq/artifacts/block_bits_s19_joint.json",
         "slope_map_file": REPO_ROOT / "compression/post-quantization/slope_maps/19_reginterleaved_separable_nonneg_block_double_mid.json",
         "quant_class": QuantENetS19Block,
         "fp32_kwargs": dict(
@@ -84,7 +84,7 @@ CONFIGS = [
     {
         "label": "S5.6",
         "fp32_net_name": "nnUNetTrainerENet_5_6_separable_dense_dilation",
-        "block_bits_file": REPO_ROOT / "compression/hawq/block_bits_5_6.json",
+        "block_bits_file": REPO_ROOT / "compression/hawq/artifacts/block_bits_5_6.json",
         "slope_map_file": REPO_ROOT / "compression/post-quantization/slope_maps/5_6_separable_dense_dilation.json",
         "quant_class": QuantENet5_6Block,
         "fp32_kwargs": dict(

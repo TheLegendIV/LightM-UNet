@@ -56,7 +56,7 @@ removed = len(geometries) - len(no_reg_geometries)
 print(f"Dropping {removed} layers belonging to the {len(BOOKEND_BLOCKS)} reg-bookend blocks: {sorted(BOOKEND_BLOCKS)}")
 print(f"Hypothetical no-reg: {len(no_reg_geometries)} layers across {len(block_names) - len(BOOKEND_BLOCKS)} blocks.")
 
-with open(REPO_ROOT / "compression/hawq/block_bits_8_2_relu_w24_reg_acc1x_joint.json") as f:
+with open(REPO_ROOT / "compression/hawq/artifacts/block_bits_8_2_relu_w24_reg_acc1x_joint.json") as f:
     bits = json.load(f)
 stage_bits = {"stage_weight_bits": bits["stage_weight_bits"], "stage_act_bits": bits["stage_act_bits"]}
 

@@ -27,7 +27,7 @@ min4_ft15ep.job.
 
 Usage:
     python compression/post-quantization/calibrate_12_separable_dense_relu_perblock.py \\
-        --block-bits-file compression/hawq/block_bits_12_separable_dense_relu_min4.json \\
+        --block-bits-file compression/hawq/artifacts/block_bits_12_separable_dense_relu_min4.json \\
         --out-net-name nnUNetTrainerCombinedQuantENet_12_separable_dense_relu_min4_calibrated
 """
 from __future__ import annotations

@@ -72,8 +72,8 @@ FP32_CKPT = (
 SLOPE_MAP_FILE = REPO_ROOT / "compression/post-quantization/slope_maps/19_reginterleaved_separable_nonneg_block_double_mid.json"
 
 RUNS = {
-    "twopass_validated": REPO_ROOT / "compression/hawq/block_bits_s19_validated.json",
-    "joint": REPO_ROOT / "compression/hawq/block_bits_s19_joint.json",
+    "twopass_validated": REPO_ROOT / "compression/hawq/artifacts/block_bits_s19_validated.json",
+    "joint": REPO_ROOT / "compression/hawq/artifacts/block_bits_s19_joint.json",
 }
 
 

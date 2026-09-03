@@ -14,7 +14,7 @@ or the "trace geometry once on an untrained FP32 model" approach.
 Usage:
     python compression/hawq/finn_block_costs.py \\
         --config config_26_5_w24 \\
-        --out-file compression/hawq/finn_block_costs_26_5_w24.json
+        --out-file compression/hawq/artifacts/finn_block_costs_26_5_w24.json
 """
 from __future__ import annotations
 
@@ -133,7 +133,7 @@ def main() -> None:
     folding: Folding = FOLDING_SERIAL if args.folding == "serial" else FOLDING_UNFOLDED
     config_suffix = "" if args.config == "config_23_1" else f"_{args.config.removeprefix('config_')}"
     default_name = f"finn_block_costs{config_suffix}" + ("_serial" if folding == FOLDING_SERIAL else "")
-    out_file = args.out_file or Path(f"compression/hawq/{default_name}.json")
+    out_file = args.out_file or Path(f"compression/hawq/artifacts/{default_name}.json")
 
     # OPTIONAL config globals -- see sensitivity.py's own build_fp32_model
     # for the full rationale (not repeated here): every pre-S8.2 config_*.py

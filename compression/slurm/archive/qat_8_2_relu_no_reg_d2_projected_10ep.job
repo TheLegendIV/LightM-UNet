@@ -1,0 +1,189 @@
+#!/bin/bash
+#SBATCH --job-name=qat_8_2_relu_no_reg_d2_projected_10ep
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=02:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# Real HPC QAT run for nnUNetTrainerENet_8_2_relu_no_reg_d2_projected's own
+# HAWQ mixed per-stage bit assignment (compression/hawq/stage_bits_8_2_relu_
+# no_reg_d2_projected_minres.json -- the one the real folding search showed
+# feasible at ~30%/15% LUT/BRAM, 185ms latency): initial/stage1/stage4/
+# stage5 weights=4, context weights=2, stage1/context/stage4 acts=2,
+# initial/stage5 acts=4.
+#
+# This session's own local proxy test (compression/qat_smoke_8_2_relu_no_
+# reg_d2_projected.py) confirmed calibration is load-bearing here too (loss
+# noisy/non-monotonic without it, clean and monotonically decreasing with
+# it, over 5 quick local epochs) -- STEP 1 below calibrates once and saves a
+# checkpoint; STEP 2 warm-starts real QAT fine-tuning from THAT calibrated
+# checkpoint, never the raw FP32 one directly.
+#
+# ENET_EPOCHS=150 sets the REAL PolyLR schedule length; ENET_MAX_EPOCHS_TO_
+# RUN is a RELATIVE cap (nnUNetTrainerENet.run_training's own max_epoch =
+# min(self.num_epochs, self.current_epoch + self._max_epochs_to_run) --
+# self.num_epochs itself is NEVER touched, so the LR schedule is exactly a
+# real, uninterrupted 150-epoch curve regardless of how many submissions it
+# takes) -- resubmit this exact same script to continue, it correctly
+# resumes from wherever current_epoch left off.
+#
+# CORRECTED (this session): nnUNetTrainerENet's own on_train_start writes
+# checkpoint_final.pth at WHATEVER current_epoch ENET_MAX_EPOCHS_TO_RUN
+# stopped it at -- NOT only once the real 150-epoch schedule truly
+# completes -- and run_training.py's own --c flag already checks
+# checkpoint_final.pth FIRST (before checkpoint_latest.pth) when deciding
+# what to resume from (see maybe_load_checkpoint). So "checkpoint_final.pth
+# exists" does NOT mean "fully done" by itself -- an earlier version of
+# this job's own bash gate treated it that way and would have silently
+# skipped straight to collect_results.py on a 10/150-epoch checkpoint. The
+# gate below now checks the checkpoint's own current_epoch against
+# ENET_EPOCHS instead, and always resumes via --c when more real epochs
+# remain (--c loads the FULL optimizer/LR-scheduler state too, so this is a
+# genuine continuous session, not a fresh restart at the base LR).
+#
+# Built this session: nnUNetTrainerCombinedQuantENet_8_2_relu_no_reg_d2_
+# projected.py (a new, narrow QAT trainer on CombinedQuantENet, no leaky-
+# slope machinery at all -- this architecture is plain ReLU throughout) +
+# compression/post-quantization/calibrate_8_2_relu_no_reg_d2_projected.py.
+# Smoke-tested locally (1 epoch, docker, ENET_MAX_EPOCHS_TO_RUN=1, both
+# calibration and training steps) before this job was written.
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+TRAINER_CLASS="nnUNetTrainerCombinedQuantENet_8_2_relu_no_reg_d2_projected"
+FP32_SOURCE_NET_NAME="nnUNetTrainerENet_8_2_relu_no_reg_d2_projected"
+CALIBRATED_NET_NAME="nnUNetTrainerCombinedQuantENet_8_2_relu_no_reg_d2_projected_calibrated"
+RUN_NAME="8_2_relu_no_reg_d2_projected_qat"
+STAGE_BITS_FILE="compression/hawq/artifacts/stage_bits_8_2_relu_no_reg_d2_projected_minres.json"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+
+FP32_CHECKPOINT="$nnUNet_results/${DATASET_NAME}/${FP32_SOURCE_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
+echo "=== Checking FP32 source checkpoint exists ==="
+if [ ! -f "$FP32_CHECKPOINT" ]; then
+    echo "ERROR: FP32 source checkpoint not found: $FP32_CHECKPOINT -- run stage_8_2_relu_no_reg_d2_projected.job first." >&2
+    exit 1
+fi
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet"
+
+CALIBRATED_CHECKPOINT="$nnUNet_results/${DATASET_NAME}/${CALIBRATED_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
+echo "=== STEP 1: calibrate (skip if already done) ==="
+if [ -f "$CALIBRATED_CHECKPOINT" ]; then
+    echo "Calibrated checkpoint already exists at ${CALIBRATED_CHECKPOINT} -- skipping calibration."
+else
+    python compression/post-quantization/calibrate_8_2_relu_no_reg_d2_projected.py \
+        --source-net-name "${FP32_SOURCE_NET_NAME}" \
+        --out-net-name "${CALIBRATED_NET_NAME}" \
+        --dataset-name "${DATASET_NAME}" \
+        --stage-bits-file "${STAGE_BITS_FILE}"
+fi
+
+echo "=== STEP 2: real QAT fine-tuning, 150-epoch schedule, this submission runs 20 more ==="
+export ENET_STAGE_BITS_FILE="$HOME/LightM-UNet/${STAGE_BITS_FILE}"
+export ENET_PRETRAINED_CHECKPOINT="${CALIBRATED_CHECKPOINT}"
+export ENET_EPOCHS=150
+export ENET_MAX_EPOCHS_TO_RUN=20
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Checking training progress for ${RUN_NAME} ==="
+EXISTING_CHECKPOINT=""
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    EXISTING_CHECKPOINT="${ENET_OUTPUT_FOLDER}/checkpoint_final.pth"
+elif [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
+    EXISTING_CHECKPOINT="${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth"
+fi
+
+if [ -z "$EXISTING_CHECKPOINT" ]; then
+    echo "=== Start training (fresh): ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+else
+    # A saved checkpoint's own current_epoch, NOT just its existence, is
+    # what determines whether the real 150-epoch schedule is actually done
+    # -- see this job's own header note (checkpoint_final.pth gets written
+    # at whatever epoch ENET_MAX_EPOCHS_TO_RUN stops at, not only at a true
+    # 150/150 finish).
+    CURRENT_EPOCH=$(cd "$HOME/LightM-UNet" && python -c "import torch; print(torch.load('${EXISTING_CHECKPOINT}', map_location='cpu', weights_only=False)['current_epoch'])")
+    echo "Existing checkpoint (${EXISTING_CHECKPOINT}) is at epoch ${CURRENT_EPOCH}/${ENET_EPOCHS}."
+    if [ "$CURRENT_EPOCH" -ge "$ENET_EPOCHS" ]; then
+        echo "Real 150-epoch schedule already complete -- skipping training."
+    else
+        echo "=== Resuming training with --c (continues the SAME 150-epoch LR schedule from epoch ${CURRENT_EPOCH}) ==="
+        nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}" --c
+    fi
+fi
+echo "Training step finished for ${RUN_NAME} (this submission's epoch budget)."
+
+echo "=== Collecting results into compression/results.csv (only meaningful once the real 150-epoch schedule is complete) ==="
+cd "$HOME/LightM-UNet"
+FINAL_EPOCH=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)['current_epoch'])" 2>/dev/null || echo -1)
+if [ "$FINAL_EPOCH" -ge "$ENET_EPOCHS" ]; then
+    python compression/collect_results.py \
+        --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+        --stage 8_2_relu_no_reg_d2_projected_qat \
+        --dataset-name "${DATASET_NAME}" \
+        --dataset-id "${DATASET_ID}" \
+        --channels 4,16,32,16,4 \
+        --bottlenecks 4,8,8,2,1 \
+        --decoder-type upsample_conv \
+        --use-asymmetric 0 \
+        --context-pattern dense_dilation_d2_projected \
+        --separable-dilated 0 \
+        --quant-bits 8 \
+        --trainer-class "${TRAINER_CLASS}"
+else
+    echo "Only at epoch ${FINAL_EPOCH}/${ENET_EPOCHS} -- skipping collect_results.py (resubmit this job to continue training)."
+fi
+
+echo "Done: ${RUN_NAME}."

@@ -20,7 +20,7 @@ on its own.
 
 Usage:
     python compression/post-quantization/calibrate_8_2_relu_no_reg_w16_perblock.py \\
-        --block-bits-file compression/hawq/block_bits_8_2_relu_no_reg_w16_acc2x_min4_joint.json \\
+        --block-bits-file compression/hawq/artifacts/block_bits_8_2_relu_no_reg_w16_acc2x_min4_joint.json \\
         --out-net-name nnUNetTrainerCombinedQuantENet_8_2_relu_no_reg_w16_acc2x_min4_calibrated
 """
 from __future__ import annotations
