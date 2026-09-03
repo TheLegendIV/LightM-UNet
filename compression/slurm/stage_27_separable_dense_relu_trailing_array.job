@@ -1,0 +1,196 @@
+#!/bin/bash
+#SBATCH --job-name=stage_27_trailing
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=05:00:00
+#SBATCH --array=0-2
+#SBATCH --output=logs/%x_%a_%j.out
+#SBATCH --error=logs/%x_%a_%j.err
+
+set -e
+
+# S27 family: same base recipe as nnUNetTrainerENet_12_separable_dense_relu
+# ("S12 relu" -- native width channels=(4,16,32,16,4), separable_dilated=1
+# on the dilated slots, dsc=0, plain ReLU throughout, projection kept on
+# the dilated slots), but with an extra "consolidation" block inserted
+# AFTER EACH (2,4,8,16) dilation cycle -- 3 probes of what that trailing
+# slot should actually be. Every one of ENet.py's own (2,4,8,16,X)
+# 5-slot-cycle patterns, X trailing (not leading) each cycle, stage2/3
+# bottleneck depth bumped from S12's native 8 to 10 (two full 5-slot
+# cycles, no truncation) -- ENET_BOTTLENECKS="4,10,10,2,1" for all 3 tasks.
+#
+#   0: X = a projection-free depthwise-separable (DSC) 3x3
+#      (DSCNoProjectionBottleneck) -- ENET_CONTEXT_PATTERN=
+#      dense_dilation_dsc_trailing (NEW this session, ENet.py's
+#      DENSE_DILATION_DSC_TRAILING_PATTERN + {"dsc_no_proj_bottleneck":
+#      True} sentinel).
+#   1: X = a full-rank projected RegularBottleneck (real reduce/expand +
+#      symmetric dense 3x3, d=1) -- ENET_CONTEXT_PATTERN=
+#      dense_dilation_reg_trailing (already existed -- ENet.py's own
+#      DENSE_DILATION_REG_TRAILING_PATTERN, previously only exercised with
+#      use_dsc=1; this is a new use_dsc=0 + separable_dilated=1
+#      composition of it, 0 new code needed there).
+#   2: X = a full-rank, PROJECTION-FREE dense 3x3, d=1
+#      (RegularNoProjectionBottleneck) -- ENET_CONTEXT_PATTERN=
+#      dense_dilation_regnoproj_trailing (NEW this session, ENet.py's
+#      DENSE_DILATION_REGNOPROJ_TRAILING_PATTERN + {"regular_no_proj_
+#      bottleneck": True} sentinel). The un-factored, non-DSC counterpart
+#      to task 0 -- isolates whether depthwise-separable factoring matters
+#      for the trailing slot specifically, independent of projection.
+#
+# Verified: ENet.py's own Stage-19 self-test (python enet/nnunetv2/nets/
+# ENet.py) builds all 3 context patterns at this exact bottleneck depth,
+# confirms the (2,4,8,16,X)x2 dilation/class schedule, and forward-passes
+# cleanly at 512x512. Not yet smoke-tested through a real nnUNetv2_train
+# epoch. Every architecture here is a from-scratch init -- no warm start,
+# no weight compatibility with S12 or with each other (task 1's
+# RegularBottleneck trailing slot and tasks 0/2's own trailing slots are
+# structurally different modules).
+#
+# ENET_EPOCHS=150 -- a genuine COMPLETE 150-epoch PolyLR schedule. Standard
+# LR (no ENET_LR override). --time=05:00:00: bumped from stage_12_
+# separable_dense_relu.job's own 04:00:00 (same width, but stage2/3 depth
+# 10 vs. S12's native 8 -- 25% more context-stage blocks), not yet measured
+# against this exact architecture's own real per-iteration rate.
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+TRAINER_CLASS="nnUNetTrainerENet"
+
+CONTEXT_PATTERNS=(dense_dilation_dsc_trailing dense_dilation_reg_trailing dense_dilation_regnoproj_trailing)
+RUN_NAMES=(27_1_dsc_trailing 27_2_reg_trailing 27_3_regnoproj_trailing)
+TASK_ID=${SLURM_ARRAY_TASK_ID}
+CONTEXT_PATTERN="${CONTEXT_PATTERNS[$TASK_ID]}"
+RUN_NAME="${RUN_NAMES[$TASK_ID]}"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- ENet trainer knobs -- S12-relu's own recipe, deepened context stages,
+#    context_pattern is the ONE thing that varies per array task -----------
+export ENET_CHANNELS="4,16,32,16,4"
+export ENET_BOTTLENECKS="4,10,10,2,1"
+export ENET_CONTEXT_PATTERN="${CONTEXT_PATTERN}"
+export ENET_DECODER_TYPE="upsample_conv"
+export ENET_USE_PRELU=0
+export ENET_USE_DILATED=1
+export ENET_USE_ASYMMETRIC=0
+export ENET_USE_STRIDED=1
+export ENET_USE_DSC=0
+export ENET_SEPARABLE_DILATED=1
+export ENET_DSC_NO_PROJECTION=0
+export ENET_EPOCHS=150
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Array task: ${TASK_ID} -> ${RUN_NAME} (context_pattern=${CONTEXT_PATTERN})"
+echo "Output folder: ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Self-healing check: promote checkpoint_latest.pth over a STALE checkpoint_final.pth ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ] && [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
+    FINAL_EPOCH_CHECK=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)['current_epoch'])")
+    LATEST_EPOCH_CHECK=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth', map_location='cpu', weights_only=False)['current_epoch'])")
+    if [ "$LATEST_EPOCH_CHECK" -gt "$FINAL_EPOCH_CHECK" ]; then
+        echo "checkpoint_final.pth (epoch ${FINAL_EPOCH_CHECK}) is STALE relative to checkpoint_latest.pth (epoch ${LATEST_EPOCH_CHECK}) -- promoting latest, backing up the stale final."
+        cp "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" "${ENET_OUTPUT_FOLDER}/checkpoint_final_STALE_epoch${FINAL_EPOCH_CHECK}_backup.pth"
+        cp "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth"
+    fi
+fi
+
+echo "=== Checking training progress for ${RUN_NAME} ==="
+EXISTING_CHECKPOINT=""
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    EXISTING_CHECKPOINT="${ENET_OUTPUT_FOLDER}/checkpoint_final.pth"
+elif [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
+    EXISTING_CHECKPOINT="${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth"
+fi
+
+if [ -z "$EXISTING_CHECKPOINT" ]; then
+    echo "=== Start training (fresh): ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+else
+    CURRENT_EPOCH=$(cd "$HOME/LightM-UNet" && python -c "import torch; print(torch.load('${EXISTING_CHECKPOINT}', map_location='cpu', weights_only=False)['current_epoch'])")
+    echo "Existing checkpoint (${EXISTING_CHECKPOINT}) is at epoch ${CURRENT_EPOCH}/${ENET_EPOCHS}."
+    if [ "$CURRENT_EPOCH" -ge "$ENET_EPOCHS" ]; then
+        echo "Real 150-epoch schedule already complete -- skipping training."
+    else
+        echo "=== Resuming training with --c (continues the SAME 150-epoch LR schedule from epoch ${CURRENT_EPOCH}) ==="
+        nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}" --c
+    fi
+fi
+echo "Training step finished for ${RUN_NAME} (this submission's epoch budget)."
+
+echo "=== Archiving checkpoints + logs to \$HOME/models (only once the real 150-epoch schedule is complete) ==="
+FINAL_EPOCH=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)['current_epoch'])" 2>/dev/null || echo -1)
+if [ "$FINAL_EPOCH" -ge "$ENET_EPOCHS" ]; then
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+
+    echo "=== Collecting results into compression/results.csv ==="
+    cd "$HOME/LightM-UNet"
+    python compression/collect_results.py \
+        --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+        --stage "27_separable_dense_relu_trailing_array" \
+        --dataset-name "${DATASET_NAME}" \
+        --dataset-id "${DATASET_ID}" \
+        --channels "${ENET_CHANNELS}" \
+        --bottlenecks "${ENET_BOTTLENECKS}" \
+        --decoder-type "${ENET_DECODER_TYPE}" \
+        --use-dilated "${ENET_USE_DILATED}" \
+        --use-asymmetric "${ENET_USE_ASYMMETRIC}" \
+        --use-strided "${ENET_USE_STRIDED}" \
+        --use-dsc "${ENET_USE_DSC}" \
+        --separable-dilated "${ENET_SEPARABLE_DILATED}" \
+        --context-pattern "${ENET_CONTEXT_PATTERN}" \
+        --use-prelu "${ENET_USE_PRELU}" \
+        --dsc-no-projection "${ENET_DSC_NO_PROJECTION}" \
+        --trainer-class "${TRAINER_CLASS}"
+else
+    echo "Only at epoch ${FINAL_EPOCH}/${ENET_EPOCHS} -- skipping archive/collect_results.py (resubmit this array task to continue training)."
+fi
+
+echo "Done: ${RUN_NAME} (task ${TASK_ID}, context_pattern=${CONTEXT_PATTERN})."

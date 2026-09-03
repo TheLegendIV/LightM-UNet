@@ -161,6 +161,7 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
             "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing", "d16_reg_interleaved",
             "dense_dilation_reg_interleaved_double_mid", "dense_dilation_d2_projected",
             "dense_dilation_d8_d16_projected", "dense_dilation_d2_regular",
+            "dense_dilation_dsc_trailing", "dense_dilation_regnoproj_trailing",
         )
         if context_pattern not in valid_context_patterns:
             raise ValueError(f"ENET_CONTEXT_PATTERN must be one of {valid_context_patterns}, got {context_pattern!r}.")

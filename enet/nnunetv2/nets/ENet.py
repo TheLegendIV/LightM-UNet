@@ -10,6 +10,7 @@ DecoderType = Literal["max_unpool", "upsample_conv"]
 ContextPattern = Literal[
     "default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_lead1",
     "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing",
+    "dense_dilation_dsc_trailing", "dense_dilation_regnoproj_trailing",
 ]
 
 # The ENet-native context-stage pattern (Paszke et al.): regular, dilated x2,
@@ -237,6 +238,40 @@ DENSE_DILATION_REG_TRAILING_PATTERN: tuple[dict, ...] = (
     {"padding": 8, "dilation": 8},
     {"padding": 16, "dilation": 16},
     {"reg_bottleneck": True},
+)
+
+# S27 family (probe: what does the trailing "consolidation" slot after each
+# dilation cycle actually need to be?). Same 5-slot (2,4,8,16,X) trailing
+# structure as DENSE_DILATION_REG_TRAILING_PATTERN, X swapped for a
+# projection-free depthwise-separable (DSC) 3x3 -- DSCNoProjectionBottleneck
+# at dilation=1 -- instead of a full-rank projected RegularBottleneck. Meant
+# for an S12-style base recipe (use_dsc=0 unscoped, dsc_no_projection=0,
+# separable_dilated=1 on the 4 dilated slots): the {"dsc_no_proj_
+# bottleneck": True} sentinel forces DSCNoProjectionBottleneck for that ONE
+# slot regardless of those global flags -- same "sentinel picks a different
+# bottleneck CLASS outright" convention {"reg_bottleneck": True} already
+# uses under dsc_no_projection=True, just introducing DSC into an otherwise
+# non-DSC stage instead of the reverse.
+DENSE_DILATION_DSC_TRAILING_PATTERN: tuple[dict, ...] = (
+    {"padding": 2, "dilation": 2},
+    {"padding": 4, "dilation": 4},
+    {"padding": 8, "dilation": 8},
+    {"padding": 16, "dilation": 16},
+    {"dsc_no_proj_bottleneck": True},
+)
+
+# Same S27-family idea, X swapped for a full-rank (non-DSC, non-depthwise)
+# KxK conv applied directly at full channel width -- RegularNoProjection
+# Bottleneck at dilation=1 -- no reduce/expand projection pair AND no DSC
+# factoring, the un-factored dense-conv counterpart to DENSE_DILATION_DSC_
+# TRAILING_PATTERN's own DSC'd one. {"regular_no_proj_bottleneck": True}
+# is the analogous forcing sentinel.
+DENSE_DILATION_REGNOPROJ_TRAILING_PATTERN: tuple[dict, ...] = (
+    {"padding": 2, "dilation": 2},
+    {"padding": 4, "dilation": 4},
+    {"padding": 8, "dilation": 8},
+    {"padding": 16, "dilation": 16},
+    {"regular_no_proj_bottleneck": True},
 )
 
 # S15's own pattern: drops the 2/4/8/16 progression entirely in favor of
@@ -878,6 +913,43 @@ class DSCNoProjectionBottleneck(nn.Module):
         return self.out_act(x + out)
 
 
+class RegularNoProjectionBottleneck(nn.Module):
+    """Full-rank (non-DSC, non-depthwise) KxK conv applied directly at full
+    `channels` width, no reduce/expand projection pair -- the "no
+    projection" counterpart to a plain RegularBottleneck's own reduce ->
+    KxK -> expand (which squeezes to internal_channels first), and the
+    un-factored, dense-conv counterpart to DSCNoProjectionBottleneck (which
+    applies this same "no projection, full width" idea via depthwise+
+    pointwise instead of one joint dense op -- see that class's own
+    docstring). S27 family (see DENSE_DILATION_REGNOPROJ_TRAILING_PATTERN):
+    tests whether a joint (non-factored) spatial+channel mix is what a
+    trailing "consolidation" slot needs, independent of whether it also
+    gets a projection."""
+
+    def __init__(
+        self,
+        channels: int,
+        kernel_size: int = 3,
+        padding: int = 1,
+        dilation: int = 1,
+        dropout_p: float = 0.1,
+        relu: bool = False,
+        prelu_variant: PReluVariant = "standard",
+    ):
+        super().__init__()
+        shared_act = NonNegativePReLU(1) if (prelu_variant == "nonneg_block" and not relu) else None
+        self.conv = nn.Sequential(
+            nn.Conv2d(channels, channels, kernel_size=kernel_size, padding=padding, dilation=dilation, bias=False),
+            nn.BatchNorm2d(channels),
+        )
+        self.dropout = nn.Dropout2d(p=dropout_p)
+        self.out_act = _activation(channels, relu, prelu_variant, shared_act)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out = self.dropout(self.conv(x))
+        return self.out_act(x + out)
+
+
 class MergedContextBottleneck(nn.Module):
     """Probe 4.4.3: fuses a PAIR of context-stage pattern slots into ONE
     block sharing a single reduce/expand projection pair -- reduce ->
@@ -1018,6 +1090,7 @@ class ENet(nn.Module):
             "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing", "d16_reg_interleaved",
             "dense_dilation_reg_interleaved_double_mid", "dense_dilation_d2_projected",
             "dense_dilation_d8_d16_projected", "dense_dilation_d2_regular",
+            "dense_dilation_dsc_trailing", "dense_dilation_regnoproj_trailing",
         )
         if context_pattern not in valid_context_patterns:
             raise ValueError(f"context_pattern must be one of {valid_context_patterns}, got {context_pattern!r}.")
@@ -1318,6 +1391,10 @@ class ENet(nn.Module):
             pattern = DENSE_DILATION_REG_INTERLEAVED_PATTERN
         elif self.context_pattern == "dense_dilation_reg_trailing":
             pattern = DENSE_DILATION_REG_TRAILING_PATTERN
+        elif self.context_pattern == "dense_dilation_dsc_trailing":
+            pattern = DENSE_DILATION_DSC_TRAILING_PATTERN
+        elif self.context_pattern == "dense_dilation_regnoproj_trailing":
+            pattern = DENSE_DILATION_REGNOPROJ_TRAILING_PATTERN
         elif self.context_pattern == "d16_reg_interleaved":
             pattern = D16_REG_INTERLEAVED_PATTERN
         elif self.context_pattern == "dense_dilation_reg_interleaved_double_mid":
@@ -1418,6 +1495,28 @@ class ENet(nn.Module):
         ops = []
         for i in range(n_ops):
             kwargs = dict(pattern[i % len(pattern)])
+            # S27 family sentinels (DENSE_DILATION_DSC_TRAILING_PATTERN /
+            # DENSE_DILATION_REGNOPROJ_TRAILING_PATTERN): force a DIFFERENT
+            # bottleneck CLASS for this one slot, same "sentinel picks the
+            # class outright" convention {"reg_bottleneck": True} already
+            # uses under dsc_no_projection=True, just introducing DSC/no-
+            # projection into an otherwise dense-conv/projected stage
+            # instead of the reverse. Both sentinels are always dilation=1,
+            # non-asymmetric slots -- checked (and popped) before the
+            # reg_bottleneck/dilation/asymmetric handling below, which
+            # never sees them.
+            if kwargs.pop("dsc_no_proj_bottleneck", False):
+                ops.append(DSCNoProjectionBottleneck(
+                    channels, kernel_size=3, padding=1, dilation=1, dropout_p=0.1,
+                    relu=not self.use_prelu, prelu_variant=self.prelu_variant,
+                ))
+                continue
+            if kwargs.pop("regular_no_proj_bottleneck", False):
+                ops.append(RegularNoProjectionBottleneck(
+                    channels, kernel_size=3, padding=1, dilation=1, dropout_p=0.1,
+                    relu=not self.use_prelu, prelu_variant=self.prelu_variant,
+                ))
+                continue
             # DENSE_DILATION_REG_TRAILING_PATTERN's reg-bookend slot -- forces
             # a genuine non-DSC RegularBottleneck here regardless of the
             # global use_dsc, same meaning the sentinel already has under
@@ -2870,3 +2969,61 @@ if __name__ == "__main__":
     print("ENet Stage-18 dsc_separable self-test PASSED: validation-without-dsc_no_projection checked, "
           "5 stages compared block-for-block (off: plain depthwise KxK, on: depthwise (K,1)+(1,K) pair), "
           "dilation preserved on both factored passes, forward pass checked on both.")
+
+    # Stage 19 -- S27 family: dense_dilation_dsc_trailing / dense_dilation_
+    # regnoproj_trailing, the (2,4,8,16,X) trailing-consolidation-slot
+    # patterns where X is forced to a projection-free DSC 3x3
+    # (DSCNoProjectionBottleneck) or a projection-free full-rank dense 3x3
+    # (RegularNoProjectionBottleneck) via ENet.py's own sentinels,
+    # regardless of the stage's own use_dsc/dsc_no_projection globals. Both
+    # built on an S12-style base recipe (use_dsc=0, dsc_no_projection=0,
+    # separable_dilated=1 on the 4 dilated slots) -- stage2/3 bottleneck
+    # depth 10 (two full 5-slot cycles).
+    dsc_trailing = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=(4, 10, 10, 2, 1),
+        decoder_type="upsample_conv", use_prelu=False, use_asymmetric=False,
+        use_dsc=False, dsc_no_projection=False, separable_dilated=True,
+        context_pattern="dense_dilation_dsc_trailing",
+    ).eval()
+    regnoproj_trailing = ENet(
+        in_channels=1, out_channels=5, channels=U4_CHANNELS, bottlenecks_per_stage=(4, 10, 10, 2, 1),
+        decoder_type="upsample_conv", use_prelu=False, use_asymmetric=False,
+        use_dsc=False, dsc_no_projection=False, separable_dilated=True,
+        context_pattern="dense_dilation_regnoproj_trailing",
+    ).eval()
+    with torch.no_grad():
+        assert dsc_trailing(dummy).shape == (1, 5, 512, 512)
+        assert regnoproj_trailing(dummy).shape == (1, 5, 512, 512)
+
+    expected_dilations = [2, 4, 8, 16, None, 2, 4, 8, 16, None]  # None = the trailing X slot (dilation=1, own class)
+    for label, net, trailing_cls in (
+        ("dsc_trailing", dsc_trailing, DSCNoProjectionBottleneck),
+        ("regnoproj_trailing", regnoproj_trailing, RegularNoProjectionBottleneck),
+    ):
+        for stage_name in ("stage2", "stage3"):
+            stage = getattr(net, stage_name)
+            assert len(stage) == 10, f"19 {label}: {stage_name} has {len(stage)} blocks, expected 10"
+            for i, (block, expected_dilation) in enumerate(zip(stage, expected_dilations)):
+                if expected_dilation is None:
+                    assert type(block) is trailing_cls, (
+                        f"19 {label}: {stage_name}[{i}] (trailing) is {type(block).__name__}, expected {trailing_cls.__name__}"
+                    )
+                    assert block.conv[0].dilation == (1, 1), f"19 {label}: {stage_name}[{i}] (trailing) expected dilation=1"
+                    expected_groups = block.conv[0].in_channels if trailing_cls is DSCNoProjectionBottleneck else 1
+                    assert block.conv[0].groups == expected_groups, (
+                        f"19 {label}: {stage_name}[{i}] (trailing) groups mismatch for {trailing_cls.__name__}"
+                    )
+                else:
+                    assert type(block) is RegularBottleneck, (
+                        f"19 {label}: {stage_name}[{i}] (dilated) is {type(block).__name__}, expected RegularBottleneck"
+                    )
+                    # separable_dilated=True -- dilated slots are (k,1)+(1,k) Sequentials, not a bare Conv2d.
+                    dilated_conv = block.conv[0]
+                    assert dilated_conv.dilation == (expected_dilation, expected_dilation), (
+                        f"19 {label}: {stage_name}[{i}] expected dilation={expected_dilation}, got {dilated_conv.dilation}"
+                    )
+
+    print("ENet Stage-19 S27-family self-test PASSED: dense_dilation_dsc_trailing (DSCNoProjectionBottleneck) "
+          "and dense_dilation_regnoproj_trailing (RegularNoProjectionBottleneck) both verified -- 10-slot "
+          "pattern, dilation schedule (2,4,8,16,X)x2 confirmed, forced sentinel class independent of the "
+          "stage's own use_dsc/dsc_no_projection globals, forward pass checked on both.")
