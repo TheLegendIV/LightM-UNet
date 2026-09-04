@@ -382,7 +382,17 @@ def upsert_row(row: dict) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--net-name", required=True, help="config_name, and the labelsPr_<net-name> prediction folder.")
+    parser.add_argument("--net-name", required=True, help="config_name (unless --config-name overrides it), and "
+                         "the labelsPr_<net-name> prediction folder / <net-name>__<plans>__<configuration> model "
+                         "folder used for inference.")
+    parser.add_argument("--config-name", default=None,
+                         help="Override for the CSV row's config_name (and upsert key) -- default None reuses "
+                              "--net-name unchanged (existing behavior, byte-for-byte). Needed when evaluating "
+                              "MULTIPLE checkpoints (--checkpoint-name) from the SAME trained run/model folder -- "
+                              "--net-name has to stay fixed (it resolves the real model folder + labelsPr dir), "
+                              "so distinguishing e.g. 'epoch5' vs 'epoch15' rows for the same run needs a separate "
+                              "config_name, not a separate net-name. E.g. --net-name X --checkpoint-name "
+                              "checkpoint_epoch5.pth --config-name X_epoch5.")
     parser.add_argument("--dataset-name", default="Dataset509_ARCADE_1x1_4c",
                          help="nnUNet_raw/<name> and nnUNet_results/<name> subfolder. Any future "
                               "Dataset509-derived sweep stage passes this (or relies on the default) -- "
@@ -642,7 +652,7 @@ def main() -> None:
     else:
         f_i, f1, f2, f3, f4, f5 = args.channels
     row = {
-        "config_name": args.net_name,
+        "config_name": args.config_name if args.config_name else args.net_name,
         "stage": args.stage,
         "f_i": f_i, "f1": f1, "f2": f2, "f3": f3, "f4": f4, "f5": f5,
         "bottlenecks_per_stage": ",".join(str(n) for n in args.bottlenecks),
