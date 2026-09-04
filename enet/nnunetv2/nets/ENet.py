@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import types
 from typing import Literal
 
 import torch
@@ -1778,6 +1779,44 @@ def apply_block_pruning(model: nn.Module, block_names: list) -> int:
             setattr(container, last, nn.Identity())
         pruned += 1
     return pruned
+
+
+def freeze_batchnorm(model: nn.Module) -> int:
+    """Post-construction, pre-training freeze for every nn.BatchNorm2d in
+    `model`: puts it in eval mode (uses its current running mean/var
+    forever, never updates them from batch statistics again) AND stops its
+    affine weight/bias from receiving gradients -- the standard "treat BN
+    as a fixed affine transform" meaning of "freeze BN", not just "stop
+    updating running stats but still let gamma/beta train".
+
+    Setting .eval() once is not enough on its own: nnU-Net's own training
+    loop calls self.network.train() at the start of every epoch (needed for
+    everything else -- dropout, the Brevitas quantizers' own training-mode
+    behavior), which recursively calls .train(mode) on every submodule
+    including these BatchNorm2d ones, silently UN-freezing them again after
+    epoch 1. So each frozen BN's own .train() method is replaced with a
+    permanent no-op (stays at the .eval() state set here, ignores whatever
+    mode a parent's recursive .train(mode) call passes it) -- everything
+    else in the model still toggles train()/eval() normally per epoch/
+    validation phase, only these specific submodules are pinned.
+
+    Intended for short QAT fine-tunes (few epochs, occasionally batch_size
+    small relative to a from-scratch run) where BN running-stat estimates
+    from the FP32 source checkpoint are already good and re-estimating them
+    from a handful of noisy mini-batches can only hurt -- NOT intended for
+    a full/long QAT graduation run, where BN should keep adapting normally.
+    Returns the number of BatchNorm2d modules frozen, for self-test/sanity
+    checks (call-site convention matches apply_block_pruning/apply_leaky_
+    slope_overrides/apply_nonneg_block_init above)."""
+    frozen = 0
+    for module in model.modules():
+        if isinstance(module, nn.BatchNorm2d):
+            module.eval()
+            module.weight.requires_grad_(False)
+            module.bias.requires_grad_(False)
+            module.train = types.MethodType(lambda self, mode=True: self, module)
+            frozen += 1
+    return frozen
 
 
 if __name__ == "__main__":

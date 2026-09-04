@@ -87,6 +87,23 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
             self.output_folder = os.environ["ENET_OUTPUT_FOLDER"]
             self.output_folder_base = os.path.dirname(self.output_folder)
             os.makedirs(self.output_folder, exist_ok=True)
+            # nnUNetTrainer.__init__ (the base class, called above via
+            # super().__init__()) already computed self.log_file from
+            # self.output_folder's DEFAULT value (before this override runs)
+            # and never re-derives it later -- checkpoints happen to re-read
+            # self.output_folder fresh at save time, so they land in the
+            # right place, but the human-readable training_log_*.txt was
+            # already pinned to the OLD (unsuffixed, shared-across-every-run-
+            # of-this-trainer-class) folder. Confirmed in practice: three
+            # separate runs' log files piling up in the bare nnUNetTrainer
+            # CombinedQuantENet_12_separable_dense_relu_perblock__nnUNetPlans
+            # __2d/fold_0/ folder while their own checkpoints correctly went
+            # to their own distinct ENET_OUTPUT_FOLDER-named directories.
+            # Relocate the SAME timestamped filename the base class already
+            # picked, just to the right folder, so every run's log lives
+            # next to its own checkpoints instead of leaking into whatever
+            # folder happened to be the class's bare default.
+            self.log_file = os.path.join(self.output_folder, os.path.basename(self.log_file))
         self._max_epochs_to_run = None
         if os.environ.get("ENET_MAX_EPOCHS_TO_RUN"):
             self._max_epochs_to_run = int(os.environ["ENET_MAX_EPOCHS_TO_RUN"])
