@@ -1,0 +1,1047 @@
+[
+  {
+    "logical_name": "initial.conv",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      3,
+      1,
+      3,
+      3
+    ]
+  },
+  {
+    "logical_name": "initial.pool",
+    "module_type": "MaxPool2d",
+    "weight_shape": null
+  },
+  {
+    "logical_name": "down1.shortcut_pool",
+    "module_type": "MaxPool2d",
+    "weight_shape": null
+  },
+  {
+    "logical_name": "down1.shortcut_proj.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      16,
+      4,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "down1.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      4,
+      4,
+      2,
+      2
+    ]
+  },
+  {
+    "logical_name": "down1.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      4,
+      4,
+      3,
+      3
+    ]
+  },
+  {
+    "logical_name": "down1.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      16,
+      4,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "regular1.0.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      4,
+      16,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "regular1.0.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      4,
+      4,
+      3,
+      3
+    ]
+  },
+  {
+    "logical_name": "regular1.0.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      16,
+      4,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "regular1.1.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      4,
+      16,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "regular1.1.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      4,
+      4,
+      3,
+      3
+    ]
+  },
+  {
+    "logical_name": "regular1.1.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      16,
+      4,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "regular1.2.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      4,
+      16,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "regular1.2.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      4,
+      4,
+      3,
+      3
+    ]
+  },
+  {
+    "logical_name": "regular1.2.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      16,
+      4,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "regular1.3.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      4,
+      16,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "regular1.3.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      4,
+      4,
+      3,
+      3
+    ]
+  },
+  {
+    "logical_name": "regular1.3.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      16,
+      4,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "down2.shortcut_pool",
+    "module_type": "MaxPool2d",
+    "weight_shape": null
+  },
+  {
+    "logical_name": "down2.shortcut_proj.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      32,
+      16,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "down2.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      16,
+      2,
+      2
+    ]
+  },
+  {
+    "logical_name": "down2.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      3,
+      3
+    ]
+  },
+  {
+    "logical_name": "down2.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      32,
+      8,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.0.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      32,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.0.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      3,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.0.conv.3",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      1,
+      3
+    ]
+  },
+  {
+    "logical_name": "stage2.0.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      32,
+      8,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.1.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      32,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.1.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      3,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.1.conv.3",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      1,
+      3
+    ]
+  },
+  {
+    "logical_name": "stage2.1.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      32,
+      8,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.2.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      32,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.2.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      3,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.2.conv.3",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      1,
+      3
+    ]
+  },
+  {
+    "logical_name": "stage2.2.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      32,
+      8,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.3.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      32,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.3.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      3,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.3.conv.3",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      1,
+      3
+    ]
+  },
+  {
+    "logical_name": "stage2.3.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      32,
+      8,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.4.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      32,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.4.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      3,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.4.conv.3",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      1,
+      3
+    ]
+  },
+  {
+    "logical_name": "stage2.4.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      32,
+      8,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.5.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      32,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.5.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      3,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.5.conv.3",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      1,
+      3
+    ]
+  },
+  {
+    "logical_name": "stage2.5.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      32,
+      8,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.6.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      32,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.6.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      3,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.6.conv.3",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      1,
+      3
+    ]
+  },
+  {
+    "logical_name": "stage2.6.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      32,
+      8,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.7.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      32,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.7.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      3,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage2.7.conv.3",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      1,
+      3
+    ]
+  },
+  {
+    "logical_name": "stage2.7.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      32,
+      8,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.0.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      32,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.0.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      3,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.0.conv.3",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      1,
+      3
+    ]
+  },
+  {
+    "logical_name": "stage3.0.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      32,
+      8,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.1.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      32,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.1.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      3,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.1.conv.3",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      1,
+      3
+    ]
+  },
+  {
+    "logical_name": "stage3.1.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      32,
+      8,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.2.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      32,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.2.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      3,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.2.conv.3",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      1,
+      3
+    ]
+  },
+  {
+    "logical_name": "stage3.2.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      32,
+      8,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.3.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      32,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.3.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      3,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.3.conv.3",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      1,
+      3
+    ]
+  },
+  {
+    "logical_name": "stage3.3.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      32,
+      8,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.4.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      32,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.4.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      3,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.4.conv.3",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      1,
+      3
+    ]
+  },
+  {
+    "logical_name": "stage3.4.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      32,
+      8,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.5.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      32,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.5.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      3,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.5.conv.3",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      1,
+      3
+    ]
+  },
+  {
+    "logical_name": "stage3.5.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      32,
+      8,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.6.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      32,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.6.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      3,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.6.conv.3",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      1,
+      3
+    ]
+  },
+  {
+    "logical_name": "stage3.6.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      32,
+      8,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.7.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      32,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.7.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      3,
+      1
+    ]
+  },
+  {
+    "logical_name": "stage3.7.conv.3",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      8,
+      1,
+      3
+    ]
+  },
+  {
+    "logical_name": "stage3.7.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      32,
+      8,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "up4.main_up",
+    "module_type": "QuantConvTranspose2d",
+    "weight_shape": [
+      32,
+      16,
+      2,
+      2
+    ]
+  },
+  {
+    "logical_name": "up4.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      8,
+      32,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "up4.up.0",
+    "module_type": "QuantConvTranspose2d",
+    "weight_shape": [
+      8,
+      8,
+      2,
+      2
+    ]
+  },
+  {
+    "logical_name": "up4.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      16,
+      8,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "regular4.0.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      4,
+      16,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "regular4.0.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      4,
+      4,
+      3,
+      3
+    ]
+  },
+  {
+    "logical_name": "regular4.0.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      16,
+      4,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "regular4.1.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      4,
+      16,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "regular4.1.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      4,
+      4,
+      3,
+      3
+    ]
+  },
+  {
+    "logical_name": "regular4.1.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      16,
+      4,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "up5.main_up",
+    "module_type": "QuantConvTranspose2d",
+    "weight_shape": [
+      16,
+      4,
+      2,
+      2
+    ]
+  },
+  {
+    "logical_name": "up5.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      4,
+      16,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "up5.up.0",
+    "module_type": "QuantConvTranspose2d",
+    "weight_shape": [
+      4,
+      4,
+      2,
+      2
+    ]
+  },
+  {
+    "logical_name": "up5.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      4,
+      4,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "regular5.0.reduce.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      1,
+      4,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "regular5.0.conv.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      1,
+      1,
+      3,
+      3
+    ]
+  },
+  {
+    "logical_name": "regular5.0.expand.0",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      4,
+      1,
+      1,
+      1
+    ]
+  },
+  {
+    "logical_name": "final",
+    "module_type": "QuantConvTranspose2d",
+    "weight_shape": [
+      4,
+      5,
+      2,
+      2
+    ]
+  }
+]
