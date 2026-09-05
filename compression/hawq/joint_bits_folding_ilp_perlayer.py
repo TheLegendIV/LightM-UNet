@@ -60,25 +60,22 @@ predecessor(s) could not be traced (see KNOWN LIMITATION below) falls back
 to its OWN sensitivity -- the pre-existing, imperfect convention -- since no
 better signal is available.
 
-KNOWN LIMITATION: torch.fx's plain symbolic tracer cannot follow a
-shape-dependent Python conditional (`if tensor.shape[...] < ...:`), and
-ENet.py's own DownsamplingBottleneck (channel pad/truncate on its pooled
-branch) and UpsamplingBottleneck (a shape-mismatch guard) both have one, as
-does ENet.forward's own trailing interpolate-back-to-input-size check.
-compute_predecessor_map is given DownsamplingBottleneck/UpsamplingBottleneck
-as `leaf_module_types` (traced as one opaque node each, sidestepping their
-own internal conditional) -- but every Conv2d inside one of those two block
-types (down1/down2/up4/up5's own reduce/conv/expand/main_proj/up sites,
-~20 layers for S12) is then invisible to the tracer entirely and falls back
-to self-sensitivity, same as before this fix, for those specific layers
-only. If tracing the whole model fails outright (e.g. a future config hits
-the top-level interpolate check some other way), this file logs a warning
-and falls back to self-sensitivity for EVERY layer, matching this script's
-pre-fix behavior exactly rather than crashing. See compression/hawq/
-demo_predecessor_fix.py for a worked, from-scratch demonstration of the bug
-and the fix on a small 1-block network unaffected by this limitation (no
-downsampling -> no shape-dependent conditional -> traces cleanly, fully
-corrected, no fallback needed anywhere).
+RESOLVED LIMITATION (was real, now fixed in layer_topology.py itself):
+torch.fx's plain symbolic tracer cannot follow a shape-dependent Python
+conditional (`if tensor.shape[...] < ...:`), and ENet.py's own
+DownsamplingBottleneck/UpsamplingBottleneck/ENet.forward's own trailing
+interpolate check all have one -- compute_predecessor_map now overrides
+Tracer.to_bool to sidestep every one of these at once (see its own module
+docstring), so the WHOLE real S12 architecture traces with full internal
+visibility, no opaque leaf modules and no per-layer fallback needed for the
+Downsampling/UpsamplingBottleneck sites specifically. If tracing the whole
+model ever fails outright for some other reason (a future config), this
+file still logs a warning and falls back to self-sensitivity for EVERY
+layer, matching this script's pre-fix behavior exactly rather than
+crashing -- but that path is not expected to trigger for this architecture
+anymore. See compression/hawq/demo_predecessor_fix.py for a worked,
+from-scratch demonstration of the bug and the fix on a small 1-block
+network.
 
 VARIABLES (same roles as joint_bits_folding_ilp.py's own, renamed/reindexed):
     y[layer, w, a]   one-hot per INDIVIDUAL LAYER (not block) -- sensitivity
@@ -174,7 +171,7 @@ from layer_topology import compute_predecessor_map  # noqa: E402 -- the predeces
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 PACKAGE_ROOT = REPO_ROOT / "enet"
 sys.path.insert(0, str(PACKAGE_ROOT))
-from nnunetv2.nets.ENet import DownsamplingBottleneck, ENet, UpsamplingBottleneck  # noqa: E402
+from nnunetv2.nets.ENet import ENet  # noqa: E402
 
 XCZU7EV = {"LUT": 230_400, "BRAM_18K": 624}  # same values as joint_bits_folding_ilp.py's own copy
 CANDIDATE_BITS = (2, 4, 6, 8, 16)
@@ -469,17 +466,16 @@ def main() -> None:
     layer_names = tuple(g.name for g in geometries)
 
     # Predecessor-corrected act sensitivity -- see module docstring's
-    # PREDECESSOR-CORRECTED ACT SENSITIVITY / KNOWN LIMITATION sections.
-    # Never fatal: any tracing failure (e.g. a future config's forward()
-    # hits a shape-dependent conditional beyond the two known leaf types)
-    # falls back to this file's original self-indexed behavior for EVERY
-    # layer, rather than crashing the whole run.
+    # PREDECESSOR-CORRECTED ACT SENSITIVITY section. Never fatal: any
+    # tracing failure falls back to this file's original self-indexed
+    # behavior for EVERY layer, rather than crashing the whole run (not
+    # expected to trigger for this architecture -- see RESOLVED LIMITATION).
     try:
-        predecessor_map = compute_predecessor_map(model, leaf_module_types=(DownsamplingBottleneck, UpsamplingBottleneck))
+        predecessor_map = compute_predecessor_map(model)
         n_resolved = sum(1 for name in layer_names if predecessor_map.get(name))
         print(f"Predecessor map: {n_resolved}/{len(layer_names)} layers have a real, traced predecessor "
-              f"(the rest -- inside DownsamplingBottleneck/UpsamplingBottleneck, or the network's own first "
-              f"layer -- fall back to self-sensitivity, see module docstring's KNOWN LIMITATION).")
+              f"(the rest are the network's own first layer(s), with no real predecessor to fall back to "
+              f"anything but self-sensitivity).")
     except Exception as error:
         predecessor_map = None
         print(f"WARNING: could not compute a predecessor map ({type(error).__name__}: {error}) -- falling back "

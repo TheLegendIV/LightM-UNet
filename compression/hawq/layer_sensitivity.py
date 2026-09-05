@@ -227,16 +227,25 @@ def main() -> None:
     parser.add_argument("--n-probes", type=int, default=10, help="Rademacher probes per batch (Hutchinson's method).")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--candidate-bits", type=str, default=None,
+                         help="Comma-separated override for the module-level CANDIDATE_BITS (e.g. '2,4,6,8') -- "
+                              "same override convention block_sensitivity.py's/joint_bits_folding_ilp.py's own "
+                              "--candidate-bits use. Needed whenever a downstream per-layer ILP run wants a "
+                              "bit-width this config's own default CANDIDATE_BITS never measured.")
     parser.add_argument("--out-file", type=Path, default=None,
                          help="Defaults to compression/hawq/artifacts/layer_sensitivity_<config suffix>.json.")
     args = parser.parse_args()
 
     load_config(args.config)  # populates CHANNELS/BOTTLENECKS_PER_STAGE/NET_NAME/... as module globals
+    if args.candidate_bits is not None:
+        global CANDIDATE_BITS
+        CANDIDATE_BITS = tuple(sorted(int(b) for b in args.candidate_bits.split(",")))
+        print(f"Overriding CANDIDATE_BITS to {CANDIDATE_BITS} (from --candidate-bits).")
     # Re-sync -- see block_sensitivity.py's own identical comment for why this
-    # second injection (after load_config, not just the module-load-time one
-    # above) is required: without it, any config whose CANDIDATE_BITS != this
-    # file's stale (2,4,8,16) default (e.g. config_12_separable_dense_relu's
-    # (2,4,8)) raises KeyError inside quantization_deltas.
+    # second injection (after load_config, or the --candidate-bits override
+    # above, not just the module-load-time one above) is required: without
+    # it, any CANDIDATE_BITS != this file's stale (2,4,8,16) default raises
+    # KeyError inside quantization_deltas.
     _sensitivity.CANDIDATE_BITS = CANDIDATE_BITS
     net_name = args.net_name or NET_NAME
     out_file = args.out_file or Path(f"compression/hawq/artifacts/layer_sensitivity_{args.config.removeprefix('config_')}.json")

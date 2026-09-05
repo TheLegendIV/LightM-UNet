@@ -91,13 +91,17 @@ class nnUNetTrainerCombinedQuantENet_12_separable_dense_relu_perblock(nnUNetTrai
         else:
             model = CombinedQuantENet(block_weight_bits, block_act_bits, **common_kwargs)
 
-        # ENET_FREEZE_BN (default ON): short QAT fine-tunes re-estimating BN
-        # running stats from a handful of noisy mini-batches can only hurt
-        # when the FP32 source checkpoint's own stats are already good --
-        # see freeze_batchnorm's own docstring. Parametrized (not hardcoded)
-        # so a later full/long QAT graduation run can disable it with
-        # ENET_FREEZE_BN=0 to let BN keep adapting normally.
-        if _parse_bool_env("ENET_FREEZE_BN", True):
+        # ENET_FREEZE_BN (default OFF): a real 15-epoch bnfreeze-vs-nobnfreeze
+        # A/B (compression/analysis/qat_results/plot_bnfreeze_dice_trend.py,
+        # 5 alpha points x 3 epoch checkpoints) showed no-freeze winning on
+        # mean dice at every checkpoint (epoch5/10/15), and for 4 of 5 alphas
+        # individually -- the original "freeze by default" reasoning (BN
+        # stats re-estimated from a few noisy mini-batches can only hurt an
+        # already-good FP32 checkpoint's stats) did not hold up empirically
+        # for this architecture/schedule. Still parametrized (not removed)
+        # so a future run can opt back into freezing with ENET_FREEZE_BN=1
+        # if a different schedule/architecture ever favors it.
+        if _parse_bool_env("ENET_FREEZE_BN", False):
             n_frozen = freeze_batchnorm(model)
             if n_frozen == 0:
                 raise ValueError("ENET_FREEZE_BN=1 but no nn.BatchNorm2d modules were found to freeze.")

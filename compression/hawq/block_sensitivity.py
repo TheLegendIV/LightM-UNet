@@ -215,19 +215,30 @@ def main() -> None:
     parser.add_argument("--n-probes", type=int, default=10, help="Rademacher probes per batch (Hutchinson's method).")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--candidate-bits", type=str, default=None,
+                         help="Comma-separated override for the module-level CANDIDATE_BITS (e.g. '2,4,6,8') -- "
+                              "same override convention joint_bits_folding_ilp.py's own --candidate-bits uses. "
+                              "Needed whenever a downstream ILP run wants a bit-width this config's own default "
+                              "CANDIDATE_BITS never measured (e.g. config_12_separable_dense_relu's own default "
+                              "is (2,4,8) -- asking a joint ILP for --candidate-bits 4,6,8 fails with "
+                              "KeyError: '6' unless this file is re-run with 6 included first).")
     parser.add_argument("--out-file", type=Path, default=None,
                          help="Defaults to compression/hawq/block_sensitivity_<config suffix>.json.")
     args = parser.parse_args()
 
     load_config(args.config)  # populates CHANNELS/BOTTLENECKS_PER_STAGE/NET_NAME/... as module globals
-    # Re-sync: load_config() just rebound this module's OWN CANDIDATE_BITS
-    # global to the loaded config's value, but quantization_deltas() lives in
-    # sensitivity.py and reads ITS module's CANDIDATE_BITS -- the one-time
-    # injection at import time (module-level, above) used this file's stale
-    # pre-load_config() default (2,4,8,16), not the config actually loaded
-    # here. Without this, any config with CANDIDATE_BITS != (2,4,8,16)
-    # (e.g. config_26_5_w24's (2,4,8)) raises KeyError inside
-    # run_block_sensitivity's weight_delta_sum/act_delta_sum accumulation.
+    if args.candidate_bits is not None:
+        global CANDIDATE_BITS
+        CANDIDATE_BITS = tuple(sorted(int(b) for b in args.candidate_bits.split(",")))
+        print(f"Overriding CANDIDATE_BITS to {CANDIDATE_BITS} (from --candidate-bits).")
+    # Re-sync: load_config() (or the --candidate-bits override above) just
+    # rebound this module's OWN CANDIDATE_BITS global, but quantization_deltas()
+    # lives in sensitivity.py and reads ITS module's CANDIDATE_BITS -- the
+    # one-time injection at import time (module-level, above) used this
+    # file's stale pre-load_config() default (2,4,8,16), not the config (or
+    # override) actually in effect here. Without this, any CANDIDATE_BITS !=
+    # (2,4,8,16) raises KeyError inside run_block_sensitivity's
+    # weight_delta_sum/act_delta_sum accumulation.
     _sensitivity.CANDIDATE_BITS = CANDIDATE_BITS
     net_name = args.net_name or NET_NAME
     out_file = args.out_file or Path(f"compression/hawq/artifacts/block_sensitivity_{args.config.removeprefix('config_')}.json")

@@ -1,0 +1,18 @@
+{
+  "script": "compression/hawq/joint_bits_folding_ilp.py",
+  "shared_args": {
+    "config": "config_12_separable_dense_relu",
+    "sensitivity-file": "compression/hawq/artifacts/block_sensitivity_12_separable_dense_relu.json",
+    "candidate-bits": "4,6,8",
+    "hard-lut-fraction": 1.0,
+    "hard-bram-fraction": 1.0,
+    "max-latency-ms": 1000,
+    "clock-mhz": 100.0,
+    "force_serial": false,
+    "time-limit": 1800,
+    "gap-rel": 0.02
+  },
+  "alphas": [0.0, 0.25, 0.5, 0.75, 1.0],
+  "granularity": "block",
+  "notes": "Full (non-force-serial) joint bits+folding MILP, candidate weight/act bits now {4,6,8} (up from the earlier min4 {4,8} sweep) -- real PE/SIMD folding chosen freely by the solver, not restricted to FOLDING_SERIAL. Hard LUT/BRAM caps at 100% of XCZU7EV budget, hard cycle cap at 1000ms @ 100MHz -- same convention as every earlier alpha sweep this session. Output files land in this same S12_ILP_outputs/ folder, named block_bits_folding_12_separable_dense_relu_joint_alpha<A>_candidatebits468_maxlat1000ms.json."
+}

@@ -1,0 +1,22 @@
+{
+  "pipeline": [
+    "compression/hawq/layer_sensitivity.py --candidate-bits 2,4,6,8 (regenerated to include bit 6)",
+    "compression/hawq/joint_bits_folding_ilp_perlayer.py --candidate-bits 4,6,8 (per-CONV-LAYER bits+folding, real non-force-serial search, predecessor-corrected act sensitivity)",
+    "compression/hawq/expand_layer_bits.py (broadcasts each alpha's per-layer result to LayerQuantENet's full per-quantizer-site schema)"
+  ],
+  "shared_args": {
+    "config": "config_12_separable_dense_relu",
+    "sensitivity-file": "compression/hawq/artifacts/layer_sensitivity_12_separable_dense_relu.json",
+    "candidate-bits": "4,6,8",
+    "hard-lut-fraction": 1.0,
+    "hard-bram-fraction": 1.0,
+    "max-latency-ms": 1000,
+    "clock-mhz": 100.0,
+    "force_serial": false,
+    "time-limit": 1800,
+    "gap-rel": 0.02
+  },
+  "alphas": [0.0, 0.25, 0.5, 0.75, 1.0],
+  "granularity": "layer",
+  "notes": "Per-LAYER joint bits+folding MILP -- see joint_bits_folding_ilp_perlayer.py's own module docstring for the full formulation and its predecessor-correction fix (compression/hawq/layer_topology.py), and expand_layer_bits.py's own docstring for how each alpha's per-conv-layer result (layer_bits_folding_*.json) is broadcast to LayerQuantENet's full per-quantizer-site schema (layer_bits_SITES_*.json -- this is the file the perlayer trainer's ENET_LAYER_BITS_FILE actually consumes, NOT layer_bits_folding_*.json directly). All 5 alphas solved Optimal, ~100% LUT utilization at every alpha (max-speed-at-hard-cap convention), total_cycles ranging 5.48M (alpha=0.0) to 99.8M (alpha=1.0), both under the 100M (1000ms@100MHz) hard cap -- see summary.csv."
+}
