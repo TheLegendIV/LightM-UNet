@@ -144,21 +144,105 @@ def _interpolate_derating(avg_bits: float, anchor_factors: tuple[float, float]) 
     return lo_factor + t * (hi_factor - lo_factor)
 
 
-def calibrated_lut(raw_total_lut: float, weight_bits: float, act_bits: float) -> float:
+def calibrated_lut(raw_total_lut: float, weight_bits: float, act_bits: float, force_dsp: bool = False) -> float:
     """This model's own raw total_lut, corrected by a derating factor
     interpolated between the avg_bits=3.52/avg_bits=8 real-synthesis
     anchors at avg_bits=(weight_bits+act_bits)/2 -- see the module-level
     comment above for the calibration this is based on and its real scope
-    limits."""
+    limits.
+
+    force_dsp=True switches to the FORCED-DSP regime's own flat factor
+    (see _FORCED_DSP_LUT_FACTOR below) instead -- default False preserves
+    this function's exact prior behavior for every existing caller."""
+    if force_dsp:
+        return raw_total_lut * _FORCED_DSP_LUT_FACTOR
     avg_bits = (weight_bits + act_bits) / 2
     return raw_total_lut * _interpolate_derating(avg_bits, _LUT_ANCHOR_FACTORS)
 
 
-def calibrated_bram18k(raw_total_bram18k: float, weight_bits: float, act_bits: float) -> float:
+def calibrated_bram18k(raw_total_bram18k: float, weight_bits: float, act_bits: float, force_dsp: bool = False) -> float:
     """This model's own raw BRAM_18K total, corrected the same way as
     calibrated_lut -- see that function's and the module-level comment."""
+    if force_dsp:
+        return raw_total_bram18k * _FORCED_DSP_BRAM_FACTOR
     avg_bits = (weight_bits + act_bits) / 2
     return raw_total_bram18k * _interpolate_derating(avg_bits, _BRAM_ANCHOR_FACTORS)
+
+
+# ---------------------------------------------------------------------------
+# FORCED-DSP regime (2026-09-05): two real S12 8-way-partitioned OOC builds,
+# both forcing DSP on every MVAU/VVAU node -- a different regime from the
+# auto-resType anchors above (see compression/hawq/fit_forced_dsp_derating.py
+# for the full fitting script and provenance; plan:
+# C:\Users\win32\.claude\plans\nested-singing-flurry.md).
+#
+# Per-PARTITION real ground truth (8 partitions x 2 builds = 16 points) was
+# fit two ways:
+#   (a) ratio real/raw vs. avg_bits -- broke down badly for partition 0 (the
+#       single initial.conv-only partition in both builds: raw_lut=937/1360,
+#       real_lut=8909/4297, i.e. 9.5x/3.2x, vs. every other partition's
+#       0.98x-1.86x). NOT because partition 0 is expensive in absolute terms
+#       (it's the cheapest partition in both builds) -- because a roughly
+#       FIXED per-partition synthesis overhead (I/O shims, FIFOs, clock/reset
+#       infra) doesn't shrink with the partition's own logic, so dividing it
+#       by an equally tiny raw baseline produces a huge ratio. This is a
+#       property of a pure-multiplicative model, not of partition 0.
+#   (b) real_lut = a*raw_lut + b (affine, all 16 points, INCLUDING partition
+#       0): R^2=0.916 -- partition 0's residual falls in line with everyone
+#       else's once the fixed intercept exists to absorb exactly that
+#       per-partition overhead. Confirms (a)'s diagnosis directly. Adding
+#       total PE/total SIMD as EXTRA regressors alongside raw_lut barely
+#       moves R^2 (0.916->0.926, with a sign-flipped SIMD coefficient --
+#       collinearity noise from 4 parameters on 16 points) since raw_lut
+#       already IS the PE*SIMD*bits combination (see conv_cost_pe_simd's own
+#       mvu_lut formula); PE/SIMD ALONE, without raw_lut, fits WORSE
+#       (R^2=0.817) than raw_lut alone. Regressing on the already-combined
+#       raw estimate is strictly better than re-splitting it into PE/SIMD
+#       terms with too little data to support the extra parameters.
+#   BRAM's affine fit is much noisier (R^2=0.462) -- real BRAM_18K counts per
+#       partition are tiny (5-36), dominated by integer-rounding noise at
+#       that scale; treat BRAM_18K forced-DSP estimates as rougher than LUT's.
+#
+# The affine model's intercept is a genuine PER-PARTITION fixed cost, but
+# calibrated_lut/calibrated_bram18k are called per-LAYER, inside the ILP,
+# before partition boundaries exist -- so the affine form can't be applied
+# per-layer without over-counting the intercept once per layer instead of
+# once per partition. Two separate uses instead:
+#
+#   1. Per-layer factor for the ILP's own search (relative cost signal
+#      across candidate bit assignments): _FORCED_DSP_LUT_FACTOR/
+#      _FORCED_DSP_BRAM_FACTOR below, a FLAT mean factor (not a function of
+#      avg_bits) computed over the 14 non-degenerate partitions (excluding
+#      each build's own partition 0 -- a single-layer partition's ratio is
+#      inherently unreliable for exactly the fixed-overhead reason above,
+#      not a real per-layer bits effect). Flat, not sloped, because the real
+#      avg_bits range across those 14 partitions is only [4.0, 5.15] -- S12's
+#      min4 folding convention keeps per-layer bits tightly clustered there,
+#      too narrow a range to support a real slope estimate.
+#   2. Affine TOTAL-cost check (_forced_dsp_lut_total/_forced_dsp_bram_total
+#      below) for validating a CONCRETE partitioned plan (n_partitions known)
+#      against a hard cap post-hoc -- n_partitions*b + a*raw_total.
+_FORCED_DSP_LUT_FACTOR = 1.261221175430389   # mean lut_factor, 14 partitions (both builds, partition 0 excluded), avg_bits in [4.0, 5.15]
+_FORCED_DSP_BRAM_FACTOR = 0.19434811541501412  # mean bram_factor, same 14 partitions
+_FORCED_DSP_LUT_AFFINE = (0.947632331261822, 4208.818846016495)   # (a, b): real_lut = a*raw_lut + b, all 16 partitions, R^2=0.916
+_FORCED_DSP_BRAM_AFFINE = (0.08739251550203067, 8.135659131252611)  # (a, b): real_bram18 = a*raw_bram18 + b, all 16 partitions, R^2=0.462
+
+
+def forced_dsp_lut_total(raw_total_lut: float, n_partitions: int) -> float:
+    """Affine total-cost check for a CONCRETE forced-DSP partitioned plan
+    (n_partitions known) -- n_partitions*b + a*raw_total, fit against all 16
+    real S12 partition points including partition 0 (see module comment
+    above). NOT for use inside the per-layer ILP search (n_partitions isn't
+    known there) -- use calibrated_lut(..., force_dsp=True) for that."""
+    a, b = _FORCED_DSP_LUT_AFFINE
+    return a * raw_total_lut + n_partitions * b
+
+
+def forced_dsp_bram_total(raw_total_bram18k: float, n_partitions: int) -> float:
+    """Same as forced_dsp_lut_total, for BRAM_18K -- see that function's
+    docstring. BRAM's affine fit is noisier (R^2=0.462, see module comment)."""
+    a, b = _FORCED_DSP_BRAM_AFFINE
+    return a * raw_total_bram18k + n_partitions * b
 
 # Weight-memory FPGA resource choice for the MVU's weight tile (FINN's own
 # "ram_style" nodeattr, see matrixvectoractivation.py: block=BRAM, ultra=

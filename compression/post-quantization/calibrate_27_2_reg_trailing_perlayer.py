@@ -1,25 +1,20 @@
-"""Builds nnUNetTrainerENet_12_separable_dense_relu's own real per-LAYER
+"""Builds nnUNetTrainerENet_27_2_reg_trailing's own real per-LAYER
 HAWQ-quantized LayerQuantENet from its trained FP32 checkpoint, then
 CALIBRATES the newly-introduced Brevitas quantizers on real data before
-saving -- byte-for-byte the same rationale/mechanism as
-calibrate_12_separable_dense_relu_perblock.py (confirmed load-bearing there:
-loss noisy/non-monotonic without calibration, clean and monotonically
-decreasing with it), just building LayerQuantENet instead of
-CombinedQuantENet from a per-QUANTIZER-SITE bits file (compression/hawq/
-expand_layer_bits.py's own output schema: {"layer_weight_bits": {...},
-"layer_act_bits": {...}}, one entry per real site LayerQuantENet.
-layer_names_for expects) instead of a per-block one.
+saving -- byte-for-byte the same mechanism as calibrate_12_separable_dense_
+relu_perlayer.py, just for S27.2's own architecture shape (bottlenecks_per_
+stage=(4,10,10,2,1), context_pattern="dense_dilation_reg_trailing" -- see
+compression/hawq/config_27_2_reg_trailing.py).
 
 Output checkpoint is meant as the WARM START for
-nnUNetTrainerLayerQuantENet_12_separable_dense_relu_perlayer's own real QAT
+nnUNetTrainerLayerQuantENet_27_2_reg_trailing_perlayer's own real QAT
 fine-tuning (ENET_PRETRAINED_CHECKPOINT), not a final deployable artifact on
-its own -- see compression/slurm/qat_12_separable_dense_relu_joint_alpha_
-sweep_15ep_perlayer_candidatebits468_array.job.
+its own.
 
 Usage:
-    python compression/post-quantization/calibrate_12_separable_dense_relu_perlayer.py \\
-        --layer-bits-file compression/hawq/artifacts/S12_ILP_outputs_perlayer/layer_bits_SITES_12_separable_dense_relu_joint_alpha0.5_candidatebits468_maxlat1000ms.json \\
-        --out-net-name nnUNetTrainerLayerQuantENet_12_separable_dense_relu_joint_alpha0.5_candidatebits468_calibrated
+    python compression/post-quantization/calibrate_27_2_reg_trailing_perlayer.py \\
+        --layer-bits-file compression/hawq/artifacts/S27_2_ILP_outputs_perlayer/layer_bits_SITES_27_2_reg_trailing_joint_alpha0.5_candidatebits468_forcedsp70lut.json \\
+        --out-net-name nnUNetTrainerLayerQuantENet_27_2_reg_trailing_joint_alpha0.5_candidatebits468_calibrated
 """
 from __future__ import annotations
 
@@ -42,8 +37,8 @@ NNUNET_PREPROCESSED = REPO_ROOT / "data" / "nnUNet_preprocessed"
 NNUNET_RESULTS = REPO_ROOT / "data" / "nnUNet_results"
 
 CHANNELS = (4, 16, 32, 16, 4)
-BOTTLENECKS_PER_STAGE = (4, 8, 8, 2, 1)
-CONTEXT_PATTERN = "dense_dilation"
+BOTTLENECKS_PER_STAGE = (4, 10, 10, 2, 1)
+CONTEXT_PATTERN = "dense_dilation_reg_trailing"
 
 
 def load_calibration_batches(dataset_name: str, n_images: int, seed: int = 0) -> list[torch.Tensor]:
@@ -57,19 +52,13 @@ def load_calibration_batches(dataset_name: str, n_images: int, seed: int = 0) ->
 
 
 def calibrate(quant_model: torch.nn.Module, calibration_batches: list[torch.Tensor], device: str, seed: int) -> int:
-    """seed reseeds torch's GLOBAL RNG right before calibration starts --
-    Downsampling/UpsamplingBottleneck's nn.Dropout2d is ACTIVE during
-    calibration (Brevitas's calibration_mode requires model.train() for its
-    observer hooks to fire, and .train() does not disable dropout), so
-    without this the calibrated activation-quantizer scale at every
-    residual_add/out_act site is corrupted by WHATEVER the ambient global
-    RNG state happens to be -- non-reproducible run-to-run even given the
-    exact same calibration images (confirmed directly: this was the entire
-    cause of an earlier apparent ~0.041 dice gap between two architectures
-    that turned out to be numerically identical once this was controlled
-    for -- see compression/post-quantization/verify_layerquant_matches_
-    combined.py). Reusing --calibration-seed for this (not a separate flag)
-    keeps one seed value controlling everything about calibration."""
+    """seed reseeds torch's GLOBAL RNG right before calibration starts -- see
+    calibrate_12_separable_dense_relu_perlayer.py's own calibrate() docstring
+    for the full rationale (Downsampling/UpsamplingBottleneck's nn.Dropout2d
+    is active during calibration_mode, so without this the calibrated
+    residual_add/out_act scales are corrupted by whatever the ambient global
+    RNG state happens to be -- non-reproducible run-to-run even given
+    identical calibration images)."""
     torch.manual_seed(seed)
     quant_model.to(device)
     quant_model.train()
@@ -89,7 +78,7 @@ def calibrate(quant_model: torch.nn.Module, calibration_batches: list[torch.Tens
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--source-net-name", default="nnUNetTrainerENet_12_separable_dense_relu")
+    parser.add_argument("--source-net-name", default="nnUNetTrainerENet_27_2_reg_trailing")
     parser.add_argument("--source-checkpoint-name", default="checkpoint_best.pth")
     parser.add_argument("--out-net-name", required=True)
     parser.add_argument("--dataset-name", default="Dataset509_ARCADE_1x1_4c")
@@ -144,7 +133,7 @@ def main() -> None:
     network_weights.update(dict(quant_model.named_parameters(remove_duplicate=False)))
     new_checkpoint = dict(reference_checkpoint)
     new_checkpoint["network_weights"] = network_weights
-    new_checkpoint["trainer_name"] = "nnUNetTrainerLayerQuantENet_12_separable_dense_relu_perlayer"
+    new_checkpoint["trainer_name"] = "nnUNetTrainerLayerQuantENet_27_2_reg_trailing_perlayer"
     out_checkpoint_path = out_fold_dir / "checkpoint_best.pth"
     torch.save(new_checkpoint, out_checkpoint_path)
     print(f"Saved calibrated checkpoint: {out_checkpoint_path}")

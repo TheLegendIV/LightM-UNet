@@ -1,0 +1,238 @@
+{
+  "points": [
+    {
+      "build": "dummy",
+      "partition_id": 0,
+      "avg_bits": 8.0,
+      "lut_factor": 9.505975245411864,
+      "bram_factor": 1.0,
+      "raw_lut": 937.2,
+      "real_lut": 8909.0,
+      "raw_bram18": 6.0,
+      "real_bram18": 6.0,
+      "n_layers": 1,
+      "unmatched_layers": []
+    },
+    {
+      "build": "dummy",
+      "partition_id": 1,
+      "avg_bits": 5.0,
+      "lut_factor": 1.2747741001447757,
+      "bram_factor": 0.25742574257425743,
+      "raw_lut": 16024.8,
+      "real_lut": 20428.0,
+      "raw_bram18": 101.0,
+      "real_bram18": 26.0,
+      "n_layers": 20,
+      "unmatched_layers": [
+        "down1.shortcut_proj.0",
+        "down2.shortcut_proj.0"
+      ]
+    },
+    {
+      "build": "dummy",
+      "partition_id": 2,
+      "avg_bits": 4.0,
+      "lut_factor": 1.2909295923149018,
+      "bram_factor": 0.1897810218978102,
+      "raw_lut": 13657.599999999999,
+      "real_lut": 17631.0,
+      "raw_bram18": 137.0,
+      "real_bram18": 26.0,
+      "n_layers": 16,
+      "unmatched_layers": []
+    },
+    {
+      "build": "dummy",
+      "partition_id": 3,
+      "avg_bits": 4.0,
+      "lut_factor": 1.30462160262418,
+      "bram_factor": 0.19444444444444445,
+      "raw_lut": 13657.6,
+      "real_lut": 17818.0,
+      "raw_bram18": 144.0,
+      "real_bram18": 28.0,
+      "n_layers": 16,
+      "unmatched_layers": []
+    },
+    {
+      "build": "dummy",
+      "partition_id": 4,
+      "avg_bits": 4.0,
+      "lut_factor": 1.2851815367295245,
+      "bram_factor": 0.19672131147540983,
+      "raw_lut": 17054.399999999998,
+      "real_lut": 21918.0,
+      "raw_bram18": 183.0,
+      "real_bram18": 36.0,
+      "n_layers": 20,
+      "unmatched_layers": []
+    },
+    {
+      "build": "dummy",
+      "partition_id": 5,
+      "avg_bits": 4.0,
+      "lut_factor": 1.2447990265347777,
+      "bram_factor": 0.17272727272727273,
+      "raw_lut": 10190.400000000001,
+      "real_lut": 12685.0,
+      "raw_bram18": 110.0,
+      "real_bram18": 19.0,
+      "n_layers": 12,
+      "unmatched_layers": []
+    },
+    {
+      "build": "dummy",
+      "partition_id": 6,
+      "avg_bits": 4.660860097985846,
+      "lut_factor": 1.427228188251596,
+      "bram_factor": 0.23404255319148937,
+      "raw_lut": 8082.8,
+      "real_lut": 11536.0,
+      "raw_bram18": 47.0,
+      "real_bram18": 11.0,
+      "n_layers": 11,
+      "unmatched_layers": [
+        "up4.main_up",
+        "up5.main_up"
+      ]
+    },
+    {
+      "build": "dummy",
+      "partition_id": 7,
+      "avg_bits": 5.150647580095432,
+      "lut_factor": 1.8592365371506478,
+      "bram_factor": 0.5625,
+      "raw_lut": 6454.799999999999,
+      "real_lut": 12001.0,
+      "raw_bram18": 32.0,
+      "real_bram18": 18.0,
+      "n_layers": 7,
+      "unmatched_layers": []
+    },
+    {
+      "build": "trained",
+      "partition_id": 0,
+      "avg_bits": 8.0,
+      "lut_factor": 3.160488378934981,
+      "bram_factor": 1.0,
+      "raw_lut": 1359.6,
+      "real_lut": 4297.0,
+      "raw_bram18": 6.0,
+      "real_bram18": 6.0,
+      "n_layers": 1,
+      "unmatched_layers": []
+    },
+    {
+      "build": "trained",
+      "partition_id": 1,
+      "avg_bits": 4.962409226826142,
+      "lut_factor": 1.1329171682653099,
+      "bram_factor": 0.06862745098039216,
+      "raw_lut": 20600.800000000003,
+      "real_lut": 23339.0,
+      "raw_bram18": 102.0,
+      "real_bram18": 7.0,
+      "n_layers": 20,
+      "unmatched_layers": [
+        "down1.shortcut_proj.0",
+        "down2.shortcut_proj.0"
+      ]
+    },
+    {
+      "build": "trained",
+      "partition_id": 2,
+      "avg_bits": 4.0,
+      "lut_factor": 1.145180250783699,
+      "bram_factor": 0.11173184357541899,
+      "raw_lut": 18374.4,
+      "real_lut": 21042.0,
+      "raw_bram18": 179.0,
+      "real_bram18": 20.0,
+      "n_layers": 16,
+      "unmatched_layers": []
+    },
+    {
+      "build": "trained",
+      "partition_id": 3,
+      "avg_bits": 4.0,
+      "lut_factor": 1.126272376272376,
+      "bram_factor": 0.12643678160919541,
+      "raw_lut": 18233.600000000002,
+      "real_lut": 20536.0,
+      "raw_bram18": 174.0,
+      "real_bram18": 22.0,
+      "n_layers": 16,
+      "unmatched_layers": []
+    },
+    {
+      "build": "trained",
+      "partition_id": 4,
+      "avg_bits": 4.0,
+      "lut_factor": 1.2263735101206004,
+      "bram_factor": 0.08502024291497975,
+      "raw_lut": 22686.40000000001,
+      "real_lut": 27822.0,
+      "raw_bram18": 247.0,
+      "real_bram18": 21.0,
+      "n_layers": 20,
+      "unmatched_layers": []
+    },
+    {
+      "build": "trained",
+      "partition_id": 5,
+      "avg_bits": 4.0,
+      "lut_factor": 1.1960735275728396,
+      "bram_factor": 0.10869565217391304,
+      "raw_lut": 12795.200000000003,
+      "real_lut": 15304.0,
+      "raw_bram18": 138.0,
+      "real_bram18": 15.0,
+      "n_layers": 12,
+      "unmatched_layers": []
+    },
+    {
+      "build": "trained",
+      "partition_id": 6,
+      "avg_bits": 4.580146774816532,
+      "lut_factor": 1.1636644545103407,
+      "bram_factor": 0.08771929824561403,
+      "raw_lut": 11391.600000000002,
+      "real_lut": 13256.0,
+      "raw_bram18": 57.0,
+      "real_bram18": 5.0,
+      "n_layers": 11,
+      "unmatched_layers": [
+        "up4.main_up",
+        "up5.main_up"
+      ]
+    },
+    {
+      "build": "trained",
+      "partition_id": 7,
+      "avg_bits": 5.08402136959689,
+      "lut_factor": 0.9798445847498783,
+      "bram_factor": 0.325,
+      "raw_lut": 9059.600000000002,
+      "real_lut": 8877.0,
+      "raw_bram18": 40.0,
+      "real_bram18": 13.0,
+      "n_layers": 7,
+      "unmatched_layers": []
+    }
+  ],
+  "lut_fit": {
+    "a": 1.2497021284757897,
+    "b": -4.153186226928325,
+    "r_squared": 0.616118558829901,
+    "bits_min": 4.0,
+    "bits_max": 8.0
+  },
+  "bram_fit": {
+    "a": 0.2147096809712612,
+    "b": -0.7441145575096795,
+    "r_squared": 0.8832655224031176,
+    "bits_min": 4.0,
+    "bits_max": 8.0
+  }
+}

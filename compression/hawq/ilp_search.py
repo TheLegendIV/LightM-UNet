@@ -137,17 +137,18 @@ from finn_cost_model import calibrated_bram18k, calibrated_lut  # noqa: E402
 CANDIDATE_BITS = (2, 4, 8, 16)
 
 
-def _finn_cost(finn_costs: dict, stage: str, weight_bits: int, act_bits: int, metric: str) -> float:
+def _finn_cost(finn_costs: dict, stage: str, weight_bits: int, act_bits: int, metric: str, force_dsp: bool = False) -> float:
     entry = finn_costs[stage][f"W{weight_bits}_A{act_bits}"]
     if metric == "bram18k":
-        return calibrated_bram18k(entry["swu_bram18"] + entry["wm_bram18"], weight_bits, act_bits)
+        return calibrated_bram18k(entry["swu_bram18"] + entry["wm_bram18"], weight_bits, act_bits, force_dsp=force_dsp)
     if metric == "total_lut":
-        return calibrated_lut(entry["total_lut"], weight_bits, act_bits)
+        return calibrated_lut(entry["total_lut"], weight_bits, act_bits, force_dsp=force_dsp)
     return entry[metric]
 
 
 def stage_costs_for_axis(
     finn_costs: dict, stage: str, bit: int, axis: str, other_bits: dict[str, int], metric: str = "total_lut",
+    force_dsp: bool = False,
 ) -> float:
     """`metric` cost ("total_lut" or "bram18k" -- swu_bram18+wm_bram18
     combined, both CALIBRATED via finn_cost_model.py's own derating
@@ -157,10 +158,14 @@ def stage_costs_for_axis(
     weight-only ILP still needs a concrete activation bit-width (and vice
     versa) to look up a real cost number. `other_bits` should be the OTHER
     axis's already-decided (or a reasonable default, e.g. 8) per-stage
-    assignment -- see solve_stage_bits's two-pass call order below."""
+    assignment -- see solve_stage_bits's two-pass call order below.
+
+    force_dsp: see finn_cost_model.calibrated_lut/calibrated_bram18k -- uses
+    the forced-DSP flat per-layer factor instead of the default auto-resType
+    avg_bits-interpolated table. Default False, byte-identical to before."""
     if axis == "weight":
-        return _finn_cost(finn_costs, stage, bit, other_bits[stage], metric)
-    return _finn_cost(finn_costs, stage, other_bits[stage], bit, metric)
+        return _finn_cost(finn_costs, stage, bit, other_bits[stage], metric, force_dsp=force_dsp)
+    return _finn_cost(finn_costs, stage, other_bits[stage], bit, metric, force_dsp=force_dsp)
 
 
 def _percentile(sorted_values: list[float], pct: float) -> float:
@@ -240,6 +245,7 @@ def solve_axis(
     sensitivity: dict, finn_costs: dict, stage_names: tuple[str, ...], axis: str, other_bits: dict[str, int],
     lut_weight: float, bram_weight: float, candidate_bits: tuple[int, ...] | None = None,
     sensitivity_weight: float = 1.0, robust_normalize_pct: float = 0.0, log_normalize: bool = False,
+    force_dsp: bool = False,
 ) -> tuple[dict[str, int], float, float]:
     """One MIP: pick a bit-width per stage on `axis` ('weight' or 'act'),
     minimizing sensitivity_weight*normalized_sensitivity +
@@ -277,11 +283,11 @@ def solve_axis(
         (s, b): sensitivity[s][sens_key][str(b)] for s in stage_names for b in bits
     }
     raw_lut = {
-        (s, b): stage_costs_for_axis(finn_costs, s, b, axis, other_bits, metric="total_lut")
+        (s, b): stage_costs_for_axis(finn_costs, s, b, axis, other_bits, metric="total_lut", force_dsp=force_dsp)
         for s in stage_names for b in bits
     }
     raw_bram = {
-        (s, b): stage_costs_for_axis(finn_costs, s, b, axis, other_bits, metric="bram18k")
+        (s, b): stage_costs_for_axis(finn_costs, s, b, axis, other_bits, metric="bram18k", force_dsp=force_dsp)
         for s in stage_names for b in bits
     }
     sens_norm = _normalize(raw_sensitivity, robust_normalize_pct, log_normalize)
@@ -321,7 +327,7 @@ XCZU7EV_BRAM_18K = 624  # real chip budget, see finn_cost_model.py's own docstri
 def solve_stage_bits(
     sensitivity: dict, finn_costs: dict, stage_names: tuple[str, ...], lut_weight: float, bram_weight: float,
     min_act_bits: int | None = None, sensitivity_weight: float = 1.0, robust_normalize_pct: float = 0.0,
-    log_normalize: bool = False,
+    log_normalize: bool = False, force_dsp: bool = False,
 ) -> dict:
     """Two-pass: solve weights first holding activations at the highest
     candidate bit (a conservative "don't let an unsolved activation choice
@@ -356,7 +362,7 @@ def solve_stage_bits(
     stage_weight_bits, w_lut, w_bram = solve_axis(
         sensitivity, finn_costs, stage_names, "weight", default_act, lut_weight, bram_weight,
         sensitivity_weight=sensitivity_weight, robust_normalize_pct=robust_normalize_pct,
-        log_normalize=log_normalize,
+        log_normalize=log_normalize, force_dsp=force_dsp,
     )
     act_candidate_bits = (
         tuple(b for b in CANDIDATE_BITS if b >= min_act_bits) if min_act_bits is not None else None
@@ -364,7 +370,7 @@ def solve_stage_bits(
     stage_act_bits, a_lut, a_bram = solve_axis(
         sensitivity, finn_costs, stage_names, "act", stage_weight_bits, lut_weight, bram_weight,
         candidate_bits=act_candidate_bits, sensitivity_weight=sensitivity_weight,
-        robust_normalize_pct=robust_normalize_pct, log_normalize=log_normalize,
+        robust_normalize_pct=robust_normalize_pct, log_normalize=log_normalize, force_dsp=force_dsp,
     )
     # NOT w_lut+a_lut / w_bram+a_bram -- those are partial sums computed
     # under two DIFFERENT "other axis" assumptions (the weight pass assumed
@@ -373,10 +379,10 @@ def solve_stage_bits(
     # assumptions. The real combined totals at the actual final (w,a) pair
     # per stage, both CALIBRATED:
     total_lut = sum(
-        _finn_cost(finn_costs, s, stage_weight_bits[s], stage_act_bits[s], "total_lut") for s in stage_names
+        _finn_cost(finn_costs, s, stage_weight_bits[s], stage_act_bits[s], "total_lut", force_dsp=force_dsp) for s in stage_names
     )
     total_bram = sum(
-        _finn_cost(finn_costs, s, stage_weight_bits[s], stage_act_bits[s], "bram18k") for s in stage_names
+        _finn_cost(finn_costs, s, stage_weight_bits[s], stage_act_bits[s], "bram18k", force_dsp=force_dsp) for s in stage_names
     )
     return {
         "status": "Optimal",
@@ -393,6 +399,7 @@ def solve_stage_bits(
             "sensitivity_weight": sensitivity_weight,
             "robust_normalize_pct": robust_normalize_pct,
             "log_normalize": log_normalize,
+            "force_dsp": force_dsp,
             "note": "LUT and BRAM are BOTH a penalty in the objective (lut_weight/bram_weight), NOT a "
                     "hard constraint -- solve_stage_bits (the two-pass method) doesn't support a hard "
                     "constraint at all, see solve_joint_bits's own docstring for why; pass --joint "
@@ -409,6 +416,7 @@ def solve_joint_bits(
     sensitivity: dict, finn_costs: dict, stage_names: tuple[str, ...], lut_weight: float, bram_weight: float,
     hard_lut: bool = False, hard_bram: bool = False, min_act_bits: int | None = None,
     sensitivity_weight: float = 1.0, robust_normalize_pct: float = 0.0, log_normalize: bool = False,
+    force_dsp: bool = False,
 ) -> dict:
     """One combined MIP: pick a (weight_bit, act_bit) PAIR per stage jointly,
     instead of solve_stage_bits's two independent per-axis passes
@@ -481,11 +489,11 @@ def solve_joint_bits(
         for s in stage_names for w, a in candidate_pairs
     }
     raw_lut = {
-        (s, w, a): _finn_cost(finn_costs, s, w, a, "total_lut")
+        (s, w, a): _finn_cost(finn_costs, s, w, a, "total_lut", force_dsp=force_dsp)
         for s in stage_names for w, a in candidate_pairs
     }
     raw_bram = {
-        (s, w, a): _finn_cost(finn_costs, s, w, a, "bram18k")
+        (s, w, a): _finn_cost(finn_costs, s, w, a, "bram18k", force_dsp=force_dsp)
         for s in stage_names for w, a in candidate_pairs
     }
     sens_norm = _normalize(raw_sensitivity, robust_normalize_pct, log_normalize)
@@ -558,6 +566,7 @@ def solve_joint_bits(
             "sensitivity_weight": sensitivity_weight,
             "robust_normalize_pct": robust_normalize_pct,
             "log_normalize": log_normalize,
+            "force_dsp": force_dsp,
             "note": "JOINT (w,a)-pair search (--joint): LUT/BRAM looked up at the exact chosen (w,a) "
                     "pair (no two-pass approximation), sensitivity is the additive sensitivity_w+"
                     "sensitivity_a approximation (see solve_joint_bits docstring). "
@@ -625,6 +634,12 @@ def main() -> None:
                               "that's a real answer, not a bug, and gets written to --out-file same as "
                               "an Optimal result would.")
     parser.add_argument("--hard-bram", action="store_true", help="Same as --hard-lut, for calibrated BRAM_18K.")
+    parser.add_argument("--force-dsp", action="store_true",
+                         help="Cost every stage under the FORCED-DSP regime's own flat empirical LUT/BRAM "
+                              "factor (finn_cost_model.py's _FORCED_DSP_LUT_FACTOR/_FORCED_DSP_BRAM_FACTOR, "
+                              "fit from two real S12 8-way forced-DSP OOC builds) instead of the default "
+                              "auto-resType avg_bits-interpolated table. Use when planning a build that will "
+                              "force DSP on every MVAU/VVAU node -- default False preserves prior behavior.")
     parser.add_argument("--candidate-bits", type=str, default=None,
                          help="Comma-separated override for the module-level CANDIDATE_BITS (e.g. "
                               "'2,4,8') -- needed when --sensitivity-file/--finn-cost-file come from a "
@@ -708,21 +723,22 @@ def main() -> None:
             sensitivity, finn_costs, free_stage_names, args.lut_weight, args.bram_weight,
             hard_lut=args.hard_lut, hard_bram=args.hard_bram, min_act_bits=args.min_act_bits,
             sensitivity_weight=args.sensitivity_weight, robust_normalize_pct=args.robust_normalize_pct,
-            log_normalize=args.log_normalize,
+            log_normalize=args.log_normalize, force_dsp=args.force_dsp,
         )
     else:
         result = solve_stage_bits(
             sensitivity, finn_costs, free_stage_names, args.lut_weight, args.bram_weight,
             min_act_bits=args.min_act_bits, sensitivity_weight=args.sensitivity_weight,
             robust_normalize_pct=args.robust_normalize_pct, log_normalize=args.log_normalize,
+            force_dsp=args.force_dsp,
         )
 
     if fixed_bits and result["status"] == "Optimal":
         for block_name, bits in fixed_bits.items():
             result["stage_weight_bits"][block_name] = bits
             result["stage_act_bits"][block_name] = bits
-        fixed_lut = sum(_finn_cost(finn_costs, b, bits, bits, "total_lut") for b, bits in fixed_bits.items())
-        fixed_bram = sum(_finn_cost(finn_costs, b, bits, bits, "bram18k") for b, bits in fixed_bits.items())
+        fixed_lut = sum(_finn_cost(finn_costs, b, bits, bits, "total_lut", force_dsp=args.force_dsp) for b, bits in fixed_bits.items())
+        fixed_bram = sum(_finn_cost(finn_costs, b, bits, bits, "bram18k", force_dsp=args.force_dsp) for b, bits in fixed_bits.items())
         result["_diagnostics"]["total_lut_calibrated"] += fixed_lut
         result["_diagnostics"]["total_bram18k_calibrated"] += fixed_bram
         result["_diagnostics"]["lut_pct_of_budget"] = 100 * result["_diagnostics"]["total_lut_calibrated"] / XCZU7EV_LUT

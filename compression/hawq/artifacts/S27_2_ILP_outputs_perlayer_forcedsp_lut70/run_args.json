@@ -1,0 +1,29 @@
+{
+  "pipeline": [
+    "compression/hawq/layer_sensitivity.py --candidate-bits 4,6,8",
+    "compression/hawq/joint_bits_folding_ilp_perlayer.py --candidate-bits 4,6,8 --hard-lut-fraction 0.7 --force-dsp (real per-CONV-LAYER bits+folding, forced-DSP derating, real non-force-serial search, predecessor-corrected act sensitivity)",
+    "compression/hawq/expand_layer_bits.py (broadcasts each alphas per-layer result to LayerQuantENets full per-quantizer-site schema)"
+  ],
+  "shared_args": {
+    "config": "config_27_2_reg_trailing",
+    "sensitivity-file": "compression/hawq/artifacts/layer_sensitivity_27_2_reg_trailing_candidatebits468.json",
+    "candidate-bits": "4,6,8",
+    "hard-lut-fraction": 0.7,
+    "hard-bram-fraction": 1.0,
+    "force_dsp": true,
+    "max-latency-ms": 1000,
+    "clock-mhz": 100.0,
+    "force_serial": false,
+    "time-limit": 300,
+    "gap-rel": 0.02
+  },
+  "alphas": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+  ],
+  "granularity": "layer",
+  "notes": "Per-LAYER joint bits+folding MILP at a HARD 70pct LUT cap under the FORCED-DSP derating (finn_cost_model.py force_dsp=True -- fit from two real S12 8-way forced-DSP OOC builds, see fit_forced_dsp_derating.py) -- all 5 alphas solved Optimal to full proof (well within the 300s time limit, ~12s each), LUT pinned at ~70.0pct of budget at every alpha by construction (hard constraint), BRAM_18K well under budget (~27-40pct), latency strictly increasing with alpha -- see summary.csv."
+}
