@@ -159,6 +159,20 @@ XCZU7EV = {"LUT": 230_400, "BRAM_18K": 624}
 # wm_uram18 formula this is summing).
 RAM_STYLES = (RAM_STYLE_BLOCK, RAM_STYLE_ULTRA)
 
+# Set from --force-serial. Module-level (not threaded through every call
+# site) so candidate_folds/candidate_swu_simd/candidate_fmpad_simd can all
+# see it without changing solve_folding/solve_folding_nodewise's own
+# signatures -- when True, restricts every layer's candidate set down to
+# FOLDING_SERIAL (PE=SIMD=1) alone, the minimum-resource/maximum-latency
+# extreme (real "no folding parallelism anywhere"), BEFORE the ILP ever
+# runs. solve_folding/solve_folding_nodewise's own real cost functions
+# still compute the answer -- this narrows the candidate set to one point
+# (per layer, modulo ram_style), it doesn't reimplement or approximate
+# anything. Was previously done by monkeypatching these three functions
+# from outside the module for a one-off check; promoted in-file since it's
+# now a standing part of the workflow, not a one-off.
+FORCE_SERIAL = False
+
 
 def load_config(config_module: str) -> None:
     """Same pattern as sensitivity.py/finn_stage_costs.py's own loader --
@@ -180,10 +194,13 @@ def candidate_folds(layer: LayerGeometry) -> list[tuple[int, int, str]]:
     conv_cost_pe_simd docstring)."""
     if layer.op_type == "MaxPool2d":
         return [(1, 1, "block")]
-    return [
+    folds = [
         (pe, simd, ram_style)
         for pe in divisors(max_pe(layer)) for simd in divisors(max_simd(layer)) for ram_style in RAM_STYLES
     ]
+    if FORCE_SERIAL:
+        folds = [f for f in folds if f[0] == 1 and f[1] == 1]
+    return folds
 
 
 def candidate_swu_simd(layer: LayerGeometry) -> list[int]:
@@ -196,6 +213,8 @@ def candidate_swu_simd(layer: LayerGeometry) -> list[int]:
     constraint. Only meaningful for a depthwise layer; callers must guard
     with is_depthwise(layer) first (a non-depthwise/MaxPool layer has no
     SWU-SIMD-must-equal-VVAU-PE coupling to model)."""
+    if FORCE_SERIAL:
+        return [1]
     return divisors(swu_max_simd_depthwise(layer))
 
 
@@ -606,6 +625,17 @@ def main() -> None:
                               "either way -- see solve_folding_nodewise's own docstring. Requires the groups= "
                               "fix in finn_block_costs.py/finn_stage_costs.py (already applied) to compute a "
                               "correct VVAU PE/SIMD domain for depthwise layers.")
+    parser.add_argument("--force-serial", action="store_true",
+                         help="Force FOLDING_SERIAL (PE=SIMD=1) on EVERY layer instead of letting the "
+                              "ILP search PE/SIMD -- the minimum-resource/maximum-latency extreme. "
+                              "Restricts each layer down to its single (1,1,ram_style) candidate (and, "
+                              "under --node-level, the coupled SWU/FMPadding SIMD down to 1 too) before "
+                              "solving, so the real cost functions still compute the answer -- this "
+                              "narrows the candidate set, it doesn't reimplement anything. Composes with "
+                              "--hard-lut/--hard-bram: e.g. --force-serial --hard-lut answers 'does a "
+                              "fully-serial (no folding parallelism anywhere) implementation of this bit "
+                              "assignment even fit the chip', independent of whether an optimized folding "
+                              "would also fit (and, if so, how much faster).")
     parser.add_argument("--out-file", type=Path, default=Path("compression/hawq/artifacts/folding_23_1_w8a8.json"))
     args = parser.parse_args()
     if args.out_file is None:
@@ -614,6 +644,10 @@ def main() -> None:
 
     if args.config != "config_23_1":
         load_config(args.config)
+
+    if args.force_serial:
+        global FORCE_SERIAL
+        FORCE_SERIAL = True
 
     stage_bits = None
     if args.stage_bits_file is not None:
@@ -650,11 +684,15 @@ def main() -> None:
               f"(layer, PE, SIMD) candidates. "
               f"Bits: {'per-' + args.granularity + ' from ' + str(args.stage_bits_file) if stage_bits else f'uniform W{args.weight_bits}A{args.act_bits}'}. Solving...")
 
+    if args.force_serial:
+        print("--force-serial: every layer restricted to FOLDING_SERIAL (PE=SIMD=1) before solving.")
+
     solve_fn = solve_folding_nodewise if args.node_level else solve_folding
     result = solve_fn(
         geometries, stage_bits, args.weight_bits, args.act_bits, args.lut_weight, args.bram_weight,
         hard_lut=args.hard_lut, hard_bram=args.hard_bram,
     )
+    result["_diagnostics"]["force_serial"] = args.force_serial
     print(f"ILP status: {result['status']}")
     if result["status"] == "Optimal":
         diag = result["_diagnostics"]

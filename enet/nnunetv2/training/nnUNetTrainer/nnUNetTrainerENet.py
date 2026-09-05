@@ -87,9 +87,59 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
             self.output_folder = os.environ["ENET_OUTPUT_FOLDER"]
             self.output_folder_base = os.path.dirname(self.output_folder)
             os.makedirs(self.output_folder, exist_ok=True)
+            # nnUNetTrainer.__init__ (the base class, called above via
+            # super().__init__()) already computed self.log_file from
+            # self.output_folder's DEFAULT value (before this override runs)
+            # and never re-derives it later -- checkpoints happen to re-read
+            # self.output_folder fresh at save time, so they land in the
+            # right place, but the human-readable training_log_*.txt was
+            # already pinned to the OLD (unsuffixed, shared-across-every-run-
+            # of-this-trainer-class) folder. Confirmed in practice: three
+            # separate runs' log files piling up in the bare nnUNetTrainer
+            # CombinedQuantENet_12_separable_dense_relu_perblock__nnUNetPlans
+            # __2d/fold_0/ folder while their own checkpoints correctly went
+            # to their own distinct ENET_OUTPUT_FOLDER-named directories.
+            # Relocate the SAME timestamped filename the base class already
+            # picked, just to the right folder, so every run's log lives
+            # next to its own checkpoints instead of leaking into whatever
+            # folder happened to be the class's bare default.
+            self.log_file = os.path.join(self.output_folder, os.path.basename(self.log_file))
         self._max_epochs_to_run = None
         if os.environ.get("ENET_MAX_EPOCHS_TO_RUN"):
             self._max_epochs_to_run = int(os.environ["ENET_MAX_EPOCHS_TO_RUN"])
+        self._checkpoint_every = None
+        if os.environ.get("ENET_CHECKPOINT_EVERY"):
+            self._checkpoint_every = int(os.environ["ENET_CHECKPOINT_EVERY"])
+
+    def on_epoch_end(self):
+        """Same body as the base nnUNetTrainer.on_epoch_end() -- adds ONE
+        thing on top: an optional DISTINCTLY-NAMED periodic checkpoint
+        (checkpoint_epoch<N>.pth), separate from the base class's own
+        'checkpoint_latest.pth' / save_every mechanism.
+
+        The base mechanism (self.save_every, default 50) only maintains ONE
+        rolling file -- checkpoint_latest.pth gets overwritten every
+        save_every epochs, so an earlier snapshot is gone the moment a later
+        one is written. That's fine for crash-resume, but useless for
+        actually comparing a run's own state AT epoch 5 vs. epoch 10 vs.
+        epoch 15 after the fact (e.g. "does the accuracy ranking across
+        alpha values from a 5-epoch QAT proxy still hold at 10/15 epochs?"
+        -- exactly this use case). ENET_CHECKPOINT_EVERY=N instead writes a
+        SEPARATE, never-overwritten file every N completed epochs, using
+        the exact same save_checkpoint() call (same full fidelity -- network
+        weights, optimizer state, scheduler-relevant logging, current_epoch
+        -- as checkpoint_best.pth/checkpoint_final.pth), so each interval's
+        checkpoint is independently loadable/evaluable later via the normal
+        nnUNetv2_predict_from_modelfolder -chk checkpoint_epoch<N>.pth flag.
+
+        Runs AFTER super().on_epoch_end() so self.current_epoch has already
+        been incremented to reflect "epochs completed so far" (matching the
+        same current_epoch+1 convention save_checkpoint() itself already
+        writes into the checkpoint) -- checkpoint_epoch5.pth means "5
+        epochs done", not "starting epoch 5"."""
+        super().on_epoch_end()
+        if self._checkpoint_every and self.current_epoch % self._checkpoint_every == 0:
+            self.save_checkpoint(os.path.join(self.output_folder, f"checkpoint_epoch{self.current_epoch}.pth"))
 
     def run_training(self):
         """Same body as the base nnUNetTrainer.run_training() -- the ONLY

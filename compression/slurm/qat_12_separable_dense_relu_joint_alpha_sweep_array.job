@@ -1,0 +1,255 @@
+#!/bin/bash
+#SBATCH --job-name=qat_12_separable_dense_relu_joint_alpha_sweep
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=02:00:00
+#SBATCH --array=0-4
+#SBATCH --output=logs/%x_%a_%j.out
+#SBATCH --error=logs/%x_%a_%j.err
+
+set -e
+
+# Real PTQ+QAT evaluation of compression/hawq/joint_bits_folding_ilp.py's
+# own alpha sweep -- 5 EVENLY SPACED points (alpha in {0.0, 0.25, 0.5, 0.75,
+# 1.0}), each a combined bits+folding MILP result under REAL hard LUT/BRAM
+# constraints (unlike every earlier per-block job in this repo, which only
+# ever hard-constrained the FOLDING stage, taking bits as already fixed) --
+# AND a real hard latency cap this time too: --max-latency-ms 1000
+# --clock-mhz 100 (100,000,000 cycles = 1 second @ 100MHz, "just to be
+# safe" per explicit direction -- 2 seconds was considered and rejected).
+# This is a genuine constraint, not just a formality -- it changes the
+# alpha=1.0 result: uncapped, pure-accuracy bits would have cost 136.1M
+# cycles (1361ms, over budget); the capped solve instead lands on a
+# slightly different, still-Optimal bit assignment at 96.1M cycles (961ms),
+# trading a little accuracy to stay compliant BY CONSTRUCTION -- see
+# compression/hawq/joint_bits_folding_ilp.py's own solve_joint() docstring
+# for why this is a real hard constraint and not a post-hoc "solve then
+# discard whichever alphas come out too slow" filter. All 5 points were
+# Optimal in under 20s each (local CPU/PuLP, no GPU) -- see
+# compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_
+# joint_alpha{X}_maxlat1000ms.json for the full curve:
+#   alpha=0.0:  avg_w=4.000 avg_a=4.000 cycles=5,476,352   (54.8ms, fastest/cheapest bits)
+#   alpha=0.25: avg_w=4.138 avg_a=4.828 cycles=17,321,984  (173.2ms)
+#   alpha=0.5:  avg_w=4.276 avg_a=5.103 cycles=34,787,328  (347.9ms)
+#   alpha=0.75: avg_w=4.276 avg_a=5.103 cycles=42,160,128  (421.6ms)
+#   alpha=1.0:  avg_w=4.414 avg_a=5.241 cycles=96,096,256  (961.0ms, pure
+#               accuracy-proxy WITHIN the 1s cap -- see above)
+# LUT sits at ~100% (the binding hard constraint) across the whole sweep;
+# BRAM stays well under budget throughout (25-28%).
+#
+# WHY QAT AT ALL: sensitivity is only a PROXY for real post-quantization
+# accuracy -- this array job is the "then run real PTQ+FT on each optimal
+# config and pick the best" half of that plan (see this job's own design
+# doc, compression/hawq/joint_bits_folding_ilp.py's module docstring, and
+# C:\Users\win32\.claude\plans\nested-singing-flurry.md for the full
+# discussion this array job implements).
+#
+# QAT_EPOCHS is a deliberately PARAMETRIZED variable (not hardcoded per the
+# user's explicit direction) -- starts at 5 real epochs here. To "graduate"
+# ONE specific winning alpha to a longer, real schedule later, do NOT just
+# bump QAT_EPOCHS and resubmit this array job -- PolyLRScheduler is
+# STATELESS (recomputes LR fresh from current_epoch/ENET_EPOCHS every call)
+# and checkpoints never store scheduler state, so changing ENET_EPOCHS on an
+# already-resumed run reshapes the WHOLE LR curve rather than extending it
+# (a real incident this session hit and documented in qat_27_2_reg_trailing_
+# min4_150ep_run50.job's own header). Instead: copy this job into a fresh,
+# NON-array single-config job for just that one alpha, set ENET_EPOCHS to
+# the real final target (e.g. 50) AND ENET_MAX_EPOCHS_TO_RUN to this
+# submission's own budget (e.g. 50, or less if resubmitting incrementally)
+# -- the same safe-resume pattern qat_27_2_reg_trailing_min4_150ep_run50.job
+# already established. Never hand-edit ENET_EPOCHS on a checkpoint that's
+# already been trained under a DIFFERENT ENET_EPOCHS value.
+QAT_EPOCHS=5
+
+# ENET_FREEZE_BN (default 1/on here): freezes every nn.BatchNorm2d's running
+# stats AND affine weight/bias for this short sweep -- re-estimating BN
+# stats from a handful of noisy mini-batches at only 5 epochs can hurt more
+# than it helps when the FP32 source checkpoint's own stats are already
+# good (see enet/nnunetv2/nets/ENet.py's freeze_batchnorm docstring for the
+# full mechanism). PARAMETRIZED so a later full/long QAT graduation run can
+# just set this to 0 to let BN keep adapting normally -- do not hardcode it
+# away, set ENET_FREEZE_BN=0 below (or in that future job) instead.
+ENET_FREEZE_BN=1
+
+# calibrate_12_separable_dense_relu_perblock.py + nnUNetTrainerCombinedQuant
+# ENet_12_separable_dense_relu_perblock are BOTH bit-assignment-agnostic
+# (only read --block-bits-file / ENET_BLOCK_BITS_FILE) -- reused unchanged
+# from every other S12 per-block job this session, same as the array-job
+# pattern this file is modeled on (compression/slurm/archive/qat_8_2_relu_
+# no_reg_w20_ft15ep_array.job).
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+TRAINER_CLASS="nnUNetTrainerCombinedQuantENet_12_separable_dense_relu_perblock"
+FP32_SOURCE_NET_NAME="nnUNetTrainerENet_12_separable_dense_relu"
+
+BLOCK_BITS_ARR=(
+    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.0_maxlat1000ms.json"
+    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.25_maxlat1000ms.json"
+    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.5_maxlat1000ms.json"
+    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.75_maxlat1000ms.json"
+    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha1.0_maxlat1000ms.json"
+)
+CALIBRATED_NET_ARR=(
+    nnUNetTrainerCombinedQuantENet_12_separable_dense_relu_perblock_joint_alpha0.0_maxlat1000ms_calibrated
+    nnUNetTrainerCombinedQuantENet_12_separable_dense_relu_perblock_joint_alpha0.25_maxlat1000ms_calibrated
+    nnUNetTrainerCombinedQuantENet_12_separable_dense_relu_perblock_joint_alpha0.5_maxlat1000ms_calibrated
+    nnUNetTrainerCombinedQuantENet_12_separable_dense_relu_perblock_joint_alpha0.75_maxlat1000ms_calibrated
+    nnUNetTrainerCombinedQuantENet_12_separable_dense_relu_perblock_joint_alpha1.0_maxlat1000ms_calibrated
+)
+RUN_NAME_ARR=(
+    12_separable_dense_relu_joint_alpha0.0_maxlat1000ms_ft${QAT_EPOCHS}ep
+    12_separable_dense_relu_joint_alpha0.25_maxlat1000ms_ft${QAT_EPOCHS}ep
+    12_separable_dense_relu_joint_alpha0.5_maxlat1000ms_ft${QAT_EPOCHS}ep
+    12_separable_dense_relu_joint_alpha0.75_maxlat1000ms_ft${QAT_EPOCHS}ep
+    12_separable_dense_relu_joint_alpha1.0_maxlat1000ms_ft${QAT_EPOCHS}ep
+)
+
+TASK_ID=${SLURM_ARRAY_TASK_ID}
+BLOCK_BITS_FILE="${BLOCK_BITS_ARR[$TASK_ID]}"
+CALIBRATED_NET_NAME="${CALIBRATED_NET_ARR[$TASK_ID]}"
+RUN_NAME="${RUN_NAME_ARR[$TASK_ID]}"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Array task: ${TASK_ID} -> ${RUN_NAME}"
+echo "BLOCK_BITS_FILE=${BLOCK_BITS_FILE}"
+echo "QAT_EPOCHS=${QAT_EPOCHS}"
+echo "ENET_FREEZE_BN=${ENET_FREEZE_BN}"
+
+FP32_CHECKPOINT="$nnUNet_results/${DATASET_NAME}/${FP32_SOURCE_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
+echo "=== Checking FP32 source checkpoint exists ==="
+if [ ! -f "$FP32_CHECKPOINT" ]; then
+    echo "ERROR: FP32 source checkpoint not found: $FP32_CHECKPOINT -- run stage_12_separable_dense_relu.job first." >&2
+    exit 1
+fi
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet"
+
+CALIBRATED_CHECKPOINT="$nnUNet_results/${DATASET_NAME}/${CALIBRATED_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
+echo "=== STEP 1: calibrate (warm-start from the real FP32 checkpoint; skip if already done) ==="
+if [ -f "$CALIBRATED_CHECKPOINT" ]; then
+    echo "Calibrated checkpoint already exists at ${CALIBRATED_CHECKPOINT} -- skipping calibration."
+else
+    python compression/post-quantization/calibrate_12_separable_dense_relu_perblock.py \
+        --source-net-name "${FP32_SOURCE_NET_NAME}" \
+        --out-net-name "${CALIBRATED_NET_NAME}" \
+        --dataset-name "${DATASET_NAME}" \
+        --block-bits-file "${BLOCK_BITS_FILE}"
+fi
+
+echo "=== STEP 2: real QAT fine-tuning, complete ${QAT_EPOCHS}-epoch schedule ==="
+export ENET_BLOCK_BITS_FILE="$HOME/LightM-UNet/${BLOCK_BITS_FILE}"
+export ENET_PRETRAINED_CHECKPOINT="${CALIBRATED_CHECKPOINT}"
+export ENET_EPOCHS=${QAT_EPOCHS}
+export ENET_FREEZE_BN=${ENET_FREEZE_BN}
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Self-healing check: promote checkpoint_latest.pth over a STALE checkpoint_final.pth ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ] && [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
+    FINAL_EPOCH_CHECK=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)['current_epoch'])")
+    LATEST_EPOCH_CHECK=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth', map_location='cpu', weights_only=False)['current_epoch'])")
+    if [ "$LATEST_EPOCH_CHECK" -gt "$FINAL_EPOCH_CHECK" ]; then
+        echo "checkpoint_final.pth (epoch ${FINAL_EPOCH_CHECK}) is STALE relative to checkpoint_latest.pth (epoch ${LATEST_EPOCH_CHECK}) -- promoting latest, backing up the stale final."
+        cp "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" "${ENET_OUTPUT_FOLDER}/checkpoint_final_STALE_epoch${FINAL_EPOCH_CHECK}_backup.pth"
+        cp "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth"
+    fi
+fi
+
+echo "=== Checking training progress for ${RUN_NAME} ==="
+EXISTING_CHECKPOINT=""
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    EXISTING_CHECKPOINT="${ENET_OUTPUT_FOLDER}/checkpoint_final.pth"
+elif [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
+    EXISTING_CHECKPOINT="${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth"
+fi
+
+if [ -z "$EXISTING_CHECKPOINT" ]; then
+    echo "=== Start training (fresh): ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+else
+    CURRENT_EPOCH=$(cd "$HOME/LightM-UNet" && python -c "import torch; print(torch.load('${EXISTING_CHECKPOINT}', map_location='cpu', weights_only=False)['current_epoch'])")
+    echo "Existing checkpoint (${EXISTING_CHECKPOINT}) is at epoch ${CURRENT_EPOCH}/${ENET_EPOCHS}."
+    if [ "$CURRENT_EPOCH" -ge "$ENET_EPOCHS" ]; then
+        echo "Real ${QAT_EPOCHS}-epoch schedule already complete -- skipping training."
+    else
+        echo "=== Resuming training with --c (continues the SAME ${QAT_EPOCHS}-epoch LR schedule from epoch ${CURRENT_EPOCH}) ==="
+        nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}" --c
+    fi
+fi
+echo "Training step finished for ${RUN_NAME} (this submission's epoch budget)."
+
+echo "=== Collecting results into compression/results.csv (only meaningful once the real ${QAT_EPOCHS}-epoch schedule is complete) ==="
+cd "$HOME/LightM-UNet"
+FINAL_EPOCH=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)['current_epoch'])" 2>/dev/null || echo -1)
+if [ "$FINAL_EPOCH" -ge "$ENET_EPOCHS" ]; then
+    python compression/collect_results.py \
+        --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+        --stage "${RUN_NAME}" \
+        --dataset-name "${DATASET_NAME}" \
+        --dataset-id "${DATASET_ID}" \
+        --channels 4,16,32,16,4 \
+        --bottlenecks 4,8,8,2,1 \
+        --decoder-type upsample_conv \
+        --use-asymmetric 0 \
+        --context-pattern dense_dilation \
+        --separable-dilated 1 \
+        --quant-bits 8 \
+        --trainer-class "${TRAINER_CLASS}"
+    # --quant-bits 8 is a deliberate placeholder (this row's REAL per-block
+    # bits AND folding live in the block_bits_folding_*.json file this task
+    # was built from, not this row's own params/flops/bops columns), same
+    # convention every other per-block job's own collect_results.py call
+    # uses.
+else
+    echo "Only at epoch ${FINAL_EPOCH}/${ENET_EPOCHS} -- skipping collect_results.py (resubmit this job to continue training)."
+fi
+
+echo "Done: ${RUN_NAME}."

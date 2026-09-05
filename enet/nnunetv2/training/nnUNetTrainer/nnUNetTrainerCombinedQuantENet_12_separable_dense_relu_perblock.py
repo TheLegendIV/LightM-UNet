@@ -26,7 +26,8 @@ import os
 from torch import nn
 
 from nnunetv2.nets.CombinedQuantENet import CombinedQuantENet
-from nnunetv2.training.nnUNetTrainer.nnUNetTrainerENet import nnUNetTrainerENet
+from nnunetv2.nets.ENet import freeze_batchnorm
+from nnunetv2.training.nnUNetTrainer.nnUNetTrainerENet import _parse_bool_env, nnUNetTrainerENet
 from nnunetv2.utilities.plans_handling.plans_handler import ConfigurationManager, PlansManager
 
 CHANNELS = (4, 16, 32, 16, 4)
@@ -89,4 +90,15 @@ class nnUNetTrainerCombinedQuantENet_12_separable_dense_relu_perblock(nnUNetTrai
             )
         else:
             model = CombinedQuantENet(block_weight_bits, block_act_bits, **common_kwargs)
+
+        # ENET_FREEZE_BN (default ON): short QAT fine-tunes re-estimating BN
+        # running stats from a handful of noisy mini-batches can only hurt
+        # when the FP32 source checkpoint's own stats are already good --
+        # see freeze_batchnorm's own docstring. Parametrized (not hardcoded)
+        # so a later full/long QAT graduation run can disable it with
+        # ENET_FREEZE_BN=0 to let BN keep adapting normally.
+        if _parse_bool_env("ENET_FREEZE_BN", True):
+            n_frozen = freeze_batchnorm(model)
+            if n_frozen == 0:
+                raise ValueError("ENET_FREEZE_BN=1 but no nn.BatchNorm2d modules were found to freeze.")
         return model
