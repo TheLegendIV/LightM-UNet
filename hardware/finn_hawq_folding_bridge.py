@@ -45,6 +45,18 @@ folding_block_s19.json entry at all (ILP cost model didn't cost them
 separately / this FINN-safe topology has no real initial-block maxpool) --
 these are left unmatched (skipped, printed as a warning) by design.
 
+UPDATED for compression/hawq/folding_ilp.py's solve_folding_nodewise output
+(--node-level): a per_layer entry may now carry a "node_type" field --
+"mvau"/"maxpool" keep the flat {"pe", "simd"} shape resolve_folding_entry
+already returns, but "depthwise_vvau_slot" nests the real compute node's
+(PE, SIMD) under entry["vvau"] and additionally requires writing the SAME
+PE onto the two FINN nodes immediately preceding the VVAU in node order
+(FMPadding_*, then ConvolutionInputGenerator_*/SWU) -- see
+find_preceding_swu_fmpad below and finn_ooc_..._8way_full.py's own copy of
+this logic, which this bridge now mirrors. A legacy solve_folding (no
+"node_type" key) folding_block_*.json still works unchanged (node_type is
+None -> treated as flat/"mvau").
+
 Run inside the FINN container, AFTER finn_hawq_preamble.py has completed:
     docker exec -e HOME=/tmp/home_dir <container> python3 \
         /home/thelegendiv/finn/notebooks/enet/finn_hawq_folding_bridge.py \
@@ -80,6 +92,12 @@ from finn.builder.build_dataflow_steps import (  # noqa: E402
 
 PARTITION_IDX = 2
 WEIGHT_OP_TYPES = ("MVAU_hls", "MVAU_rtl", "VVAU_hls", "VVAU_rtl")
+# Real FINN node types for the sliding-window unit and its preceding padding
+# block, feeding a VVAU -- see compression/hawq/folding_ilp.py's
+# solve_folding_nodewise, whose "depthwise_vvau_slot" entries this bridge
+# now also writes onto these two node types.
+SWU_OP_TYPES = ("ConvolutionInputGenerator_hls", "ConvolutionInputGenerator_rtl")
+FMPAD_OP_TYPES = ("FMPadding_hls", "FMPadding_rtl", "FMPadding_Pixel")
 
 CONV_ORDER_FILE = os.path.join(
     base.ENET_DIR, "quantEnet_s19_hawq_block_int8_conv_order.json"
@@ -166,6 +184,24 @@ def resolve_folding_entry(logical_name, per_layer):
     return None, None
 
 
+def find_preceding_swu_fmpad(all_nodes, name_to_idx, vvau_node):
+    """Real FINN's step_specialize_layers always emits a depthwise conv's
+    three nodes back-to-back, in the fixed order [FMPadding_i,
+    ConvolutionInputGenerator_i, VVAU_j] -- see finn_ooc_..._8way_full.py's
+    identical helper for the full rationale."""
+    idx = name_to_idx[vvau_node.name]
+    if idx < 2:
+        raise RuntimeError(f"{vvau_node.name}: expected 2 preceding nodes (FMPadding, SWU), only {idx} nodes before it")
+    swu_node, fmpad_node = all_nodes[idx - 1], all_nodes[idx - 2]
+    if swu_node.op_type not in SWU_OP_TYPES:
+        raise RuntimeError(f"{vvau_node.name}: expected an SWU node immediately before it, got "
+                            f"{swu_node.op_type} ({swu_node.name})")
+    if fmpad_node.op_type not in FMPAD_OP_TYPES:
+        raise RuntimeError(f"{vvau_node.name}: expected an FMPadding node 2 positions before it, got "
+                            f"{fmpad_node.op_type} ({fmpad_node.name})")
+    return fmpad_node, swu_node
+
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: finn_hawq_folding_bridge.py <hawq_preamble_output_dir> [folding_block_json_path]")
@@ -230,21 +266,37 @@ def main():
         folding_block = json.load(f)
     per_layer = folding_block["per_layer"]
 
+    all_nodes = list(kernel_model.graph.node)
+    name_to_idx = {n.name: i for i, n in enumerate(all_nodes)}
+
     folding_config = {"Defaults": {}}
     print(f"{'FINN node':30s} {'op_type':12s} {'logical name':25s} {'json key':25s} {'PE':>4s} {'SIMD':>5s}")
     unmatched = []
+    n_swu_fmpad = 0
     for node, logical_name in zip(weight_nodes, logical_names):
         entry, json_key = resolve_folding_entry(logical_name, per_layer)
         if entry is None:
             unmatched.append(logical_name)
             print(f"{node.name:30s} {node.op_type:12s} {logical_name:25s} {'<NO MATCH>':25s} {'':>4s} {'':>5s}")
             continue
-        pe, simd = entry["pe"], entry["simd"]
+        node_type = entry.get("node_type")  # None for a legacy solve_folding-shaped entry
+        compute_entry = entry["vvau"] if node_type == "depthwise_vvau_slot" else entry
+        pe, simd = compute_entry["pe"], compute_entry["simd"]
         folding_config[node.name] = {"PE": pe, "SIMD": simd}
         print(f"{node.name:30s} {node.op_type:12s} {logical_name:25s} {json_key:25s} {pe:4d} {simd:5d}")
 
+        if node_type == "depthwise_vvau_slot":
+            fmpad_node, swu_node = find_preceding_swu_fmpad(all_nodes, name_to_idx, node)
+            folding_config[swu_node.name] = {"SIMD": pe}
+            folding_config[fmpad_node.name] = {"SIMD": pe}
+            n_swu_fmpad += 1
+            print(f"{swu_node.name:30s} {swu_node.op_type:12s} {'(SWU, coupled)':25s} {'':25s} {'':>4s} {pe:5d}")
+            print(f"{fmpad_node.name:30s} {fmpad_node.op_type:12s} {'(FMPadding, coupled)':25s} {'':25s} {'':>4s} {pe:5d}")
+
     if unmatched:
-        print(f"\nWARNING: {len(unmatched)} logical names had no folding_block_s19.json entry: {unmatched}")
+        print(f"\nWARNING: {len(unmatched)} logical names had no folding json entry: {unmatched}")
+    if n_swu_fmpad:
+        print(f"Bridged {n_swu_fmpad} FMPadding+SWU pair(s) for depthwise VVAU slots")
 
     out_path = os.path.join(preamble_dir, "hawq_folding_config_partition2.json")
     with open(out_path, "w") as f:
