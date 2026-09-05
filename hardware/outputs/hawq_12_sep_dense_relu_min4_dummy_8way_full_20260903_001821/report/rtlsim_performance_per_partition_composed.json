@@ -1,0 +1,95 @@
+{
+  "end_to_end_latency_ms_sum_of_partitions": 2.09635,
+  "steady_state_throughput_fps_min_of_partitions": 1440.071427542806,
+  "bottleneck_partition": "partition_7",
+  "per_partition": {
+    "partition_0": {
+      "cycles": 13503,
+      "runtime[ms]": 0.13503,
+      "throughput[images/s]": 7405.761682589054,
+      "DRAM_in_bandwidth[MB/s]": 60.667999703769524,
+      "DRAM_out_bandwidth[MB/s]": 30.333999851884762,
+      "fclk[mhz]": 100.0,
+      "N": 1,
+      "latency_cycles": 13503,
+      "stable_throughput[images/s]": 7405.761682589054
+    },
+    "partition_1": {
+      "cycles": 13671,
+      "runtime[ms]": 0.13671,
+      "throughput[images/s]": 7314.75385853266,
+      "DRAM_in_bandwidth[MB/s]": 29.961231804549772,
+      "DRAM_out_bandwidth[MB/s]": 9.362884938921804,
+      "fclk[mhz]": 100.0,
+      "N": 1,
+      "latency_cycles": 13671,
+      "stable_throughput[images/s]": 7314.75385853266
+    },
+    "partition_2": {
+      "cycles": 11143,
+      "runtime[ms]": 0.11143000000000002,
+      "throughput[images/s]": 8974.243919949744,
+      "DRAM_in_bandwidth[MB/s]": 11.48703221753567,
+      "DRAM_out_bandwidth[MB/s]": 9.189625774028537,
+      "fclk[mhz]": 100.0,
+      "N": 1,
+      "latency_cycles": 11143,
+      "stable_throughput[images/s]": 8974.243919949744
+    },
+    "partition_3": {
+      "cycles": 11164,
+      "runtime[ms]": 0.11164,
+      "throughput[images/s]": 8957.362952346828,
+      "DRAM_in_bandwidth[MB/s]": 9.172339663203152,
+      "DRAM_out_bandwidth[MB/s]": 9.172339663203152,
+      "fclk[mhz]": 100.0,
+      "N": 1,
+      "latency_cycles": 11164,
+      "stable_throughput[images/s]": 8957.362952346828
+    },
+    "partition_4": {
+      "cycles": 12010,
+      "runtime[ms]": 0.12010000000000001,
+      "throughput[images/s]": 8326.39467110741,
+      "DRAM_in_bandwidth[MB/s]": 8.526228143213988,
+      "DRAM_out_bandwidth[MB/s]": 10.657785179017484,
+      "fclk[mhz]": 100.0,
+      "N": 1,
+      "latency_cycles": 12010,
+      "stable_throughput[images/s]": 8326.39467110741
+    },
+    "partition_5": {
+      "cycles": 10961,
+      "runtime[ms]": 0.10961,
+      "throughput[images/s]": 9123.255177447312,
+      "DRAM_in_bandwidth[MB/s]": 11.67776662713256,
+      "DRAM_out_bandwidth[MB/s]": 18.684426603412096,
+      "fclk[mhz]": 100.0,
+      "N": 1,
+      "latency_cycles": 10961,
+      "stable_throughput[images/s]": 9123.255177447312
+    },
+    "partition_6": {
+      "cycles": 67742,
+      "runtime[ms]": 0.6774200000000001,
+      "throughput[images/s]": 1476.1890702961234,
+      "DRAM_in_bandwidth[MB/s]": 3.0232352159664604,
+      "DRAM_out_bandwidth[MB/s]": 3.7790440199580755,
+      "fclk[mhz]": 100.0,
+      "N": 1,
+      "latency_cycles": 67742,
+      "stable_throughput[images/s]": 1476.1890702961234
+    },
+    "partition_7": {
+      "cycles": 69441,
+      "runtime[ms]": 0.69441,
+      "throughput[images/s]": 1440.071427542806,
+      "DRAM_in_bandwidth[MB/s]": 3.686582854509583,
+      "DRAM_out_bandwidth[MB/s]": 94.37652107544534,
+      "fclk[mhz]": 100.0,
+      "N": 1,
+      "latency_cycles": 69441,
+      "stable_throughput[images/s]": 1440.071427542806
+    }
+  }
+}
