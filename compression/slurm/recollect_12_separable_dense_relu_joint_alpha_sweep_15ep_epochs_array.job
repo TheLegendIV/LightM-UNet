@@ -1,0 +1,153 @@
+#!/bin/bash
+#SBATCH --job-name=recollect_12_separable_dense_relu_joint_alpha_sweep_15ep_epochs
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=00:45:00
+#SBATCH --array=0-9
+#SBATCH --output=logs/%x_%a_%j.out
+#SBATCH --error=logs/%x_%a_%j.err
+
+set -e
+
+# Bugfix re-run of ONLY the collect_results.py step for the epoch5/epoch10/
+# epoch15 rows written by qat_12_separable_dense_relu_joint_alpha_sweep_15ep_
+# {bnfreeze,nobnfreeze}_array.job -- NOT a re-train (checkpoints already
+# exist and are fine; only the metric-collection step was wrong).
+#
+# ROOT CAUSE: collect_results.py's own prediction_dir (labelsPr_<net-name>)
+# is keyed ONLY by --net-name, which those jobs held FIXED across all 4
+# collect_results.py calls per task (only --checkpoint-name varied) --
+# and collect_results.py SKIPS re-running inference if that directory
+# already exists (see its own --skip-inference flag / "if not prediction_
+# dir.exists()" check), by design, for a caller re-scoring already-known-
+# good predictions without repeating slow inference. That default silently
+# scored the WRONG checkpoint under the right label for 3 of every 4 calls:
+# each task's own checkpoint_best/epoch5/epoch10/epoch15 rows all came back
+# with IDENTICAL dice/dice_binary/n_components -- confirmed real (checked
+# the actual results.csv rows), impossible for 4 genuinely different
+# checkpoints. Only each task's OWN "base" (checkpoint_best.pth) row is
+# real -- it was the FIRST call, before the stale directory existed.
+#
+# THE FIX (already applied to both source .job files for any future
+# resubmission): rm -rf the shared prediction dir before EACH collect_
+# results.py call. This job applies that same fix here, for JUST the 3
+# affected rows per task (skips checkpoint_best.pth -- already correct).
+#
+# 10 tasks = 5 alpha points x 2 BN variants, same RUN_NAME/ENET_OUTPUT_
+# FOLDER as the two source jobs (checkpoints must already exist there --
+# this job does NOT calibrate or train, only predicts + scores).
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+TRAINER_CLASS="nnUNetTrainerCombinedQuantENet_12_separable_dense_relu_perblock"
+
+RUN_NAME_ARR=(
+    12_separable_dense_relu_joint_alpha0.0_maxlat1000ms_ft15ep_bnfreeze
+    12_separable_dense_relu_joint_alpha0.25_maxlat1000ms_ft15ep_bnfreeze
+    12_separable_dense_relu_joint_alpha0.5_maxlat1000ms_ft15ep_bnfreeze
+    12_separable_dense_relu_joint_alpha0.75_maxlat1000ms_ft15ep_bnfreeze
+    12_separable_dense_relu_joint_alpha1.0_maxlat1000ms_ft15ep_bnfreeze
+    12_separable_dense_relu_joint_alpha0.0_maxlat1000ms_ft15ep_nobnfreeze
+    12_separable_dense_relu_joint_alpha0.25_maxlat1000ms_ft15ep_nobnfreeze
+    12_separable_dense_relu_joint_alpha0.5_maxlat1000ms_ft15ep_nobnfreeze
+    12_separable_dense_relu_joint_alpha0.75_maxlat1000ms_ft15ep_nobnfreeze
+    12_separable_dense_relu_joint_alpha1.0_maxlat1000ms_ft15ep_nobnfreeze
+)
+# Same block_bits_folding_*.json per alpha as the two source jobs used
+# (bits don't depend on BN-freeze, so bnfreeze/nobnfreeze share the file) --
+# REQUIRED at inference time too: CombinedQuantENet's build_network_
+# architecture reads ENET_BLOCK_BITS_FILE unconditionally (raises if unset),
+# and unlike the source training jobs, nothing earlier in THIS job's own
+# shell session exports it -- a standalone collect-only invocation doesn't
+# inherit it from anywhere (same gotcha this session already hit once
+# before with a bare docker exec collect_results.py call).
+BLOCK_BITS_ARR=(
+    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.0_maxlat1000ms.json"
+    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.25_maxlat1000ms.json"
+    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.5_maxlat1000ms.json"
+    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.75_maxlat1000ms.json"
+    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha1.0_maxlat1000ms.json"
+    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.0_maxlat1000ms.json"
+    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.25_maxlat1000ms.json"
+    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.5_maxlat1000ms.json"
+    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.75_maxlat1000ms.json"
+    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha1.0_maxlat1000ms.json"
+)
+
+TASK_ID=${SLURM_ARRAY_TASK_ID}
+RUN_NAME="${RUN_NAME_ARR[$TASK_ID]}"
+BLOCK_BITS_FILE="${BLOCK_BITS_ARR[$TASK_ID]}"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Array task: ${TASK_ID} -> ${RUN_NAME}"
+echo "BLOCK_BITS_FILE=${BLOCK_BITS_FILE}"
+
+cd "$HOME/LightM-UNet"
+export ENET_BLOCK_BITS_FILE="$HOME/LightM-UNet/${BLOCK_BITS_FILE}"
+
+NET_NAME="${TRAINER_CLASS}_${RUN_NAME}"
+ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${NET_NAME}__nnUNetPlans__2d/fold_0"
+PREDICTION_DIR="$nnUNet_raw/${DATASET_NAME}/labelsPr_${NET_NAME}"
+
+if [ ! -d "$nnUNet_results/${DATASET_NAME}/${NET_NAME}__nnUNetPlans__2d" ]; then
+    echo "ERROR: model folder not found for ${RUN_NAME} -- the source training job must have run first." >&2
+    exit 1
+fi
+
+COMMON_ARGS=(
+    --net-name "${NET_NAME}"
+    --dataset-name "${DATASET_NAME}"
+    --dataset-id "${DATASET_ID}"
+    --channels 4,16,32,16,4
+    --bottlenecks 4,8,8,2,1
+    --decoder-type upsample_conv
+    --use-asymmetric 0
+    --context-pattern dense_dilation
+    --separable-dilated 1
+    --quant-bits 8
+    --trainer-class "${TRAINER_CLASS}"
+)
+
+for EP in 5 10 15; do
+    CKPT="${ENET_OUTPUT_FOLDER}/checkpoint_epoch${EP}.pth"
+    if [ -f "$CKPT" ]; then
+        echo "--- Re-evaluating checkpoint_epoch${EP}.pth (fresh inference, fixed) ---"
+        rm -rf "${PREDICTION_DIR}"
+        python compression/collect_results.py "${COMMON_ARGS[@]}" \
+            --stage "${RUN_NAME}_epoch${EP}" --config-name "${NET_NAME}_epoch${EP}" \
+            --checkpoint-name "checkpoint_epoch${EP}.pth"
+    else
+        echo "checkpoint_epoch${EP}.pth not found at ${ENET_OUTPUT_FOLDER} -- skipping that row." >&2
+    fi
+done
+
+echo "Done: ${RUN_NAME}."

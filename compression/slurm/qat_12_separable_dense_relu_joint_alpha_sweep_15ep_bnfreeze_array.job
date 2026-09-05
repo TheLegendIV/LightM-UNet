@@ -240,7 +240,21 @@ if [ "$FINAL_EPOCH" -ge "$ENET_EPOCHS" ]; then
     if [ "$BEST_EPOCH" != "$FINAL_EPOCH" ]; then
         echo "NOTE: 'best' EMA dice plateaued before the run finished (last improved at epoch ${BEST_EPOCH}, training reached ${FINAL_EPOCH}) -- the standard row below reports epoch-${BEST_EPOCH} weights, not epoch-${FINAL_EPOCH}. This is real, not a failure -- the epoch5/10/15 rows below are NOT affected (fixed snapshots, independent of EMA-best tracking)."
     fi
+    # collect_results.py's own prediction_dir (labelsPr_<net-name>) is keyed
+    # ONLY by --net-name, which is the SAME across all 4 calls below (only
+    # --checkpoint-name differs) -- and it SKIPS re-running inference if
+    # that directory already exists (see its own --skip-inference flag /
+    # "if not prediction_dir.exists()" check), by design, for a caller that
+    # wants to re-score already-known-good predictions without repeating
+    # slow inference. That default is WRONG for this job specifically: each
+    # call below predicts from DIFFERENT checkpoint weights, so reusing a
+    # prior call's predictions silently scores the WRONG checkpoint under
+    # the right label. Force fresh inference every time by removing the
+    # shared prediction dir before each call.
+    PREDICTION_DIR="$nnUNet_raw/${DATASET_NAME}/labelsPr_${NET_NAME}"
+
     echo "--- Evaluating checkpoint_best.pth (standard 'best EMA dice' row) ---"
+    rm -rf "${PREDICTION_DIR}"
     python compression/collect_results.py "${COMMON_ARGS[@]}" \
         --stage "${RUN_NAME}" --checkpoint-name checkpoint_best.pth
 
@@ -248,6 +262,7 @@ if [ "$FINAL_EPOCH" -ge "$ENET_EPOCHS" ]; then
         CKPT="${ENET_OUTPUT_FOLDER}/checkpoint_epoch${EP}.pth"
         if [ -f "$CKPT" ]; then
             echo "--- Evaluating checkpoint_epoch${EP}.pth ---"
+            rm -rf "${PREDICTION_DIR}"
             python compression/collect_results.py "${COMMON_ARGS[@]}" \
                 --stage "${RUN_NAME}_epoch${EP}" --config-name "${NET_NAME}_epoch${EP}" \
                 --checkpoint-name "checkpoint_epoch${EP}.pth"

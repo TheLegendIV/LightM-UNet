@@ -126,7 +126,7 @@ sys.path.insert(0, str(PACKAGE_ROOT))
 from nnunetv2.nets.ENet import ENet  # noqa: E402
 
 XCZU7EV = {"LUT": 230_400, "BRAM_18K": 624}  # same values as ilp_search.py/folding_ilp.py's own copies
-CANDIDATE_BITS = (2, 4, 8, 16)
+CANDIDATE_BITS = (2, 4, 6, 8, 16)
 
 
 def load_config(config_module: str) -> None:
