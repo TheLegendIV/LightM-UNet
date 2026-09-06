@@ -1,0 +1,29 @@
+{
+  "pipeline": [
+    "compression/hawq/layer_sensitivity.py --candidate-bits 4,6,8",
+    "compression/hawq/joint_bits_folding_ilp_perlayer.py --candidate-bits 4,6,8 --hard-lut-fraction 0.7 --force-dsp",
+    "compression/hawq/expand_layer_bits.py"
+  ],
+  "shared_args": {
+    "config": "config_12_dense_relu_warmstart150ep",
+    "sensitivity-file": "compression/hawq/artifacts/layer_sensitivity_12_dense_relu_warmstart150ep.json",
+    "candidate-bits": "4,6,8",
+    "hard-lut-fraction": 0.7,
+    "hard-bram-fraction": 1.0,
+    "force_dsp": true,
+    "max-latency-ms": 1000,
+    "clock-mhz": 100.0,
+    "force_serial": false,
+    "time-limit": 300,
+    "gap-rel": 0.02
+  },
+  "alphas": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+  ],
+  "granularity": "layer",
+  "notes": "Per-LAYER joint bits+folding MILP at a HARD 70pct LUT cap under the FORCED-DSP derating, for the WARM-STARTED 12_dense_relu checkpoint (dice=0.7954, separable_dilated=False dense dilated convs, plain dense_dilation context pattern, no reg-trailing block). All 5 alphas solved Optimal, LUT pinned at ~70pct of budget at every alpha, latency strictly increasing with alpha -- see summary.csv."
+}
