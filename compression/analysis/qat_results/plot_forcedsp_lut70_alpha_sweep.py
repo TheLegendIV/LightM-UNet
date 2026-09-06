@@ -201,11 +201,12 @@ def main() -> int:
     args = parser.parse_args()
 
     trend_data = load_epoch_trend(args.csv, args.config_prefix, args.metric)
-    if not trend_data:
-        print(f"No matching epoch-trend rows found in {args.csv} for config-prefix {args.config_prefix!r}.")
+    final_dice = load_final_dice(args.csv, args.config_prefix, args.metric)
+    if not trend_data and not final_dice:
+        print(f"No matching rows found in {args.csv} for config-prefix {args.config_prefix!r} (neither "
+              f"epoch-trend nor checkpoint_best rows) -- nothing to plot.")
         return 1
 
-    final_dice = load_final_dice(args.csv, args.config_prefix, args.metric)
     ilp_summary = REPO_ROOT / "compression" / "hawq" / "artifacts" / f"{args.ilp_dir_prefix}_ILP_outputs_perlayer_forcedsp_lut70" / "summary.csv"
     latency = load_ilp_latency(ilp_summary) if ilp_summary.exists() else {}
     if not latency:
@@ -213,8 +214,12 @@ def main() -> int:
 
     print_summary(trend_data, final_dice, latency, args.metric)
 
-    plot_dice_trend(trend_data, args.metric, args.ilp_dir_prefix, args.out_dir / f"{args.config_prefix}_forcedsp_lut70_{args.metric}_trend.png")
-    if latency:
+    if trend_data:
+        plot_dice_trend(trend_data, args.metric, args.ilp_dir_prefix, args.out_dir / f"{args.config_prefix}_forcedsp_lut70_{args.metric}_trend.png")
+    else:
+        print(f"Note: no epoch5/10/15 breakdown rows found for config-prefix {args.config_prefix!r} yet -- "
+              f"skipping the dice-vs-epoch trend plot (only the checkpoint_best-based Pareto plot below).")
+    if latency and final_dice:
         plot_dice_vs_latency(final_dice, latency, args.ilp_dir_prefix, args.out_dir / f"{args.config_prefix}_forcedsp_lut70_{args.metric}_vs_latency.png")
     return 0
 
