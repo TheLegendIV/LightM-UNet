@@ -48,4 +48,6 @@ logs/*
 # content worth tracking, just a lock target.
 *.lock
 
-*/archive/
+# Any directory named "archive" anywhere in the repo (old/retired
+# experiment files, kept locally but never worth pushing).
+**/archive/

@@ -1,7 +1,0 @@
-resource,value,unit,source
-CLB_LUT,230400,LUTs,"repo-verified: hardware/finn_enet_ip_build.py's own XCZU7EV dict + hardware/README.md's ZCU7EV LUT budget correction note -- real CLB LUT count per Xilinx DS891's detailed resource table, NOT the 504,000 ""System Logic Cells"" marketing figure from the product-selection summary table"
-CLB_Flip_Flop,460800,FFs,"external (Xilinx DS891 Zynq UltraScale+ datasheet) -- not yet cross-verified against a repo comment; standard UltraScale+ ratio is exactly 2x CLB LUT count, consistent with every other ZU-series device DS891 lists"
-Block_RAM_36Kb,312,tiles,"repo-verified: hardware/finn_enet_ip_build.py's own comment (""312 Block RAM tiles (36Kb each)"")"
-Block_RAM_18Kb_equiv,624,tiles,"repo-verified: hardware/finn_enet_ip_build.py's own XCZU7EV dict (BRAM_18K) -- FINN's own BRAM reporting granularity, = 2x Block_RAM_36Kb"
-UltraRAM_288Kb,96,blocks,"external (Xilinx DS891) -- not yet cross-verified against a repo comment; standard published ZU7EV URAM count (used by compression/hawq/finn_cost_model.py's RAM_STYLE_ULTRA / wm_uram18 formula, which has no established budget constant wired in yet -- see compression/hawq/folding_ilp.py's own note)"
-DSP_Slice,1728,slices,"repo-verified: hardware/finn_enet_ip_build.py's own XCZU7EV dict + hardware/finn_estimate_original_enet_unfolded.py's matching comment"
