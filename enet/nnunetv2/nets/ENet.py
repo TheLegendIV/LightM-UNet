@@ -241,6 +241,29 @@ DENSE_DILATION_REG_TRAILING_PATTERN: tuple[dict, ...] = (
     {"reg_bottleneck": True},
 )
 
+# S27.4 (ablation of S27.2/DENSE_DILATION_REG_TRAILING_PATTERN): identical
+# 5-slot (2,4,8,16,reg) schedule, but the trailing reg-bookend ALSO carries
+# {"asymmetric": True} -- an ENet-style 5x1+1x5 factored inner conv instead
+# of a plain dense 3x3, still full-rank/projected (real reduce/expand, not
+# DSC -- the reg_bottleneck sentinel forces use_dsc=False regardless, same
+# as DENSE_DILATION_REG_TRAILING_PATTERN's own trailing slot). _make_context_
+# stage's plain (projected) loop pops "reg_bottleneck" first, THEN checks
+# the remaining kwargs for "asymmetric" -- so this combination already works
+# through existing code, no new branch needed there; it only requires the
+# model itself be built with use_asymmetric=True (ENET_USE_ASYMMETRIC=1),
+# since asymmetric=True is silently dropped otherwise (same "downgrade if
+# the matching global flag is off" convention every other asymmetric/dilated
+# slot in this file already follows). The other four (2,4,8,16) slots carry
+# no "asymmetric" key at all, so use_asymmetric=True has no effect on them --
+# only the trailing slot changes vs. S27.2.
+DENSE_DILATION_REG_TRAILING_ASYMMETRIC_PATTERN: tuple[dict, ...] = (
+    {"padding": 2, "dilation": 2},
+    {"padding": 4, "dilation": 4},
+    {"padding": 8, "dilation": 8},
+    {"padding": 16, "dilation": 16},
+    {"reg_bottleneck": True, "asymmetric": True},
+)
+
 # S27 family (probe: what does the trailing "consolidation" slot after each
 # dilation cycle actually need to be?). Same 5-slot (2,4,8,16,X) trailing
 # structure as DENSE_DILATION_REG_TRAILING_PATTERN, X swapped for a
@@ -1088,7 +1111,8 @@ class ENet(nn.Module):
         super().__init__()
         valid_context_patterns = (
             "default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_lead1",
-            "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing", "d16_reg_interleaved",
+            "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing",
+            "dense_dilation_reg_trailing_asymmetric", "d16_reg_interleaved",
             "dense_dilation_reg_interleaved_double_mid", "dense_dilation_d2_projected",
             "dense_dilation_d8_d16_projected", "dense_dilation_d2_regular",
             "dense_dilation_dsc_trailing", "dense_dilation_regnoproj_trailing",
@@ -1392,6 +1416,8 @@ class ENet(nn.Module):
             pattern = DENSE_DILATION_REG_INTERLEAVED_PATTERN
         elif self.context_pattern == "dense_dilation_reg_trailing":
             pattern = DENSE_DILATION_REG_TRAILING_PATTERN
+        elif self.context_pattern == "dense_dilation_reg_trailing_asymmetric":
+            pattern = DENSE_DILATION_REG_TRAILING_ASYMMETRIC_PATTERN
         elif self.context_pattern == "dense_dilation_dsc_trailing":
             pattern = DENSE_DILATION_DSC_TRAILING_PATTERN
         elif self.context_pattern == "dense_dilation_regnoproj_trailing":

@@ -208,7 +208,8 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
         context_pattern = os.environ.get("ENET_CONTEXT_PATTERN", "default")
         valid_context_patterns = (
             "default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_lead1",
-            "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing", "d16_reg_interleaved",
+            "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing",
+            "dense_dilation_reg_trailing_asymmetric", "d16_reg_interleaved",
             "dense_dilation_reg_interleaved_double_mid", "dense_dilation_d2_projected",
             "dense_dilation_d8_d16_projected", "dense_dilation_d2_regular",
             "dense_dilation_dsc_trailing", "dense_dilation_regnoproj_trailing",
