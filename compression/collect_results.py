@@ -428,6 +428,7 @@ def main() -> None:
     parser.add_argument("--context-pattern", default="default",
                          choices=["default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_lead1",
                                   "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing",
+                                  "dense_dilation_reg_trailing_asymmetric",
                                   "d16_reg_interleaved", "dense_dilation_reg_interleaved_double_mid",
                                   "dense_dilation_d2_projected", "dense_dilation_d8_d16_projected",
                                   "dense_dilation_dsc_trailing", "dense_dilation_regnoproj_trailing"],

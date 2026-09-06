@@ -139,7 +139,7 @@ def solve_joint(
     sensitivity: dict, geometries: list[LayerGeometry], block_names: tuple[str, ...],
     alpha: float, hard_lut_fraction: float, hard_bram_fraction: float,
     time_limit: int, gap_rel: float, max_cycles: float | None = None,
-    pinned_bits: dict[str, tuple[int, int]] | None = None,
+    pinned_bits: dict[str, tuple[int, int]] | None = None, force_dsp: bool = False,
 ) -> dict:
     """The combined MILP -- see module docstring for the full formulation.
 
@@ -197,8 +197,8 @@ def solve_joint(
                 key = (layer.name, pe, simd, ram_style, w, a)
                 layer_costs[key] = cost
                 raw_cycles[key] = cost["cycles"]
-                raw_lut[key] = calibrated_lut(cost["total_lut"], w, a)
-                raw_bram[key] = calibrated_bram18k(cost["swu_bram18"] + cost["wm_bram18"], w, a)
+                raw_lut[key] = calibrated_lut(cost["total_lut"], w, a, force_dsp=force_dsp)
+                raw_bram[key] = calibrated_bram18k(cost["swu_bram18"] + cost["wm_bram18"], w, a, force_dsp=force_dsp)
                 z[key] = pulp.LpVariable(f"z_{layer.name}_{pe}_{simd}_{ram_style}_{w}_{a}", cat=pulp.LpBinary)
 
     cycles_norm = _normalize(raw_cycles)
@@ -258,6 +258,7 @@ def solve_joint(
                 "hard_lut_fraction": hard_lut_fraction, "hard_bram_fraction": hard_bram_fraction,
                 "max_cycles": max_cycles,
                 "solver_time_limit_s": time_limit, "solver_gap_rel": gap_rel, "force_serial": _folding.FORCE_SERIAL,
+                "force_dsp": force_dsp,
                 "note": f"Solver status {status_name!r} -- no joint (bits, folding) assignment satisfies the "
                         f"requested hard LUT/BRAM budget(s) (hard_lut_fraction={hard_lut_fraction}, "
                         f"hard_bram_fraction={hard_bram_fraction})"
@@ -289,9 +290,9 @@ def solve_joint(
             "weight_bits": w, "act_bits": a, **cost,
         }
 
-    total_lut = sum(calibrated_lut(v["total_lut"], v["weight_bits"], v["act_bits"]) for v in per_layer.values())
+    total_lut = sum(calibrated_lut(v["total_lut"], v["weight_bits"], v["act_bits"], force_dsp=force_dsp) for v in per_layer.values())
     total_bram = sum(
-        calibrated_bram18k(v["swu_bram18"] + v["wm_bram18"], v["weight_bits"], v["act_bits"])
+        calibrated_bram18k(v["swu_bram18"] + v["wm_bram18"], v["weight_bits"], v["act_bits"], force_dsp=force_dsp)
         for v in per_layer.values()
     )
     total_uram = sum(v.get("wm_uram18", 0) for v in per_layer.values())
@@ -314,6 +315,7 @@ def solve_joint(
             "hard_lut_fraction": hard_lut_fraction, "hard_bram_fraction": hard_bram_fraction,
             "max_cycles": max_cycles,
             "solver_time_limit_s": time_limit, "solver_gap_rel": gap_rel, "force_serial": _folding.FORCE_SERIAL,
+            "force_dsp": force_dsp,
             "note": "Joint MILP: y[block,w,a] (sensitivity) linked to z[layer,pe,simd,ram_style,w,a] "
                     "(cycles/LUT/BRAM) via a per-(layer,w,a) equality constraint -- LUT/BRAM are REAL hard "
                     "<= XCZU7EV constraints here (not a soft penalty, unlike ilp_search.py/folding_ilp.py's "
@@ -356,6 +358,13 @@ def main() -> None:
                               "this script's whole point is a real hard budget, not a soft penalty. Pass e.g. "
                               "0.7 to reserve headroom for DSP/FF (resources this cost model doesn't estimate).")
     parser.add_argument("--hard-bram-fraction", type=float, default=1.0, help="Same as --hard-lut-fraction, for BRAM_18K.")
+    parser.add_argument("--force-dsp", action="store_true",
+                         help="Cost every (layer, fold, bits) combination under the FORCED-DSP regime's own "
+                              "flat empirical LUT/BRAM factor (finn_cost_model.py's _FORCED_DSP_LUT_FACTOR/"
+                              "_FORCED_DSP_BRAM_FACTOR, fit from two real S12 8-way forced-DSP OOC builds) "
+                              "instead of the default auto-resType avg_bits-interpolated table -- use when "
+                              "planning a build that will force DSP on every MVAU/VVAU node. Default False "
+                              "preserves prior behavior exactly.")
     parser.add_argument("--max-latency-ms", type=float, default=None,
                          help="Hard cap on total cycles, expressed as a latency budget at --clock-mhz (default "
                               "None = no cap). Converted to max_cycles = max_latency_ms/1000 * clock_mhz*1e6 and "
@@ -456,7 +465,7 @@ def main() -> None:
 
     result = solve_joint(
         sensitivity, geometries, block_names, args.alpha, args.hard_lut_fraction, args.hard_bram_fraction,
-        args.time_limit, args.gap_rel, max_cycles=max_cycles, pinned_bits=pinned_bits,
+        args.time_limit, args.gap_rel, max_cycles=max_cycles, pinned_bits=pinned_bits, force_dsp=args.force_dsp,
     )
 
     args.out_file.parent.mkdir(parents=True, exist_ok=True)

@@ -56,7 +56,21 @@ def load_calibration_batches(dataset_name: str, n_images: int, seed: int = 0) ->
     return [torch.from_numpy(np.load(p)).float() for p in sampled]
 
 
-def calibrate(quant_model: torch.nn.Module, calibration_batches: list[torch.Tensor], device: str) -> int:
+def calibrate(quant_model: torch.nn.Module, calibration_batches: list[torch.Tensor], device: str, seed: int) -> int:
+    """seed reseeds torch's GLOBAL RNG right before calibration starts --
+    Downsampling/UpsamplingBottleneck's nn.Dropout2d is ACTIVE during
+    calibration (Brevitas's calibration_mode requires model.train() for its
+    observer hooks to fire, and .train() does not disable dropout), so
+    without this the calibrated activation-quantizer scale at every
+    residual_add/out_act site is corrupted by WHATEVER the ambient global
+    RNG state happens to be -- non-reproducible run-to-run even given the
+    exact same calibration images (confirmed directly: this was the entire
+    cause of an earlier apparent ~0.041 dice gap between two architectures
+    that turned out to be numerically identical once this was controlled
+    for -- see compression/post-quantization/verify_layerquant_matches_
+    combined.py). Reusing --calibration-seed for this (not a separate flag)
+    keeps one seed value controlling everything about calibration."""
+    torch.manual_seed(seed)
     quant_model.to(device)
     quant_model.train()
     n_used = 0
@@ -113,7 +127,7 @@ def main() -> None:
 
     print(f"Calibrating on real preprocessed images (device={args.device})...")
     calibration_batches = load_calibration_batches(args.dataset_name, args.n_calibration_images, seed=args.calibration_seed)
-    n_used = calibrate(quant_model, calibration_batches, args.device)
+    n_used = calibrate(quant_model, calibration_batches, args.device, seed=args.calibration_seed)
     print(f"Calibration used {n_used}/{len(calibration_batches)} images.")
     quant_model.to("cpu")
 

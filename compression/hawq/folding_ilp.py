@@ -249,6 +249,7 @@ def _normalize(values: dict) -> dict:
 def solve_folding(
     geometries: list[LayerGeometry], stage_bits: dict | None, weight_bits: int, act_bits: int,
     lut_weight: float, bram_weight: float, hard_lut: float | None = None, hard_bram: float | None = None,
+    force_dsp: bool = False,
 ) -> dict:
     """hard_lut/hard_bram: None (default) = no hard constraint, matching
     this file's original soft-penalty-only behavior. A float `f` in (0, 1]
@@ -290,8 +291,8 @@ def solve_folding(
             # applying this per layer BEFORE normalizing actually changes the
             # relative normalized magnitudes across layers with different
             # bit-widths -- no longer a normalization-invariant no-op.
-            raw_lut[key] = calibrated_lut(costs[fold_key]["total_lut"], w_bits, a_bits)
-            raw_bram[key] = calibrated_bram18k(costs[fold_key]["swu_bram18"] + costs[fold_key]["wm_bram18"], w_bits, a_bits)
+            raw_lut[key] = calibrated_lut(costs[fold_key]["total_lut"], w_bits, a_bits, force_dsp=force_dsp)
+            raw_bram[key] = calibrated_bram18k(costs[fold_key]["swu_bram18"] + costs[fold_key]["wm_bram18"], w_bits, a_bits, force_dsp=force_dsp)
             x[key] = pulp.LpVariable(f"x_{layer.name}_{pe}_{simd}_{ram_style}", cat=pulp.LpBinary)
 
     cycles_norm = _normalize(raw_cycles)
@@ -359,10 +360,13 @@ def solve_folding(
                     }
                     break
 
-    return _build_result(status_name, result_per_layer, hard_lut, hard_bram)
+    return _build_result(status_name, result_per_layer, hard_lut, hard_bram, force_dsp=force_dsp)
 
 
-def _build_result(status_name: str, result_per_layer: dict, hard_lut: float | None, hard_bram: float | None) -> dict:
+def _build_result(
+    status_name: str, result_per_layer: dict, hard_lut: float | None, hard_bram: float | None,
+    force_dsp: bool = False,
+) -> dict:
     """Shared by solve_folding and solve_folding_nodewise -- both produce a
     result_per_layer dict whose entries carry the SAME flat cost keys
     (total_lut, swu_bram18, wm_bram18, wm_uram18, cycles, weight_bits,
@@ -386,9 +390,9 @@ def _build_result(status_name: str, result_per_layer: dict, hard_lut: float | No
     # (min-max normalization inside the objective above is invariant to a
     # per-layer-constant rescaling that doesn't depend on pe/simd/ram_style),
     # only what's reported here as "% of budget".
-    total_lut = sum(calibrated_lut(v["total_lut"], v["weight_bits"], v["act_bits"]) for v in result_per_layer.values())
+    total_lut = sum(calibrated_lut(v["total_lut"], v["weight_bits"], v["act_bits"], force_dsp=force_dsp) for v in result_per_layer.values())
     total_bram = sum(
-        calibrated_bram18k(v["swu_bram18"] + v["wm_bram18"], v["weight_bits"], v["act_bits"])
+        calibrated_bram18k(v["swu_bram18"] + v["wm_bram18"], v["weight_bits"], v["act_bits"], force_dsp=force_dsp)
         for v in result_per_layer.values()
     )
     return {
@@ -403,6 +407,7 @@ def _build_result(status_name: str, result_per_layer: dict, hard_lut: float | No
             "total_cycles": total_cycles,
             "hard_lut": hard_lut,
             "hard_bram": hard_bram,
+            "force_dsp": force_dsp,
             "note": ("hard_lut/hard_bram constraints were ENFORCED (see those fields, each either null "
                      "or the fraction of XCZU7EV's nominal budget actually capped at) -- if status is "
                      "Optimal, this folding is GUARANTEED to fit those (possibly fractional) budgets "
@@ -423,6 +428,7 @@ def _build_result(status_name: str, result_per_layer: dict, hard_lut: float | No
 def solve_folding_nodewise(
     geometries: list[LayerGeometry], stage_bits: dict | None, weight_bits: int, act_bits: int,
     lut_weight: float, bram_weight: float, hard_lut: float | None = None, hard_bram: float | None = None,
+    force_dsp: bool = False,
 ) -> dict:
     """Like solve_folding, but for a depthwise Conv2d layer (is_depthwise),
     splits the single (PE, SIMD, ram_style) decision into the THREE real
@@ -479,8 +485,8 @@ def solve_folding_nodewise(
             fold_key = (pe, simd, ram_style)
             key = (layer.name, pe, simd, ram_style)
             raw_cycles[key] = costs[fold_key]["cycles"]
-            raw_lut[key] = calibrated_lut(costs[fold_key]["total_lut"], w_bits, a_bits)
-            raw_bram[key] = calibrated_bram18k(costs[fold_key]["swu_bram18"] + costs[fold_key]["wm_bram18"], w_bits, a_bits)
+            raw_lut[key] = calibrated_lut(costs[fold_key]["total_lut"], w_bits, a_bits, force_dsp=force_dsp)
+            raw_bram[key] = calibrated_bram18k(costs[fold_key]["swu_bram18"] + costs[fold_key]["wm_bram18"], w_bits, a_bits, force_dsp=force_dsp)
             compute_x[key] = pulp.LpVariable(f"x_{var_prefix}_{layer.name}_{pe}_{simd}_{ram_style}", cat=pulp.LpBinary)
         if depthwise:
             for simd in candidate_swu_simd(layer):
@@ -578,7 +584,7 @@ def solve_folding_nodewise(
                     **cost_fields,
                 }
 
-    return _build_result(status_name, result_per_layer, hard_lut, hard_bram)
+    return _build_result(status_name, result_per_layer, hard_lut, hard_bram, force_dsp=force_dsp)
 
 
 def main() -> None:
@@ -615,6 +621,12 @@ def main() -> None:
                               "gets written to --out-file same as an Optimal result would.")
     parser.add_argument("--hard-bram", type=float, nargs="?", const=1.0, default=None, metavar="FRACTION",
                          help="Same as --hard-lut, for calibrated BRAM_18K.")
+    parser.add_argument("--force-dsp", action="store_true",
+                         help="Cost every layer under the FORCED-DSP regime's own flat empirical LUT/BRAM "
+                              "factor (finn_cost_model.py's _FORCED_DSP_LUT_FACTOR/_FORCED_DSP_BRAM_FACTOR) "
+                              "instead of the default auto-resType avg_bits-interpolated table -- see "
+                              "finn_cost_model.py's module comment for the real S12 forced-DSP calibration "
+                              "this is based on. Default False preserves prior behavior exactly.")
     parser.add_argument("--node-level", action="store_true",
                          help="EXPERIMENTAL, developed/verified against --config config_8_2_relu_no_reg_w16 -- "
                               "splits each depthwise Conv2d's single folding decision into FINN's real 3-node "
@@ -690,7 +702,7 @@ def main() -> None:
     solve_fn = solve_folding_nodewise if args.node_level else solve_folding
     result = solve_fn(
         geometries, stage_bits, args.weight_bits, args.act_bits, args.lut_weight, args.bram_weight,
-        hard_lut=args.hard_lut, hard_bram=args.hard_bram,
+        hard_lut=args.hard_lut, hard_bram=args.hard_bram, force_dsp=args.force_dsp,
     )
     result["_diagnostics"]["force_serial"] = args.force_serial
     print(f"ILP status: {result['status']}")
