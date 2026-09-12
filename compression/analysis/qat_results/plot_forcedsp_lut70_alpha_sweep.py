@@ -43,7 +43,7 @@ INK, SECONDARY_INK, MUTED, GRID, SURFACE = (
     "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#fcfcfb",
 )
 ALPHA_COLORS = {
-    0.0: "#2a78d6", 0.25: "#3fa796", 0.5: "#eb6834", 0.75: "#c44536", 1.0: "#8a5fbf",
+    0.0: "#0061d6", 0.25: "#00a78c", 0.5: "#eb4300", 0.75: "#c41500", 1.0: "#5600bf",
 }
 
 
@@ -52,7 +52,7 @@ def _style_axes(ax) -> None:
     ax.grid(True, axis="y", color=GRID, linewidth=0.8, zorder=0)
     for spine in ax.spines.values():
         spine.set_color("#c3c2b7")
-    ax.tick_params(colors=MUTED, labelsize=9)
+    ax.tick_params(colors=INK, labelsize=9)
 
 
 def load_epoch_trend(csv_path: Path, config_prefix: str, metric: str) -> dict[float, dict[int, float]]:
@@ -91,11 +91,34 @@ def load_final_dice(csv_path: Path, config_prefix: str, metric: str) -> dict[flo
     return data
 
 
+def load_fp32_baseline(csv_path: Path, config_prefix: str, metric: str) -> float | None:
+    """The unquantized FP32 reference run's own metric (nnUNetTrainerENet_
+    <config_prefix>, no LayerQuant/bit-width suffix at all) -- used only as a
+    horizontal reference line on the Pareto plot, never mixed into the alpha
+    series itself."""
+    target = f"nnUNetTrainerENet_{config_prefix}"
+    with open(csv_path, newline="") as f:
+        for row in csv.DictReader(f):
+            if row["config_name"] == target:
+                return float(row[metric])
+    return None
+
+
 def load_ilp_latency(ilp_summary_csv: Path) -> dict[float, float]:
     data: dict[float, float] = {}
     with open(ilp_summary_csv, newline="") as f:
         for row in csv.DictReader(f):
             data[float(row["alpha"])] = float(row["latency_ms_at_100mhz"])
+    return data
+
+
+def load_ilp_lut_pct(ilp_summary_csv: Path) -> dict[float, float]:
+    """Each alpha's own REAL calibrated LUT usage (lut_pct_of_budget) -- all
+    sit just under the requested 70% hard cap, not exactly at it."""
+    data: dict[float, float] = {}
+    with open(ilp_summary_csv, newline="") as f:
+        for row in csv.DictReader(f):
+            data[float(row["alpha"])] = float(row["lut_pct_of_budget"])
     return data
 
 
@@ -124,7 +147,7 @@ def plot_dice_trend(data: dict[float, dict[int, float]], metric: str, title_pref
     ax.set_xlabel("checkpoint epoch", color=SECONDARY_INK, fontsize=10)
     ax.set_ylabel(metric, color=SECONDARY_INK, fontsize=10)
     ax.set_title(
-        f"{title_prefix}: {metric} vs. QAT epoch, per-layer joint ILP alpha sweep\n"
+        f"Optimum Configurations {metric} vs. QAT epoch, per-layer joint ILP alpha sweep\n"
         "hard 70% LUT cap, forced-DSP derating, candidate bits {4,6,8} -- fixed ENET_SEED/calibration-seed across alphas",
         color=INK, fontsize=10.5,
     )
@@ -136,7 +159,10 @@ def plot_dice_trend(data: dict[float, dict[int, float]], metric: str, title_pref
     print(f"Wrote {out_path}")
 
 
-def plot_dice_vs_latency(dice: dict[float, float], latency: dict[float, float], title_prefix: str, out_path: Path) -> None:
+def plot_dice_vs_latency(
+    dice: dict[float, float], latency: dict[float, float], title_prefix: str, out_path: Path,
+    fp32_dice: float | None = None,
+) -> None:
     import matplotlib.pyplot as plt
 
     alphas = sorted(set(dice) & set(latency))
@@ -147,23 +173,27 @@ def plot_dice_vs_latency(dice: dict[float, float], latency: dict[float, float], 
     fig, ax = plt.subplots(figsize=(7, 5.5), facecolor=SURFACE)
     _style_axes(ax)
 
+    if fp32_dice is not None:
+        ax.axhline(fp32_dice, color=INK, linestyle=":", linewidth=1.2, zorder=1,
+                   label=f"FP32 baseline ({fp32_dice:.4f})")
+
     xs = [latency[a] for a in alphas]
     ys = [dice[a] for a in alphas]
-    ax.plot(xs, ys, color=MUTED, linewidth=1.3, linestyle="--", zorder=2)
-    for i, (a, x, y) in enumerate(zip(alphas, xs, ys)):
+    ax.plot(xs, ys, color=MUTED, linewidth=1.3, linestyle="-", alpha=0.5, zorder=2)
+    alpha_legend_suffix = {0.0: " (optimize speed only)", 1.0: " (optimize accuracy only)"}
+    for a, x, y in zip(alphas, xs, ys):
         ax.scatter([x], [y], color=ALPHA_COLORS.get(a, MUTED), s=90, zorder=4,
-                   edgecolor=SURFACE, linewidth=1.2)
-        y_off = 10 if i % 2 == 0 else -14
-        ax.annotate(f"alpha={a}", (x, y), xytext=(6, y_off), textcoords="offset points",
-                    color=ALPHA_COLORS.get(a, MUTED), fontsize=9, fontweight="bold")
+                   edgecolor=SURFACE, linewidth=1.2, label=f"α={a}{alpha_legend_suffix.get(a, '')}")
 
-    ax.set_xlabel("ILP-predicted latency (ms @ 100MHz)", color=SECONDARY_INK, fontsize=10)
-    ax.set_ylabel("best-checkpoint dice (checkpoint_best.pth)", color=SECONDARY_INK, fontsize=10)
+    ax.set_xlabel("Predicted Latency (ms @ 100MHz)", color=INK, fontsize=10, fontweight="bold")
+    ax.set_ylabel("Dice", color=INK, fontsize=10, fontweight="bold")
     ax.set_title(
-        f"{title_prefix}: accuracy vs. latency tradeoff at a fixed 70% LUT budget\n"
-        "(forced-DSP derating, candidate bits {4,6,8} -- every point fits the SAME real chip budget)",
-        color=INK, fontsize=10.5,
+        "Optimum Configurations Spanning Five Accuracy/Latency Tradeoffs at 70% LUT Cap",
+        color=INK, fontsize=10.5, fontweight="bold",
     )
+    ax.set_ylim(top=0.8)
+    ax.legend(loc="lower right", frameon=True, facecolor=SURFACE, edgecolor="#c3c2b7",
+              fontsize=8.5, labelcolor=SECONDARY_INK)
     fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=SURFACE)
@@ -179,8 +209,8 @@ def print_summary(data: dict[float, dict[int, float]], dice: dict[float, float],
         vals = [data[a].get(e) for e in EPOCHS]
         print(f"{a:>6} " + " ".join(f"{v:>10.4f}" if v is not None else f"{'--':>10}" for v in vals))
 
-    print(f"\nbest-checkpoint dice vs. ILP-predicted latency:")
-    print(f"{'alpha':>6} {'dice':>8} {'latency_ms':>12}")
+    print(f"\nbest-checkpoint {metric} vs. ILP-predicted latency:")
+    print(f"{'alpha':>6} {metric:>8} {'latency_ms':>12}")
     for a in sorted(set(dice) | set(latency)):
         d = dice.get(a)
         l = latency.get(a)
@@ -220,7 +250,15 @@ def main() -> int:
         print(f"Note: no epoch5/10/15 breakdown rows found for config-prefix {args.config_prefix!r} yet -- "
               f"skipping the dice-vs-epoch trend plot (only the checkpoint_best-based Pareto plot below).")
     if latency and final_dice:
-        plot_dice_vs_latency(final_dice, latency, args.ilp_dir_prefix, args.out_dir / f"{args.config_prefix}_forcedsp_lut70_{args.metric}_vs_latency.png")
+        fp32_baseline = load_fp32_baseline(args.csv, args.config_prefix, args.metric)
+        if fp32_baseline is None:
+            print(f"Note: no FP32 baseline row (nnUNetTrainerENet_{args.config_prefix}) found in {args.csv} -- "
+                  f"plotting without the FP32 reference line.")
+        plot_dice_vs_latency(
+            final_dice, latency, args.ilp_dir_prefix,
+            args.out_dir / f"{args.config_prefix}_forcedsp_lut70_{args.metric}_vs_latency.png",
+            fp32_dice=fp32_baseline,
+        )
     return 0
 
 
