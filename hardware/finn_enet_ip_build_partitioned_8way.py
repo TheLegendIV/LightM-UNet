@@ -38,6 +38,7 @@ from finn_enet_build_decomposed_prelu import (
     step_enet_streamline,
     step_absorb_leftover_scale_before_matmul,
     step_fuse_forked_dequant_into_duplicate_threshold,
+    step_dedup_forked_matmul_before_threshold,
     _fixup_degenerate_signed_bias,
     step_enet_convert_to_hw,
 )
@@ -89,6 +90,7 @@ enet_ip_partitioned_8way_steps = [
     step_enet_streamline,
     step_absorb_leftover_scale_before_matmul,
     step_fuse_forked_dequant_into_duplicate_threshold,
+    step_dedup_forked_matmul_before_threshold,  # <-- works around InferQuantizedMatrixVectorActivation's forked-MatMul-output bug
     _fixup_degenerate_signed_bias,
     step_enet_convert_to_hw,
     assign_stage_partition_ids_8way,     # <-- 8-way: sets partition_id 0..7

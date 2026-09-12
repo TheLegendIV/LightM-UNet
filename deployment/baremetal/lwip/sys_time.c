@@ -14,7 +14,7 @@ static int TtcPs_Init_1ms_any(void)
     int dev_id = -1;
     XTtcPs_Config *cfg = NULL;
 
-    for (int i = 0; i < 12; ++i) {
+    for (int i = 1; i < 12; ++i) {
         cfg = XTtcPs_LookupConfig(i);
         if (cfg) { dev_id = i; break; }
     }

@@ -822,6 +822,72 @@ def step_fuse_forked_dequant_into_duplicate_threshold(model: ModelWrapper, cfg: 
     return model
 
 
+def step_dedup_forked_matmul_before_threshold(model: ModelWrapper, cfg: DataflowBuildConfig = None) -> ModelWrapper:
+    """Fixup for a genuine bug in FINN's own
+    InferQuantizedMatrixVectorActivation (finn/src/finn/transformation/
+    fpgadataflow/convert_to_hw_layers.py, part of step_enet_convert_to_hw):
+    it resolves a MatMul's HW consumer via `model.find_consumer(mm_output)`,
+    which -- whenever mm_output has MORE THAN ONE consumer -- silently
+    returns just one arbitrary consumer (with a
+    "find_consumer: found multiple consumers, returning first one"
+    warning), fuses THAT ONE MultiThreshold into an MVAU node, and
+    unconditionally `graph.node.remove()`s the MatMul. Any OTHER
+    MultiThreshold consumer of the same (now-deleted) MatMul output is left
+    referencing a producer-less tensor -- a dangling wire that survives all
+    the way into the final HW graph and trips
+    finn_stage_partition.find_stage_boundaries's ascending-topological-order
+    assertion much later.
+
+    This exact fork arises legitimately, right here in our own pipeline,
+    from step_fuse_forked_dequant_into_duplicate_threshold's duplicate-
+    MultiThreshold mechanism: two MultiThreshold nodes (sharing the same
+    threshold params) are deliberately created to consume the SAME
+    upstream tensor -- one continuing to the "main"/FMPadding_Pixel-bound
+    branch, one feeding another fork branch (e.g. a residual). When that
+    shared upstream tensor happens to be a MatMul's output (as it is for
+    main_up's Im2Col+MatMul-lowered ConvTranspose), this trips the FINN bug
+    above.
+
+    Fix: MatMul is a pure, pointwise-in-the-graph op with no side effects,
+    so duplicating it -- one private copy per consumer beyond the first,
+    each with its own fresh output tensor -- is always value-preserving.
+    Each duplicate's output then has exactly one consumer, so
+    InferQuantizedMatrixVectorActivation can fuse every copy correctly and
+    independently, with nothing left dangling.
+    """
+    graph = model.graph
+    deduped = 0
+    for n in list(graph.node):
+        if n.op_type != "MatMul":
+            continue
+        out = n.output[0]
+        consumers = [c for c in graph.node if out in list(c.input)]
+        if len(consumers) <= 1:
+            continue
+        idt = model.get_tensor_datatype(out)
+        shape = model.get_tensor_shape(out)
+        # keep the original MatMul feeding the first consumer; give every
+        # OTHER consumer its own private duplicate MatMul + output tensor
+        for extra_consumer in consumers[1:]:
+            new_out = model.make_new_valueinfo_name()
+            model.set_tensor_datatype(new_out, idt)
+            if shape is not None:
+                model.set_tensor_shape(new_out, shape)
+            dup = oh.make_node("MatMul", list(n.input), [new_out])
+            graph.node.append(dup)
+            for i, inp in enumerate(extra_consumer.input):
+                if inp == out:
+                    extra_consumer.input[i] = new_out
+            deduped += 1
+    if deduped:
+        model = model.transform(SortGraph())
+        model = model.transform(GiveUniqueNodeNames())
+        model = model.transform(InferShapes())
+        model = model.transform(InferDataTypes())
+    print(f"    [dedup_forked_matmul] deduplicated {deduped} forked MatMul output(s)")
+    return model
+
+
 enet_estimate_steps = [
     "step_qonnx_to_finn",
     step_enet_tidy,
@@ -829,6 +895,7 @@ enet_estimate_steps = [
     step_enet_streamline,
     step_absorb_leftover_scale_before_matmul,  # <-- fixes leftover dequant Mul/Add before Im2Col
     step_fuse_forked_dequant_into_duplicate_threshold,  # <-- last-resort fix for FMPadding_Pixel-adjacent leftovers
+    step_dedup_forked_matmul_before_threshold,  # <-- works around InferQuantizedMatrixVectorActivation's forked-MatMul-output bug
     _fixup_degenerate_signed_bias,   # <-- the only other difference vs. finn_enet_build.py
     step_enet_convert_to_hw,
     "step_create_dataflow_partition",

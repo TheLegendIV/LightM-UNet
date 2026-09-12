@@ -1,0 +1,30 @@
+sdcard_gen --xpfm C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_test/export/zcu106_test/zcu106_test.xpfm --sys_config zcu106_test --bif C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_v1_system/Debug/system.bif --bitstream C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_v1/_ide/bitstream/top_wrapper.bit --elf C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_v1/Debug/lwip_v1.elf,psu_cortexa53_0
+creating BOOT.BIN using C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_v1/_ide/bitstream/top_wrapper.bit
+Error intializing SD boot data : Software platform XML error, sdx:qemuArguments value "zcu106_test/qemu/pmu_args.txt" path does not exist C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_test/export/zcu106_test/sw/zcu106_test/qemu/pmu_args.txt, platform path C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_test/export/zcu106_test, sdx:configuration zcu106_test, sdx:image standard
+make: *** [makefile:37: package] Error 1
+
+01:24:06 Build Finished (took 13s.208ms)
+
+Nothing to build in platform 'zcu106_test'
+
+01:24:07 **** Incremental Build of configuration Debug for project lwip_v1 ****
+make all 
+'Building file: ../src/run.c'
+'Invoking: ARM v8 gcc compiler'
+aarch64-none-elf-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/run.o" -IC:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_test/export/zcu106_test/sw/zcu106_test/standalone_domain/bspinclude/include -MMD -MP -MF"src/run.d" -MT"src/run.o" -o "src/run.o" "../src/run.c"
+../src/run.c:678:13: warning: 'reset_conn' defined but not used [-Wunused-function]
+  678 | static void reset_conn(struct tcp_pcb *tpcb, conn_ctx_t *ctx, int abort)
+      |             ^~~~~~~~~~
+'Finished building: ../src/run.c'
+' '
+'Building target: lwip_v1.elf'
+'Invoking: ARM v8 gcc linker'
+aarch64-none-elf-gcc -Wl,-T -Wl,../src/lscript.ld -LC:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_test/export/zcu106_test/sw/zcu106_test/standalone_domain/bsplib/lib -o "lwip_v1.elf"  ./src/i2c_access.o ./src/iic_phyreset.o ./src/main.o ./src/platform.o ./src/platform_mb.o ./src/platform_ppc.o ./src/platform_zynq.o ./src/platform_zynqmp.o ./src/run.o ./src/sfp.o ./src/si5324.o ./src/sys_time.o   -Wl,--start-group,-lxil,-lgcc,-lc,--end-group -Wl,--start-group,-lxil,-llwip4,-lgcc,-lc,--end-group -Wl,--start-group,-lxiltimer,-lxil,-lgcc,-lc,--end-group
+'Finished building target: lwip_v1.elf'
+' '
+'Invoking: ARM v8 Print Size'
+aarch64-none-elf-size lwip_v1.elf  |tee "lwip_v1.elf.size"
+   text	   data	    bss	    dec	    hex	filename
+ 114891	   7688	6363501	6486080	 62f840	lwip_v1.elf
+'Finished building: lwip_v1.elf.size'
+' '

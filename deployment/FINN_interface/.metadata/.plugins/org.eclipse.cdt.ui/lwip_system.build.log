@@ -1,0 +1,10 @@
+17:48:48 **** Build of configuration Debug for project lwip_system ****
+make all 
+Generating bif file for the system project
+generate_system_bif.bat 62142 C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_test/export/zcu106_test/zcu106_test.xpfm standalone_domain C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_system/Debug/system.bif
+sdcard_gen --xpfm C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_test/export/zcu106_test/zcu106_test.xpfm --sys_config zcu106_test --bif C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_system/Debug/system.bif --bitstream C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip/_ide/bitstream/zcu106_test_with_i2c.bit --elf C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip/Debug/lwip.elf,psu_cortexa53_0
+ELF does not exist: C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip/Debug/lwip.elf
+make: *** [makefile:37: package] Error 1
+
+17:48:54 Build Finished (took 6s.351ms)
+

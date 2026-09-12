@@ -1,0 +1,11 @@
+01:23:53 **** Incremental Build of configuration Debug for project lwip_v1_system ****
+make all 
+Generating bif file for the system project
+generate_system_bif.bat 62142 C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_test/export/zcu106_test/zcu106_test.xpfm standalone_domain C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_v1_system/Debug/system.bif
+sdcard_gen --xpfm C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_test/export/zcu106_test/zcu106_test.xpfm --sys_config zcu106_test --bif C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_v1_system/Debug/system.bif --bitstream C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_v1/_ide/bitstream/top_wrapper.bit --elf C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_v1/Debug/lwip_v1.elf,psu_cortexa53_0
+creating BOOT.BIN using C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_v1/_ide/bitstream/top_wrapper.bit
+Error intializing SD boot data : Software platform XML error, sdx:qemuArguments value "zcu106_test/qemu/pmu_args.txt" path does not exist C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_test/export/zcu106_test/sw/zcu106_test/qemu/pmu_args.txt, platform path C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_test/export/zcu106_test, sdx:configuration zcu106_test, sdx:image standard
+make: *** [makefile:37: package] Error 1
+
+01:24:06 Build Finished (took 13s.208ms)
+
