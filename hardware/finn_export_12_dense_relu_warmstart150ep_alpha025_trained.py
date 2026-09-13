@@ -5,29 +5,31 @@ transferred wherever the FINN-safe topology is structurally identical to
 the real LayerQuantENet.
 
 Byte-for-byte copy of finn_export_12_dense_relu_warmstart150ep_alpha025_dummy.py's
-own FINNDownsamplingBottleneck/FINNUpsamplingBottleneck/FINNQuantENet/
-load_layer_bits (see that file's module docstring for the full derivation
-of the 2 FINN-specific substitutions) -- only this file's checkpoint
-loading + weight transfer + final.bias handling are new.
+own FINNInitialBlockConcat/FINNDownsamplingBottleneck/FINNUpsamplingBottleneck/
+LayerQuantEnetFINN/load_layer_bits (see that file's module docstring for the
+full derivation of the 3 FINN-specific substitutions) -- only this file's
+checkpoint loading + weight transfer + final.bias handling are new.
 
-WEIGHT TRANSFER: since initial/regular1/regular4/regular5/stage2/stage3
-reuse the REAL LayerQuantInitialBlock/LayerQuantRegularBottleneck classes
-unmodified, and down1/down2/up4/up5's reduce/conv/expand/up/main_proj/
+WEIGHT TRANSFER: since regular1/regular4/regular5/stage2/stage3 reuse the
+REAL LayerQuantRegularBottleneck class unmodified, and initial's
+conv/pool/bn/act and down1/down2/up4/up5's reduce/conv/expand/up/main_proj/
 residual_add/out_act submodules use the exact same site names as the real
-LayerQuantDownsamplingBottleneck/LayerQuantUpsamplingBottleneck, a single
-generic strict=False name+shape state-dict transfer (identical in spirit to
-LayerQuantENet.from_pretrained's own -- see enet/nnunetv2/nets/
-LayerQuantENet.py) transfers EVERY real trained parameter automatically:
-  - shortcut_proj (down1/down2) and main_up (up4/up5) have no counterpart
-    key in the real checkpoint at all (real model has no such submodules),
-    so they are simply never touched by the transfer, and are left at
-    their fixed/frozen exact values (this is not a hack -- literally the
-    correct fresh init for a parameter-free operation, see the dummy
-    script's docstring point 1/2 for why those two are mathematically
-    EXACT anyway, not approximations).
-  - every other submodule (initial.*, regular1-5.*, stage2/3.*, down1/2's
-    reduce/conv/expand, up4/5's reduce/up/expand/main_proj) has an
-    identical key+shape match and transfers in full.
+LayerQuantInitialBlock/LayerQuantDownsamplingBottleneck/
+LayerQuantUpsamplingBottleneck, a single generic strict=False name+shape
+state-dict transfer (identical in spirit to LayerQuantENet.from_pretrained's
+own -- see enet/nnunetv2/nets/LayerQuantENet.py) transfers EVERY real
+trained parameter automatically:
+  - shortcut_proj (down1/down2), main_up (up4/up5), and initial.branch_quant
+    have no counterpart key in the real checkpoint at all (real model has no
+    such submodules), so they are simply never touched by the transfer, and
+    are left at their fixed/frozen or freshly-constructed values (shortcut_
+    proj/main_up are mathematically EXACT fixed ops, see the dummy script's
+    docstring point 1/2; branch_quant is a genuinely NEW rounding point --
+    see the dummy script's docstring point 0 -- and needs calibration below
+    like any other freshly-added quantizer).
+  - every other submodule (initial.conv/pool/bn/act, regular1-5.*,
+    stage2/3.*, down1/2's reduce/conv/expand, up4/5's reduce/up/expand/
+    main_proj) has an identical key+shape match and transfers in full.
 
 FINAL BIAS: real `final` has bias=True (a genuine trained parameter, see
 LayerQuantENet.py's own final = qnn.QuantConvTranspose2d(..., bias=True)).
@@ -72,7 +74,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from nnunetv2.nets.LayerQuantENet import layer_names_for  # noqa: E402
 from finn_export_s13_leaky_frozen import export_model  # noqa: E402
 from finn_export_12_dense_relu_warmstart150ep_alpha025_dummy import (  # noqa: E402
-    FINNQuantENet, load_layer_bits, CHANNELS, BOTTLENECKS_PER_STAGE, CONTEXT_PATTERN,
+    LayerQuantEnetFINN, load_layer_bits, CHANNELS, BOTTLENECKS_PER_STAGE, CONTEXT_PATTERN,
     OUT_DIR, DEFAULT_BITS_FILE,
 )
 
@@ -127,7 +129,7 @@ def load_calibration_images(
     return images
 
 
-def load_real_weights(model: "FINNQuantENet", checkpoint_path: Path) -> torch.Tensor:
+def load_real_weights(model: "LayerQuantEnetFINN", checkpoint_path: Path) -> torch.Tensor:
     """Generic strict=False name+shape state-dict transfer -- identical in
     spirit to LayerQuantENet.from_pretrained's own (see module docstring).
     Returns the real trained `final.bias` tensor (out_channels,) separately
@@ -163,7 +165,7 @@ def load_real_weights(model: "FINNQuantENet", checkpoint_path: Path) -> torch.Te
     return real_final_bias
 
 
-def calibrate_runtime_stats(model: "FINNQuantENet", calibration_images: list[torch.Tensor]) -> None:
+def calibrate_runtime_stats(model: "LayerQuantEnetFINN", calibration_images: list[torch.Tensor]) -> None:
     """Root-cause fix for `RuntimeError: Scaling factors are different` in
     down1/down2's residual_add (QuantEltwiseAdd) during the real-weight
     forward pass -- see memories/repo/finn_12_dense_relu_alpha025_perlayer.md
@@ -181,7 +183,7 @@ def calibrate_runtime_stats(model: "FINNQuantENet", calibration_images: list[tor
     load_real_weights, and (2) every quant proxy's actual scale is whatever
     its own non-persistent runtime-stats buffer happens to converge to,
     starting from ITS OWN construction-time state -- which, on a freshly
-    built FINNQuantENet, is NOT guaranteed to already agree between two
+    built LayerQuantEnetFINN, is NOT guaranteed to already agree between two
     operands (e.g. residual_add's `main`/`out`) that are fed by two
     DIFFERENT quant-proxy instances, until each has been calibrated on
     representative data. The real (unmodified) LayerQuantENet class
@@ -236,7 +238,7 @@ def main() -> None:
 
     print(f"\n=== Building REAL-weight, per-layer-bit-width FINN-safe 12_dense_relu_warmstart150ep "
           f"(alpha=0.25) -- {len(weight_names)} weight sites, {len(act_names)} act sites ===")
-    model = FINNQuantENet(
+    model = LayerQuantEnetFINN(
         layer_weight_bits, layer_act_bits, in_channels=args.in_channels, out_channels=args.out_channels,
     ).eval()
 

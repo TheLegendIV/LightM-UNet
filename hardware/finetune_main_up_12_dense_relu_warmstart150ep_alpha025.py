@@ -45,7 +45,7 @@ import torch.nn.functional as F
 
 from finn_export_s13_leaky_frozen import export_model
 from finn_export_12_dense_relu_warmstart150ep_alpha025_dummy import (
-    FINNQuantENet, load_layer_bits, layer_names_for, CHANNELS, BOTTLENECKS_PER_STAGE, CONTEXT_PATTERN,
+    LayerQuantEnetFINN, load_layer_bits, layer_names_for, CHANNELS, BOTTLENECKS_PER_STAGE, CONTEXT_PATTERN,
     OUT_DIR, DEFAULT_BITS_FILE,
 )
 from finn_export_12_dense_relu_warmstart150ep_alpha025_trained import (
@@ -60,7 +60,7 @@ def _as_plain_tensor(x):
 
 
 def finetune_main_up(
-    model: "FINNQuantENet", finetune_images: list[torch.Tensor], epochs: int, lr: float,
+    model: "LayerQuantEnetFINN", finetune_images: list[torch.Tensor], epochs: int, lr: float,
 ) -> None:
     """Freezes every parameter except up4.main_up.weight/up5.main_up.weight,
     then fits those 2 kernels to match real F.interpolate(bilinear) on the
@@ -151,7 +151,7 @@ def main() -> None:
     layer_weight_bits, layer_act_bits = load_layer_bits(Path(args.bits_file), weight_names, act_names)
 
     print(f"\n=== Building REAL-weight FINN-safe 12_dense_relu_warmstart150ep (alpha=0.25) ===")
-    model = FINNQuantENet(
+    model = LayerQuantEnetFINN(
         layer_weight_bits, layer_act_bits, in_channels=args.in_channels, out_channels=args.out_channels,
     ).eval()
 

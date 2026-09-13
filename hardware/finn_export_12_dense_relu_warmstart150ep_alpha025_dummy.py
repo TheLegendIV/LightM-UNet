@@ -15,25 +15,50 @@ validates the graph/export pipeline structurally, and validates that the
 real per-layer bits JSON's key set lines up exactly with this exact
 architecture's real site names, before loading the real ft15ep QAT
 checkpoint (see finn_export_12_dense_relu_warmstart150ep_alpha025_trained.py,
-which reuses this file's FINNDownsamplingBottleneck/FINNUpsamplingBottleneck/
-FINNQuantENet/load_layer_bits verbatim).
+which reuses this file's FINNInitialBlockConcat/FINNDownsamplingBottleneck/
+FINNUpsamplingBottleneck/LayerQuantEnetFINN/load_layer_bits verbatim).
 
 Since USE_PRELU=False for this config, the REAL LayerQuantENet's own
 activation modules devolve to plain qnn.QuantReLU (`_quant_block_act` with
 negative_slope=None -- see QuantENet.py) and its residual_add is a real,
 already-FINN-safe qnn.QuantEltwiseAdd (single shared input_quant across
 both operands, per LayerQuantRegularBottleneck's own docstring). This means
-LayerQuantInitialBlock and LayerQuantRegularBottleneck (imported directly
-from enet/nnunetv2/nets/LayerQuantENet.py, via the same
+LayerQuantRegularBottleneck (imported directly from
+enet/nnunetv2/nets/LayerQuantENet.py, via the same
 _make_layer_shallow_stage/_make_layer_context_stage assembly helpers that
-file itself uses) are reused UNMODIFIED here -- no FINN-specific
-reimplementation needed for those. LayerQuantDSCNoProjectionBottleneck is
-never instantiated (USE_DSC=False globally for this config).
+file itself uses) is reused UNMODIFIED here -- no FINN-specific
+reimplementation needed. LayerQuantInitialBlock needs one (see point 0
+below). LayerQuantDSCNoProjectionBottleneck is never instantiated
+(USE_DSC=False globally for this config).
 
-Only 2 block classes need real FINN-specific substitutes, both EXACT (not
-fresh/random-init) fixes -- see memories/repo/finn_12_dense_relu_alpha025_
-perlayer.md for the full derivation/verification of each:
+3 block classes need real FINN-specific substitutes -- see memories/repo/
+finn_12_dense_relu_alpha025_perlayer.md for the full derivation/verification
+of each:
 
+0. FINNInitialBlockConcat: real LayerQuantInitialBlock does
+   `torch.cat([self.conv(x), self.pool(x)], dim=1)` with NO shared quantizer
+   forcing the conv branch and the pool branch onto the same (scale,
+   zero_point) pair first. Brevitas's QuantTensor-aware `cat` requires
+   coherent quant params across all its inputs to stay in the QuantTensor
+   representation, and silently falls back to a plain float tensor when
+   they differ -- confirmed against the real S12 preamble build's
+   step_enet_convert_to_hw.onnx: Concat_0's inputs are annotated FLOAT32,
+   not integer, which is why Concat/the BN-affine Mul+Add/MaxPool never
+   lower to FINN HW nodes (every Infer*Layer HW-conversion pass hard-
+   requires an integer input DataType). Fix, and ONLY departure from the
+   real block: one new shared `branch_quant` (qnn.QuantIdentity instance,
+   no HAWQ site -> FALLBACK_BITS) applied to BOTH self.conv(x) and
+   self.pool(x) right before the cat, forcing them onto one common scale so
+   the cat stays integer-annotated all the way through. This is the ONLY
+   new rounding point added; self.bn is NOT hand-folded into self.conv --
+   once Concat sees coherent integer inputs it converts to StreamingConcat,
+   and the standard BatchNormToAffine + AbsorbMulIntoMultiThreshold /
+   AbsorbAddIntoMultiThreshold streamlining (already wired into
+   step_enet_streamline, and already relied on for every OTHER conv+BN+act
+   instance in this network) absorbs self.bn into `act`'s thresholds for
+   free, exactly like everywhere else. conv/pool/bn/act are otherwise
+   identical (same modules, same real per-site weights, same site names) to
+   LayerQuantInitialBlock.
 1. FINNDownsamplingBottleneck: real down1/down2 shortcut is a
    parameter-free MaxPool + zero-pad-to-out_channels (see
    LayerQuantDownsamplingBottleneck.forward). Concat-with-a-zeros-tensor
@@ -86,9 +111,9 @@ from brevitas.quant import Int8ActPerTensorFloat, Int8WeightPerTensorFloat
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from nnunetv2.nets.QuantENet import _quant_conv2d, _quant_act  # noqa: E402
+from nnunetv2.nets.QuantENet import _quant_conv2d, _quant_act, _quant_block_act  # noqa: E402
 from nnunetv2.nets.LayerQuantENet import (  # noqa: E402
-    LayerQuantInitialBlock, _make_layer_shallow_stage, _make_layer_context_stage,
+    _make_layer_shallow_stage, _make_layer_context_stage,
     _local_single, layer_names_for,
 )
 from finn_export_s13_leaky_frozen import export_model  # noqa: E402
@@ -130,10 +155,36 @@ def load_layer_bits(
 
 
 # ---------------------------------------------------------------------------
-# FINN-safe block substitutes -- ONLY down1/down2 and up4/up5 need one (see
-# module docstring). initial/regular1/regular4/regular5/stage2/stage3 reuse
-# LayerQuantInitialBlock/LayerQuantRegularBottleneck unmodified.
+# FINN-safe block substitutes -- initial, down1/down2 and up4/up5 need one
+# (see module docstring). regular1/regular4/regular5/stage2/stage3 reuse
+# LayerQuantRegularBottleneck unmodified.
 # ---------------------------------------------------------------------------
+
+class FINNInitialBlockConcat(nn.Module):
+    """FINN-safe substitute for LayerQuantInitialBlock -- see module
+    docstring point 0. conv/pool/bn/act are the real per-site ops, real
+    weights transfer directly (same site names: "conv", "input_quant",
+    "act"); `branch_quant` is the one new, no-HAWQ-site rounding point
+    (FALLBACK_BITS) that this substitute adds."""
+
+    def __init__(self, in_channels: int, out_channels: int, weight_bits: dict[str, int], act_bits: dict[str, int]):
+        super().__init__()
+        if out_channels <= in_channels:
+            raise ValueError("FINNInitialBlockConcat out_channels must exceed in_channels.")
+        self.input_quant = qnn.QuantIdentity(
+            bit_width=act_bits["input_quant"], act_quant=Int8ActPerTensorFloat, return_quant_tensor=True,
+        )
+        self.conv = _quant_conv2d(in_channels, out_channels - in_channels, weight_bits["conv"], kernel_size=3, stride=2, padding=1)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.branch_quant = qnn.QuantIdentity(bit_width=FALLBACK_BITS, act_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.act = _quant_block_act(out_channels, act_bits["act"], None)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.input_quant(x)
+        branches = [self.branch_quant(self.conv(x)), self.branch_quant(self.pool(x))]
+        return self.act(self.bn(torch.cat(branches, dim=1)))
+
 
 def _padded_identity_conv(in_channels: int, out_channels: int) -> nn.Conv2d:
     """Fixed (frozen, non-learned) 1x1 conv reproducing "zero-pad channels
@@ -293,15 +344,16 @@ class FINNUpsamplingBottleneck(nn.Module):
 # Model assembly
 # ---------------------------------------------------------------------------
 
-class FINNQuantENet(nn.Module):
+class LayerQuantEnetFINN(nn.Module):
     """FINN-compatible mirror of LayerQuantENet for
     nnUNetTrainerENet_12_dense_relu_warmstart150ep (per-layer HAWQ
-    alpha=0.25). initial/regular1/regular4/regular5/stage2/stage3 are the
-    REAL, unmodified LayerQuantInitialBlock/LayerQuantRegularBottleneck;
-    down1/down2/up4/up5 are the FINN-safe (but numerically exact, see module
-    docstring) substitutes above. `final_bias` defaults to False here
-    (fresh/dummy weights) -- the trained sibling script overrides this to
-    True and splices the real bias in as a post-partition Add instead."""
+    alpha=0.25). regular1/regular4/regular5/stage2/stage3 are the REAL,
+    unmodified LayerQuantRegularBottleneck; initial/down1/down2/up4/up5 are
+    the FINN-safe (but numerically exact except for `initial`'s new
+    branch_quant, see module docstring) substitutes above. `final_bias`
+    defaults to False here (fresh/dummy weights) -- the trained sibling
+    script overrides this to True and splices the real bias in as a
+    post-partition Add instead."""
 
     def __init__(
         self, layer_weight_bits: dict[str, int], layer_act_bits: dict[str, int], *,
@@ -313,7 +365,7 @@ class FINNQuantENet(nn.Module):
         c0, c1, c23, c4, c5 = channels
         n1, n2, n3, n4, n5 = bottlenecks_per_stage
 
-        self.initial = LayerQuantInitialBlock(
+        self.initial = FINNInitialBlockConcat(
             in_channels, c0, _local_single(layer_weight_bits, "initial"), _local_single(layer_act_bits, "initial"),
         )
 
@@ -381,7 +433,7 @@ def main() -> None:
     print(f"\n=== Building fresh-weight, per-layer-bit-width FINN-safe 12_dense_relu_warmstart150ep "
           f"(alpha=0.25) -- {len(weight_names)} weight sites, {len(act_names)} act sites ===")
     torch.manual_seed(0)
-    model = FINNQuantENet(
+    model = LayerQuantEnetFINN(
         layer_weight_bits, layer_act_bits, in_channels=args.in_channels, out_channels=args.out_channels,
     ).eval()
 

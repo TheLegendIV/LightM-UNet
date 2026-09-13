@@ -34,7 +34,7 @@ sys.path.insert(0, str(REPO_ROOT / "enet"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from finn_export_12_dense_relu_warmstart150ep_alpha025_dummy import (  # noqa: E402
-    FINNQuantENet,
+    LayerQuantEnetFINN,
     load_layer_bits,
     CHANNELS,
     BOTTLENECKS_PER_STAGE,
@@ -57,7 +57,7 @@ def main() -> None:
     layer_weight_bits, layer_act_bits = load_layer_bits(DEFAULT_BITS_FILE, weight_names, act_names)
 
     torch.manual_seed(0)
-    model = FINNQuantENet(layer_weight_bits, layer_act_bits, in_channels=1, out_channels=5).eval()
+    model = LayerQuantEnetFINN(layer_weight_bits, layer_act_bits, in_channels=1, out_channels=5).eval()
 
     ordered = []
     for name, mod in model.named_modules():
