@@ -32,21 +32,19 @@ Usage (inside the pytorch training container):
     docker exec <container> python /workspace/LightM-UNet/hardware/finetune_main_up_12_dense_relu_warmstart150ep_alpha025.py
 
 Output: hardware/outputs/finn_exports/quantEnet_12_dense_relu_warmstart150ep_alpha025_trained_ftmainup_int8.onnx
-        hardware/outputs/finn_exports/quantEnet_12_dense_relu_warmstart150ep_alpha025_trained_ftmainup_int8_final_bias.npy
 """
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 
 from finn_export_s13_leaky_frozen import export_model
 from finn_export_12_dense_relu_warmstart150ep_alpha025_dummy import (
     LayerQuantEnetFINN, load_layer_bits, layer_names_for, CHANNELS, BOTTLENECKS_PER_STAGE, CONTEXT_PATTERN,
-    OUT_DIR, DEFAULT_BITS_FILE,
+    DEFAULT_BITS_FILE,
 )
 from finn_export_12_dense_relu_warmstart150ep_alpha025_trained import (
     load_real_weights, load_calibration_images, calibrate_runtime_stats,
@@ -156,7 +154,7 @@ def main() -> None:
     ).eval()
 
     print("\n=== Loading real trained checkpoint ===")
-    real_final_bias = load_real_weights(model, checkpoint_path)
+    load_real_weights(model, checkpoint_path)
 
     print("\n=== Calibrating runtime-stats activation scales on real training data ===")
     n_calib = None if args.calibration_images < 0 else args.calibration_images
@@ -177,10 +175,6 @@ def main() -> None:
 
     name = "quantEnet_12_dense_relu_warmstart150ep_alpha025_trained_ftmainup_int8"
     export_model(model, name, dummy)
-
-    bias_path = OUT_DIR / f"{name}_final_bias.npy"
-    np.save(bias_path, real_final_bias.detach().numpy())
-    print(f"  Saved real final.bias side-car: {bias_path}")
 
     print("\nDone. Copy to FINN container with:")
     print(f"  docker cp hardware/outputs/finn_exports/{name}.onnx <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/")

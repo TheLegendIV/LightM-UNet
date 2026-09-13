@@ -31,7 +31,7 @@ reimplementation needed. LayerQuantInitialBlock needs one (see point 0
 below). LayerQuantDSCNoProjectionBottleneck is never instantiated
 (USE_DSC=False globally for this config).
 
-3 block classes need real FINN-specific substitutes -- see memories/repo/
+4 substitutions are needed vs. the real LayerQuantENet -- see memories/repo/
 finn_12_dense_relu_alpha025_perlayer.md for the full derivation/verification
 of each:
 
@@ -81,11 +81,15 @@ of each:
    image border) -- decided against the edge-replicate-Pad node needed for
    full bit-exactness (unverified FINN support, real risk of failing like
    Resize does).
-
-`final`'s real bias=True is intentionally handled OUTSIDE this model class
--- see the trained sibling script's weight-transfer step for how it's
-spliced back in as a post-partition Add. This dummy script exports `final`
-with bias=False (a fresh/untrained bias value has no meaning to preserve).
+3. `final` bias: real LayerQuantENet's `final` is bias=True with a plain
+   (unquantized) float bias Add -- fine on GPU/CPU but not FINN-HW-
+   convertible (MVAU has no bias input at all, and InferChannelwiseLinearLayer
+   requires the constant to be exactly integer-valued, confirmed from FINN's
+   own convert_to_hw_layers.py source). Fix: bias_quant=Int32Bias, which
+   quantizes the bias into the MatMul accumulator's own implicit scale
+   (input_scale * weight_scale), making it exact-integer and letting the
+   resulting Add lower to a real ChannelwiseOp HW node instead of a CPU-
+   side post-processing step.
 
 Usage (run inside the pytorch training container, e.g. `lightm_pytorch`):
     docker exec lightm_pytorch python /workspace/LightM-UNet/hardware/finn_export_12_dense_relu_warmstart150ep_alpha025_dummy.py
@@ -106,7 +110,7 @@ import torch
 from torch import nn
 
 import brevitas.nn as qnn
-from brevitas.quant import Int8ActPerTensorFloat, Int8WeightPerTensorFloat
+from brevitas.quant import Int8ActPerTensorFloat, Int8WeightPerTensorFloat, Int32Bias
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
@@ -350,16 +354,21 @@ class LayerQuantEnetFINN(nn.Module):
     alpha=0.25). regular1/regular4/regular5/stage2/stage3 are the REAL,
     unmodified LayerQuantRegularBottleneck; initial/down1/down2/up4/up5 are
     the FINN-safe (but numerically exact except for `initial`'s new
-    branch_quant, see module docstring) substitutes above. `final_bias`
-    defaults to False here (fresh/dummy weights) -- the trained sibling
-    script overrides this to True and splices the real bias in as a
-    post-partition Add instead."""
+    branch_quant, see module docstring) substitutes above. `final`'s bias
+    (bias=True, bias_quant=Int32Bias) quantizes the bias into the MatMul
+    accumulator's own scale (input_scale * weight_scale), which makes it an
+    exact-integer constant -- letting InferChannelwiseLinearLayer lower the
+    resulting Add straight to a real ChannelwiseOp HW node instead of a
+    CPU-side post-processing step (confirmed against the real S12 preamble
+    build's step_enet_convert_to_hw.onnx: plain float biases fail
+    InferChannelwiseLinearLayer's `ll_cinit.astype(np.int32) == ll_cinit`
+    check)."""
 
     def __init__(
         self, layer_weight_bits: dict[str, int], layer_act_bits: dict[str, int], *,
         in_channels: int = 1, out_channels: int = 5,
         channels: tuple[int, ...] = CHANNELS, bottlenecks_per_stage: tuple[int, ...] = BOTTLENECKS_PER_STAGE,
-        context_pattern: str = CONTEXT_PATTERN, final_bias: bool = False,
+        context_pattern: str = CONTEXT_PATTERN, final_bias: bool = True,
     ):
         super().__init__()
         c0, c1, c23, c4, c5 = channels
@@ -396,6 +405,7 @@ class LayerQuantEnetFINN(nn.Module):
 
         self.final = qnn.QuantConvTranspose2d(
             c5, out_channels, kernel_size=2, stride=2, bias=final_bias,
+            bias_quant=Int32Bias if final_bias else None,
             weight_bit_width=layer_weight_bits["final"], weight_quant=Int8WeightPerTensorFloat,
         )
 

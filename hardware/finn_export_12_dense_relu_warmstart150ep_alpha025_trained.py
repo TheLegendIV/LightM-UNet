@@ -30,19 +30,13 @@ trained parameter automatically:
   - every other submodule (initial.conv/pool/bn/act, regular1-5.*,
     stage2/3.*, down1/2's reduce/conv/expand, up4/5's reduce/up/expand/
     main_proj) has an identical key+shape match and transfers in full.
-
-FINAL BIAS: real `final` has bias=True (a genuine trained parameter, see
-LayerQuantENet.py's own final = qnn.QuantConvTranspose2d(..., bias=True)).
-This export still uses bias=False for `final` (matching this repo's
-established convention that the HW-partitionable graph's `final` node must
-be bias=False for threshold streamlining) and instead dumps the REAL
-trained bias vector to a side-car .npy file
-(<name>_final_bias.npy, out_channels values) alongside the .onnx -- to be
-applied as a post-processing step on the raw driver output (a per-channel
-float add has zero hardware/synthesis cost implication and does not affect
-LUT/DSP/BRAM/timing results either way, so this is deliberately deferred
-past stitched-IP/OOC-synth rather than attempted as in-graph ONNX surgery
-before it -- see memories/repo/finn_12_dense_relu_alpha025_perlayer.md).
+  - `final.bias` also has an identical key+shape match: bias_quant=Int32Bias
+    (see dummy script's docstring point 3) quantizes the bias at forward
+    time using `final`'s own input/weight scales, but the underlying
+    `.bias` parameter itself stays a plain real-valued (out_channels,)
+    tensor, byte-for-byte the same shape/semantics as the real checkpoint's
+    `final.bias` -- so it transfers via the SAME generic loop, no special-
+    casing needed.
 
 REAL checkpoint: data/nnUNet_results/Dataset509_ARCADE_1x1_4c/
 nnUNetTrainerLayerQuantENet_12_dense_relu_warmstart150ep_perlayer_
@@ -53,7 +47,6 @@ Usage (run inside the pytorch training container):
     docker exec <container> python /workspace/LightM-UNet/hardware/finn_export_12_dense_relu_warmstart150ep_alpha025_trained.py
 
 Output: hardware/outputs/finn_exports/quantEnet_12_dense_relu_warmstart150ep_alpha025_trained_int8.onnx
-        hardware/outputs/finn_exports/quantEnet_12_dense_relu_warmstart150ep_alpha025_trained_int8_final_bias.npy
 Then, inside the FINN container:
     docker cp hardware/outputs/finn_exports/quantEnet_12_dense_relu_warmstart150ep_alpha025_trained_int8.onnx \\
         <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/
@@ -75,7 +68,7 @@ from nnunetv2.nets.LayerQuantENet import layer_names_for  # noqa: E402
 from finn_export_s13_leaky_frozen import export_model  # noqa: E402
 from finn_export_12_dense_relu_warmstart150ep_alpha025_dummy import (  # noqa: E402
     LayerQuantEnetFINN, load_layer_bits, CHANNELS, BOTTLENECKS_PER_STAGE, CONTEXT_PATTERN,
-    OUT_DIR, DEFAULT_BITS_FILE,
+    DEFAULT_BITS_FILE,
 )
 
 DEFAULT_CHECKPOINT = (
@@ -129,12 +122,13 @@ def load_calibration_images(
     return images
 
 
-def load_real_weights(model: "LayerQuantEnetFINN", checkpoint_path: Path) -> torch.Tensor:
+def load_real_weights(model: "LayerQuantEnetFINN", checkpoint_path: Path) -> None:
     """Generic strict=False name+shape state-dict transfer -- identical in
     spirit to LayerQuantENet.from_pretrained's own (see module docstring).
-    Returns the real trained `final.bias` tensor (out_channels,) separately
-    -- `model.final` itself is bias=False, so it isn't in model's own
-    state_dict at all and needs no special-casing in the transfer loop."""
+    `final.bias` transfers through this same generic loop (bias_quant=
+    Int32Bias only affects the quantization applied at forward time, not
+    the underlying parameter's shape/semantics), so no special-casing is
+    needed."""
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     source_state_dict = checkpoint["network_weights"]
     model_state_dict = model.state_dict()
@@ -158,11 +152,6 @@ def load_real_weights(model: "LayerQuantEnetFINN", checkpoint_path: Path) -> tor
     still_frozen = [k for k in missing if "shortcut_proj" in k or "main_up" in k]
     print(f"  -> {len(still_frozen)}/{len(missing)} of the uninitialized keys are the expected frozen "
           f"shortcut_proj/main_up params (untouched, as intended): {still_frozen}")
-
-    real_final_bias = source_state_dict["final.bias"]
-    print(f"  -> real trained final.bias ({tuple(real_final_bias.shape)}) extracted for post-processing "
-          f"side-car (not applied in-graph, see module docstring).")
-    return real_final_bias
 
 
 def calibrate_runtime_stats(model: "LayerQuantEnetFINN", calibration_images: list[torch.Tensor]) -> None:
@@ -243,7 +232,7 @@ def main() -> None:
     ).eval()
 
     print("\n=== Loading real trained checkpoint ===")
-    real_final_bias = load_real_weights(model, checkpoint_path)
+    load_real_weights(model, checkpoint_path)
 
     print("\n=== Calibrating runtime-stats activation scales on real training data ===")
     n_calib = None if args.calibration_images < 0 else args.calibration_images
@@ -260,10 +249,6 @@ def main() -> None:
 
     name = "quantEnet_12_dense_relu_warmstart150ep_alpha025_trained_int8"
     export_model(model, name, dummy)
-
-    bias_path = OUT_DIR / f"{name}_final_bias.npy"
-    np.save(bias_path, real_final_bias.detach().numpy())
-    print(f"  Saved real final.bias side-car: {bias_path}")
 
     print("\nDone. Copy to FINN container with:")
     print(f"  docker cp hardware/outputs/finn_exports/{name}.onnx <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/")
