@@ -358,3 +358,43 @@ class LayerQuantEnetFINN(nn.Module):
         x = self.regular5(self.up5(x))
         out = self.final(x)
         return out.value if hasattr(out, "value") else out
+
+    @classmethod
+    def from_pretrained(
+        cls, checkpoint_path, layer_weight_bits: dict[str, int], layer_act_bits: dict[str, int], **kwargs,
+    ) -> "LayerQuantEnetFINN":
+        """Same strict=False name+shape transfer as LayerQuantENet.from_pretrained
+        (see its own docstring) -- valid here for exactly the same reason: state-
+        dict key/shape matching depends only on module-tree structure and tensor
+        shapes, neither of which vary with bit-width. Transfers cleanly into
+        regular1/regular4/regular5/stage2/stage3 (byte-for-byte the same
+        LayerQuantRegularBottleneck) and into initial/down1/down2/up4/up5's real
+        sub-modules (main_proj/reduce/conv/up/expand/residual_add/out_act -- same
+        site names as the real block). Left uninitialized (by design, same as
+        LayerQuantENet's own from_pretrained): every Brevitas quantizer's own
+        scaling_impl buffer (no FP32 counterpart to transfer), plus the 3
+        substitute-block params that are already fixed/frozen at construction
+        time and must NOT come from the checkpoint -- down1/down2.shortcut_proj
+        (padded-identity) and up4/up5.main_up's tent-kernel depthwise conv (see
+        module docstring points 1 and 2)."""
+        model = cls(layer_weight_bits, layer_act_bits, **kwargs)
+        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+        source_state_dict = checkpoint["network_weights"]
+        model_state_dict = model.state_dict()
+        transferable = {
+            key: value for key, value in source_state_dict.items()
+            if key in model_state_dict and model_state_dict[key].shape == value.shape
+        }
+        missing, unexpected = model.load_state_dict(transferable, strict=False)
+        assert not unexpected, f"unexpected keys after strict=False load (should be impossible): {unexpected}"
+        n_shape_mismatch = sum(
+            1 for key, value in source_state_dict.items()
+            if key in model_state_dict and model_state_dict[key].shape != value.shape
+        )
+        print(
+            f"LayerQuantEnetFINN.from_pretrained({checkpoint_path}): transferred {len(transferable)}/"
+            f"{len(model_state_dict)} model keys ({n_shape_mismatch} shape mismatches, "
+            f"{len(missing)} left uninitialized -- expected for Brevitas-only quantizer params "
+            f"plus the frozen substitute-block params)."
+        )
+        return model
