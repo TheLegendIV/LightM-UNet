@@ -47,7 +47,8 @@ of each:
    lower to FINN HW nodes (every Infer*Layer HW-conversion pass hard-
    requires an integer input DataType). Fix, and ONLY departure from the
    real block: one new shared `branch_quant` (qnn.QuantIdentity instance,
-   no HAWQ site -> FALLBACK_BITS) applied to BOTH self.conv(x) and
+   no HAWQ site -> bit-width matched to the chain, see
+   FINNInitialBlockConcat) applied to BOTH self.conv(x) and
    self.pool(x) right before the cat, forcing them onto one common scale so
    the cat stays integer-annotated all the way through. This is the ONLY
    new rounding point added; self.bn is NOT hand-folded into self.conv --
@@ -67,6 +68,12 @@ of each:
    (W[c,c]=1 for c<in_ch, 0 elsewhere) + zero bias -- mathematically
    IDENTICAL to the real op, not an approximation. No new weight/act site:
    `shortcut_proj` has no HAWQ-searched bit-width and needs none (frozen).
+   Built as qnn.QuantConv2d (INT8 weight_quant), NOT plain nn.Conv2d: a
+   plain conv's weight exports as a bare FLOAT32 initializer, and FINN does
+   NOT infer an integer DataType for it even though every value is a
+   literal 0.0/1.0 (confirmed empirically -- MatMul_0/MatMul_1 stayed
+   FLOAT32-annotated and never lowered to MVAU), so an explicit Quant
+   wrapper is required -- same fix already applied to `main_up` below.
 2. FINNUpsamplingBottleneck: real up4/up5 main path is main_proj (real,
    trained, transferred as-is) -> F.interpolate(bilinear,
    align_corners=False) (LayerQuantENet always passes indices=None in
@@ -168,8 +175,9 @@ class FINNInitialBlockConcat(nn.Module):
     """FINN-safe substitute for LayerQuantInitialBlock -- see module
     docstring point 0. conv/pool/bn/act are the real per-site ops, real
     weights transfer directly (same site names: "conv", "input_quant",
-    "act"); `branch_quant` is the one new, no-HAWQ-site rounding point
-    (FALLBACK_BITS) that this substitute adds."""
+    "act"); `branch_quant` is the one new, no-HAWQ-site rounding point that
+    this substitute adds, bit-width chosen to match the chain (see below)
+    rather than a flat fallback."""
 
     def __init__(self, in_channels: int, out_channels: int, weight_bits: dict[str, int], act_bits: dict[str, int]):
         super().__init__()
@@ -180,7 +188,11 @@ class FINNInitialBlockConcat(nn.Module):
         )
         self.conv = _quant_conv2d(in_channels, out_channels - in_channels, weight_bits["conv"], kernel_size=3, stride=2, padding=1)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.branch_quant = qnn.QuantIdentity(bit_width=FALLBACK_BITS, act_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
+        # bit-width matches the wider of this block's own "prior" (input_quant,
+        # pool's true source precision) and "post" (act, its eventual consumer)
+        # so this new rounding point never becomes an information bottleneck.
+        branch_bits = max(act_bits["input_quant"], act_bits["act"])
+        self.branch_quant = qnn.QuantIdentity(bit_width=branch_bits, act_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
         self.bn = nn.BatchNorm2d(out_channels)
         self.act = _quant_block_act(out_channels, act_bits["act"], None)
 
@@ -190,10 +202,26 @@ class FINNInitialBlockConcat(nn.Module):
         return self.act(self.bn(torch.cat(branches, dim=1)))
 
 
-def _padded_identity_conv(in_channels: int, out_channels: int) -> nn.Conv2d:
+def _padded_identity_conv(in_channels: int, out_channels: int) -> qnn.QuantConv2d:
     """Fixed (frozen, non-learned) 1x1 conv reproducing "zero-pad channels
-    to out_channels" EXACTLY -- see module docstring point 1."""
-    conv = nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False)
+    to out_channels" EXACTLY -- see module docstring point 1.
+
+    A plain (non-quantized) nn.Conv2d here exports its weight as a bare
+    FLOAT32 ONNX initializer: even though every value is a literal 0.0/1.0,
+    FINN's tidy-up does NOT infer an integer DataType for it (confirmed
+    empirically against the real S12 preamble build's
+    step_enet_convert_to_hw.onnx -- MatMul_0/MatMul_1's weight tensors stay
+    annotated FLOAT32), so InferQuantizedMatrixVectorActivation's
+    `wdt.is_integer()` gate fails and the conv never lowers to an MVAU --
+    same failure mode already found and fixed for `main_up`'s bilinear
+    kernel (see _bilinear_kernel_conv_transpose below). Fix: wrap in
+    qnn.QuantConv2d (INT8 weight quant) so an explicit Quant node forces a
+    real integer weight DataType, then overwrite+freeze the weight exactly
+    as before."""
+    conv = qnn.QuantConv2d(
+        in_channels, out_channels, kernel_size=1, bias=False,
+        weight_bit_width=8, weight_quant=Int8WeightPerTensorFloat,
+    )
     weight = torch.zeros(out_channels, in_channels, 1, 1)
     for c in range(min(in_channels, out_channels)):
         weight[c, c, 0, 0] = 1.0
@@ -312,9 +340,10 @@ class FINNUpsamplingBottleneck(nn.Module):
         # conv, and FINN's Conv->MVAU fusion pass requires a properly-quantized
         # (integer-datatype) INPUT to fuse, else it leaves a dangling non-HW
         # Im2Col+MatMul+MultiThreshold triple that breaks partitioning. Add an
-        # explicit signed passthrough quantizer (FINN-export-only, no HAWQ site,
-        # hence FALLBACK_BITS) to bridge this gap.
-        self.main_act = qnn.QuantIdentity(bit_width=FALLBACK_BITS, act_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
+        # explicit signed passthrough quantizer (FINN-export-only, no HAWQ site)
+        # to bridge this gap, bit-width matched to residual_add -- the one real
+        # "post" consumer this branch's output feeds into after main_up.
+        self.main_act = qnn.QuantIdentity(bit_width=act_bits["residual_add"], act_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
         self.main_up = _bilinear_kernel_conv_transpose(out_channels)
 
         self.reduce = nn.Sequential(

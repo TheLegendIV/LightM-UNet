@@ -139,15 +139,53 @@ def load_all_partition_logical_names(preamble_dir):
         idx for idx, node in enumerate(full_model.graph.node)
         if node.op_type in ("MatrixVectorActivation", "MVAU", "VVAU") or "MaxPool" in node.op_type
     ]
-    if len(weight_like_idx) != len(all_names):
+
+    # step_dedup_forked_matmul_before_threshold (finn_enet_build_decomposed_
+    # prelu.py) deliberately DUPLICATES a MatMul node -- new node, SAME
+    # weight initializer tensor -- whenever its output has multiple
+    # MultiThreshold consumers (a workaround for a real FINN
+    # InferQuantizedMatrixVectorActivation bug, see that step's docstring).
+    # Both copies lower to separate MVAU nodes sharing one weight tensor, so
+    # the real graph can have MORE weight-like nodes than conv_order.json
+    # has logical names (confirmed here: 2 extra MVAU nodes, e.g.
+    # MVAU_69/MVAU_71 both referencing "MVAU_71_param0"). Detect this by
+    # weight-tensor-name reuse: a duplicate consumes NO new conv_order.json
+    # entry, instead inheriting the logical name already assigned to the
+    # first node that used that same tensor (correct -- it's literally the
+    # same conv/weight, just legitimately re-emitted for a second consumer).
+    def _weight_tensor(node):
+        for inp in node.input:
+            if full_model.get_initializer(inp) is not None:
+                return inp
+        return None
+
+    tensor_to_entry = {}
+    pos = 0
+    node_idx_to_entry = {}
+    for node_idx in weight_like_idx:
+        node = full_model.graph.node[node_idx]
+        wt = _weight_tensor(node)
+        if wt is not None and wt in tensor_to_entry:
+            node_idx_to_entry[node_idx] = tensor_to_entry[wt]
+            continue
+        if pos >= len(all_names):
+            raise RuntimeError(
+                f"ran out of conv_order.json entries at node_idx={node_idx} (pos={pos}, "
+                f"available={len(all_names)}) -- positional correspondence broken, do not proceed."
+            )
+        entry = all_names[pos]
+        pos += 1
+        if wt is not None:
+            tensor_to_entry[wt] = entry
+        node_idx_to_entry[node_idx] = entry
+    if pos != len(all_names):
         raise RuntimeError(
-            f"weight-like node count in pre-partition graph ({len(weight_like_idx)}) != "
-            f"logical name list length ({len(all_names)}) -- positional correspondence broken, "
-            "do not proceed."
+            f"consumed only {pos}/{len(all_names)} conv_order.json entries -- positional "
+            "correspondence broken, do not proceed."
         )
 
     result = {i: ([], []) for i in range(8)}
-    for pos, node_idx in enumerate(weight_like_idx):
+    for node_idx in weight_like_idx:
         pid = None
         for i in range(8):
             lo, hi = partition_node_index_range(i, boundaries)
@@ -155,7 +193,7 @@ def load_all_partition_logical_names(preamble_dir):
                 pid = i
                 break
         assert pid is not None, f"node_idx {node_idx} not covered by any partition range"
-        entry = all_names[pos]
+        entry = node_idx_to_entry[node_idx]
         if "MaxPool" in entry["module_type"]:
             result[pid][1].append(entry["logical_name"])
         else:

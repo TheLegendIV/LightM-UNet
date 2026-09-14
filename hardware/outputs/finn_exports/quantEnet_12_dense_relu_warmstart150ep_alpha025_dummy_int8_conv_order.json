@@ -20,6 +20,16 @@
     "weight_shape": null
   },
   {
+    "logical_name": "down1.shortcut_proj",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      16,
+      4,
+      1,
+      1
+    ]
+  },
+  {
     "logical_name": "down1.reduce.0",
     "module_type": "QuantConv2d",
     "weight_shape": [
@@ -173,6 +183,16 @@
     "logical_name": "down2.shortcut_pool",
     "module_type": "MaxPool2d",
     "weight_shape": null
+  },
+  {
+    "logical_name": "down2.shortcut_proj",
+    "module_type": "QuantConv2d",
+    "weight_shape": [
+      32,
+      16,
+      1,
+      1
+    ]
   },
   {
     "logical_name": "down2.reduce.0",

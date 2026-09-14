@@ -183,7 +183,22 @@ def _shrink_boundary_past_open_fork(model, prev_boundary, boundary):
     binary add -- 30 DuplicateStreams vs only 27 AddStreams in this model).
     So if scanning forward never finds a closing AddStreams, this is NOT a
     boundary artifact -- give up and return the ORIGINAL boundary unchanged
-    rather than asserting/crashing.
+    rather than asserting/crashing. This DOES happen in practice for
+    perfectly benign reasons: this network has a "chronic" outer fork (its
+    very first DuplicateStreams, found 2026-09-13 on `12_dense_relu_
+    warmstart150ep_alpha025`: 28 DuplicateStreams vs only 27 AddStreams
+    total) that never closes via a literal AddStreams anywhere in the WHOLE
+    graph -- it's reconverged some other way, fused into the final dequant
+    Mul at the very end. Depth-counting this chronic fork as "still open"
+    at every boundary that happens to start from index 0 (or from a prior
+    boundary that itself starts before this fork's own AddStreams) does NOT
+    mean that boundary is actually cutting mid-fork in the crash-causing
+    sense -- see `_shrink_boundary_past_dangling_fork_output` below for the
+    narrower, precise check that actually catches the real bug (a multi-
+    output node landing as the LAST node before the cut, with 2+ of its
+    outputs escaping the partition) without being confused by unrelated,
+    already-resolved-by-internal-consumption open forks earlier in the
+    range.
 
     Fix: track fork "depth" across [prev_boundary, boundary) --
     DuplicateStreams opens one (+1), AddStreams closes one (-1). If depth is
@@ -219,6 +234,57 @@ def _shrink_boundary_past_open_fork(model, prev_boundary, boundary):
             depth -= 1
         idx += 1
     return idx
+
+
+def _shrink_boundary_past_dangling_fork_output(model, prev_boundary, boundary):
+    """Catches the REAL bug found 2026-09-13 on `12_dense_relu_
+    warmstart150ep_alpha025` trained 8-way build (partitions 0, 1, 4 of 8
+    crashed hours into the build, deep inside a ProcessPoolExecutor worker,
+    with `AssertionError: No producer for output global_out` inside
+    CreateStitchedIP): unlike `_shrink_boundary_past_open_fork` (which
+    tracks a DuplicateStreams/AddStreams "depth" across the WHOLE range --
+    confused by this network's chronic, never-closes-via-AddStreams outer
+    fork, see that function's docstring), this check looks ONLY at the
+    single node immediately before the cut. If that node has 2+ outputs
+    AND 2+ of them are never consumed inside [prev_boundary, boundary) --
+    i.e. they'd become 2+ dangling partition-level outputs, both produced
+    by the same node -- FINN's `InsertFIFO(create_shallow_fifos=True)` +
+    `GiveReadableTensorNames()` (inside step_set_fifo_depths) mishandle the
+    renaming: a FIFO gets inserted on only one of the two output branches,
+    and both branches' renamed boundary-output tensors collide onto the
+    same generated name (e.g. both become "global_out_1"), orphaning the
+    other declared output name (e.g. "global_out") with no producer at
+    all. Confirmed via a step-by-step replay of the FIFO-insertion
+    transform sequence on the real failing partition 0 sub-model.
+
+    Fix: shrink the boundary back by 1 (excluding that dangling-multi-
+    output node from this partition, deferring it -- and its eventual
+    reconvergence, however/wherever that happens -- entirely into the
+    NEXT partition instead), and repeat, in case the new last node has the
+    same problem. A node's single input tensor crossing a partition
+    boundary is always fine (the normal case); only 2+ OUTPUTS of the same
+    node crossing is the bug trigger."""
+    nodes = list(model.graph.node)
+    while boundary > prev_boundary:
+        last_node = nodes[boundary - 1]
+        if len(last_node.output) <= 1:
+            break
+        n_dangling = 0
+        for out_name in last_node.output:
+            consumers = model.find_consumers(out_name) or []
+            consumer_idxs = [_node_index(model, c) for c in consumers]
+            if not consumer_idxs or any(ci >= boundary for ci in consumer_idxs):
+                n_dangling += 1
+        if n_dangling <= 1:
+            break
+        print(
+            "[_shrink_boundary_past_dangling_fork_output] shrinking boundary "
+            "%d -> %d: last node %s (%s) has %d outputs escaping the "
+            "partition (would collide during FIFO-insertion tensor "
+            "renaming)." % (boundary, boundary - 1, last_node.name, last_node.op_type, n_dangling)
+        )
+        boundary -= 1
+    return boundary
 
 
 def validate_partition_single_output(parent_model):
@@ -397,19 +463,26 @@ def compute_8way_boundaries(model):
     down1_start, down2_start, up4_start, up5_start = find_stage_boundaries(model)
     down1_start = _shrink_boundary_past_sandwiched_nonhw(model, 0, down1_start)
     down1_start = _shrink_boundary_past_open_fork(model, 0, down1_start)
+    down1_start = _shrink_boundary_past_dangling_fork_output(model, 0, down1_start)
     down2_start = _shrink_boundary_past_sandwiched_nonhw(model, down1_start, down2_start)
     down2_start = _shrink_boundary_past_open_fork(model, down1_start, down2_start)
+    down2_start = _shrink_boundary_past_dangling_fork_output(model, down1_start, down2_start)
     up4_start = _shrink_boundary_past_sandwiched_nonhw(model, down2_start, up4_start)
     up4_start = _shrink_boundary_past_open_fork(model, down2_start, up4_start)
+    up4_start = _shrink_boundary_past_dangling_fork_output(model, down2_start, up4_start)
     up5_start = _shrink_boundary_past_sandwiched_nonhw(model, up4_start, up5_start)
     up5_start = _shrink_boundary_past_open_fork(model, up4_start, up5_start)
+    up5_start = _shrink_boundary_past_dangling_fork_output(model, up4_start, up5_start)
     q2_start, q3_start, q4_start = find_stage23_quarter_boundaries(down2_start, up4_start)
     q2_start = _shrink_boundary_past_sandwiched_nonhw(model, down2_start, q2_start)
     q2_start = _shrink_boundary_past_open_fork(model, down2_start, q2_start)
+    q2_start = _shrink_boundary_past_dangling_fork_output(model, down2_start, q2_start)
     q3_start = _shrink_boundary_past_sandwiched_nonhw(model, q2_start, q3_start)
     q3_start = _shrink_boundary_past_open_fork(model, q2_start, q3_start)
+    q3_start = _shrink_boundary_past_dangling_fork_output(model, q2_start, q3_start)
     q4_start = _shrink_boundary_past_sandwiched_nonhw(model, q3_start, q4_start)
     q4_start = _shrink_boundary_past_open_fork(model, q3_start, q4_start)
+    q4_start = _shrink_boundary_past_dangling_fork_output(model, q3_start, q4_start)
     return {
         "down1_start": down1_start, "down2_start": down2_start,
         "q2_start": q2_start, "q3_start": q3_start, "q4_start": q4_start,

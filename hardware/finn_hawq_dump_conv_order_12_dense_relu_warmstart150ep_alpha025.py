@@ -59,16 +59,42 @@ def main() -> None:
     torch.manual_seed(0)
     model = LayerQuantEnetFINN(layer_weight_bits, layer_act_bits, in_channels=1, out_channels=5).eval()
 
-    ordered = []
+    # A static named_modules() walk assumes each weight-bearing module is
+    # invoked EXACTLY ONCE in forward() -- FALSE for this "dense" (non-
+    # separable) dilated context pattern: some stage2/stage3 blocks fork
+    # their input via a 3-way DuplicateStreams-equivalent and apply the SAME
+    # shared conv module to two different branch copies (confirmed via the
+    # exported ONNX: MVAU_69/MVAU_71 and MVAU_81/MVAU_83 reference the exact
+    # same weight initializer, fed from two different outputs of the same
+    # fork). named_modules() only reports such a shared module ONCE (by
+    # object identity), silently under-counting vs. the real graph's node
+    # count and desyncing this file's positional bridge to the folding
+    # config. Fix: register forward hooks and record one entry PER ACTUAL
+    # CALL (true execution order), not one entry per registered submodule --
+    # this naturally captures a shared module twice, in the right place.
+    name_by_id: dict[int, str] = {}
+    modules_to_hook: list[nn.Module] = []
     for name, mod in model.named_modules():
-        if isinstance(mod, WEIGHT_MODULE_TYPES):
-            kind = type(mod).__name__
-            shape = None
-            if hasattr(mod, "weight") and mod.weight is not None:
-                shape = list(mod.weight.shape)
-            ordered.append({"logical_name": name, "module_type": kind, "weight_shape": shape})
+        if isinstance(mod, WEIGHT_MODULE_TYPES) and id(mod) not in name_by_id:
+            name_by_id[id(mod)] = name
+            modules_to_hook.append(mod)
 
-    print(f"Found {len(ordered)} weight-bearing/pool modules in named_modules() order:")
+    ordered: list[dict] = []
+
+    def _record(mod, _inp, _out):
+        kind = type(mod).__name__
+        shape = None
+        if hasattr(mod, "weight") and mod.weight is not None:
+            shape = list(mod.weight.shape)
+        ordered.append({"logical_name": name_by_id[id(mod)], "module_type": kind, "weight_shape": shape})
+
+    handles = [mod.register_forward_hook(_record) for mod in modules_to_hook]
+    with torch.no_grad():
+        model(torch.randn(1, 1, 64, 64))
+    for h in handles:
+        h.remove()
+
+    print(f"Found {len(ordered)} weight-bearing/pool module CALLS in forward-execution order:")
     for entry in ordered:
         print(f"  {entry['logical_name']:35s} {entry['module_type']:20s} {entry['weight_shape']}")
 
