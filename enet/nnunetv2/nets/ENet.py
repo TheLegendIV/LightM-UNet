@@ -7,7 +7,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-DecoderType = Literal["max_unpool", "upsample_conv"]
+DecoderType = Literal["max_unpool", "upsample_conv", "learned_upsample"]
 ContextPattern = Literal[
     "default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_lead1",
     "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing",
@@ -796,6 +796,7 @@ class UpsamplingBottleneck(nn.Module):
         relu: bool = True,
         double_projections: bool = False,
         prelu_variant: PReluVariant = "standard",
+        learned_skip_upsample: bool = False,
     ):
         super().__init__()
         internal_channels = max(1, in_channels // internal_ratio)
@@ -812,6 +813,22 @@ class UpsamplingBottleneck(nn.Module):
             nn.BatchNorm2d(out_channels),
         )
         self.unpool = nn.MaxUnpool2d(kernel_size=2, stride=2)
+        # decoder_type="learned_upsample": indices-free like upsample_conv
+        # (no MaxUnpool2d indices threaded through, so it works under
+        # nnU-Net's patch-based windowing same as upsample_conv does), but
+        # the skip/main branch's parameter-free bilinear resize is replaced
+        # by a learned 2x deconv -- same kernel_size=2/stride=2/bias=False
+        # shape as the residual branch's own `up` ConvTranspose2d below and
+        # as the network's final ConvTranspose2d (both already learned), so
+        # this makes ALL three upsampling sites learned instead of just two
+        # of three. No BN/activation added after it, to isolate the resize
+        # op itself as the only change vs. upsample_conv's bilinear resize.
+        self.learned_skip_upsample = learned_skip_upsample
+        self.main_upsample = (
+            nn.ConvTranspose2d(out_channels, out_channels, kernel_size=2, stride=2, bias=False)
+            if learned_skip_upsample
+            else None
+        )
         self.reduce = _reduce_proj(in_channels, internal_channels, relu, double_projections, prelu_variant, shared_act)
         self.up = nn.Sequential(
             nn.ConvTranspose2d(internal_channels, internal_channels, kernel_size=2, stride=2, bias=False),
@@ -830,7 +847,10 @@ class UpsamplingBottleneck(nn.Module):
     ) -> torch.Tensor:
         main = self.main_proj(x)
         if indices is None:
-            main = F.interpolate(main, size=output_size[2:], mode="bilinear", align_corners=False)
+            if self.learned_skip_upsample:
+                main = self.main_upsample(main)
+            else:
+                main = F.interpolate(main, size=output_size[2:], mode="bilinear", align_corners=False)
         else:
             if main.shape[1] != indices.shape[1]:
                 raise RuntimeError(
@@ -1187,8 +1207,10 @@ class ENet(nn.Module):
             raise ValueError("ENet stage channels must all be positive.")
         if initial_channels <= in_channels:
             raise ValueError("ENet initial channels must exceed input channels.")
-        if decoder_type not in ("max_unpool", "upsample_conv"):
-            raise ValueError(f"decoder_type must be 'max_unpool' or 'upsample_conv', got {decoder_type!r}.")
+        if decoder_type not in ("max_unpool", "upsample_conv", "learned_upsample"):
+            raise ValueError(
+                f"decoder_type must be 'max_unpool', 'upsample_conv', or 'learned_upsample', got {decoder_type!r}."
+            )
 
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -1305,11 +1327,14 @@ class ENet(nn.Module):
         )
         self.stage3 = self._make_context_stage(stage3_channels, n_stage3, skip_leading_reg=self.merge_reg_boundary)
 
+        learned_skip_upsample = decoder_type == "learned_upsample"
         self.up4 = UpsamplingBottleneck(stage3_channels, stage4_channels, double_projections=double_projections,
-                                         prelu_variant=self.prelu_variant)
+                                         prelu_variant=self.prelu_variant,
+                                         learned_skip_upsample=learned_skip_upsample)
         self.regular4 = self._make_shallow_stage(stage4_channels, n_regular4, dropout_p=0.1, relu=True)
         self.up5 = UpsamplingBottleneck(stage4_channels, stage5_channels, double_projections=double_projections,
-                                         prelu_variant=self.prelu_variant)
+                                         prelu_variant=self.prelu_variant,
+                                         learned_skip_upsample=learned_skip_upsample)
         if dsc_no_projection and not dsc_no_projection_context_only:
             self.regular5 = nn.Sequential(
                 *[DSCNoProjectionBottleneck(stage5_channels, dropout_p=0.1, relu=True,

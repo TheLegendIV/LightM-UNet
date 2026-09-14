@@ -63,7 +63,7 @@ def main() -> None:
     parser.add_argument("--dataset-name", default="Dataset509_ARCADE_1x1_4c")
     parser.add_argument("--channels", required=True, type=lambda v: parse_tuple5(v, "channels"))
     parser.add_argument("--bottlenecks", default="4,8,8,2,1", type=lambda v: parse_tuple5(v, "bottlenecks"))
-    parser.add_argument("--decoder-type", default="upsample_conv", choices=["max_unpool", "upsample_conv"])
+    parser.add_argument("--decoder-type", default="upsample_conv", choices=["max_unpool", "upsample_conv", "learned_upsample"])
     parser.add_argument("--use-dilated", type=int, default=1, choices=[0, 1])
     parser.add_argument("--use-asymmetric", type=int, default=1, choices=[0, 1])
     parser.add_argument("--use-strided", type=int, default=1, choices=[0, 1])
