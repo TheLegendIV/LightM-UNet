@@ -79,15 +79,33 @@ of each:
    align_corners=False) (LayerQuantENet always passes indices=None in
    decoder_type="upsample_conv" mode -- confirmed NEVER MaxUnpool2d).
    Resize/interpolate isn't FINN-synthesizable, so this substitutes a fixed
-   (frozen) depthwise ConvTranspose2d(kernel=4, stride=2, padding=1,
-   groups=channels) with the classic bilinear kernel
-   outer([1,3,3,1]/4, [1,3,3,1]/4) -- verified in
-   hardware/verify_bilinear_kernel.py to match F.interpolate EXACTLY on
-   every interior pixel; only the outermost 1px border ring differs
-   (zero-pad vs. the real op's edge-replicate/clamp assumption at the
-   image border) -- decided against the edge-replicate-Pad node needed for
-   full bit-exactness (unverified FINN support, real risk of failing like
-   Resize does).
+   (frozen) nn.Upsample(mode="nearest", scale_factor=2) followed by a fixed
+   (frozen) depthwise 3x3 conv with the exact bilinear-equivalent "tent"
+   kernel outer([1,2,1]/4, [1,2,1]/4) -- derived and verified (both on
+   synthetic tensors and on real trained up4/up5 activations, see
+   hardware/testbench_bilinear_vs_nearest_depthwise_up4up5.py) to match
+   F.interpolate EXACTLY (float-rounding-level, ~5e-7) on every interior
+   pixel; only the outermost 1px border ring differs (zero-pad vs. the real
+   op's edge-replicate/clamp assumption at the image border, <1% relative
+   error overall). An edge-replicate Pad fix was considered and REJECTED --
+   confirmed via direct source read (2026-09-14) that BOTH of FINN's
+   padding HW ops (fmpadding.py, fmpadding_pixel.py) hardcode zero-fill
+   only (`InferConvInpGen` asserts `pad_val == 0`; FMPadding_Pixel's own
+   `execute_node` is a literal `np.zeros(...)` fill) -- there is no
+   edge/replicate/reflect padding primitive anywhere in FINN's op set, so
+   full bit-exactness at the border is not achievable in real hardware
+   without a brand-new custom FINN op (out of scope). main_up stays
+   FROZEN (requires_grad=False, no HAWQ site): the real op it approximates,
+   F.interpolate, has zero trainable parameters, so this substitute must
+   not introduce a new learnable layer either. This also replaces the
+   earlier dense ConvTranspose2d substitute (kernel=4, stride=2,
+   groups=1, diagonal-zeroed to fake depthwise) -- that version is no
+   longer used; the nearest+depthwise pair is architecturally exact
+   (matches the real math: each output channel only ever mixes its own
+   input channel), and its HW lowering (Resize -> UpsampleNearestNeighbour_
+   hls, depthwise conv -> VVAU_hls) was already independently verified
+   end-to-end in finn_build_probe_upsample_nearest_depthwise_int8.py (see
+   memories/repo/finn_gotchas.md, 2026-09-14 entry) -- not an untested path.
 3. `final` bias: real LayerQuantENet's `final` is bias=True with a plain
    (unquantized) float bias Add -- fine on GPU/CPU but not FINN-HW-
    convertible (MVAU has no bias input at all, and InferChannelwiseLinearLayer
@@ -214,7 +232,7 @@ def _padded_identity_conv(in_channels: int, out_channels: int) -> qnn.QuantConv2
     annotated FLOAT32), so InferQuantizedMatrixVectorActivation's
     `wdt.is_integer()` gate fails and the conv never lowers to an MVAU --
     same failure mode already found and fixed for `main_up`'s bilinear
-    kernel (see _bilinear_kernel_conv_transpose below). Fix: wrap in
+    kernel (see _nearest_depthwise_bilinear_kernel below). Fix: wrap in
     qnn.QuantConv2d (INT8 weight quant) so an explicit Quant node forces a
     real integer weight DataType, then overwrite+freeze the weight exactly
     as before."""
@@ -231,49 +249,52 @@ def _padded_identity_conv(in_channels: int, out_channels: int) -> qnn.QuantConv2
     return conv
 
 
-def _bilinear_kernel_conv_transpose(channels: int) -> qnn.QuantConvTranspose2d:
-    """Fixed (frozen, non-learned) ConvTranspose2d reproducing 2x bilinear
-    upsampling (align_corners=False) exactly on interior pixels -- see
-    module docstring point 2 and hardware/verify_bilinear_kernel.py.
+def _nearest_depthwise_bilinear_kernel(channels: int) -> nn.Sequential:
+    """Fixed (frozen, non-learned) nn.Upsample(mode="nearest") followed by a
+    fixed depthwise conv, reproducing 2x bilinear upsampling
+    (align_corners=False) exactly on interior pixels -- see module
+    docstring point 2 and hardware/testbench_bilinear_vs_nearest_depthwise_
+    up4up5.py (verified against real trained up4/up5 activations: interior
+    max abs err ~5e-7, error only at the 1px border ring -- edge-replicate
+    padding is NOT available in FINN, see module docstring, so this border
+    mismatch is accepted as-is, same as the ConvTranspose2d version this
+    replaces).
 
-    A plain (non-quantized) nn.ConvTranspose2d here would export as a bare
-    float ONNX ConvTranspose node: FINN's step_enet_convert_to_hw only
-    lowers Quant-wrapped ops into HW dataflow nodes, so a plain float op
-    stays a non-fpgadataflow node and gets silently EXCLUDED from every
-    StreamingDataflowPartition -- confirmed empirically (2 bare
-    "ConvTranspose" nodes found outside all partitions when this used
-    nn.ConvTranspose2d), meaning this upsample would never actually be
-    synthesized into the accelerator. Fix: wrap in qnn.QuantConvTranspose2d
-    (INT8 weight quant, same class already used for the real `up.0` deconv)
-    so it lowers to a real MVAU node like everything else, then overwrite
-    its weight with the exact fixed kernel and freeze it (requires_grad=
-    False) -- same "quantized but not learned" pattern as _padded_identity_
-    conv, just needing an explicit Quant wrapper here because the bilinear
-    kernel's values (1,3,9)/16 aren't literal integers the way the
-    padded-identity conv's {0,1} values are (QONNX's tidy-up can infer an
-    INT datatype for exact-integer float weights even without a Quant
-    wrapper, which is how the identity conv "gets away with" staying plain
-    -- fractional weights have no such fallback).
+    Supersedes the earlier dense ConvTranspose2d substitute: the real op
+    this approximates, F.interpolate(bilinear), has ZERO trainable
+    parameters, so this stays frozen (requires_grad=False) exactly like the
+    op it replaces -- a numerical stand-in for a parameter-free resize, not
+    a new learnable layer. Built DEPTHWISE (groups=channels) this time,
+    matching the real math exactly (each output channel only ever mixes
+    its own input channel's spatial neighborhood) -- this is this
+    architecture's first VVAU (depthwise) node (SEPARABLE_DILATED=False,
+    USE_DSC=False everywhere else), but the Upsample(nearest)->depthwise
+    conv HW lowering path (Resize -> UpsampleNearestNeighbour_hls,
+    depthwise conv -> VVAU_hls) was already independently built and
+    verified end-to-end in finn_build_probe_upsample_nearest_depthwise_
+    int8.py (see memories/repo/finn_gotchas.md, 2026-09-14 entry) -- not an
+    untested path. NOTE: mid-graph nearest Resize needs the NHWC-layout
+    absorb-transform sequence from that same note added to convert_to_hw
+    (AbsorbTransposeIntoMultiThreshold -> AbsorbTransposeIntoResize ->
+    AbsorbConsecutiveTransposes -> InferDataLayouts, right before
+    to_hw.InferUpsample) before an actual FINN build of this model.
 
-    Built DENSE (groups=1, weight (channels,channels,4,4), zero off the
-    per-channel diagonal) rather than depthwise (groups=channels): this
-    architecture has 0 VVAU/depthwise nodes everywhere else (SEPARABLE_
-    DILATED=False, USE_DSC=False), so staying dense reuses the same
-    already-proven MVAU/ConvTranspose HW lowering path as `up.0` instead of
-    introducing an untested depthwise-ConvTranspose-as-VVAU code path."""
-    up = qnn.QuantConvTranspose2d(
-        channels, channels, kernel_size=4, stride=2, padding=1, groups=1, bias=False,
+    A plain (non-quantized) nn.Conv2d here would export as a bare float
+    ONNX Conv node and get silently excluded from the HW partition -- same
+    failure mode as _padded_identity_conv/the old ConvTranspose2d version.
+    Fix: wrap in qnn.QuantConv2d (INT8 weight quant), overwrite the weight
+    with the exact fixed tent kernel, and freeze it."""
+    dw = qnn.QuantConv2d(
+        channels, channels, kernel_size=3, padding=1, groups=channels, bias=False,
         weight_bit_width=8, weight_quant=Int8WeightPerTensorFloat,
     )
-    k1d = torch.tensor([1.0, 3.0, 3.0, 1.0]) / 4.0
+    k1d = torch.tensor([1.0, 2.0, 1.0]) / 4.0
     k2d = torch.outer(k1d, k1d)
-    weight = torch.zeros(channels, channels, 4, 4)
-    for c in range(channels):
-        weight[c, c] = k2d
+    weight = k2d.unsqueeze(0).unsqueeze(0).repeat(channels, 1, 1, 1)
     with torch.no_grad():
-        up.weight.copy_(weight)
-    up.weight.requires_grad_(False)
-    return up
+        dw.weight.copy_(weight)
+    dw.weight.requires_grad_(False)
+    return nn.Sequential(nn.Upsample(scale_factor=2, mode="nearest"), dw)
 
 
 class FINNDownsamplingBottleneck(nn.Module):
@@ -320,9 +341,10 @@ class FINNDownsamplingBottleneck(nn.Module):
 class FINNUpsamplingBottleneck(nn.Module):
     """FINN-safe substitute for LayerQuantUpsamplingBottleneck -- main_proj
     (real, transferred as-is) is unchanged; only the spatial-upsample step
-    after it is substituted (fixed bilinear kernel, see module docstring
-    point 2). reduce/up/expand/residual_add/out_act are the real per-site
-    ops (same site names as the real block)."""
+    after it is substituted (fixed, frozen nearest+depthwise bilinear-
+    equivalent kernel, see module docstring point 2). reduce/up/expand/
+    residual_add/out_act are the real per-site ops (same site names as the
+    real block)."""
 
     def __init__(
         self, in_channels: int, out_channels: int, weight_bits: dict[str, int], act_bits: dict[str, int],
@@ -337,14 +359,14 @@ class FINNUpsamplingBottleneck(nn.Module):
         )
         # real main_proj has no activation quantizer here (BN feeds straight into
         # F.interpolate) -- but main_up (see below) is now a real Quant-wrapped HW
-        # conv, and FINN's Conv->MVAU fusion pass requires a properly-quantized
+        # conv, and FINN's Conv->MVAU/VVAU fusion pass requires a properly-quantized
         # (integer-datatype) INPUT to fuse, else it leaves a dangling non-HW
         # Im2Col+MatMul+MultiThreshold triple that breaks partitioning. Add an
         # explicit signed passthrough quantizer (FINN-export-only, no HAWQ site)
         # to bridge this gap, bit-width matched to residual_add -- the one real
         # "post" consumer this branch's output feeds into after main_up.
         self.main_act = qnn.QuantIdentity(bit_width=act_bits["residual_add"], act_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
-        self.main_up = _bilinear_kernel_conv_transpose(out_channels)
+        self.main_up = _nearest_depthwise_bilinear_kernel(out_channels)
 
         self.reduce = nn.Sequential(
             _quant_conv2d(in_channels, internal_channels, weight_bits["reduce.0"], kernel_size=1),
