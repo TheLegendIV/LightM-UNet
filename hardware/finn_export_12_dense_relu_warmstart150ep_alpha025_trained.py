@@ -4,11 +4,11 @@ fine-tuned nnUNetTrainerENet_12_dense_relu_warmstart150ep checkpoint
 transferred wherever the FINN-safe topology is structurally identical to
 the real LayerQuantENet.
 
-Byte-for-byte copy of finn_export_12_dense_relu_warmstart150ep_alpha025_dummy.py's
-own FINNInitialBlockConcat/FINNDownsamplingBottleneck/FINNUpsamplingBottleneck/
-LayerQuantEnetFINN/load_layer_bits (see that file's module docstring for the
-full derivation of the 3 FINN-specific substitutions) -- only this file's
-checkpoint loading + weight transfer + final.bias handling are new.
+Uses the same enet/nnunetv2/nets/LayerQuantEnetFINN.py architecture (see
+that file's module docstring for the full derivation of the 4 FINN-specific
+substitutions) as finn_export_12_dense_relu_warmstart150ep_alpha025_dummy.py
+-- only this file's checkpoint loading + weight transfer + final.bias
+handling are new.
 
 WEIGHT TRANSFER: since regular1/regular4/regular5/stage2/stage3 reuse the
 REAL LayerQuantRegularBottleneck class unmodified, and initial's
@@ -23,9 +23,9 @@ trained parameter automatically:
     have no counterpart key in the real checkpoint at all (real model has no
     such submodules), so they are simply never touched by the transfer, and
     are left at their fixed/frozen or freshly-constructed values (shortcut_
-    proj/main_up are mathematically EXACT fixed ops, see the dummy script's
+    proj/main_up are mathematically EXACT fixed ops, see LayerQuantEnetFINN.py's
     docstring point 1/2; branch_quant is a genuinely NEW rounding point --
-    see the dummy script's docstring point 0 -- and needs calibration below
+    see LayerQuantEnetFINN.py's docstring point 0 -- and needs calibration below
     like any other freshly-added quantizer).
   - every other submodule (initial.conv/pool/bn/act, regular1-5.*,
     stage2/3.*, down1/2's reduce/conv/expand, up4/5's reduce/up/expand/
@@ -65,9 +65,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from nnunetv2.nets.LayerQuantENet import layer_names_for  # noqa: E402
+from nnunetv2.nets.LayerQuantEnetFINN import LayerQuantEnetFINN  # noqa: E402
 from finn_export_s13_leaky_frozen import export_model  # noqa: E402
 from finn_export_12_dense_relu_warmstart150ep_alpha025_dummy import (  # noqa: E402
-    LayerQuantEnetFINN, load_layer_bits, CHANNELS, BOTTLENECKS_PER_STAGE, CONTEXT_PATTERN,
+    load_layer_bits, CHANNELS, BOTTLENECKS_PER_STAGE, CONTEXT_PATTERN,
     DEFAULT_BITS_FILE,
 )
 
