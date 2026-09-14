@@ -103,7 +103,7 @@ def main() -> None:
     parser.add_argument("--net-name", required=True, help="Same value passed as --net-name to collect_results.py for this run.")
     parser.add_argument("--channels", default=None, type=lambda v: parse_tuple5(v, "channels"), help="Overrides the results.csv lookup. Requires --quant-bits too.")
     parser.add_argument("--bottlenecks", default=None, type=lambda v: parse_tuple5(v, "bottlenecks"))
-    parser.add_argument("--decoder-type", default=None, choices=["max_unpool", "upsample_conv"])
+    parser.add_argument("--decoder-type", default=None, choices=["max_unpool", "upsample_conv", "learned_upsample"])
     parser.add_argument("--use-dilated", type=int, default=None, choices=[0, 1])
     parser.add_argument("--use-asymmetric", type=int, default=None, choices=[0, 1])
     parser.add_argument("--use-strided", type=int, default=None, choices=[0, 1])
