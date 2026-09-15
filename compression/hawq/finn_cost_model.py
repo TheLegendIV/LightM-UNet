@@ -222,31 +222,79 @@ def calibrated_bram18k(raw_total_bram18k: float, weight_bits: float, act_bits: f
 #   2. Affine TOTAL-cost check (_forced_dsp_lut_total/_forced_dsp_bram_total
 #      below) for validating a CONCRETE partitioned plan (n_partitions known)
 #      against a hard cap post-hoc -- n_partitions*b + a*raw_total.
-# Historical calibration, PRESERVED for provenance/reuse but NO LONGER
-# APPLIED BY DEFAULT (see reset below) -- both real builds behind these
-# numbers are 12_separable_dense_relu_min4 (S12) ONLY (see
-# fit_forced_dsp_derating.py's BUILDS dict). Confirmed via real FINN source
-# read (2026-09-16, see repo memory finn_calibrated_8way_build_status.md's
+# Historical calibration, PRESERVED for provenance/reuse -- both real builds
+# behind these numbers are 12_separable_dense_relu_min4 (S12 SEPARABLE) ONLY
+# (see fit_forced_dsp_derating.py's BUILDS dict). Confirmed via real FINN
+# source read (2026-09-16, see repo memory finn_calibrated_8way_build_status.md's
 # "LUT model mismatch: CONFIRMED root cause" section) that this flat/affine
 # correction was silently absorbing a whole missing structural term (real
 # FINN's addertree_luts/acc_luts, the latter MW-dependent) that mvu_lut now
 # models directly below -- a factor fit only on separable-architecture
 # (small-MW) data under-corrects for dense (non-separable, large-MW)
-# architectures. Kept under an architecture-specific name rather than
-# deleted: still a valid anchor for a from-scratch check against the S12
-# family specifically, just not a general-purpose default anymore.
+# architectures (confirmed empirically below: the dense-specific refit's own
+# flat factor, 4.46x, is ~3.5x larger than separable's 1.26x, even AFTER
+# mvu_lut's structural fix -- see fit_forced_dsp_derating_s12_dense.py's own
+# per-layer folding comparison: the real dense build's ILP chose far LESS
+# folding (e.g. stage2.0.conv real SIMD=24 vs separable's matched-slot
+# SIMD=4-6, and this session's re-solved alpha=0.25 output pushes that same
+# dense layer to SIMD=72, i.e. fully UNFOLDED) than separable's did, so a
+# large chunk of the real gap is a folding-choice/addertree_luts-scaling
+# effect, not pure architecture). Kept under an architecture-specific name
+# rather than deleted: still a valid anchor for a from-scratch check against
+# the S12 SEPARABLE geometry specifically.
 _S12_SEPARABLE_DSP_FORCED_LUT_FACTOR = 1.261221175430389   # mean lut_factor, 14 partitions (both builds, partition 0 excluded), avg_bits in [4.0, 5.15]
 _S12_SEPARABLE_DSP_FORCED_BRAM_FACTOR = 0.19434811541501412  # mean bram_factor, same 14 partitions
 _S12_SEPARABLE_DSP_FORCED_LUT_AFFINE = (0.947632331261822, 4208.818846016495)   # (a, b): real_lut = a*raw_lut + b, all 16 partitions, R^2=0.916
 _S12_SEPARABLE_DSP_FORCED_BRAM_AFFINE = (0.08739251550203067, 8.135659131252611)  # (a, b): real_bram18 = a*raw_bram18 + b, all 16 partitions, R^2=0.462
 
-# Reset to neutral/default (2026-09-16): mvu_lut below now directly
-# implements real FINN's addertree_luts/acc_luts terms instead of a flat
-# stand-in, so the per-layer/affine corrections above are no longer needed
-# as a general-purpose default -- identity (no-op) until a new real anchor
-# justifies a non-trivial one again.
-_FORCED_DSP_LUT_FACTOR = 1.0
-_FORCED_DSP_BRAM_FACTOR = 1.0
+# S12 DENSE (non-separable, SEPARABLE_DILATED=False) refit (2026-09-15) --
+# see fit_forced_dsp_derating_s12_dense.py and its own output
+# compression/hawq/artifacts/forced_dsp_derating_fit_s12_dense.json. ONE real
+# build (quantEnet_12_dense_relu_warmstart150ep_alpha025_finn_calibrated_
+# int8, 8 partitions, no second build to pool against unlike separable's 16
+# points) -- weaker statistically than the separable fit above. avg_bits
+# range [5.003, 7.284] (this build's own {4,6,8}-candidate joint search, vs
+# separable's tighter min4 [4.0, 5.15]).
+#   - Flat lut_factor: mean=4.4639 (RMSE=1.6317) over all 8 partitions
+#     (unlike separable, dense's own partition 0 -- avg_bits=6.0,
+#     factor=5.24 -- is NOT a fixed-overhead outlier the way separable's was
+#     (9.5x/3.2x there vs the 2.78-6.41 range here for the other 7), so
+#     nothing excluded).
+#   - Affine lut fit: a=-1.1204, b=10.9734, R^2=0.268 -- WEAK and
+#     WRONG-SIGNED (more bits -> less LUT makes no physical sense) at this
+#     sample size; NOT used for the active _FORCED_DSP_LUT_AFFINE below
+#     (left at identity) -- an 8-point regression isn't enough evidence to
+#     override the post-hoc total-cost check with a spurious slope. Stored
+#     here for provenance only.
+#   - Flat bram_factor: mean=0.4598 (RMSE=0.1245) -- REAL BRAM_18K usage is
+#     UNDER its own raw prediction here (factor <1), the opposite direction
+#     from LUT (which needs a >1 correction) -- an asymmetry worth
+#     remembering, not a typo.
+_S12_DENSE_DSP_FORCED_LUT_FACTOR = 4.4639          # flat mean, all 8 real partitions, 1 build
+_S12_DENSE_DSP_FORCED_BRAM_FACTOR = 0.4598         # flat mean, same 8 partitions
+_S12_DENSE_DSP_FORCED_LUT_AFFINE = (-1.1204, 10.9734)   # (a, b): lut_factor = a*avg_bits + b, R^2=0.268 -- weak, NOT applied by default, provenance only
+_S12_DENSE_DSP_FORCED_BRAM_AFFINE = (0.1131, -0.1973)   # (a, b): bram_factor = a*avg_bits + b, R^2=0.468 -- also weak at n=8, provenance only
+
+# ACTIVE default (2026-09-15): the S12 DENSE flat factor above, not identity.
+# mvu_lut's addertree_luts/acc_luts structural terms (2026-09-16 fix) closed
+# part of the gap but a direct cross-check (this session: re-pricing the
+# REAL as-synthesized dense partitions under the fixed formula) still showed
+# a real/raw ratio of ~4.5-7x -- the structural fix alone was NOT sufficient
+# for dense geometry, so a non-trivial derating is back, sourced from the
+# dense-specific refit rather than reused from separable's (confirmed wrong
+# for dense: separable's own factor, 1.26x, is ~3.5x too small here).
+# CAVEAT: this is a SINGLE global slot, not dispatched by architecture --
+# applying it to a future SEPARABLE-geometry force_dsp estimate would
+# OVER-correct (separable only needs ~1.26x, per _S12_SEPARABLE_... above).
+# No per-geometry selector exists yet; whoever reuses calibrated_lut(...,
+# force_dsp=True) for a non-S12-dense architecture should swap this back to
+# 1.0 or to the relevant _S12_*_DSP_FORCED_LUT_FACTOR by hand until a real
+# dispatch mechanism is built. The AFFINE constants (used only by
+# forced_dsp_lut_total/forced_dsp_bram_total, not by the per-layer ILP
+# search) are LEFT AT IDENTITY -- dense's own affine fit above is too weak
+# (R^2=0.268, wrong-signed) to trust for that post-hoc hard-cap check.
+_FORCED_DSP_LUT_FACTOR = _S12_DENSE_DSP_FORCED_LUT_FACTOR
+_FORCED_DSP_BRAM_FACTOR = _S12_DENSE_DSP_FORCED_BRAM_FACTOR
 _FORCED_DSP_LUT_AFFINE = (1.0, 0.0)
 _FORCED_DSP_BRAM_AFFINE = (1.0, 0.0)
 

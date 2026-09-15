@@ -1,0 +1,394 @@
+<title>S12 Derating Fit</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page:           #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --grid:           #e1e0d9;
+    --axis:           #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-sep:      #2a78d6;
+    --series-sep-line: #2a78d6;
+    --series-dense:    #eb6834;
+    --series-dense-line:#eb6834;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page:           #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --grid:           #2c2c2a;
+      --axis:           #383835;
+      --border:         rgba(255,255,255,0.10);
+      --series-sep:      #3987e5;
+      --series-sep-line: #3987e5;
+      --series-dense:    #d95926;
+      --series-dense-line:#d95926;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --page:           #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --grid:           #2c2c2a;
+    --axis:           #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-sep:      #3987e5;
+    --series-sep-line: #3987e5;
+    --series-dense:    #d95926;
+    --series-dense-line:#d95926;
+  }
+
+  body { background: var(--page); }
+  .viz-root {
+    background: var(--page);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 28px 24px 40px;
+    max-width: 1180px;
+    margin: 0 auto;
+    box-sizing: border-box;
+  }
+  h1 { font-size: 19px; font-weight: 650; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .subtitle { color: var(--text-secondary); font-size: 13px; margin: 0 0 22px; line-height: 1.5; max-width: 860px; }
+  .panels { display: flex; gap: 20px; flex-wrap: wrap; }
+  .panel {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 18px 14px;
+    flex: 1 1 460px;
+    min-width: 320px;
+    box-sizing: border-box;
+  }
+  .panel h2 { font-size: 14px; font-weight: 600; margin: 0 0 2px; }
+  .panel .panel-note { font-size: 11.5px; color: var(--text-muted); margin: 0 0 10px; line-height: 1.45; }
+  svg { display: block; overflow: visible; font-family: inherit; }
+  .grid-line { stroke: var(--grid); stroke-width: 1; }
+  .axis-line { stroke: var(--axis); stroke-width: 1; }
+  .axis-label { fill: var(--text-muted); font-size: 10.5px; }
+  .axis-title { fill: var(--text-secondary); font-size: 11px; font-weight: 550; }
+  .pt {
+    stroke: var(--surface-1);
+    stroke-width: 2px;
+    cursor: pointer;
+  }
+  .pt-sep { fill: var(--series-sep); }
+  .pt-dense { fill: var(--series-dense); }
+  .fit-line-flat { stroke-width: 2px; fill: none; }
+  .fit-line-slope { stroke-width: 1.5px; fill: none; stroke-dasharray: 5 4; opacity: 0.75; }
+  .line-sep { stroke: var(--series-sep-line); }
+  .line-dense { stroke: var(--series-dense-line); }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px 20px; margin: 16px 2px 4px; font-size: 12px; }
+  .legend-item { display: flex; align-items: center; gap: 7px; color: var(--text-secondary); }
+  .legend-swatch { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+  .legend-line { width: 16px; height: 0; border-top: 2px solid; flex: none; }
+  .legend-line.dashed { border-top-style: dashed; opacity: 0.75; }
+  .stat-row { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 10px; font-size: 11.5px; color: var(--text-muted); }
+  .stat-row b { color: var(--text-primary); font-weight: 600; }
+  .tooltip {
+    position: fixed;
+    pointer-events: none;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 11.5px;
+    color: var(--text-primary);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    line-height: 1.5;
+    z-index: 10;
+    display: none;
+    white-space: nowrap;
+  }
+  .tooltip b { color: var(--text-primary); }
+  .tooltip .muted { color: var(--text-muted); }
+  .toggle-btn {
+    margin-top: 22px;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-size: 12px;
+    padding: 7px 13px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .toggle-btn:hover { color: var(--text-primary); }
+  table { border-collapse: collapse; width: 100%; margin-top: 14px; font-size: 12px; }
+  th, td { text-align: right; padding: 5px 10px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--text-muted); font-weight: 550; font-size: 11px; }
+  td { color: var(--text-secondary); }
+  td.flagged { color: var(--series-dense); }
+  #table-wrap { display: none; }
+</style>
+
+<div class="viz-root">
+  <h1>Forced-DSP LUT/BRAM derating: separable vs. dense</h1>
+  <p class="subtitle">
+    Real-partition ratio (real / model-raw) per partition, plotted against that partition's own LUT-weighted average
+    bit-width. Separable: 16 points (2 builds &times; 8 partitions, <code>min4</code>). Dense: 8 points (1 build,
+    <code>alpha0.25</code>) &mdash; half the data, and its avg_bits-vs-factor slope is weak (R&sup2;=0.27, wrong-signed),
+    so the <b>flat mean</b> is what's wired into <code>finn_cost_model.py</code> as the active default, not the slope.
+  </p>
+
+  <div class="panels">
+    <div class="panel" id="panel-lut"></div>
+    <div class="panel" id="panel-bram"></div>
+  </div>
+
+  <button class="toggle-btn" id="toggle-table">Show data table</button>
+  <div id="table-wrap"></div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const DATA = {
+  separable: {
+    points: [
+      {"build":"dummy","partition_id":0,"avg_bits":8.0,"lut_factor":9.505975245411864,"bram_factor":1.0,"raw_lut":937.2,"real_lut":8909.0,"raw_bram18":6.0,"real_bram18":6.0,"n_layers":1,"unmatched":[]},
+      {"build":"dummy","partition_id":1,"avg_bits":5.0,"lut_factor":1.2747741001447757,"bram_factor":0.25742574257425743,"raw_lut":16024.8,"real_lut":20428.0,"raw_bram18":101.0,"real_bram18":26.0,"n_layers":20,"unmatched":["down1.shortcut_proj.0","down2.shortcut_proj.0"]},
+      {"build":"dummy","partition_id":2,"avg_bits":4.0,"lut_factor":1.2909295923149018,"bram_factor":0.1897810218978102,"raw_lut":13657.6,"real_lut":17631.0,"raw_bram18":137.0,"real_bram18":26.0,"n_layers":16,"unmatched":[]},
+      {"build":"dummy","partition_id":3,"avg_bits":4.0,"lut_factor":1.30462160262418,"bram_factor":0.19444444444444445,"raw_lut":13657.6,"real_lut":17818.0,"raw_bram18":144.0,"real_bram18":28.0,"n_layers":16,"unmatched":[]},
+      {"build":"dummy","partition_id":4,"avg_bits":4.0,"lut_factor":1.2851815367295245,"bram_factor":0.19672131147540983,"raw_lut":17054.4,"real_lut":21918.0,"raw_bram18":183.0,"real_bram18":36.0,"n_layers":20,"unmatched":[]},
+      {"build":"dummy","partition_id":5,"avg_bits":4.0,"lut_factor":1.2447990265347777,"bram_factor":0.17272727272727273,"raw_lut":10190.4,"real_lut":12685.0,"raw_bram18":110.0,"real_bram18":19.0,"n_layers":12,"unmatched":[]},
+      {"build":"dummy","partition_id":6,"avg_bits":4.660860097985846,"lut_factor":1.427228188251596,"bram_factor":0.23404255319148937,"raw_lut":8082.8,"real_lut":11536.0,"raw_bram18":47.0,"real_bram18":11.0,"n_layers":11,"unmatched":["up4.main_up","up5.main_up"]},
+      {"build":"dummy","partition_id":7,"avg_bits":5.150647580095432,"lut_factor":1.8592365371506478,"bram_factor":0.5625,"raw_lut":6454.8,"real_lut":12001.0,"raw_bram18":32.0,"real_bram18":18.0,"n_layers":7,"unmatched":[]},
+      {"build":"trained","partition_id":0,"avg_bits":8.0,"lut_factor":3.160488378934981,"bram_factor":1.0,"raw_lut":1359.6,"real_lut":4297.0,"raw_bram18":6.0,"real_bram18":6.0,"n_layers":1,"unmatched":[]},
+      {"build":"trained","partition_id":1,"avg_bits":4.962409226826142,"lut_factor":1.1329171682653099,"bram_factor":0.06862745098039216,"raw_lut":20600.8,"real_lut":23339.0,"raw_bram18":102.0,"real_bram18":7.0,"n_layers":20,"unmatched":["down1.shortcut_proj.0","down2.shortcut_proj.0"]},
+      {"build":"trained","partition_id":2,"avg_bits":4.0,"lut_factor":1.145180250783699,"bram_factor":0.11173184357541899,"raw_lut":18374.4,"real_lut":21042.0,"raw_bram18":179.0,"real_bram18":20.0,"n_layers":16,"unmatched":[]},
+      {"build":"trained","partition_id":3,"avg_bits":4.0,"lut_factor":1.126272376272376,"bram_factor":0.12643678160919541,"raw_lut":18233.6,"real_lut":20536.0,"raw_bram18":174.0,"real_bram18":22.0,"n_layers":16,"unmatched":[]},
+      {"build":"trained","partition_id":4,"avg_bits":4.0,"lut_factor":1.2263735101206004,"bram_factor":0.08502024291497975,"raw_lut":22686.4,"real_lut":27822.0,"raw_bram18":247.0,"real_bram18":21.0,"n_layers":20,"unmatched":[]},
+      {"build":"trained","partition_id":5,"avg_bits":4.0,"lut_factor":1.1960735275728396,"bram_factor":0.10869565217391304,"raw_lut":12795.2,"real_lut":15304.0,"raw_bram18":138.0,"real_bram18":15.0,"n_layers":12,"unmatched":[]},
+      {"build":"trained","partition_id":6,"avg_bits":4.580146774816532,"lut_factor":1.1636644545103407,"bram_factor":0.08771929824561403,"raw_lut":11391.6,"real_lut":13256.0,"raw_bram18":57.0,"real_bram18":5.0,"n_layers":11,"unmatched":["up4.main_up","up5.main_up"]},
+      {"build":"trained","partition_id":7,"avg_bits":5.08402136959689,"lut_factor":0.9798445847498783,"bram_factor":0.325,"raw_lut":9059.6,"real_lut":8877.0,"raw_bram18":40.0,"real_bram18":13.0,"n_layers":7,"unmatched":[]}
+    ],
+    lut_slope: {a:1.2497021284757897, b:-4.153186226928325, r2:0.616118558829901},
+    bram_slope: {a:0.2147096809712612, b:-0.7441145575096795, r2:0.8832655224031176},
+    lut_flat: 1.261221175430389,
+    bram_flat: 0.19434811541501412
+  },
+  dense: {
+    points: [
+      {"build":"finn_calibrated","partition_id":0,"avg_bits":5.999999999999999,"lut_factor":5.24011269326066,"bram_factor":0.5,"raw_lut":1445.961269066756,"real_lut":7577.0,"raw_bram18":6.0,"real_bram18":3.0,"n_layers":1,"unmatched":[]},
+      {"build":"finn_calibrated","partition_id":1,"avg_bits":6.722990390522068,"lut_factor":5.30439355109978,"bram_factor":0.5972222222222222,"raw_lut":34935.37917479346,"real_lut":185311.0,"raw_bram18":72.0,"real_bram18":43.0,"n_layers":20,"unmatched":["down1.shortcut_proj","down2.shortcut_proj"]},
+      {"build":"finn_calibrated","partition_id":2,"avg_bits":5.292472510623124,"lut_factor":3.4644882044387004,"bram_factor":0.4453125,"raw_lut":27616.488887859014,"real_lut":95677.0,"raw_bram18":128.0,"real_bram18":57.0,"n_layers":15,"unmatched":[]},
+      {"build":"finn_calibrated","partition_id":3,"avg_bits":5.002657308198749,"lut_factor":6.374081741329576,"bram_factor":0.38181818181818183,"raw_lut":23171.18072746776,"real_lut":147695.0,"raw_bram18":110.0,"real_bram18":42.0,"n_layers":12,"unmatched":[]},
+      {"build":"finn_calibrated","partition_id":4,"avg_bits":5.3306627278750325,"lut_factor":6.414066474816742,"bram_factor":0.3559322033898305,"raw_lut":22503.664495326884,"real_lut":144340.0,"raw_bram18":118.0,"real_bram18":42.0,"n_layers":12,"unmatched":[]},
+      {"build":"finn_calibrated","partition_id":5,"avg_bits":5.263691957171342,"lut_factor":4.6169901561953965,"bram_factor":0.2265625,"raw_lut":26452.298113765202,"real_lut":122130.0,"raw_bram18":128.0,"real_bram18":29.0,"n_layers":14,"unmatched":["up4.main_up.1"]},
+      {"build":"finn_calibrated","partition_id":6,"avg_bits":5.5834136076389775,"lut_factor":2.7783601673508658,"bram_factor":0.6,"raw_lut":17301.572548038,"real_lut":48070.0,"raw_bram18":35.0,"real_bram18":21.0,"n_layers":11,"unmatched":["up5.main_up.1"]},
+      {"build":"finn_calibrated","partition_id":7,"avg_bits":7.283749703043612,"lut_factor":1.5183838464648054,"bram_factor":0.5714285714285714,"raw_lut":6201.989056933949,"real_lut":9417.0,"raw_bram18":14.0,"real_bram18":8.0,"n_layers":4,"unmatched":[]}
+    ],
+    lut_slope: {a:-1.1204143537385958, b:10.973416329562129, r2:0.26761074094144044},
+    bram_slope: {a:0.11308866731323938, b:-0.19725552036930172, r2:0.467958290158927},
+    lut_flat: 4.463859604369566,
+    bram_flat: 0.4597845223573508
+  }
+};
+
+const W = 480, H = 300, M = {top: 14, right: 16, bottom: 34, left: 42};
+const plotW = W - M.left - M.right, plotH = H - M.top - M.bottom;
+
+function fmt(n, d=2){ return Number(n).toFixed(d); }
+
+function buildPanel(container, title, note, field, sepFit, denseFit, sepFlat, denseFlat, yFmt) {
+  const allVals = [...DATA.separable.points.map(p=>p[field]), ...DATA.dense.points.map(p=>p[field])];
+  const allBits = [...DATA.separable.points.map(p=>p.avg_bits), ...DATA.dense.points.map(p=>p.avg_bits)];
+  const xMin = 3.5, xMax = 8.5;
+  const yMax = Math.ceil(Math.max(...allVals, sepFlat, denseFlat) * 1.12 * 10) / 10;
+  const yMin = 0;
+
+  const x = v => M.left + (v - xMin) / (xMax - xMin) * plotW;
+  const y = v => M.top + plotH - (v - yMin) / (yMax - yMin) * plotH;
+
+  const h2 = document.createElement('h2'); h2.textContent = title;
+  const p = document.createElement('p'); p.className = 'panel-note'; p.textContent = note;
+  container.appendChild(h2); container.appendChild(p);
+
+  const svgns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgns, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("width", "100%");
+  svg.style.maxWidth = W + "px";
+
+  // gridlines + y axis ticks
+  const yTicks = 5;
+  for (let i = 0; i <= yTicks; i++) {
+    const v = yMin + (yMax - yMin) * i / yTicks;
+    const gy = y(v);
+    const gl = document.createElementNS(svgns, "line");
+    gl.setAttribute("x1", M.left); gl.setAttribute("x2", W - M.right);
+    gl.setAttribute("y1", gy); gl.setAttribute("y2", gy);
+    gl.setAttribute("class", "grid-line");
+    svg.appendChild(gl);
+    const lbl = document.createElementNS(svgns, "text");
+    lbl.setAttribute("x", M.left - 8); lbl.setAttribute("y", gy + 3.5);
+    lbl.setAttribute("text-anchor", "end"); lbl.setAttribute("class", "axis-label");
+    lbl.textContent = yFmt(v);
+    svg.appendChild(lbl);
+  }
+  // x ticks
+  for (let v = 4; v <= 8; v += 1) {
+    const gx = x(v);
+    const lbl = document.createElementNS(svgns, "text");
+    lbl.setAttribute("x", gx); lbl.setAttribute("y", H - M.bottom + 16);
+    lbl.setAttribute("text-anchor", "middle"); lbl.setAttribute("class", "axis-label");
+    lbl.textContent = v;
+    svg.appendChild(lbl);
+  }
+  const xTitle = document.createElementNS(svgns, "text");
+  xTitle.setAttribute("x", M.left + plotW/2); xTitle.setAttribute("y", H - 4);
+  xTitle.setAttribute("text-anchor", "middle"); xTitle.setAttribute("class", "axis-title");
+  xTitle.textContent = "LUT-weighted avg_bits per partition";
+  svg.appendChild(xTitle);
+
+  // axis lines
+  const ax1 = document.createElementNS(svgns, "line");
+  ax1.setAttribute("x1", M.left); ax1.setAttribute("x2", M.left);
+  ax1.setAttribute("y1", M.top); ax1.setAttribute("y2", M.top + plotH);
+  ax1.setAttribute("class", "axis-line");
+  svg.appendChild(ax1);
+  const ax2 = document.createElementNS(svgns, "line");
+  ax2.setAttribute("x1", M.left); ax2.setAttribute("x2", W - M.right);
+  ax2.setAttribute("y1", M.top + plotH); ax2.setAttribute("y2", M.top + plotH);
+  ax2.setAttribute("class", "axis-line");
+  svg.appendChild(ax2);
+
+  // flat lines (solid)
+  function flatLine(val, cls) {
+    const ln = document.createElementNS(svgns, "line");
+    ln.setAttribute("x1", M.left); ln.setAttribute("x2", W - M.right);
+    ln.setAttribute("y1", y(val)); ln.setAttribute("y2", y(val));
+    ln.setAttribute("class", `fit-line-flat ${cls}`);
+    svg.appendChild(ln);
+  }
+  flatLine(sepFlat, "line-sep");
+  flatLine(denseFlat, "line-dense");
+
+  // slope lines (dashed) across each series' own observed bit range
+  function slopeLine(fit, pts, cls) {
+    const xs = pts.map(p=>p.avg_bits);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs);
+    const ln = document.createElementNS(svgns, "line");
+    ln.setAttribute("x1", x(x0)); ln.setAttribute("x2", x(x1));
+    ln.setAttribute("y1", y(fit.a*x0+fit.b)); ln.setAttribute("y2", y(fit.a*x1+fit.b));
+    ln.setAttribute("class", `fit-line-slope ${cls}`);
+    svg.appendChild(ln);
+  }
+  slopeLine(sepFit, DATA.separable.points, "line-sep");
+  slopeLine(denseFit, DATA.dense.points, "line-dense");
+
+  // points
+  function drawPoints(pts, cls, seriesLabel) {
+    pts.forEach(pt => {
+      const c = document.createElementNS(svgns, "circle");
+      c.setAttribute("cx", x(pt.avg_bits));
+      c.setAttribute("cy", y(pt[field]));
+      c.setAttribute("r", 6);
+      c.setAttribute("class", `pt ${cls}`);
+      c.addEventListener("mousemove", (e) => showTooltip(e, pt, seriesLabel, field));
+      c.addEventListener("mouseleave", hideTooltip);
+      svg.appendChild(c);
+    });
+  }
+  drawPoints(DATA.separable.points, "pt-sep", "Separable");
+  drawPoints(DATA.dense.points, "pt-dense", "Dense");
+
+  container.appendChild(svg);
+
+  // legend
+  const legend = document.createElement("div"); legend.className = "legend";
+  legend.innerHTML = `
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--series-sep)"></div>Separable (16 pts, 2 builds)</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--series-dense)"></div>Dense (8 pts, 1 build)</div>
+    <div class="legend-item"><div class="legend-line" style="border-color:var(--series-dense-line)"></div>flat factor (active default)</div>
+    <div class="legend-item"><div class="legend-line dashed" style="border-color:var(--text-muted)"></div>avg_bits slope (reference only)</div>
+  `;
+  container.appendChild(legend);
+
+  const stats = document.createElement("div"); stats.className = "stat-row";
+  stats.innerHTML = `
+    <div>Separable flat: <b>${fmt(sepFlat)}x</b></div>
+    <div>Dense flat (applied): <b>${fmt(denseFlat)}x</b></div>
+    <div>Separable slope R&sup2;: <b>${fmt(sepFit.r2,3)}</b></div>
+    <div>Dense slope R&sup2;: <b>${fmt(denseFit.r2,3)}</b></div>
+  `;
+  container.appendChild(stats);
+}
+
+const tooltipEl = document.getElementById("tooltip");
+function showTooltip(e, pt, seriesLabel, field) {
+  const label = field === "lut_factor" ? "LUT factor" : "BRAM factor";
+  const rawLabel = field === "lut_factor" ? "raw_lut / real_lut" : "raw_bram18 / real_bram18";
+  const rawVal = field === "lut_factor" ? `${fmt(pt.raw_lut,1)} / ${fmt(pt.real_lut,0)}` : `${fmt(pt.raw_bram18,1)} / ${fmt(pt.real_bram18,0)}`;
+  tooltipEl.innerHTML = `
+    <div><b>${seriesLabel}</b> &middot; partition ${pt.partition_id} <span class="muted">(${pt.build})</span></div>
+    <div class="muted">avg_bits: ${fmt(pt.avg_bits,2)} &middot; n_layers: ${pt.n_layers}</div>
+    <div>${label}: <b>${fmt(pt[field],3)}x</b></div>
+    <div class="muted">${rawLabel}: ${rawVal}</div>
+    ${pt.unmatched.length ? `<div class="muted">excludes: ${pt.unmatched.join(', ')}</div>` : ''}
+  `;
+  tooltipEl.style.display = "block";
+  tooltipEl.style.left = (e.clientX + 14) + "px";
+  tooltipEl.style.top = (e.clientY + 14) + "px";
+}
+function hideTooltip(){ tooltipEl.style.display = "none"; }
+
+buildPanel(
+  document.getElementById("panel-lut"),
+  "LUT factor vs. avg_bits",
+  "real_lut / model raw_lut, per real partition. Dense sits far above separable at every bit-width — the gap this session's mvu_lut fix narrowed but didn't close.",
+  "lut_factor", DATA.separable.lut_slope, DATA.dense.lut_slope, DATA.separable.lut_flat, DATA.dense.lut_flat,
+  v => fmt(v,1) + "x"
+);
+buildPanel(
+  document.getElementById("panel-bram"),
+  "BRAM factor vs. avg_bits",
+  "real_bram18 / model raw_bram18. Both series sit BELOW 1.0 — the model over-predicts BRAM in the forced-DSP regime, opposite direction from LUT.",
+  "bram_factor", DATA.separable.bram_slope, DATA.dense.bram_slope, DATA.separable.bram_flat, DATA.dense.bram_flat,
+  v => fmt(v,2) + "x"
+);
+
+// table view
+const tableWrap = document.getElementById("table-wrap");
+const toggleBtn = document.getElementById("toggle-table");
+function buildTable() {
+  let rows = [];
+  [["Separable", DATA.separable], ["Dense", DATA.dense]].forEach(([label, d]) => {
+    d.points.forEach(p => rows.push({series: label, ...p}));
+  });
+  let html = `<table><thead><tr>
+    <th>Series</th><th>Build</th><th>Partition</th><th>n_layers</th><th>avg_bits</th>
+    <th>LUT factor</th><th>raw_lut</th><th>real_lut</th>
+    <th>BRAM factor</th><th>raw_bram18</th><th>real_bram18</th>
+  </tr></thead><tbody>`;
+  rows.forEach(r => {
+    const flagged = r.unmatched.length ? ' class="flagged"' : '';
+    html += `<tr>
+      <td>${r.series}</td><td>${r.build}</td><td>${r.partition_id}</td><td>${r.n_layers}</td>
+      <td>${fmt(r.avg_bits,2)}</td>
+      <td${flagged}>${fmt(r.lut_factor,3)}</td><td>${fmt(r.raw_lut,1)}</td><td>${fmt(r.real_lut,0)}</td>
+      <td${flagged}>${fmt(r.bram_factor,3)}</td><td>${fmt(r.raw_bram18,1)}</td><td>${fmt(r.real_bram18,0)}</td>
+    </tr>`;
+  });
+  html += `</tbody></table>`;
+  tableWrap.innerHTML = html;
+}
+buildTable();
+toggleBtn.addEventListener("click", () => {
+  const showing = tableWrap.style.display === "block";
+  tableWrap.style.display = showing ? "none" : "block";
+  toggleBtn.textContent = showing ? "Show data table" : "Hide data table";
+});
+</script>

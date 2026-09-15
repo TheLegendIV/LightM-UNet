@@ -1,0 +1,137 @@
+{
+  "points": [
+    {
+      "build": "finn_calibrated",
+      "partition_id": 0,
+      "avg_bits": 5.999999999999999,
+      "lut_factor": 5.24011269326066,
+      "bram_factor": 0.5,
+      "raw_lut": 1445.961269066756,
+      "real_lut": 7577.0,
+      "raw_bram18": 6.0,
+      "real_bram18": 3.0,
+      "n_layers": 1,
+      "unmatched_layers": []
+    },
+    {
+      "build": "finn_calibrated",
+      "partition_id": 1,
+      "avg_bits": 6.722990390522068,
+      "lut_factor": 5.30439355109978,
+      "bram_factor": 0.5972222222222222,
+      "raw_lut": 34935.37917479346,
+      "real_lut": 185311.0,
+      "raw_bram18": 72.0,
+      "real_bram18": 43.0,
+      "n_layers": 20,
+      "unmatched_layers": [
+        "down1.shortcut_proj",
+        "down2.shortcut_proj"
+      ]
+    },
+    {
+      "build": "finn_calibrated",
+      "partition_id": 2,
+      "avg_bits": 5.292472510623124,
+      "lut_factor": 3.4644882044387004,
+      "bram_factor": 0.4453125,
+      "raw_lut": 27616.488887859014,
+      "real_lut": 95677.0,
+      "raw_bram18": 128.0,
+      "real_bram18": 57.0,
+      "n_layers": 15,
+      "unmatched_layers": []
+    },
+    {
+      "build": "finn_calibrated",
+      "partition_id": 3,
+      "avg_bits": 5.002657308198749,
+      "lut_factor": 6.374081741329576,
+      "bram_factor": 0.38181818181818183,
+      "raw_lut": 23171.18072746776,
+      "real_lut": 147695.0,
+      "raw_bram18": 110.0,
+      "real_bram18": 42.0,
+      "n_layers": 12,
+      "unmatched_layers": []
+    },
+    {
+      "build": "finn_calibrated",
+      "partition_id": 4,
+      "avg_bits": 5.3306627278750325,
+      "lut_factor": 6.414066474816742,
+      "bram_factor": 0.3559322033898305,
+      "raw_lut": 22503.664495326884,
+      "real_lut": 144340.0,
+      "raw_bram18": 118.0,
+      "real_bram18": 42.0,
+      "n_layers": 12,
+      "unmatched_layers": []
+    },
+    {
+      "build": "finn_calibrated",
+      "partition_id": 5,
+      "avg_bits": 5.263691957171342,
+      "lut_factor": 4.6169901561953965,
+      "bram_factor": 0.2265625,
+      "raw_lut": 26452.298113765202,
+      "real_lut": 122130.0,
+      "raw_bram18": 128.0,
+      "real_bram18": 29.0,
+      "n_layers": 14,
+      "unmatched_layers": [
+        "up4.main_up.1"
+      ]
+    },
+    {
+      "build": "finn_calibrated",
+      "partition_id": 6,
+      "avg_bits": 5.5834136076389775,
+      "lut_factor": 2.7783601673508658,
+      "bram_factor": 0.6,
+      "raw_lut": 17301.572548038,
+      "real_lut": 48070.0,
+      "raw_bram18": 35.0,
+      "real_bram18": 21.0,
+      "n_layers": 11,
+      "unmatched_layers": [
+        "up5.main_up.1"
+      ]
+    },
+    {
+      "build": "finn_calibrated",
+      "partition_id": 7,
+      "avg_bits": 7.283749703043612,
+      "lut_factor": 1.5183838464648054,
+      "bram_factor": 0.5714285714285714,
+      "raw_lut": 6201.989056933949,
+      "real_lut": 9417.0,
+      "raw_bram18": 14.0,
+      "real_bram18": 8.0,
+      "n_layers": 4,
+      "unmatched_layers": []
+    }
+  ],
+  "lut_fit": {
+    "a": -1.1204143537385958,
+    "b": 10.973416329562129,
+    "r_squared": 0.26761074094144044,
+    "bits_min": 5.002657308198749,
+    "bits_max": 7.283749703043612
+  },
+  "bram_fit": {
+    "a": 0.11308866731323938,
+    "b": -0.19725552036930172,
+    "r_squared": 0.467958290158927,
+    "bits_min": 5.002657308198749,
+    "bits_max": 7.283749703043612
+  },
+  "lut_flat_fit": {
+    "factor": 4.463859604369566,
+    "rmse": 1.631726446788321
+  },
+  "bram_flat_fit": {
+    "factor": 0.4597845223573508,
+    "rmse": 0.12454777467166556
+  }
+}
