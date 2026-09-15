@@ -193,7 +193,13 @@ def export_onnx(model: nn.Module, name: str) -> Path:
 
     qm = ModelWrapper(str(out_path))
     qm.set_tensor_datatype(qm.graph.input[0].name, DataType["INT8"])
-    qm.set_tensor_datatype(qm.graph.output[0].name, DataType["INT8"])
+    # Final activation is _quant_act -> QuantReLU/Uint8ActPerTensorFloat (unsigned,
+    # non-narrow, see QuantENet._quant_act's own docstring) -- annotating the graph
+    # output as signed INT8 here caused FINN's convert_to_hw step to fail with
+    # a similar "Signed output requires actval < 0" (the real output never
+    # goes negative, so the emitted thresholds have no negative actval to satisfy
+    # a signed-output annotation).
+    qm.set_tensor_datatype(qm.graph.output[0].name, DataType[f"UINT{ACT_BIT_WIDTH}"])
     qm.save(str(out_path))
 
     loaded = onnx.load(str(out_path))

@@ -1,4 +1,4 @@
-# FINN resource equivalence at int8 (LUT↔DSP, URAM↔BRAM)
+   # FINN resource equivalence at int8 (LUT↔DSP, URAM↔BRAM)
 
 Derived directly from FINN v0.10.1's own cost-estimation source (read from
 the `brave_lewin` container, 2026-08-21/22) -- not a general Xilinx claim,

@@ -52,32 +52,29 @@ def main():
         sys.exit(1)
     output_dir = sys.argv[1]
 
-    # step_create_stitched_ip's own intermediate checkpoint -- with
-    # save_intermediate_models=True (set in finn_build_probe_s12_context_int4.py's
-    # cfg_probe), FINN saves one .onnx per step under intermediate_models/,
-    # named after the step function. Try the expected name first; fall back
-    # to a glob + manual pick if FINN's own naming differs from this.
-    candidates = [
-        os.path.join(output_dir, "intermediate_models", "step_create_stitched_ip.onnx"),
-    ]
-    import glob
-    candidates += sorted(glob.glob(os.path.join(output_dir, "intermediate_models", "*stitched_ip*.onnx")))
-    parent_ckpt = next((c for c in candidates if os.path.exists(c)), None)
-    if parent_ckpt is None:
+    # step_create_dataflow_partition reassigns `model` to the CHILD partition
+    # model for every subsequent step, so step_create_stitched_ip.onnx (named
+    # after the step, per save_intermediate_models's own convention) IS
+    # already that child model with CreateStitchedIP's `vivado_stitch_proj`
+    # metadata set directly on it -- no StreamingDataflowPartition lookup
+    # needed (that node only exists in dataflow_parent.onnx, an earlier,
+    # one-time-only snapshot that CreateStitchedIP never touches).
+    ckpt = os.path.join(output_dir, "intermediate_models", "step_create_stitched_ip.onnx")
+    if not os.path.exists(ckpt):
+        import glob
         available = sorted(glob.glob(os.path.join(output_dir, "intermediate_models", "*.onnx")))
-        print(f"Could not find a stitched-IP checkpoint automatically. Candidates tried: {candidates}\n"
-              f"Files actually present under intermediate_models/: {available}\n"
-              f"Pass the right one manually by editing parent_ckpt below.", file=sys.stderr)
+        print(f"Could not find {ckpt}.\n"
+              f"Files actually present under intermediate_models/: {available}", file=sys.stderr)
         sys.exit(1)
-    print(f"Using stitched-IP checkpoint: {parent_ckpt}")
+    print(f"Using stitched-IP checkpoint: {ckpt}")
 
-    parent_model = ModelWrapper(parent_ckpt)
-    sdp_nodes = parent_model.get_nodes_by_op_type("StreamingDataflowPartition")
-    assert len(sdp_nodes) == 1, f"expected exactly 1 partition for this single-model probe, got {len(sdp_nodes)}"
-    model_path = getCustomOp(sdp_nodes[0]).get_nodeattr("model")
+    part_model = ModelWrapper(ckpt)
+    assert part_model.get_metadata_prop("vivado_stitch_proj") is not None, (
+        "step_create_stitched_ip.onnx has no vivado_stitch_proj metadata -- "
+        "was step_create_stitched_ip actually run for this build?"
+    )
 
-    print(f"[ooc_synth] synthesizing {model_path} (part={FPGA_PART}, clk={CLK_PERIOD_NS}ns)", flush=True)
-    part_model = ModelWrapper(model_path)
+    print(f"[ooc_synth] synthesizing {ckpt} (part={FPGA_PART}, clk={CLK_PERIOD_NS}ns)", flush=True)
     part_model = part_model.transform(SynthOutOfContext(part=FPGA_PART, clk_period_ns=CLK_PERIOD_NS))
     res = eval(part_model.get_metadata_prop("res_total_ooc_synth"))
     print(f"[ooc_synth] result: {res}", flush=True)
