@@ -73,6 +73,7 @@ from finn.transformation.streamline.absorb import (
     Absorb1BitMulIntoConv,
     AbsorbConsecutiveTransposes,
     AbsorbTransposeIntoMultiThreshold,
+    AbsorbTransposeIntoResize,
 )
 from finn.transformation.streamline.collapse_repeated import (
     CollapseRepeatedAdd,
@@ -392,7 +393,23 @@ def step_enet_convert_to_hw(model: ModelWrapper, cfg: DataflowBuildConfig):
     # breaking step_create_dataflow_partition_multi's "cycle-free graph
     # violated" convexity check.
 
+    # A mid-graph nearest-neighbor Resize/Upsample (e.g. LayerQuantEnetFINN's
+    # main_up substitute: nn.Upsample(nearest) + depthwise conv) sits behind
+    # a NHWC->NCHW Transpose at this point (LowerConvsToMatMul locally
+    # restores NCHW convention around each lowered conv) -- InferUpsample
+    # requires an NHWC-tagged input, so it silently no-ops unless this
+    # Transpose is first moved past the intervening MultiThreshold and
+    # absorbed directly into Resize (reordering its scales to NHWC). Safe
+    # no-op for any model with no Resize node at all. Verified end-to-end in
+    # hardware/finn_build_probe_upsample_nearest_depthwise_int8.py.
+    model = model.transform(AbsorbTransposeIntoMultiThreshold())
+    model = model.transform(AbsorbTransposeIntoResize())
+    model = model.transform(AbsorbConsecutiveTransposes())
+    model = model.transform(InferDataLayouts())
+    model = model.transform(GiveUniqueNodeNames())
+
     for trn in [
+        to_hw.InferUpsample,                   # Resize (nearest) → UpsampleNearestNeighbour_hls
         to_hw.InferAddStreamsLayer,            # residual Add → AddStreams_Batch
         to_hw.InferChannelwiseLinearLayer,
         to_hw.InferStreamingMaxPool,           # MaxPool(NHWC) → StreamingMaxPool (pre-existing backbone pools)

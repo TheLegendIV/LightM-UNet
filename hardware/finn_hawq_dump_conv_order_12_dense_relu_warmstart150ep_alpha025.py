@@ -57,7 +57,10 @@ def main() -> None:
     layer_weight_bits, layer_act_bits = load_layer_bits(DEFAULT_BITS_FILE, weight_names, act_names)
 
     torch.manual_seed(0)
-    model = LayerQuantEnetFINN(layer_weight_bits, layer_act_bits, in_channels=1, out_channels=5).eval()
+    model = LayerQuantEnetFINN(
+        layer_weight_bits, layer_act_bits, in_channels=1, out_channels=5,
+        channels=CHANNELS, bottlenecks_per_stage=BOTTLENECKS_PER_STAGE, context_pattern=CONTEXT_PATTERN,
+    ).eval()
 
     # A static named_modules() walk assumes each weight-bearing module is
     # invoked EXACTLY ONCE in forward() -- FALSE for this "dense" (non-

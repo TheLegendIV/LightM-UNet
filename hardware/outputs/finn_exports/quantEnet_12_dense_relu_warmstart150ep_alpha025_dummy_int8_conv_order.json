@@ -715,13 +715,13 @@
     ]
   },
   {
-    "logical_name": "up4.main_up",
-    "module_type": "QuantConvTranspose2d",
+    "logical_name": "up4.main_up.1",
+    "module_type": "QuantConv2d",
     "weight_shape": [
       16,
-      16,
-      4,
-      4
+      1,
+      3,
+      3
     ]
   },
   {
@@ -825,13 +825,13 @@
     ]
   },
   {
-    "logical_name": "up5.main_up",
-    "module_type": "QuantConvTranspose2d",
+    "logical_name": "up5.main_up.1",
+    "module_type": "QuantConv2d",
     "weight_shape": [
       4,
-      4,
-      4,
-      4
+      1,
+      3,
+      3
     ]
   },
   {

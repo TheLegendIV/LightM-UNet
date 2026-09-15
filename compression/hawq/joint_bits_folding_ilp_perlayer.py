@@ -259,7 +259,7 @@ def solve_joint_perlayer(
         layer_folds[layer.name] = folds
         for pe, simd, ram_style in folds:
             for w, a in candidate_pairs:
-                cost = layer_cost_pe_simd(layer, w, a, pe, simd, ram_style)
+                cost = layer_cost_pe_simd(layer, w, a, pe, simd, ram_style, force_dsp=force_dsp)
                 key = (layer.name, pe, simd, ram_style, w, a)
                 layer_costs[key] = cost
                 raw_cycles[key] = cost["cycles"]

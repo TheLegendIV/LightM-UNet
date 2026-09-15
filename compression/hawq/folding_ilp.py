@@ -269,7 +269,7 @@ def solve_folding(
         w_bits, a_bits = layer_bits(layer, stage_bits, weight_bits, act_bits)
         folds = candidate_folds(layer)
         costs = {
-            (pe, simd, ram_style): layer_cost_pe_simd(layer, w_bits, a_bits, pe, simd, ram_style)
+            (pe, simd, ram_style): layer_cost_pe_simd(layer, w_bits, a_bits, pe, simd, ram_style, force_dsp=force_dsp)
             for pe, simd, ram_style in folds
         }
         layer_costs[layer.name] = costs
@@ -474,7 +474,7 @@ def solve_folding_nodewise(
         w_bits, a_bits = layer_bits(layer, stage_bits, weight_bits, act_bits)
         folds = candidate_folds(layer)
         costs = {
-            (pe, simd, ram_style): layer_cost_pe_simd(layer, w_bits, a_bits, pe, simd, ram_style)
+            (pe, simd, ram_style): layer_cost_pe_simd(layer, w_bits, a_bits, pe, simd, ram_style, force_dsp=force_dsp)
             for pe, simd, ram_style in folds
         }
         layer_costs[layer.name] = costs

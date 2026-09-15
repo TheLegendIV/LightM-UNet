@@ -92,7 +92,7 @@ def main() -> int:
         for name, ref_entry in ref_per_layer.items():
             geom = geom_by_name[name]
             pe, simd, ram_style = ref_entry["pe"], ref_entry["simd"], ref_entry["ram_style"]
-            cost = layer_cost_pe_simd(geom, bits, bits, pe, simd, ram_style)
+            cost = layer_cost_pe_simd(geom, bits, bits, pe, simd, ram_style, force_dsp=True)
             new_per_layer[name] = {
                 "stage": ref_entry["stage"], "pe": pe, "simd": simd, "ram_style": ram_style,
                 "weight_bits": bits, "act_bits": bits, **cost,

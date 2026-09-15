@@ -29,16 +29,26 @@ step_enet_convert_to_hw.onnx checkpoint (580 HW nodes):
     pool always precedes down1 entirely).
 
   - FINNUpsamplingBottleneck.forward() computes `main_act(main_bn(
-    main_up(x)))` FIRST, before its reduce/up/expand path. FINN lowers
-    each QuantConvTranspose2d into a zero-insertion step implemented as
-    an "FMPadding_Pixel" HW node followed by a regular conv. Each
-    upsampling bottleneck (up4, up5) has exactly 2 ConvTranspose2d calls
-    (main_up + the "up" sub-path), so contributes 2 FMPadding_Pixel nodes;
-    the final QuantConvTranspose2d layer contributes a 5th, trailing one.
-    So the FIRST node of up4 is FMPadding_Pixel occurrence #0 (of 5), and
-    the first node of up5 is occurrence #2 (of 5). The 5th occurrence
-    (final's own transpose) is NOT a partition boundary -- it stays
-    merged into the stage5 partition per the user's spec.
+    main_up(x)))` FIRST, before its reduce/up/expand path.
+
+    UPDATED 2026-09-14+ (main_up topology change): `main_up` used to be a
+    QuantConvTranspose2d, lowering (like the "up" sub-path and `final`) to
+    an "FMPadding_Pixel" HW node + regular conv -- each upsampling
+    bottleneck contributed 2 FMPadding_Pixel nodes (main_up + "up"), +1 for
+    `final`'s own ConvTranspose2d, for 5 total; the FIRST node of up4/up5
+    was FMPadding_Pixel occurrence #0/#2 (of 5). `main_up` is now a frozen
+    `nn.Sequential(nn.Upsample(mode="nearest"), depthwise QuantConv2d)`
+    instead (see LayerQuantEnetFINN.py's FINNUpsamplingBottleneck), which
+    FINN lowers to a Resize node (then, after step_enet_convert_to_hw's
+    InferUpsample, an "UpsampleNearestNeighbour_hls"/"_rtl" HW node)
+    followed by a VVAU (depthwise conv) -- NOT an FMPadding_Pixel at all.
+    So the FIRST node of up4/up5 is now the first/second
+    UpsampleNearestNeighbour_* node by index (one per upsampling
+    bottleneck; `final` has no Upsample of its own). The "up" sub-path and
+    `final` are unaffected (still ConvTranspose2d -> FMPadding_Pixel), so
+    the expected FMPadding_Pixel count dropped from 5 to 3 (up4.up, up5.up,
+    final) -- kept as a fail-fast sanity assert even though FMPadding_Pixel
+    is no longer used to derive up4_start/up5_start.
 
 Usage: call assign_stage_partition_ids(model) as its own build step,
 inserted directly after step_enet_convert_to_hw and before
@@ -72,9 +82,9 @@ def find_stage_boundaries(model):
     """Returns a sorted list of 4 node indices marking the start of
     stage1, stage2/3, stage4, stage5 respectively (partition 0/initial
     always starts at index 0). Raises AssertionError if the expected
-    marker node counts aren't found (2 or 3 StreamingMaxPool, 5
-    FMPadding_Pixel) -- this is a deliberate fail-fast so a topology
-    change doesn't silently mis-partition the graph.
+    marker node counts aren't found (2 or 3 StreamingMaxPool, 2
+    UpsampleNearestNeighbour_*, 3 FMPadding_Pixel) -- this is a deliberate
+    fail-fast so a topology change doesn't silently mis-partition the graph.
 
     2 StreamingMaxPool = down1/down2 shortcut_pool only (the original
     fresh-init single-conv initial block, e.g. 26_5_w24). 3 = same plus
@@ -89,25 +99,39 @@ def find_stage_boundaries(model):
         "StreamingMaxPool nodes, found %d. Topology may have changed -- "
         "update find_stage_boundaries()." % len(maxpools)
     )
+    # fail-fast sanity check only -- no longer used to derive up4_start/
+    # up5_start (see module docstring: main_up's topology change means it
+    # no longer lowers to FMPadding_Pixel). Still 1 per up4.up/up5.up + 1
+    # for final's own ConvTranspose2d = 3.
     fmpad = model.get_nodes_by_op_type("FMPadding_Pixel")
-    assert len(fmpad) == 5, (
-        "Expected exactly 5 FMPadding_Pixel nodes (up4 x2, up5 x2, final x1), "
+    assert len(fmpad) == 3, (
+        "Expected exactly 3 FMPadding_Pixel nodes (up4.up, up5.up, final), "
         "found %d. Topology may have changed -- update find_stage_boundaries()."
         % len(fmpad)
+    )
+
+    # main_up now lowers to a Resize node, then (post step_enet_convert_to_hw's
+    # InferUpsample) an UpsampleNearestNeighbour_hls/_rtl HW node -- this is
+    # the new FIRST op of each upsampling bottleneck (main_act(main_bn(
+    # main_up(x))) is computed first in FINNUpsamplingBottleneck.forward()).
+    upsample = [n for n in model.graph.node if n.op_type.startswith("UpsampleNearestNeighbour")]
+    assert len(upsample) == 2, (
+        "Expected exactly 2 UpsampleNearestNeighbour_* nodes (up4's and up5's "
+        "main_up), found %d. Topology may have changed -- update "
+        "find_stage_boundaries()." % len(upsample)
     )
 
     # sort each group by their position in the graph, so "first occurrence"
     # is well defined regardless of get_nodes_by_op_type's internal order
     maxpools = sorted(maxpools, key=lambda n: _node_index(model, n))
-    fmpad = sorted(fmpad, key=lambda n: _node_index(model, n))
+    upsample = sorted(upsample, key=lambda n: _node_index(model, n))
 
     # down1/down2 are always the LAST two maxpools -- any earlier one
     # (index 0 of 3) is the initial block's own pool branch, not a boundary.
     down1_start = _node_index(model, maxpools[-2])
     down2_start = _node_index(model, maxpools[-1])
-    up4_start = _node_index(model, fmpad[0])
-    up5_start = _node_index(model, fmpad[2])
-    # fmpad[4] (final's own transpose) is intentionally not a boundary
+    up4_start = _node_index(model, upsample[0])
+    up5_start = _node_index(model, upsample[1])
 
     boundaries = [down1_start, down2_start, up4_start, up5_start]
     assert boundaries == sorted(boundaries), (

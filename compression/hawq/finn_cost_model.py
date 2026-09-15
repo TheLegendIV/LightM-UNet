@@ -222,10 +222,33 @@ def calibrated_bram18k(raw_total_bram18k: float, weight_bits: float, act_bits: f
 #   2. Affine TOTAL-cost check (_forced_dsp_lut_total/_forced_dsp_bram_total
 #      below) for validating a CONCRETE partitioned plan (n_partitions known)
 #      against a hard cap post-hoc -- n_partitions*b + a*raw_total.
-_FORCED_DSP_LUT_FACTOR = 1.261221175430389   # mean lut_factor, 14 partitions (both builds, partition 0 excluded), avg_bits in [4.0, 5.15]
-_FORCED_DSP_BRAM_FACTOR = 0.19434811541501412  # mean bram_factor, same 14 partitions
-_FORCED_DSP_LUT_AFFINE = (0.947632331261822, 4208.818846016495)   # (a, b): real_lut = a*raw_lut + b, all 16 partitions, R^2=0.916
-_FORCED_DSP_BRAM_AFFINE = (0.08739251550203067, 8.135659131252611)  # (a, b): real_bram18 = a*raw_bram18 + b, all 16 partitions, R^2=0.462
+# Historical calibration, PRESERVED for provenance/reuse but NO LONGER
+# APPLIED BY DEFAULT (see reset below) -- both real builds behind these
+# numbers are 12_separable_dense_relu_min4 (S12) ONLY (see
+# fit_forced_dsp_derating.py's BUILDS dict). Confirmed via real FINN source
+# read (2026-09-16, see repo memory finn_calibrated_8way_build_status.md's
+# "LUT model mismatch: CONFIRMED root cause" section) that this flat/affine
+# correction was silently absorbing a whole missing structural term (real
+# FINN's addertree_luts/acc_luts, the latter MW-dependent) that mvu_lut now
+# models directly below -- a factor fit only on separable-architecture
+# (small-MW) data under-corrects for dense (non-separable, large-MW)
+# architectures. Kept under an architecture-specific name rather than
+# deleted: still a valid anchor for a from-scratch check against the S12
+# family specifically, just not a general-purpose default anymore.
+_S12_SEPARABLE_DSP_FORCED_LUT_FACTOR = 1.261221175430389   # mean lut_factor, 14 partitions (both builds, partition 0 excluded), avg_bits in [4.0, 5.15]
+_S12_SEPARABLE_DSP_FORCED_BRAM_FACTOR = 0.19434811541501412  # mean bram_factor, same 14 partitions
+_S12_SEPARABLE_DSP_FORCED_LUT_AFFINE = (0.947632331261822, 4208.818846016495)   # (a, b): real_lut = a*raw_lut + b, all 16 partitions, R^2=0.916
+_S12_SEPARABLE_DSP_FORCED_BRAM_AFFINE = (0.08739251550203067, 8.135659131252611)  # (a, b): real_bram18 = a*raw_bram18 + b, all 16 partitions, R^2=0.462
+
+# Reset to neutral/default (2026-09-16): mvu_lut below now directly
+# implements real FINN's addertree_luts/acc_luts terms instead of a flat
+# stand-in, so the per-layer/affine corrections above are no longer needed
+# as a general-purpose default -- identity (no-op) until a new real anchor
+# justifies a non-trivial one again.
+_FORCED_DSP_LUT_FACTOR = 1.0
+_FORCED_DSP_BRAM_FACTOR = 1.0
+_FORCED_DSP_LUT_AFFINE = (1.0, 0.0)
+_FORCED_DSP_BRAM_AFFINE = (1.0, 0.0)
 
 
 def forced_dsp_lut_total(raw_total_lut: float, n_partitions: int) -> float:
@@ -369,6 +392,7 @@ def divisors(n: int) -> list[int]:
 
 def conv_cost_pe_simd(
     layer: LayerGeometry, weight_bits: int, act_bits: int, pe: int, simd: int, ram_style: RamStyle = RAM_STYLE_BLOCK,
+    force_dsp: bool = False,
 ) -> dict:
     """The general per-layer cost, given EXPLICIT PE/SIMD (the actual
     folding decision variables a folding search chooses over) instead of
@@ -395,7 +419,16 @@ def conv_cost_pe_simd(
     is IDENTICAL either way (confirmed via direct FINN source read: real
     FINN's lut_estimation() only adds an extra term for ram_style=
     "distributed", not "ultra") -- URAM is a free swap in this cost model
-    other than needing its own separate resource budget."""
+    other than needing its own separate resource budget.
+
+    force_dsp mirrors real FINN's resType="dsp" nodeattr (see
+    matrixvectoractivation_hls.py's lut_estimation()): zeroes mvu_lut's
+    LUT-based multiplier term (mult_luts) since the multiplication moves to
+    DSP48 slices instead -- pass the SAME force_dsp used elsewhere for this
+    build (e.g. the one already threaded into calibrated_lut/
+    calibrated_bram18k) for consistency; the two used to disagree (raw
+    mvu_lut always included a multiplier term regardless of force_dsp,
+    only the separate calibration factor knew about it)."""
     W, A = weight_bits, act_bits
     P, Q = pe, simd
     M = 1  # spatial replication -- already minimal in every convention this file implements
@@ -413,7 +446,34 @@ def conv_cost_pe_simd(
         wm_bram18 = P * math.ceil(omega / 512) * math.ceil(Q * W / 36)
         wm_uram18 = 0
     swu_lut = M * 426
-    mvu_lut = 300 + 1.1 * M * (P * Q) * (W * A)
+
+    # mvu_lut: real FINN's MatrixVectorActivation_hls/VectorVectorActivation_
+    # hls.lut_estimation() (Blott et al. FINN-R, confirmed via container
+    # source read 2026-09-16) -- c0 + c1*P*(mult_luts + addertree_luts +
+    # acc_luts) -- NOT the old flat "300 + 1.1*P*Q*W*A" stand-in. mult_luts
+    # is the LUT-based multiplier array, ZERO when force_dsp (multiplication
+    # moves into DSP48 slices instead); addertree_luts is the SIMD-wide
+    # reduction tree; acc_luts is the accumulator register width, which
+    # grows with log2(MW) where MW is the FULL reduction depth
+    # (max_simd(layer) -- the whole cin/groups*kh*kw, NOT the folded Q) --
+    # a real dependence on kernel/channel geometry the old flat formula had
+    # no way to express (root cause of the dense-vs-separable LUT
+    # under-prediction, see repo memory finn_calibrated_8way_build_status.md's
+    # "LUT model mismatch: CONFIRMED root cause" section). thr_luts/
+    # comp_luts (fused-threshold LUTs) are NOT modeled -- every build in
+    # this repo uses a standalone Thresholding_rtl node rather than a fused
+    # MVAU/VVAU activation (noActivation=1), so real FINN charges 0 for that
+    # term here too.
+    c0, c1 = 300, 1.1
+    mw = max_simd(layer)  # full reduction depth (cin/groups * kh * kw) -- same domain as max_simd(), NOT the folded Q
+    mult_luts = 0 if force_dsp else Q * (2 * math.ceil((W + A) / 6) - 1) * (W + A)
+    addertree_luts = (W + A) * (2 * Q - 1)
+    # "-1" signedness term: assumes signed activations (typical after this
+    # repo's PReLU/ReLU quantization), a <=1-bit rounding effect not modeled
+    # per-layer here (real FINN's own idt.signed() would resolve it exactly).
+    alpha = math.log2(mw) + W + A - 1 - 1
+    acc_luts = min(32, alpha + math.log2(1 + 2 ** -alpha) + 1)  # capped at FINN's default INT32 accumulator width
+    mvu_lut = c0 + c1 * M * P * (mult_luts + addertree_luts + acc_luts)
     total_lut = swu_lut + mvu_lut
 
     total_pe = P * M
@@ -427,7 +487,9 @@ def conv_cost_pe_simd(
     }
 
 
-def conv_cost(layer: LayerGeometry, weight_bits: int, act_bits: int, folding: Folding = FOLDING_UNFOLDED) -> dict:
+def conv_cost(
+    layer: LayerGeometry, weight_bits: int, act_bits: int, folding: Folding = FOLDING_UNFOLDED, force_dsp: bool = False,
+) -> dict:
     """Conv2d cost (Eq. 1/4/5 of finn_cost_formulae.md's source paper) at
     one of the two folding PRESETS (unfolded/serial) -- see
     conv_cost_pe_simd for the general (arbitrary PE, SIMD) version a
@@ -443,11 +505,11 @@ def conv_cost(layer: LayerGeometry, weight_bits: int, act_bits: int, folding: Fo
     reflecting "the whole layer's weights get streamed through one PE over
     many cycles" instead of loaded all at once."""
     Q, P = _pq_for_folding(layer, folding)
-    return conv_cost_pe_simd(layer, weight_bits, act_bits, P, Q)
+    return conv_cost_pe_simd(layer, weight_bits, act_bits, P, Q, force_dsp=force_dsp)
 
 
 def conv_transpose_cost(
-    layer: LayerGeometry, weight_bits: int, act_bits: int, folding: Folding = FOLDING_UNFOLDED,
+    layer: LayerGeometry, weight_bits: int, act_bits: int, folding: Folding = FOLDING_UNFOLDED, force_dsp: bool = False,
 ) -> dict:
     """ConvTranspose2d modeled as zero-insertion + ordinary stride-1 conv
     (Dumoulin & Visin) -- see finn_cost_formulae.md's own derivation. Only
@@ -464,7 +526,7 @@ def conv_transpose_cost(
         cin=layer.cin, hin=n_eff_h, win=n_eff_w, cout=layer.cout, hout=layer.hout, wout=layer.wout,
         kh=layer.kh, kw=layer.kw, sh=1, sw=1, dh=1, dw=1,
     )
-    return conv_cost(equivalent, weight_bits, act_bits, folding)
+    return conv_cost(equivalent, weight_bits, act_bits, folding, force_dsp=force_dsp)
 
 
 def maxpool_cost(layer: LayerGeometry, act_bits: int) -> dict:
@@ -488,11 +550,13 @@ def maxpool_cost(layer: LayerGeometry, act_bits: int) -> dict:
     }
 
 
-def layer_cost(layer: LayerGeometry, weight_bits: int, act_bits: int, folding: Folding = FOLDING_UNFOLDED) -> dict:
+def layer_cost(
+    layer: LayerGeometry, weight_bits: int, act_bits: int, folding: Folding = FOLDING_UNFOLDED, force_dsp: bool = False,
+) -> dict:
     if layer.op_type == "Conv2d":
-        return conv_cost(layer, weight_bits, act_bits, folding)
+        return conv_cost(layer, weight_bits, act_bits, folding, force_dsp=force_dsp)
     if layer.op_type == "ConvTranspose2d":
-        return conv_transpose_cost(layer, weight_bits, act_bits, folding)
+        return conv_transpose_cost(layer, weight_bits, act_bits, folding, force_dsp=force_dsp)
     if layer.op_type == "MaxPool2d":
         return maxpool_cost(layer, act_bits)
     raise ValueError(f"Unknown op_type {layer.op_type!r} for layer {layer.name}")
@@ -500,6 +564,7 @@ def layer_cost(layer: LayerGeometry, weight_bits: int, act_bits: int, folding: F
 
 def layer_cost_pe_simd(
     layer: LayerGeometry, weight_bits: int, act_bits: int, pe: int, simd: int, ram_style: RamStyle = RAM_STYLE_BLOCK,
+    force_dsp: bool = False,
 ) -> dict:
     """Like layer_cost, but for an explicit (PE, SIMD) folding choice
     (what a real folding search sweeps over) instead of one of the two
@@ -508,7 +573,7 @@ def layer_cost_pe_simd(
     the caller's own candidate enumeration, see folding_ilp.py's PoolCost,
     so this never silently drops a real folding choice)."""
     if layer.op_type == "Conv2d":
-        return conv_cost_pe_simd(layer, weight_bits, act_bits, pe, simd, ram_style)
+        return conv_cost_pe_simd(layer, weight_bits, act_bits, pe, simd, ram_style, force_dsp=force_dsp)
     if layer.op_type == "ConvTranspose2d":
         n_eff_h = (layer.hin - 1) * layer.sh + 1 + 2 * (layer.kh - 1)
         n_eff_w = (layer.win - 1) * layer.sw + 1 + 2 * (layer.kw - 1)
@@ -517,7 +582,7 @@ def layer_cost_pe_simd(
             cin=layer.cin, hin=n_eff_h, win=n_eff_w, cout=layer.cout, hout=layer.hout, wout=layer.wout,
             kh=layer.kh, kw=layer.kw, sh=1, sw=1, dh=1, dw=1,
         )
-        return conv_cost_pe_simd(equivalent, weight_bits, act_bits, pe, simd, ram_style)
+        return conv_cost_pe_simd(equivalent, weight_bits, act_bits, pe, simd, ram_style, force_dsp=force_dsp)
     if layer.op_type == "MaxPool2d":
         return maxpool_cost(layer, act_bits)
     raise ValueError(f"Unknown op_type {layer.op_type!r} for layer {layer.name}")

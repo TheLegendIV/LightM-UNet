@@ -180,7 +180,7 @@ def build_partition_row(idx: int, part: dict, base: dict, dsp_override: int | No
     return row
 
 
-def build_total_row(partitions: list[dict], base: dict, estimate: dict | None, rtlsim: dict | None) -> dict:
+def build_total_row(partitions: list[dict], base: dict, estimate: dict | None, rtlsim: dict | None, dsp_verified: bool = False) -> dict:
     def total(key):
         vals = [p.get(key) for p in partitions if p.get(key) is not None]
         return sum(vals) if vals else None
@@ -225,8 +225,14 @@ def build_total_row(partitions: list[dict], base: dict, estimate: dict | None, r
         f"BRAM_18K-equivalent(18K_count+2*36K_count)="
         f"{(bram_18k_total or 0) + 2 * (bram_36k_total or 0)}="
         f"{bram_18k_equiv_pct(bram_18k_total, bram_36k_total)}% of {XCZU7EV_BRAM_18K}. "
-        f"DSP={dsp_total}/{XCZU7EV_DSP} (see per-partition rows/module docstring re: known "
-        "JSON DSP=0 parser bug -- pass --dsp-rpt-dir to correct this sum with verified counts). "
+        f"DSP={dsp_total}/{XCZU7EV_DSP} "
+        + (
+            "(verified against raw utilization_placed.rpt for all partitions). "
+            if dsp_verified else
+            "(see per-partition rows/module docstring re: known JSON DSP=0 parser bug -- "
+            "pass --dsp-rpt-dir to correct this sum with verified counts). "
+        )
+        +
         f"fmax_mhz is the MIN across the {N_PARTITIONS} partitions "
         f"(bottleneck=partition_{bottleneck_idx}, {bottleneck_fmax} MHz); each partition is an "
         "independently clocked/synthesized kernel, not one chained design."
@@ -357,6 +363,7 @@ def main() -> None:
     }
 
     partition_rows = []
+    all_dsp_verified = True
     for i, part in enumerate(partitions):
         dsp_override = None
         dsp_verified = False
@@ -367,14 +374,20 @@ def main() -> None:
                 dsp_verified = "placed" in rpt.name.lower()
                 if dsp_override is None:
                     print(f"  WARNING: could not parse a DSP count out of {rpt}")
+        else:
+            all_dsp_verified = False
         partition_rows.append(build_partition_row(i, part, base, dsp_override, dsp_verified))
+        # feed the verified override back so the TOTAL row's DSP sum isn't stuck at 0
+        if dsp_override is not None:
+            part["DSP"] = dsp_override
+        all_dsp_verified = all_dsp_verified and dsp_verified
 
     estimate = load_json(args.report_dir / "estimate_network_performance.json")
     rtlsim = load_json(args.report_dir / "rtlsim_performance.json")
     if rtlsim and rtlsim.get("N_OUT_TXNS", 0) == 0:
         print("  NOTE: rtlsim_performance.json looks degenerate (N_OUT_TXNS=0) -- skipping "
               "rtlsim_cycles/inputs/outputs for the TOTAL row (known-unreliable combined-design rtlsim).")
-    total_row = build_total_row(partitions, base, estimate, rtlsim)
+    total_row = build_total_row(partitions, base, estimate, rtlsim, dsp_verified=all_dsp_verified)
 
     upsert_rows([total_row] + partition_rows)
 
