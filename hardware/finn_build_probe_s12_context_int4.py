@@ -64,6 +64,7 @@ os.environ.setdefault("XILINX_HLS", "/tools/Xilinx/Vitis_HLS/2022.2")
 
 from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.core.datatype import DataType
+from qonnx.custom_op.registry import getCustomOp
 from qonnx.transformation.fold_constants import FoldConstants
 from qonnx.transformation.double_to_single_float import DoubleToSingleFloat
 from qonnx.transformation.infer_shapes import InferShapes
@@ -137,6 +138,51 @@ FPGA_PART = "xczu7ev-ffvc1156-2-e"
 
 def step_reapply_unique_names(model: ModelWrapper, cfg: DataflowBuildConfig):
     return model.transform(GiveUniqueNodeNames())
+
+
+def step_force_dsp(model: ModelWrapper, cfg: DataflowBuildConfig):
+    """Force resType=dsp on every MVAU/VVAU node (dense variant has MVAU
+    only, separable variant also has VVAU); ram_style left at default (auto)."""
+    n_dsp = 0
+    for node in model.graph.node:
+        if "MVAU" in node.op_type or "VVAU" in node.op_type:
+            getCustomOp(node).set_nodeattr("resType", "dsp")
+            n_dsp += 1
+    print(f"[step_force_dsp] forced resType=dsp on {n_dsp} MVAU/VVAU node(s), ram_style left at default (auto)")
+    return model
+
+
+def step_fix_signed_thresholds(model: ModelWrapper, cfg: DataflowBuildConfig):
+    """QuantIdentityHandler (qonnx_activation_handlers.py) REQUIRES signed=1 on
+    any 'identity' Quant node it converts to MultiThreshold (hard-fails
+    otherwise) -- but this probe's QuantRegularBottleneck.input_quant is an
+    identity Quant chained directly onto the PRECEDING block's already-
+    unsigned/non-negative ReLU output (no arithmetic in between), so its real
+    values never go negative even though FINN forced it signed at conversion
+    time. That mismatch then trips a LATER assertion in
+    convert_to_hw_layers.py's InferThresholdingLayer: "assert (not odt.signed())
+    or (actval < 0)" -- where actval is the MultiThreshold node's own
+    'out_bias' attribute (NOT the raw threshold values -- checked and ruled
+    out first). Mirror FINN's own condition exactly: any MultiThreshold node
+    annotated signed whose out_bias is >= 0 gets its output datatype
+    downgraded to the equivalent unsigned type (matches its real,
+    always-non-negative value range: out_bias >= 0 means the comparator
+    never needed to represent a negative result)."""
+    n_fixed = 0
+    for node in model.graph.node:
+        if node.op_type != "MultiThreshold":
+            continue
+        out_name = node.output[0]
+        dt = model.get_tensor_datatype(out_name)
+        if not dt.signed():
+            continue
+        out_bias = getCustomOp(node).get_nodeattr("out_bias")
+        if out_bias < 0:
+            continue  # genuinely needs a signed output -- leave it alone
+        model.set_tensor_datatype(out_name, DataType[f"UINT{dt.bitwidth()}"])
+        n_fixed += 1
+    print(f"[step_fix_signed_thresholds] downgraded {n_fixed} MultiThreshold node(s) signed->unsigned (out_bias >= 0)")
+    return model
 
 
 def step_probe_tidy(model: ModelWrapper, cfg: DataflowBuildConfig):
@@ -238,6 +284,13 @@ def step_probe_convert_to_hw(model: ModelWrapper, cfg: DataflowBuildConfig):
         to_hw.InferConvInpGen,
         to_hw.InferDuplicateStreamsLayer,
     ]:
+        if trn is to_hw.InferThresholdingLayer:
+            # InferDataTypes() re-runs after every transform in this loop and
+            # re-derives (signed) datatypes straight from the still-signed
+            # Quant-derived annotations -- undoing step_fix_signed_thresholds
+            # if it only ran once, earlier. Re-apply right before the transform
+            # that actually asserts on it.
+            model = step_fix_signed_thresholds(model, cfg)
         model = model.transform(trn())
         model = model.transform(InferDataLayouts())
         model = model.transform(GiveUniqueNodeNames())
@@ -252,12 +305,14 @@ def step_probe_convert_to_hw(model: ModelWrapper, cfg: DataflowBuildConfig):
 
 probe_steps = [
     "step_qonnx_to_finn",
+    step_fix_signed_thresholds,
     step_probe_tidy,
     step_probe_streamline,
     step_probe_convert_to_hw,
     "step_create_dataflow_partition",
     "step_specialize_layers",
     step_reapply_unique_names,
+    step_force_dsp,
     "step_target_fps_parallelization",
     "step_apply_folding_config",
     "step_minimize_bit_width",
