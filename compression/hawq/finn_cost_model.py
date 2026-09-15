@@ -634,3 +634,28 @@ def layer_cost_pe_simd(
     if layer.op_type == "MaxPool2d":
         return maxpool_cost(layer, act_bits)
     raise ValueError(f"Unknown op_type {layer.op_type!r} for layer {layer.name}")
+
+
+def layer_cost_pe_simd_auto_ram(
+    layer: LayerGeometry, weight_bits: int, act_bits: int, pe: int, simd: int, force_dsp: bool = False,
+) -> dict:
+    """Like layer_cost_pe_simd, but picks ram_style per-layer instead of
+    taking it as a fixed input -- the "leave memory type as auto" default
+    for cost-model estimates going forward (standing convention, 2026-09-15).
+
+    LUT is IDENTICAL between "block" and "ultra" (real FINN's lut_estimation()
+    only adds an extra term for ram_style="distributed", not "ultra" -- see
+    conv_cost_pe_simd's own docstring, confirmed via direct FINN source
+    read) -- so "auto" only ever changes which pool (BRAM_18K vs URAM) a
+    layer's weight memory lands in, never total_lut/cycles. Picks whichever
+    of wm_bram18/wm_uram18 is the SMALLER block count for this layer (a
+    stand-in for real FINN's own auto ram_style heuristic, which isn't
+    directly accessible from this repo). MaxPool2d has no weight memory at
+    all -- ram_style is irrelevant there, both calls would return identical
+    results anyway, so it's skipped."""
+    block = layer_cost_pe_simd(layer, weight_bits, act_bits, pe, simd, ram_style=RAM_STYLE_BLOCK, force_dsp=force_dsp)
+    if layer.op_type == "MaxPool2d":
+        return block
+    ultra = layer_cost_pe_simd(layer, weight_bits, act_bits, pe, simd, ram_style=RAM_STYLE_ULTRA, force_dsp=force_dsp)
+    chosen = ultra if ultra["wm_uram18"] < block["wm_bram18"] else block
+    return {**chosen, "ram_style_chosen": "ultra" if chosen is ultra else "block"}

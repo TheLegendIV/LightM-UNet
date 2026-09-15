@@ -47,7 +47,7 @@ sys.path.insert(0, str(REPO_ROOT / "enet"))
 sys.path.insert(0, str(REPO_ROOT / "compression" / "hawq"))
 
 from nnunetv2.nets.QuantENet import QuantRegularBottleneck, _quant_conv2d, _quant_act  # noqa: E402
-from finn_cost_model import LayerGeometry, layer_cost_pe_simd, RAM_STYLE_BLOCK  # noqa: E402
+from finn_cost_model import LayerGeometry, layer_cost_pe_simd_auto_ram  # noqa: E402
 
 OUT_DIR = Path(__file__).resolve().parent / "outputs" / "finn_exports"
 
@@ -138,12 +138,14 @@ def dump_probe_geometry(model: nn.Module, input_hw: tuple[int, int]) -> list[Lay
 def raw_estimate(geometries: list[LayerGeometry]) -> dict:
     """Raw (UNDERATED -- no calibrated_lut/calibrated_bram18k applied)
     per-layer and summed LUT/BRAM/cycles, force_dsp=True, PE=SIMD=1 for every
-    layer."""
+    layer, ram_style picked per-layer via layer_cost_pe_simd_auto_ram
+    (standing convention: force_dsp on, memory type left auto -- see that
+    function's own docstring)."""
     per_layer = {}
     total_lut = total_bram18 = total_uram18 = 0.0
     stem_lut = stem_bram18 = 0.0
     for g in geometries:
-        r = layer_cost_pe_simd(g, WEIGHT_BIT_WIDTH, ACT_BIT_WIDTH, PE, SIMD, ram_style=RAM_STYLE_BLOCK, force_dsp=True)
+        r = layer_cost_pe_simd_auto_ram(g, WEIGHT_BIT_WIDTH, ACT_BIT_WIDTH, PE, SIMD, force_dsp=True)
         per_layer[g.name] = {
             "stage": g.stage, "cin": g.cin, "cout": g.cout, "hin": g.hin, "win": g.win,
             "kh": g.kh, "kw": g.kw, "dh": g.dh, "dw": g.dw, "groups": g.groups,
