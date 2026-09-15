@@ -44,7 +44,8 @@
           "mvu_lut": 316.5246045943313,
           "mp_lut": 0,
           "total_lut": 742.5246045943313,
-          "cycles": 32768
+          "cycles": 32768,
+          "ram_style_chosen": "block"
         },
         "bottlenecks.0.reduce.0": {
           "stage": "bottlenecks.0",
@@ -66,7 +67,8 @@
           "mvu_lut": 322.00077469591236,
           "mp_lut": 0,
           "total_lut": 748.0007746959124,
-          "cycles": 262144
+          "cycles": 262144,
+          "ram_style_chosen": "block"
         },
         "bottlenecks.0.conv": {
           "stage": "bottlenecks.0",
@@ -82,13 +84,14 @@
           "total_pe": 1,
           "total_simd_lanes": 1,
           "swu_bram18": 6,
-          "wm_bram18": 2,
-          "wm_uram18": 0,
+          "wm_bram18": 0,
+          "wm_uram18": 1,
           "swu_lut": 426,
           "mvu_lut": 323.28726185757034,
           "mp_lut": 0,
           "total_lut": 749.2872618575703,
-          "cycles": 589824
+          "cycles": 589824,
+          "ram_style_chosen": "ultra"
         },
         "bottlenecks.0.expand.0": {
           "stage": "bottlenecks.0",
@@ -110,7 +113,8 @@
           "mvu_lut": 319.8030965171678,
           "mp_lut": 0,
           "total_lut": 745.8030965171678,
-          "cycles": 262144
+          "cycles": 262144,
+          "ram_style_chosen": "block"
         },
         "bottlenecks.1.reduce.0": {
           "stage": "bottlenecks.1",
@@ -132,7 +136,8 @@
           "mvu_lut": 322.00077469591236,
           "mp_lut": 0,
           "total_lut": 748.0007746959124,
-          "cycles": 262144
+          "cycles": 262144,
+          "ram_style_chosen": "block"
         },
         "bottlenecks.1.conv": {
           "stage": "bottlenecks.1",
@@ -148,13 +153,14 @@
           "total_pe": 1,
           "total_simd_lanes": 1,
           "swu_bram18": 10,
-          "wm_bram18": 2,
-          "wm_uram18": 0,
+          "wm_bram18": 0,
+          "wm_uram18": 1,
           "swu_lut": 426,
           "mvu_lut": 323.28726185757034,
           "mp_lut": 0,
           "total_lut": 749.2872618575703,
-          "cycles": 589824
+          "cycles": 589824,
+          "ram_style_chosen": "ultra"
         },
         "bottlenecks.1.expand.0": {
           "stage": "bottlenecks.1",
@@ -176,14 +182,15 @@
           "mvu_lut": 319.8030965171678,
           "mp_lut": 0,
           "total_lut": 745.8030965171678,
-          "cycles": 262144
+          "cycles": 262144,
+          "ram_style_chosen": "block"
         }
       },
       "total_lut": 5228.706870735632,
-      "total_bram18": 47.0,
-      "total_uram18": 0.0,
+      "total_bram18": 43.0,
+      "total_uram18": 2.0,
       "bottlenecks_only_lut": 4486.182266141301,
-      "bottlenecks_only_bram18": 44.0,
+      "bottlenecks_only_bram18": 40.0,
       "n_layers": 7
     }
   },
@@ -232,7 +239,8 @@
           "mvu_lut": 316.5246045943313,
           "mp_lut": 0,
           "total_lut": 742.5246045943313,
-          "cycles": 32768
+          "cycles": 32768,
+          "ram_style_chosen": "block"
         },
         "bottlenecks.0.reduce.0": {
           "stage": "bottlenecks.0",
@@ -254,7 +262,8 @@
           "mvu_lut": 322.00077469591236,
           "mp_lut": 0,
           "total_lut": 748.0007746959124,
-          "cycles": 262144
+          "cycles": 262144,
+          "ram_style_chosen": "block"
         },
         "bottlenecks.0.conv.0": {
           "stage": "bottlenecks.0",
@@ -276,7 +285,8 @@
           "mvu_lut": 321.54449159465986,
           "mp_lut": 0,
           "total_lut": 747.5444915946598,
-          "cycles": 196608
+          "cycles": 196608,
+          "ram_style_chosen": "block"
         },
         "bottlenecks.0.conv.3": {
           "stage": "bottlenecks.0",
@@ -298,7 +308,8 @@
           "mvu_lut": 321.54449159465986,
           "mp_lut": 0,
           "total_lut": 747.5444915946598,
-          "cycles": 196608
+          "cycles": 196608,
+          "ram_style_chosen": "block"
         },
         "bottlenecks.0.expand.0": {
           "stage": "bottlenecks.0",
@@ -320,7 +331,8 @@
           "mvu_lut": 319.8030965171678,
           "mp_lut": 0,
           "total_lut": 745.8030965171678,
-          "cycles": 262144
+          "cycles": 262144,
+          "ram_style_chosen": "block"
         },
         "bottlenecks.1.reduce.0": {
           "stage": "bottlenecks.1",
@@ -342,7 +354,8 @@
           "mvu_lut": 322.00077469591236,
           "mp_lut": 0,
           "total_lut": 748.0007746959124,
-          "cycles": 262144
+          "cycles": 262144,
+          "ram_style_chosen": "block"
         },
         "bottlenecks.1.conv.0": {
           "stage": "bottlenecks.1",
@@ -364,7 +377,8 @@
           "mvu_lut": 321.54449159465986,
           "mp_lut": 0,
           "total_lut": 747.5444915946598,
-          "cycles": 196608
+          "cycles": 196608,
+          "ram_style_chosen": "block"
         },
         "bottlenecks.1.conv.3": {
           "stage": "bottlenecks.1",
@@ -386,7 +400,8 @@
           "mvu_lut": 321.54449159465986,
           "mp_lut": 0,
           "total_lut": 747.5444915946598,
-          "cycles": 196608
+          "cycles": 196608,
+          "ram_style_chosen": "block"
         },
         "bottlenecks.1.expand.0": {
           "stage": "bottlenecks.1",
@@ -408,7 +423,8 @@
           "mvu_lut": 319.8030965171678,
           "mp_lut": 0,
           "total_lut": 745.8030965171678,
-          "cycles": 262144
+          "cycles": 262144,
+          "ram_style_chosen": "block"
         }
       },
       "total_lut": 6720.310313399131,
@@ -421,7 +437,7 @@
   },
   "ratio_dense_over_separable": {
     "raw_total_lut": 0.7780454513105591,
-    "raw_total_bram18": 0.9215686274509803,
+    "raw_total_bram18": 0.8431372549019608,
     "bottlenecks_only_lut": 0.7504755915779172
   },
   "note": "raw = UNDERATED analytical estimate (finn_cost_model.layer_cost_pe_simd, force_dsp=True, PE=SIMD=1, no calibrated_lut/calibrated_bram18k applied). Compare this ratio against real FINN build reports once finn_build_probe_s12_context_int4.py has been run through OOC synthesis."
