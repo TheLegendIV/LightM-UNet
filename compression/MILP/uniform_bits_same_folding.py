@@ -4,11 +4,11 @@ layer_bits_folding_*.json (e.g. the alpha=0.25 solve for 12_dense_relu_
 warmstart150ep), keeps every layer's own real (pe, simd, ram_style) folding
 choice UNCHANGED, and overrides weight_bits/act_bits to a single uniform
 value at every layer -- then recomputes every derived cost field (total_lut,
-swu_bram18, wm_bram18, cycles, ...) at that new bit-width via this repo's
-own finn_cost_model.layer_cost_pe_simd, so the output is a fully self-
-consistent layer_bits_folding_*.json (not just bit-overridden with stale
-cost fields), usable directly by expand_layer_bits.py exactly like a real
-ILP solve would be.
+swu_bram18, wm_bram18, thr_bram18, total_dsp, cycles, ...) at that new
+bit-width via this repo's own finn_cost_model.layer_cost_pe_simd, so the
+output is a fully self-consistent layer_bits_folding_*.json (not just
+bit-overridden with stale cost fields), usable directly by
+expand_layer_bits.py exactly like a real ILP solve would be.
 
 WHY hold folding fixed rather than re-solving it per bit-width: the whole
 point of this baseline is to isolate "does per-layer BIT ALLOCATION matter",
@@ -21,11 +21,11 @@ favorably) rather than the one asked (at the SAME hardware structure, does
 smarter bit allocation beat uniform).
 
 Usage:
-    python compression/hawq/uniform_bits_same_folding.py \\
+    python compression/MILP/uniform_bits_same_folding.py \\
         --config config_12_dense_relu_warmstart150ep \\
-        --reference-ilp-result compression/hawq/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.25_candidatebits468_forcedsp_lut70.json \\
+        --reference-ilp-result compression/MILP/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.25_candidatebits468_forcedsp_lut70.json \\
         --uniform-bits 4,6,8 \\
-        --out-dir compression/hawq/artifacts/12_dense_relu_warmstart150ep_uniform_samefolding_alpha0.25
+        --out-dir compression/MILP/artifacts/12_dense_relu_warmstart150ep_uniform_samefolding_alpha0.25
 """
 from __future__ import annotations
 
@@ -40,11 +40,10 @@ PACKAGE_ROOT = REPO_ROOT / "enet"
 sys.path.insert(0, str(PACKAGE_ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from nnunetv2.nets.ENet import ENet  # noqa: E402
-from finn_block_costs import dump_block_layer_geometry  # noqa: E402
 from finn_cost_model import calibrated_bram18k, calibrated_lut, layer_cost_pe_simd  # noqa: E402
-from finn_stage_costs import INPUT_HW  # noqa: E402
+from finn_milp import INPUT_HW, trace_layer_geometry  # noqa: E402 -- 2026-09-17: finn_block_costs.py/finn_stage_costs.py archived, this is now the one shared geometry tracer
 
-XCZU7EV = {"LUT": 230_400, "BRAM_18K": 624}
+XCZU7EV = {"LUT": 230_400, "BRAM_18K": 624, "DSP": 1_728}
 
 
 def load_config(config_module: str) -> None:
@@ -77,7 +76,7 @@ def main() -> int:
         separable_dilated=SEPARABLE_DILATED, use_prelu=globals().get("USE_PRELU", True), prelu_variant=PRELU_VARIANT,
         use_dsc=globals().get("USE_DSC", False), dsc_no_projection=globals().get("DSC_NO_PROJECTION", False),
     )
-    geometries, _block_names = dump_block_layer_geometry(model, INPUT_HW)
+    geometries, _block_names = trace_layer_geometry(model, INPUT_HW, IN_CHANNELS)
     geom_by_name = {g.name: g for g in geometries}
 
     missing = set(ref_per_layer) - set(geom_by_name)
@@ -100,10 +99,13 @@ def main() -> int:
 
         total_lut = sum(calibrated_lut(v["total_lut"], v["weight_bits"], v["act_bits"], force_dsp=True) for v in new_per_layer.values())
         total_bram = sum(
-            calibrated_bram18k(v["swu_bram18"] + v["wm_bram18"], v["weight_bits"], v["act_bits"], force_dsp=True)
+            calibrated_bram18k(
+                v["swu_bram18"] + v["wm_bram18"] + v.get("thr_bram18", 0), v["weight_bits"], v["act_bits"], force_dsp=True,
+            )
             for v in new_per_layer.values()
         )
         total_uram = sum(v.get("wm_uram18", 0) for v in new_per_layer.values())
+        total_dsp = sum(v.get("total_dsp", 0) for v in new_per_layer.values())
         total_cycles = sum(v["cycles"] for v in new_per_layer.values())
 
         result = {
@@ -121,6 +123,8 @@ def main() -> int:
                 "total_bram18k_calibrated": total_bram, "xczu7ev_bram18k_budget": XCZU7EV["BRAM_18K"],
                 "bram_pct_of_budget": 100 * total_bram / XCZU7EV["BRAM_18K"],
                 "total_uram18": total_uram, "total_cycles": total_cycles,
+                "total_dsp": total_dsp, "xczu7ev_dsp_budget": XCZU7EV["DSP"],
+                "dsp_pct_of_budget": 100 * total_dsp / XCZU7EV["DSP"],
                 "force_dsp": True,
                 "note": f"NAIVE UNIFORM INT{bits} baseline -- NOT ILP-solved. Every layer's real (pe, simd, "
                         f"ram_style) folding choice is copied UNCHANGED from {args.reference_ilp_result.name}; "

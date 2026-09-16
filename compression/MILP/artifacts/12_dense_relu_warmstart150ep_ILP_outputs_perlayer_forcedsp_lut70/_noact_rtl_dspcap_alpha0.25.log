@@ -1,0 +1,11 @@
+Overriding CANDIDATE_BITS to (4, 6, 8) (from --candidate-bits).
+Predecessor map: 86/88 layers have a real, traced predecessor (the rest are the network's own first layer(s), with no real predecessor to fall back to anything but self-sensitivity).
+Note: ['down1.pool', 'down2.pool', 'initial.pool'] have no sensitivity entry (MaxPool2d, no weight, never HAWQ-measured) -- given a fixed raw sensitivity of 0.0 for every (w,a), see module docstring.
+Traced 88 layers (per-layer granularity, no block grouping). candidate_bits=(4, 6, 8) -> 9 (w,a) pairs. y: 792 binaries, z: 39843 binaries (40635 total). Solving (time_limit=300s, gap_rel=0.02)...
+--max-latency-ms 1000.0 @ 100.0MHz -> max_cycles=100000000 (hard constraint).
+Wrote artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.25_candidatebits468_forcedsp_lut70_NOACT_RTL_dspcap.json
+ILP status: Optimal
+LUT used (calibrated): 160706 (69.8% of 230400 budget) -- GUARANTEED (hard constraint).
+BRAM_18K used (calibrated): 505 (80.9% of 624 budget) -- GUARANTEED (hard constraint).
+DSP used: 1724 (99.8% of 1728 budget) -- GUARANTEED (hard constraint).
+Total cycles (sum, ~= per-image latency): 3724818
