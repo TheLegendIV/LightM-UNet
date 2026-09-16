@@ -1,0 +1,138 @@
+#!/bin/bash
+#SBATCH --job-name=sensitivity_ilp_12_separable_dense_relu_warmstart150ep_forcedsp_lut70
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=01:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# Prep step between stage_12_separable_dense_relu_warmstart150ep.job (FP32
+# warm-start) and qat_12_separable_dense_relu_warmstart150ep_joint_alpha_
+# sweep_15ep_perlayer_candidatebits468_forcedsp_lut70_array.job (the real QAT
+# fine-tunes) -- byte-for-byte the same 3-part pipeline dense's own
+# warmstart150ep family used (see compression/hawq/artifacts/
+# 12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/
+# run_args.json's own "pipeline" field for that precedent), just never
+# wrapped in its own SLURM job before now (it was run manually/interactively
+# for dense) -- wrapped here since STEP 1 (HAWQ sensitivity) needs the same
+# GPU+real-data access as training, and bundling STEPS 2-3 (pure CPU) into
+# the same allocation avoids a second GPU queue wait for what's otherwise a
+# few minutes of CBC solving.
+#
+#   STEP 1: layer_sensitivity.py -- per-layer HAWQ Hessian-trace sensitivity
+#           on the WARM-STARTED FP32 checkpoint (needs GPU + real preprocessed
+#           data, same as training).
+#   STEP 2: joint_bits_folding_ilp_perlayer.py -- 5-alpha sweep (0.0, 0.25,
+#           0.5, 0.75, 1.0), candidate bits {4,6,8}, hard 70% LUT cap under
+#           the forced-DSP regime -- pure CPU (PuLP/CBC), same settings as
+#           dense's own run_args.json shared_args.
+#   STEP 3: uniform_bits_same_folding.py -- the alpha=0.25 solve's own
+#           real per-layer folding, bits overridden to uniform {4,6,8} --
+#           the "naive uniform quantization" baseline
+#           qat_12_separable_dense_relu_warmstart150ep_uniform_int468_
+#           samefolding_alpha0.25_array.job consumes.
+#
+# expand_layer_bits.py (per-conv-layer -> per-site bits) is DELIBERATELY NOT
+# run here -- both downstream QAT array jobs already do that themselves as
+# their own STEP 0 (skip-if-exists), same as every other job in this repo.
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+CONFIG="config_12_separable_dense_relu_warmstart150ep"
+CONFIG_SUFFIX="12_separable_dense_relu_warmstart150ep"
+ILP_OUT_DIR="compression/hawq/artifacts/${CONFIG_SUFFIX}_ILP_outputs_perlayer_forcedsp_lut70"
+SENSITIVITY_FILE="compression/hawq/artifacts/layer_sensitivity_${CONFIG_SUFFIX}.json"
+UNIFORM_OUT_DIR="compression/hawq/artifacts/${CONFIG_SUFFIX}_uniform_samefolding_alpha0.25"
+
+ALPHAS=(0.0 0.25 0.5 0.75 1.0)
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+cd "$HOME/LightM-UNet"
+
+FP32_CHECKPOINT="$nnUNet_results/${DATASET_NAME}/nnUNetTrainerENet_${CONFIG_SUFFIX}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
+echo "=== Checking FP32 warm-started source checkpoint exists ==="
+if [ ! -f "$FP32_CHECKPOINT" ]; then
+    echo "ERROR: FP32 checkpoint not found: $FP32_CHECKPOINT -- run stage_12_separable_dense_relu_warmstart150ep.job first." >&2
+    exit 1
+fi
+
+echo "=== GPU info ==="
+nvidia-smi
+
+echo "=== STEP 1: layer_sensitivity.py (skip if already done) ==="
+if [ -f "$SENSITIVITY_FILE" ]; then
+    echo "Sensitivity file already exists at ${SENSITIVITY_FILE} -- skipping."
+else
+    python compression/hawq/layer_sensitivity.py \
+        --config "${CONFIG}" \
+        --candidate-bits 4,6,8
+fi
+
+echo "=== STEP 2: joint_bits_folding_ilp_perlayer.py -- 5-alpha sweep ==="
+mkdir -p "${ILP_OUT_DIR}"
+for ALPHA in "${ALPHAS[@]}"; do
+    OUT_FILE="${ILP_OUT_DIR}/layer_bits_folding_${CONFIG_SUFFIX}_joint_alpha${ALPHA}_candidatebits468_forcedsp_lut70.json"
+    if [ -f "$OUT_FILE" ]; then
+        echo "alpha=${ALPHA}: ${OUT_FILE} already exists -- skipping."
+        continue
+    fi
+    echo "--- Solving alpha=${ALPHA} ---"
+    python compression/hawq/joint_bits_folding_ilp_perlayer.py \
+        --config "${CONFIG}" \
+        --sensitivity-file "${SENSITIVITY_FILE}" \
+        --candidate-bits 4,6,8 \
+        --alpha "${ALPHA}" \
+        --hard-lut-fraction 0.7 \
+        --hard-bram-fraction 1.0 \
+        --force-dsp \
+        --max-latency-ms 1000 \
+        --clock-mhz 100.0 \
+        --time-limit 300 \
+        --gap-rel 0.02 \
+        --out-file "${OUT_FILE}"
+done
+
+echo "=== STEP 3: uniform_bits_same_folding.py -- naive-uniform baseline off the alpha=0.25 solve ==="
+REFERENCE_ILP_RESULT="${ILP_OUT_DIR}/layer_bits_folding_${CONFIG_SUFFIX}_joint_alpha0.25_candidatebits468_forcedsp_lut70.json"
+if [ -f "${UNIFORM_OUT_DIR}/layer_bits_folding_uniform_int4_samefolding.json" ]; then
+    echo "Uniform-bits baseline files already exist under ${UNIFORM_OUT_DIR} -- skipping."
+else
+    python compression/hawq/uniform_bits_same_folding.py \
+        --config "${CONFIG}" \
+        --reference-ilp-result "${REFERENCE_ILP_RESULT}" \
+        --uniform-bits 4,6,8 \
+        --out-dir "${UNIFORM_OUT_DIR}"
+fi
+
+echo "Done: sensitivity + 5-alpha ILP sweep + uniform-bits baseline for ${CONFIG_SUFFIX}."
+echo "Next: qat_12_separable_dense_relu_warmstart150ep_joint_alpha_sweep_15ep_perlayer_candidatebits468_forcedsp_lut70_array.job"
+echo "  and qat_12_separable_dense_relu_warmstart150ep_uniform_int468_samefolding_alpha0.25_array.job"
