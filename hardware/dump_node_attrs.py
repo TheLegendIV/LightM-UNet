@@ -14,7 +14,7 @@ model = ModelWrapper(onnx_path)
 
 rows = []
 for node in model.graph.node:
-    if node.op_type not in ("MVAU_hls", "VVAU_hls"):
+    if node.op_type not in ("MVAU_hls", "VVAU_hls", "MVAU_rtl", "VVAU_rtl"):
         continue
     inst = getCustomOp(node)
     attrs = {}

@@ -12,7 +12,9 @@ from qonnx.custom_op.registry import getCustomOp
 
 OUTPUT_DIR = "/home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/12_separable_dense_relu_alpha025_trained_8way_full_20260916_010009"
 PARENT_CKPT = f"{OUTPUT_DIR}/intermediate_models/dataflow_parent_built.onnx"
-PARTITIONS = [3, 4, 5, 6, 7]
+# Only partition 7 is re-dumped here: it's the sole partition with an RTL-
+# specialized MVAU_rtl_0 node, missed by the original MVAU_hls/VVAU_hls-only filter.
+PARTITIONS = [7]
 
 ATTR_KEYS = (
     "MH", "MW", "PE", "SIMD", "Channels", "Kernel",
@@ -29,7 +31,7 @@ for n in PARTITIONS:
     part_model = ModelWrapper(model_path)
     rows = []
     for node in part_model.graph.node:
-        if node.op_type not in ("MVAU_hls", "VVAU_hls"):
+        if node.op_type not in ("MVAU_hls", "VVAU_hls", "MVAU_rtl", "VVAU_rtl"):
             continue
         inst = getCustomOp(node)
         attrs = {}

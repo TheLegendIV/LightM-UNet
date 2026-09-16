@@ -55,5 +55,23 @@
       "mem_mode": "internal_decoupled",
       "runtime_writeable_weights": 0
     }
+  },
+  {
+    "node_name": "MVAU_rtl_0",
+    "op_type": "MVAU_rtl",
+    "attrs": {
+      "MH": 5,
+      "MW": 16,
+      "PE": 5,
+      "SIMD": 16,
+      "weightDataType": "INT6",
+      "inputDataType": "UINT6",
+      "outputDataType": "INT16",
+      "accDataType": "INT16",
+      "resType": "dsp",
+      "ram_style": "auto",
+      "mem_mode": "internal_decoupled",
+      "runtime_writeable_weights": 0
+    }
   }
 ]

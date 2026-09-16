@@ -119,7 +119,7 @@ for part in PARTITIONS:
         if res is None:
             raise RuntimeError(f"partition {part}: no hierarchical utilization row for {name!r}")
         # VVAU (depthwise) nodes use Channels/Kernel instead of MH/MW.
-        if node["op_type"] == "VVAU_hls":
+        if node["op_type"] in ("VVAU_hls", "VVAU_rtl"):
             mh = a["Channels"]
             mw = a["Kernel"][0] * a["Kernel"][1]
         else:
