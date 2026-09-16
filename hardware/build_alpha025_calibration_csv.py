@@ -118,12 +118,19 @@ for part in PARTITIONS:
         res = hier.get(name)
         if res is None:
             raise RuntimeError(f"partition {part}: no hierarchical utilization row for {name!r}")
+        # VVAU (depthwise) nodes use Channels/Kernel instead of MH/MW.
+        if node["op_type"] == "VVAU_hls":
+            mh = a["Channels"]
+            mw = a["Kernel"][0] * a["Kernel"][1]
+        else:
+            mh = a["MH"]
+            mw = a["MW"]
         row = {
             "partition": part,
             "node_name": name,
             "op_type": node["op_type"],
-            "MH": a["MH"],
-            "MW": a["MW"],
+            "MH": mh,
+            "MW": mw,
             "PE": a["PE"],
             "SIMD": a["SIMD"],
             "PE_folding_json": pe_json,
@@ -139,7 +146,7 @@ for part in PARTITIONS:
             "ram_style": a["ram_style"],
             "mem_mode": a["mem_mode"],
             "PE_times_SIMD": a["PE"] * a["SIMD"],
-            "log2_MW": round(math.log2(a["MW"]), 2),
+            "log2_MW": round(math.log2(mw), 2),
         }
         row.update(res)
         rows.append(row)

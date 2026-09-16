@@ -19,7 +19,7 @@ for node in model.graph.node:
     inst = getCustomOp(node)
     attrs = {}
     for key in (
-        "MH", "MW", "PE", "SIMD", "Channels", "Kernel_0", "Kernel_1",
+        "MH", "MW", "PE", "SIMD", "Channels", "Kernel",
         "weightDataType", "inputDataType", "outputDataType", "accDataType",
         "resType", "ram_style", "mem_mode", "runtime_writeable_weights",
     ):

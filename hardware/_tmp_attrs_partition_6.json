@@ -1,0 +1,203 @@
+[
+  {
+    "node_name": "MVAU_hls_0",
+    "op_type": "MVAU_hls",
+    "attrs": {
+      "MH": 4,
+      "MW": 16,
+      "PE": 2,
+      "SIMD": 8,
+      "weightDataType": "INT6",
+      "inputDataType": "UINT6",
+      "outputDataType": "UINT6",
+      "accDataType": "INT15",
+      "resType": "dsp",
+      "ram_style": "block",
+      "mem_mode": "internal_decoupled",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "MVAU_hls_1",
+    "op_type": "MVAU_hls",
+    "attrs": {
+      "MH": 4,
+      "MW": 36,
+      "PE": 1,
+      "SIMD": 18,
+      "weightDataType": "INT6",
+      "inputDataType": "UINT6",
+      "outputDataType": "UINT6",
+      "accDataType": "INT16",
+      "resType": "dsp",
+      "ram_style": "block",
+      "mem_mode": "internal_decoupled",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "MVAU_hls_2",
+    "op_type": "MVAU_hls",
+    "attrs": {
+      "MH": 16,
+      "MW": 4,
+      "PE": 4,
+      "SIMD": 4,
+      "weightDataType": "INT6",
+      "inputDataType": "UINT6",
+      "outputDataType": "INT8",
+      "accDataType": "INT13",
+      "resType": "dsp",
+      "ram_style": "block",
+      "mem_mode": "internal_decoupled",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "MVAU_hls_3",
+    "op_type": "MVAU_hls",
+    "attrs": {
+      "MH": 4,
+      "MW": 16,
+      "PE": 1,
+      "SIMD": 16,
+      "weightDataType": "INT6",
+      "inputDataType": "UINT6",
+      "outputDataType": "UINT6",
+      "accDataType": "INT14",
+      "resType": "dsp",
+      "ram_style": "block",
+      "mem_mode": "internal_decoupled",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "MVAU_hls_4",
+    "op_type": "MVAU_hls",
+    "attrs": {
+      "MH": 4,
+      "MW": 36,
+      "PE": 2,
+      "SIMD": 18,
+      "weightDataType": "INT4",
+      "inputDataType": "UINT6",
+      "outputDataType": "UINT4",
+      "accDataType": "INT13",
+      "resType": "dsp",
+      "ram_style": "auto",
+      "mem_mode": "internal_decoupled",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "MVAU_hls_5",
+    "op_type": "MVAU_hls",
+    "attrs": {
+      "MH": 16,
+      "MW": 4,
+      "PE": 16,
+      "SIMD": 1,
+      "weightDataType": "INT6",
+      "inputDataType": "UINT4",
+      "outputDataType": "INT8",
+      "accDataType": "INT11",
+      "resType": "dsp",
+      "ram_style": "block",
+      "mem_mode": "internal_decoupled",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "MVAU_hls_6",
+    "op_type": "MVAU_hls",
+    "attrs": {
+      "MH": 4,
+      "MW": 16,
+      "PE": 1,
+      "SIMD": 16,
+      "weightDataType": "INT6",
+      "inputDataType": "UINT6",
+      "outputDataType": "INT6",
+      "accDataType": "INT14",
+      "resType": "dsp",
+      "ram_style": "block",
+      "mem_mode": "internal_decoupled",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "MVAU_hls_7",
+    "op_type": "MVAU_hls",
+    "attrs": {
+      "MH": 4,
+      "MW": 16,
+      "PE": 4,
+      "SIMD": 8,
+      "weightDataType": "INT4",
+      "inputDataType": "UINT6",
+      "outputDataType": "UINT6",
+      "accDataType": "INT12",
+      "resType": "dsp",
+      "ram_style": "auto",
+      "mem_mode": "internal_decoupled",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "VVAU_hls_0",
+    "op_type": "VVAU_hls",
+    "attrs": {
+      "PE": 2,
+      "SIMD": 3,
+      "Channels": 4,
+      "Kernel": [
+        3,
+        3
+      ],
+      "weightDataType": "UINT7",
+      "inputDataType": "INT6",
+      "outputDataType": "INT8",
+      "accDataType": "INT15",
+      "resType": "dsp",
+      "ram_style": "block",
+      "mem_mode": "internal_decoupled",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "MVAU_hls_8",
+    "op_type": "MVAU_hls",
+    "attrs": {
+      "MH": 4,
+      "MW": 16,
+      "PE": 4,
+      "SIMD": 8,
+      "weightDataType": "INT4",
+      "inputDataType": "UINT6",
+      "outputDataType": "UINT4",
+      "accDataType": "INT13",
+      "resType": "dsp",
+      "ram_style": "block",
+      "mem_mode": "internal_decoupled",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "MVAU_hls_9",
+    "op_type": "MVAU_hls",
+    "attrs": {
+      "MH": 4,
+      "MW": 4,
+      "PE": 4,
+      "SIMD": 4,
+      "weightDataType": "INT4",
+      "inputDataType": "UINT4",
+      "outputDataType": "INT8",
+      "accDataType": "INT9",
+      "resType": "dsp",
+      "ram_style": "auto",
+      "mem_mode": "internal_decoupled",
+      "runtime_writeable_weights": 0
+    }
+  }
+]
