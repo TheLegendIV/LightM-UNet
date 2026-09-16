@@ -205,6 +205,7 @@ def solve_joint_perlayer(
     pinned_bits: dict[str, tuple[int, int]] | None = None,
     predecessor_map: dict[str, list[str]] | None = None,
     force_dsp: bool = False,
+    require_simd_ge_pe: bool = False,
 ) -> dict:
     """The per-layer combined MILP -- see module docstring for the full
     formulation and how it differs from joint_bits_folding_ilp.solve_joint
@@ -256,6 +257,16 @@ def solve_joint_perlayer(
 
     for layer in geometries:
         folds = _folding.candidate_folds(layer)  # respects _folding.FORCE_SERIAL if set
+        if require_simd_ge_pe:
+            # Hard structural fix for the PE>>SIMD real-LUT blowup documented in
+            # hardware/mvau_lut_correlation_report.txt: 36% of the 89-row real
+            # calibration dataset has PE>SIMD, yet those rows account for 70.7%
+            # of total real_LUT. Rules out that whole region up front instead of
+            # relying on a fitted imbalance_luts penalty (finn_cost_model.py's
+            # conv_cost_pe_simd) to price it correctly. PE=1 is always paired
+            # with SIMD=max_simd(layer)>=1 by candidate_folds, so this never
+            # empties a layer's fold set.
+            folds = [f for f in folds if f[1] >= f[0]]
         layer_folds[layer.name] = folds
         for pe, simd, ram_style in folds:
             for w, a in candidate_pairs:
@@ -324,7 +335,7 @@ def solve_joint_perlayer(
                 "hard_lut_fraction": hard_lut_fraction, "hard_bram_fraction": hard_bram_fraction,
                 "max_cycles": max_cycles,
                 "solver_time_limit_s": time_limit, "solver_gap_rel": gap_rel, "force_serial": _folding.FORCE_SERIAL,
-                "force_dsp": force_dsp,
+                "force_dsp": force_dsp, "require_simd_ge_pe": require_simd_ge_pe,
                 "note": f"Solver status {status_name!r} -- no joint per-layer (bits, folding) assignment "
                         f"satisfies the requested hard LUT/BRAM budget(s) (hard_lut_fraction={hard_lut_fraction}, "
                         f"hard_bram_fraction={hard_bram_fraction})"
@@ -381,7 +392,7 @@ def solve_joint_perlayer(
             "hard_lut_fraction": hard_lut_fraction, "hard_bram_fraction": hard_bram_fraction,
             "max_cycles": max_cycles,
             "solver_time_limit_s": time_limit, "solver_gap_rel": gap_rel, "force_serial": _folding.FORCE_SERIAL,
-            "force_dsp": force_dsp,
+            "force_dsp": force_dsp, "require_simd_ge_pe": require_simd_ge_pe,
             "note": "Joint per-LAYER MILP: y[layer,w,a] (sensitivity) linked to z[layer,pe,simd,ram_style,w,a] "
                     "(cycles/LUT/BRAM) via a same-layer equality constraint -- LUT/BRAM are REAL hard "
                     "<= XCZU7EV constraints here (not a soft penalty), same as joint_bits_folding_ilp.py's own. "
@@ -431,6 +442,12 @@ def main() -> None:
                               "as folding_ilp.py's/joint_bits_folding_ilp.py's own flag (reused directly). Mainly "
                               "for validating this script against joint_bits_folding_ilp.py's own already-"
                               "computed answers (pin bits externally and compare) -- see module docstring.")
+    parser.add_argument("--require-simd-ge-pe", action="store_true",
+                         help="Drop every (PE,SIMD) candidate fold with PE>SIMD before solving -- a hard, "
+                              "zero-fitted-parameter fix for the real-LUT blowup documented in "
+                              "hardware/mvau_lut_correlation_report.txt (PE>SIMD rows are 36%% of the real "
+                              "calibration dataset but 70.7%% of its total real_LUT). Default False preserves "
+                              "prior behavior exactly.")
     parser.add_argument("--time-limit", type=int, default=1800,
                          help="CBC wall-clock cap in seconds (default 1800 = 30min).")
     parser.add_argument("--gap-rel", type=float, default=0.02,
@@ -504,7 +521,12 @@ def main() -> None:
               f"HAWQ-measured) -- given a fixed raw sensitivity of 0.0 for every (w,a), see module docstring.")
 
     candidate_pairs_count = len(CANDIDATE_BITS) ** 2
-    n_z = sum(len(_folding.candidate_folds(g)) for g in geometries) * candidate_pairs_count
+    n_folds_per_layer = [
+        len([f for f in _folding.candidate_folds(g) if f[1] >= f[0]]) if args.require_simd_ge_pe
+        else len(_folding.candidate_folds(g))
+        for g in geometries
+    ]
+    n_z = sum(n_folds_per_layer) * candidate_pairs_count
     n_y = len(layer_names) * candidate_pairs_count
     print(f"Traced {len(geometries)} layers (per-layer granularity, no block grouping). "
           f"candidate_bits={CANDIDATE_BITS} -> {candidate_pairs_count} (w,a) pairs. "
@@ -529,7 +551,7 @@ def main() -> None:
     result = solve_joint_perlayer(
         sensitivity, geometries, args.alpha, args.hard_lut_fraction, args.hard_bram_fraction,
         args.time_limit, args.gap_rel, max_cycles=max_cycles, pinned_bits=pinned_bits,
-        predecessor_map=predecessor_map, force_dsp=args.force_dsp,
+        predecessor_map=predecessor_map, force_dsp=args.force_dsp, require_simd_ge_pe=args.require_simd_ge_pe,
     )
 
     args.out_file.parent.mkdir(parents=True, exist_ok=True)

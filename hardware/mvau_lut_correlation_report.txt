@@ -1,0 +1,168 @@
+MVAU/VVAU real_LUT correlation & regression analysis
+Source dataset: hardware/mvau_lut_calibration_dataset.csv (89 real MVAU/VVAU
+nodes, all 8 partitions of the finn_calibrated 8-way production build,
+force_dsp=True for all rows).
+
+=======================================================================
+1) Pearson correlation of real_LUT vs. base variables
+=======================================================================
+PE*act_bits                                       0.7704
+PE*(act_bits+weight_bits)/2                       0.7607
+PE*(act_bits+weight_bits)                         0.7607  (identical, /2 is just a scalar)
+PE*(act_bits*weight_bits)                         0.7701
+PE*weight_bits                                    0.7121
+PE                                                0.6900
+MH                                                0.6245
+SIMD*weight_bits                                 -0.4338
+log2_MW                                          -0.4327
+SIMD                                              -0.4069
+MW                                                -0.3793
+SIMD*act_bits                                     -0.3713
+real_BRAM18                                        0.2222
+real_FF                                            0.2012
+PE*SIMD*weight_bits                               -0.1530
+real_DSP                                          -0.1456
+PE_times_SIMD                                     -0.1249
+PE*SIMD*(act_bits+weight_bits)                    -0.1216
+real_BRAM36                                        0.0676
+weight_bits                                       -0.0611
+act_bits                                           0.0268
+force_dsp                                            nan  (constant: all 89 rows have resType=dsp)
+
+=======================================================================
+2) Best engineered single-feature combos found
+=======================================================================
+PE*act_bits + MH                          0.8102   <- best simple combo found
+PE*act_bits*log2(MH)                      0.7961
+PE*act_bits/SIMD                          0.7813
+PE*act_bits                               0.7704   (baseline)
+sqrt(PE)*act_bits*PE                      0.7458
+PE*acc_width(act+weight+ceil(log2 SIMD))  0.7452
+PE^2*act_bits                             0.6973
+PE*MH                                     0.6940
+PE*act_bits - SIMD*weight_bits            0.6824
+PE*act_bits + PE*SIMD                     0.6697
+MH*act_bits                               0.6303
+(PE+SIMD)*act_bits                        0.2472
+
+=======================================================================
+3) Multivariate OLS regressions (R^2, not correlation)
+=======================================================================
+kitchen sink (PE, SIMD, MH, MW, weight_bits, act_bits, PE*act_bits,
+PE*weight_bits, PE*SIMD, log2(MW))
+    R^2 = 0.7884   <- highest, but 10 params / 89 rows, likely overfit
+
+PE*act_bits + PE*weight_bits + SIMD*weight_bits + MH
+    R^2 = 0.6732
+
+PE*act_bits + MH
+    R^2 = 0.6692
+    fitted: real_LUT = 176.4*(PE*act_bits) + 337.1*MH - 3097
+
+PE + act_bits + weight_bits + SIMD + MH (no interaction terms)
+    R^2 = 0.6097
+
+PE*act_bits + PE*weight_bits
+    R^2 = 0.5943
+
+PE*act_bits alone
+    R^2 = 0.5934
+
+=======================================================================
+4) Testing the user-proposed formula:
+   mvu_lut = c0 + c3*MH + c1*P*(A + mult_luts + addertree_luts + acc_luts)
+   (M=1, mult_luts=0 since all rows are force_dsp)
+=======================================================================
+current formula as-is (c0=300, c1=1.1, UNFIT, force_dsp)
+    R^2 = -0.4040   RMSE=13012   (worse than predicting the mean)
+
+c0 + c1*X_combined  (X = P*(A + addertree_luts + acc_luts), no MH)
+    R^2 = 0.0001   RMSE=10981   <- essentially zero signal
+
+c0 + c3*MH + c1*X_combined   (proposed formula, OLS-fit)
+    R^2 = 0.3955   RMSE=8538
+    c3*MH          = 669.8
+    c1*X_combined  = 2.88
+
+c0 + c3*MH + c1*(P*A) + c2*(P*(addertree_luts+acc_luts))  [separate slopes]
+    R^2 = 0.6759   RMSE=6252
+    c3*MH                    = 312.6
+    c1*(P*A)                 = 181.4
+    c2*(P*(addertree+acc))   = -3.30   <- NEGATIVE, wrong sign physically
+
+c0 + c1*(P*A) + c2*(P*(addertree_luts+acc_luts))   [no MH]
+    R^2 = 0.6144   RMSE=6819
+
+c0 + c3*MH + c1*(P*A)   [drop addertree/acc structural terms entirely]
+    R^2 = 0.6692   RMSE=6316
+
+CONCLUSION: the proposed formula, evaluated with a single shared
+coefficient across A/addertree_luts/acc_luts, underperforms badly
+(R^2=0.40 with MH, ~0 without) because addertree_luts/acc_luts scale with
+SIMD, and SIMD is NEGATIVELY correlated with real_LUT in this dataset
+(SIMD alone: -0.41). Sharing one coefficient across a positively-correlated
+term (A) and negatively-correlated terms (addertree/acc) cancels most of
+the signal. Even allowing the structural term its own free coefficient,
+the fit assigns it a NEGATIVE weight (-3.3) -- physically backwards -- and
+only nudges R^2 from 0.669 to 0.676, not a meaningful improvement.
+BEST SIMPLE, PHYSICALLY-SANE MODEL SO FAR: real_LUT ~ MH + PE*act_bits
+(R^2=0.669).
+
+=======================================================================
+5) Testing: mvu_lut = c0 + c1*M*P*(mult_luts + c2*addertree_luts + c3*acc_luts)
+   (M=1, mult_luts=0 since force_dsp everywhere -- c1 not separately
+   identifiable from c2/c3 in a linear fit, equivalent to 2 free combined
+   coefficients on P*addertree_luts and P*acc_luts)
+=======================================================================
+c0 + c1*P*(mult_luts + c2*addertree_luts + c3*acc_luts)
+    R^2 = 0.5455   RMSE=7403.4
+    c0 (intercept)              2287.96
+    coef on P*addertree_luts     -6.02   (wrong-signed)
+    coef on P*acc_luts           90.90
+
+PE*act_bits + MH   (comparison baseline)
+    R^2 = 0.6692   RMSE=6315.8
+    intercept              -3096.91
+    coef on PE*act_bits       176.45
+    coef on MH                337.10
+
+P*addertree_luts + P*acc_luts + PE*act_bits + MH  (all 4 terms combined)
+    R^2 = 0.7011   RMSE=6003.6
+    intercept           -806.30
+    P*addertree_luts      -2.53   (flips negative once PE*act_bits/MH present)
+    P*acc_luts           -95.71   (also flips negative)
+    PE*act_bits          374.23
+    MH                   352.21
+
+CONCLUSION: PE*act_bits + MH (R^2=0.669) remains the best simple,
+physically-coherent model. addertree_luts/acc_luts terms consistently
+flip sign or add only marginal R^2 once PE*act_bits/MH are present --
+not solid independent evidence of a real additive structural effect at
+this sample size (n=89).
+
+=======================================================================
+6) Testing: ADD PE*act_bits + MH to the EXISTING formula (not swap)
+   i.e. mvu_lut = c0 + c1*P*(mult_luts+addertree_luts+acc_luts)
+                     + c4*(PE*act_bits) + c5*MH
+=======================================================================
+current formula alone: c0 + c1*P*(mult+addertree+acc)
+    R^2=0.0090   (basically useless on its own once properly fit)
+
+current formula + PE*act_bits (added)
+    R^2=0.6144
+
+current formula + MH (added)
+    R^2=0.3902
+
+current formula + PE*act_bits + MH (both added)
+    R^2=0.6759   coefs: intercept=-1141.6, structural=-3.30, PE*act_bits=181.4, MH=312.6
+
+PE*act_bits + MH alone (structural term dropped entirely)
+    R^2=0.6692
+
+CONCLUSION: adding both terms to the existing formula only nudges R^2 from
+0.6692 to 0.6759 (+0.0067) -- negligible. The structural term's own fitted
+coefficient is NEGATIVE (-3.30), i.e. regression wants to SUBTRACT it, not
+add it, once PE*act_bits/MH are present. The addertree_luts/acc_luts term
+isn't earning its keep -- dropping it in favor of plain PE*act_bits + MH is
+simpler and essentially as accurate.

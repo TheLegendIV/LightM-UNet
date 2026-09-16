@@ -46,12 +46,10 @@ FPGA_PART = "xczu7ev-ffvc1156-2-e"
 CLK_PERIOD_NS = 10.0
 
 
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: finn_ooc_probe_s12_context_synth.py <OUTPUT_DIR>", file=sys.stderr)
-        sys.exit(1)
-    output_dir = sys.argv[1]
-
+def run_ooc_synth(output_dir: str) -> dict:
+    """Core OOC-synthesis logic, callable directly (e.g. right after a build
+    script's own build.build_dataflow_cfg() call finishes stitching) as well
+    as via this script's own CLI entry point below."""
     # step_create_dataflow_partition reassigns `model` to the CHILD partition
     # model for every subsequent step, so step_create_stitched_ip.onnx (named
     # after the step, per save_intermediate_models's own convention) IS
@@ -63,9 +61,10 @@ def main():
     if not os.path.exists(ckpt):
         import glob
         available = sorted(glob.glob(os.path.join(output_dir, "intermediate_models", "*.onnx")))
-        print(f"Could not find {ckpt}.\n"
-              f"Files actually present under intermediate_models/: {available}", file=sys.stderr)
-        sys.exit(1)
+        raise FileNotFoundError(
+            f"Could not find {ckpt}.\n"
+            f"Files actually present under intermediate_models/: {available}"
+        )
     print(f"Using stitched-IP checkpoint: {ckpt}")
 
     part_model = ModelWrapper(ckpt)
@@ -85,6 +84,14 @@ def main():
     with open(out_file, "w") as f:
         json.dump(res, f, indent=2)
     print(f"[ooc_synth] Done. Wrote {out_file}")
+    return res
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: finn_ooc_probe_s12_context_synth.py <OUTPUT_DIR>", file=sys.stderr)
+        sys.exit(1)
+    run_ooc_synth(sys.argv[1])
 
 
 if __name__ == "__main__":

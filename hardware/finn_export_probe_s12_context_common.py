@@ -73,16 +73,16 @@ class ProbeNet(nn.Module):
     """1x1 stem -> 2 stacked QuantRegularBottleneck context blocks, only
     `separable_dilated` varies between the dense/separable probes."""
 
-    def __init__(self, separable_dilated: bool):
+    def __init__(self, separable_dilated: bool, weight_bit_width: int = WEIGHT_BIT_WIDTH, act_bit_width: int = ACT_BIT_WIDTH):
         super().__init__()
         self.stem = nn.Sequential(
-            _quant_conv2d(IN_CHANNELS, CHANNELS, WEIGHT_BIT_WIDTH, kernel_size=1),
+            _quant_conv2d(IN_CHANNELS, CHANNELS, weight_bit_width, kernel_size=1),
             nn.BatchNorm2d(CHANNELS),
-            _quant_act(ACT_BIT_WIDTH),
+            _quant_act(act_bit_width),
         )
         self.bottlenecks = nn.ModuleList([
             QuantRegularBottleneck(
-                channels=CHANNELS, weight_bit_width=WEIGHT_BIT_WIDTH, act_bit_width=ACT_BIT_WIDTH,
+                channels=CHANNELS, weight_bit_width=weight_bit_width, act_bit_width=act_bit_width,
                 internal_ratio=INTERNAL_RATIO, kernel_size=KERNEL_SIZE, padding=dilation, dilation=dilation,
                 separable_dilated=separable_dilated,
             )
@@ -135,7 +135,7 @@ def dump_probe_geometry(model: nn.Module, input_hw: tuple[int, int]) -> list[Lay
     return geometries
 
 
-def raw_estimate(geometries: list[LayerGeometry]) -> dict:
+def raw_estimate(geometries: list[LayerGeometry], weight_bit_width: int = WEIGHT_BIT_WIDTH, act_bit_width: int = ACT_BIT_WIDTH) -> dict:
     """Raw (UNDERATED -- no calibrated_lut/calibrated_bram18k applied)
     per-layer and summed LUT/BRAM/cycles, force_dsp=True, PE=SIMD=1 for every
     layer, ram_style picked per-layer via layer_cost_pe_simd_auto_ram
@@ -145,7 +145,7 @@ def raw_estimate(geometries: list[LayerGeometry]) -> dict:
     total_lut = total_bram18 = total_uram18 = 0.0
     stem_lut = stem_bram18 = 0.0
     for g in geometries:
-        r = layer_cost_pe_simd_auto_ram(g, WEIGHT_BIT_WIDTH, ACT_BIT_WIDTH, PE, SIMD, force_dsp=True)
+        r = layer_cost_pe_simd_auto_ram(g, weight_bit_width, act_bit_width, PE, SIMD, force_dsp=True)
         per_layer[g.name] = {
             "stage": g.stage, "cin": g.cin, "cout": g.cout, "hin": g.hin, "win": g.win,
             "kh": g.kh, "kw": g.kw, "dh": g.dh, "dw": g.dw, "groups": g.groups,
@@ -165,15 +165,15 @@ def raw_estimate(geometries: list[LayerGeometry]) -> dict:
     }
 
 
-def build_and_estimate(separable_dilated: bool) -> tuple[ProbeNet, dict]:
+def build_and_estimate(separable_dilated: bool, weight_bit_width: int = WEIGHT_BIT_WIDTH, act_bit_width: int = ACT_BIT_WIDTH) -> tuple[ProbeNet, dict]:
     torch.manual_seed(0)  # dummy weights, but reproducible across runs
-    model = ProbeNet(separable_dilated)
+    model = ProbeNet(separable_dilated, weight_bit_width, act_bit_width)
     geometries = dump_probe_geometry(model, INPUT_HW)
-    est = raw_estimate(geometries)
+    est = raw_estimate(geometries, weight_bit_width, act_bit_width)
     return model, est
 
 
-def export_onnx(model: nn.Module, name: str) -> Path:
+def export_onnx(model: nn.Module, name: str, act_bit_width: int = ACT_BIT_WIDTH) -> Path:
     """Same export helper as hardware/finn_enet_prod_export.py's export_model
     (reimplemented inline here to keep this probe self-contained and avoid
     that file's own nnunetv2-independent-import assumption)."""
@@ -199,7 +199,7 @@ def export_onnx(model: nn.Module, name: str) -> Path:
     # a similar "Signed output requires actval < 0" (the real output never
     # goes negative, so the emitted thresholds have no negative actval to satisfy
     # a signed-output annotation).
-    qm.set_tensor_datatype(qm.graph.output[0].name, DataType[f"UINT{ACT_BIT_WIDTH}"])
+    qm.set_tensor_datatype(qm.graph.output[0].name, DataType[f"UINT{act_bit_width}"])
     qm.save(str(out_path))
 
     loaded = onnx.load(str(out_path))
@@ -212,28 +212,28 @@ def export_onnx(model: nn.Module, name: str) -> Path:
     return out_path
 
 
-def run(name: str, separable_dilated: bool) -> dict:
+def run(name: str, separable_dilated: bool, weight_bit_width: int = WEIGHT_BIT_WIDTH, act_bit_width: int = ACT_BIT_WIDTH) -> dict:
     """Full per-variant pipeline: build -> raw estimate -> export ONNX ->
     return a summary dict (for the combined comparison JSON)."""
-    print(f"=== {name} (separable_dilated={separable_dilated}) ===")
-    model, est = build_and_estimate(separable_dilated)
+    print(f"=== {name} (separable_dilated={separable_dilated}, W{weight_bit_width}A{act_bit_width}) ===")
+    model, est = build_and_estimate(separable_dilated, weight_bit_width, act_bit_width)
     print(f"  layers: {est['n_layers']}  raw_total_lut={est['total_lut']:.1f}  "
           f"raw_total_bram18={est['total_bram18']:.1f}  raw_total_uram18={est['total_uram18']:.1f}")
-    onnx_path = export_onnx(model, name)
+    onnx_path = export_onnx(model, name, act_bit_width)
     return {
         "separable_dilated": separable_dilated,
         "onnx_path": str(onnx_path),
         "architecture": {
             "in_channels": IN_CHANNELS, "channels": CHANNELS, "internal_ratio": INTERNAL_RATIO,
             "internal_channels": CHANNELS // INTERNAL_RATIO, "kernel_size": KERNEL_SIZE,
-            "dilations": list(DILATIONS), "weight_bit_width": WEIGHT_BIT_WIDTH, "act_bit_width": ACT_BIT_WIDTH,
+            "dilations": list(DILATIONS), "weight_bit_width": weight_bit_width, "act_bit_width": act_bit_width,
             "pe": PE, "simd": SIMD, "input_hw": list(INPUT_HW), "force_dsp": True,
         },
         "raw_estimate": est,
     }
 
 
-def write_combined_summary(dense_result: dict, separable_result: dict) -> Path:
+def write_combined_summary(dense_result: dict, separable_result: dict, out_name: str = "probe_s12_context_int4_analytical_estimate.json") -> Path:
     combined = {
         "dense": dense_result,
         "separable": separable_result,
@@ -246,11 +246,11 @@ def write_combined_summary(dense_result: dict, separable_result: dict) -> Path:
             "raw = UNDERATED analytical estimate (finn_cost_model.layer_cost_pe_simd, "
             "force_dsp=True, PE=SIMD=1, no calibrated_lut/calibrated_bram18k applied). "
             "Compare this ratio against real FINN build reports once "
-            "finn_build_probe_s12_context_int4.py has been run through OOC synthesis."
+            "the matching finn_build_probe_s12_context*.py has been run through OOC synthesis."
         ),
     }
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = OUT_DIR / "probe_s12_context_int4_analytical_estimate.json"
+    out_path = OUT_DIR / out_name
     out_path.write_text(json.dumps(combined, indent=2))
     print(f"\nWrote combined summary: {out_path}")
     return out_path

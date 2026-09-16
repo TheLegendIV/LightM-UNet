@@ -521,8 +521,47 @@ def conv_cost_pe_simd(
     # per-layer here (real FINN's own idt.signed() would resolve it exactly).
     alpha = math.log2(mw) + W + A - 1 - 1
     acc_luts = min(32, alpha + math.log2(1 + 2 ** -alpha) + 1)  # capped at FINN's default INT32 accumulator width
-    mvu_lut = c0 + c1 * M * P * (mult_luts + addertree_luts + acc_luts)
+
+    # imbalance_luts: EMPIRICALLY-FIT correction (NOT source-derived like the
+    # rest of this formula) for two real patterns in
+    # hardware/mvau_lut_calibration_dataset.csv left unexplained by the
+    # physically-derived terms above: (1) PE>SIMD folding points (all
+    # parallelism on the output-channel axis, ~none on the reduction axis)
+    # are dramatically more expensive in real synthesis than adder-tree/
+    # accumulator terms predict -- scaled by A since the extra per-lane
+    # control/interconnect logic this term stands in for plausibly grows
+    # with activation width, not just lane count; (2) MH (output channel
+    # count, i.e. max_pe(layer)) has its own independent, PE/SIMD-agnostic
+    # correlation with real_LUT (0.62 alone, see
+    # hardware/mvau_lut_correlation_report.txt) that the PE-scaled terms
+    # above don't capture -- MH is deliberately left UNCONDITIONAL here
+    # (not gated by max(0,PE-SIMD)) since gating it that way fits far worse
+    # (tried: max(0,PE-SIMD)*(c3*A+c4*MH) only reaches R^2=0.570 and gives
+    # MH a wrong-signed NEGATIVE coefficient; c3*max(0,PE-SIMD)*A + c4*MH
+    # unconditional reaches R^2=0.658, both coefficients correctly signed).
+    # Both coefficients fit THROUGH THE ORIGIN against this file's own
+    # baseline prediction's residual -- c_imbalance alone (no MH) reached
+    # R^2=0.566; adding the unconditional MH term raises this to 0.658,
+    # just short of the simple PE*act_bits+MH regression's 0.669 (see
+    # correlation report) but additive on top of the physically-derived
+    # structure rather than replacing it. Only validated at force_dsp=True
+    # (100% of the calibration rows); may not generalize to force_dsp=False.
+    MH = layer.cout  # == max_pe(layer)
+    c_imbalance, c_mh = 167.38, 274.14
+    imbalance_luts = c_imbalance * max(0, P - Q) * A + c_mh * MH
+
+    mvu_lut = c0 + c1 * M * P * (mult_luts + addertree_luts + acc_luts) + imbalance_luts
     total_lut = swu_lut + mvu_lut
+
+    # mvu_dsp: real FINN's MatrixVectorActivation_hls.dsp_estimation() --
+    # P*Q*ceil((W+A)/48) DSP48E2 slices, ZERO unless force_dsp (resType="lut"/
+    # "auto" keeps the multiply in mult_luts above instead) -- see
+    # hardware/resource_equivalence_int8.md for the source-read derivation
+    # (int8: ceil(16/48)=1 DSP/lane). Cross-checked exactly against 3 of 4
+    # sampled rows of hardware/mvau_lut_calibration_dataset.csv's real_DSP
+    # column (4th off by a handful, likely threshold/accumulator DSPs this
+    # simple per-lane count doesn't capture).
+    mvu_dsp = M * P * Q * math.ceil((W + A) / 48) if force_dsp else 0
 
     total_pe = P * M
     total_simd_lanes = P * Q * M
@@ -531,7 +570,8 @@ def conv_cost_pe_simd(
         "total_pe": total_pe, "total_simd_lanes": total_simd_lanes,
         "swu_bram18": swu_bram18, "wm_bram18": wm_bram18, "wm_uram18": wm_uram18,
         "swu_lut": swu_lut, "mvu_lut": mvu_lut, "mp_lut": 0,
-        "total_lut": total_lut, "cycles": cycles,
+        "total_lut": total_lut, "mvu_dsp": mvu_dsp, "total_dsp": mvu_dsp,
+        "cycles": cycles,
     }
 
 
@@ -594,7 +634,8 @@ def maxpool_cost(layer: LayerGeometry, act_bits: int) -> dict:
         "total_pe": 0, "total_simd_lanes": 0,
         "swu_bram18": swu_bram18, "wm_bram18": 0, "wm_uram18": 0,
         "swu_lut": swu_lut, "mvu_lut": 0, "mp_lut": mp_lut,
-        "total_lut": total_lut, "cycles": cycles,
+        "total_lut": total_lut, "mvu_dsp": 0, "total_dsp": 0,
+        "cycles": cycles,
     }
 
 
