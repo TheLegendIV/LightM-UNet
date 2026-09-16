@@ -123,6 +123,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import csv
 import importlib
 import json
 import sys
@@ -489,6 +490,102 @@ def solve_joint_perlayer(
     }
 
 
+_SUMMARY_FIELDS = [
+    "alpha", "status", "avg_weight_bits", "avg_act_bits",
+    "lut_pct_of_budget", "bram_pct_of_budget", "dsp_pct_of_budget",
+    "total_dsp", "total_cycles", "clock_mhz", "latency_ms",
+    "n_binary_vars", "n_layers",
+]
+
+
+def _update_sweep_summary(out_dir: Path, args: argparse.Namespace, result: dict) -> None:
+    """Maintains summary.csv and run_args.json in out_dir across an ALPHA
+    SWEEP -- a 5-alpha sweep normally run as 5 separate `finn_milp.py`
+    invocations (see e.g. compression/slurm/sensitivity_ilp_*.job's own
+    per-alpha loop), each one upserting its own row/shared-args here, so
+    the sweep ends up with one coherent, always-current summary with no
+    separate aggregation script or manual step needed.
+
+    summary.csv: one row per alpha, replaced (not duplicated) on rerun --
+    keyed by the `alpha` column, matching upsert_row's own config_name-keyed
+    replace semantics in compression/collect_results.py. An existing row
+    from an OLDER schema version (e.g. missing dsp_pct_of_budget, before
+    this repo's forced-DSP-regime hard DSP cap existed) is dropped rather
+    than partially merged -- summary.csv is a derived artifact, safe to
+    regenerate wrong-then-right one alpha at a time as each is rerun.
+
+    run_args.json: shared_args should be IDENTICAL across every alpha of one
+    real sweep -- if an existing run_args.json's shared_args disagree with
+    this invocation's, that's flagged loudly (a real inconsistency, e.g.
+    someone changed --hard-lut-fraction between alphas) rather than
+    silently overwritten without comment."""
+    diag = result["_diagnostics"]
+    weight_bits, act_bits = result.get("layer_weight_bits", {}), result.get("layer_act_bits", {})
+    avg_weight_bits = sum(weight_bits.values()) / len(weight_bits) if weight_bits else float("nan")
+    avg_act_bits = sum(act_bits.values()) / len(act_bits) if act_bits else float("nan")
+    total_cycles = diag.get("total_cycles")
+    latency_ms = total_cycles / (args.clock_mhz * 1000) if total_cycles is not None else float("nan")
+
+    row = {
+        "alpha": args.alpha, "status": result["status"],
+        "avg_weight_bits": avg_weight_bits, "avg_act_bits": avg_act_bits,
+        "lut_pct_of_budget": diag.get("lut_pct_of_budget"), "bram_pct_of_budget": diag.get("bram_pct_of_budget"),
+        "dsp_pct_of_budget": diag.get("dsp_pct_of_budget"), "total_dsp": diag.get("total_dsp"),
+        "total_cycles": total_cycles, "clock_mhz": args.clock_mhz, "latency_ms": latency_ms,
+        "n_binary_vars": diag.get("n_binary_vars"), "n_layers": diag.get("n_layers"),
+    }
+
+    summary_path = out_dir / "summary.csv"
+    rows = []
+    if summary_path.exists():
+        with open(summary_path, newline="") as f:
+            rows = [r for r in csv.DictReader(f) if float(r["alpha"]) != args.alpha]
+    rows.append(row)
+    rows.sort(key=lambda r: float(r["alpha"]))
+    with open(summary_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=_SUMMARY_FIELDS, restval="")
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"Updated {summary_path} ({len(rows)} alpha rows).")
+
+    run_args_path = out_dir / "run_args.json"
+    shared_args = {
+        "config": args.config, "sensitivity-file": str(args.sensitivity_file),
+        "candidate-bits": ",".join(str(b) for b in CANDIDATE_BITS),
+        "hard-lut-fraction": args.hard_lut_fraction, "hard-bram-fraction": args.hard_bram_fraction,
+        "hard-dsp-fraction": args.hard_dsp_fraction, "force-dsp": args.force_dsp,
+        "max-latency-ms": args.max_latency_ms, "clock-mhz": args.clock_mhz,
+        "force-serial": FORCE_SERIAL, "require-simd-ge-pe": args.require_simd_ge_pe,
+        "time-limit": args.time_limit, "gap-rel": args.gap_rel,
+    }
+    existing_alphas = []
+    if run_args_path.exists():
+        existing = json.loads(run_args_path.read_text())
+        existing_alphas = existing.get("alphas", [])
+        prior_shared = existing.get("shared_args", {})
+        mismatched = {k: (prior_shared[k], v) for k, v in shared_args.items() if k in prior_shared and prior_shared[k] != v}
+        if mismatched:
+            print(f"WARNING: {run_args_path} was last written with DIFFERENT shared args for other alpha(s) in "
+                  f"this sweep: {mismatched} -- overwriting shared_args with THIS run's values; the sweep may "
+                  f"now be inconsistent across alphas (mixed hard caps/config/etc).")
+    run_args = {
+        "pipeline": [
+            "compression/MILP/layer_sensitivity.py --candidate-bits ...",
+            "compression/MILP/finn_milp.py --candidate-bits ... --hard-lut-fraction ... --hard-bram-fraction ... "
+            "--hard-dsp-fraction ... --force-dsp",
+            "compression/MILP/expand_layer_bits.py",
+        ],
+        "shared_args": shared_args,
+        "alphas": sorted(set(existing_alphas) | {args.alpha}),
+        "granularity": "layer",
+        "notes": f"Per-layer joint bits+folding MILP for {args.config}, hard LUT/BRAM/DSP caps "
+                 f"{args.hard_lut_fraction}/{args.hard_bram_fraction}/{args.hard_dsp_fraction} under "
+                 f"force_dsp={args.force_dsp}. See summary.csv for per-alpha results.",
+    }
+    run_args_path.write_text(json.dumps(run_args, indent=2))
+    print(f"Updated {run_args_path}.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", required=True,
@@ -650,6 +747,8 @@ def main() -> None:
     print(f"DSP used: {diag['total_dsp']:.0f} ({diag['dsp_pct_of_budget']:.1f}% of {XCZU7EV['DSP']} budget) "
           f"-- GUARANTEED (hard constraint).")
     print(f"Total cycles (sum, ~= per-image latency): {diag['total_cycles']:.0f}")
+
+    _update_sweep_summary(args.out_file.parent, args, result)
 
 
 if __name__ == "__main__":
