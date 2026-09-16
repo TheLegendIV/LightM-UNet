@@ -302,13 +302,24 @@ class LayerQuantEnetFINN(nn.Module):
     accumulator's own scale (input_scale * weight_scale), which makes it an
     exact-integer constant -- letting InferChannelwiseLinearLayer lower the
     resulting Add straight to a real ChannelwiseOp HW node instead of a
-    CPU-side post-processing step."""
+    CPU-side post-processing step.
+
+    `separable_dilated` (default False, matching the original
+    12_dense_relu_warmstart150ep family this class was built for) threads
+    straight through to stage2/stage3's `_make_layer_context_stage` calls --
+    set True for the 12_separable_dense_relu sibling family (dense KxK
+    dilated conv factored into a (k,1)+(1,k) pair for dilation!=1 blocks,
+    site names "conv.0"/"conv.3" instead of a single "conv"; see
+    LayerQuantRegularBottleneck's own docstring). No other change needed:
+    initial/down1/down2/up4/up5 and regular1/regular4/regular5 are
+    unaffected (separable_dilated only ever changes stage2/stage3's
+    dilated-block internals)."""
 
     def __init__(
         self, layer_weight_bits: dict[str, int], layer_act_bits: dict[str, int], *,
         in_channels: int = 1, out_channels: int = 5,
         channels: tuple[int, int, int, int, int], bottlenecks_per_stage: tuple[int, int, int, int, int],
-        context_pattern: str, final_bias: bool = True,
+        context_pattern: str, final_bias: bool = True, separable_dilated: bool = False,
     ):
         super().__init__()
         c0, c1, c23, c4, c5 = channels
@@ -327,10 +338,12 @@ class LayerQuantEnetFINN(nn.Module):
             c1, c23, _local_single(layer_weight_bits, "down2"), _local_single(layer_act_bits, "down2"), dropout_p=0.1,
         )
         self.stage2 = _make_layer_context_stage(
-            c23, n2, layer_weight_bits, layer_act_bits, "stage2", {}, context_pattern, separable_dilated=False,
+            c23, n2, layer_weight_bits, layer_act_bits, "stage2", {}, context_pattern,
+            separable_dilated=separable_dilated,
         )
         self.stage3 = _make_layer_context_stage(
-            c23, n3, layer_weight_bits, layer_act_bits, "stage3", {}, context_pattern, separable_dilated=False,
+            c23, n3, layer_weight_bits, layer_act_bits, "stage3", {}, context_pattern,
+            separable_dilated=separable_dilated,
         )
 
         self.up4 = FINNUpsamplingBottleneck(

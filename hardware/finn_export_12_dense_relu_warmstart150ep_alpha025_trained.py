@@ -230,6 +230,7 @@ def main() -> None:
           f"(alpha=0.25) -- {len(weight_names)} weight sites, {len(act_names)} act sites ===")
     model = LayerQuantEnetFINN(
         layer_weight_bits, layer_act_bits, in_channels=args.in_channels, out_channels=args.out_channels,
+        channels=CHANNELS, bottlenecks_per_stage=BOTTLENECKS_PER_STAGE, context_pattern=CONTEXT_PATTERN,
     ).eval()
 
     print("\n=== Loading real trained checkpoint ===")
