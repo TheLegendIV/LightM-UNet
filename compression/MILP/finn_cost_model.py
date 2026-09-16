@@ -40,11 +40,26 @@ never the sliding-window buffer. If SWU BRAM alone already exceeds budget,
 no amount of folding fixes it -- only M (already minimal, =1), A (bit-width),
 or the underlying kernel/stride/channel geometry can.
 
-Not covered here (same scope as finn_cost_formulae.md): threshold memory,
-routing/interconnect/shell overhead. DSP is not modeled by this formula set
-either (the source report only covers BRAM_18K/LUT/PE/SIMD) -- the HAWQ ILP
-budget accordingly constrains on LUT (this repo's tightest observed budget
-line, see hardware/README.md's ~21x-over-LUT-budget note).
+2026-09-17 REFRESH -- noActivation regime, formulae transcribed from the
+FINN v1.0.0-alpha source checkout at <repo>/finn (src/finn/custom_op/
+fpgadataflow/{matrixvectoractivation,vectorvectoractivation}.py, hls/
+{matrixvectoractivation,vectorvectoractivation}_hls.py, rtl/
+{matrixvectoractivation,vectorvectoractivation,convolutioninputgenerator,
+thresholding}_rtl.py, util/basic.py). conv_cost_pe_simd now models, per
+conv layer: MVAU/VVAU LUT (HLS noActivation formula; FINN's MVAU_rtl.
+lut_estimation() is literally 0, so the HLS formula doubles as the RTL
+proxy), DSP (HLS: P*Q*ceil((W+A)/48); RTL DSP48: ceil(P/lanes)*Q), weight
+memory BRAM_18K (FINN's exact SDP aspect-ratio table) / URAM, the RTL
+sliding-window unit (LUT=300, line-buffer BRAM and cycle count as a
+function of the SWU's own SIMD), and the STANDALONE Thresholding_rtl node
+that follows every MVAU/VVAU under noActivation=1 (empirical per-node
+cost from 66 real nodes -- FINN's own LUTRAM-count estimator contradicts
+the Vivado reports, see _THR_RTL_LUT_PER_PE). Still not
+covered: StreamingDataWidthConverters (need the successor layer's folding),
+FIFOs, shell/interconnect. The old empirical "imbalance_luts" term is GONE:
+it was measuring fused-threshold logic inside MVAU_hls (outputDataType=
+UINTx on 172/173 calibration nodes), which noActivation=1 removes at the
+source -- see analysis/hardware_calibration/.
 """
 from __future__ import annotations
 
@@ -293,8 +308,19 @@ _S12_DENSE_DSP_FORCED_BRAM_AFFINE = (0.1131, -0.1973)   # (a, b): bram_factor = 
 # forced_dsp_lut_total/forced_dsp_bram_total, not by the per-layer ILP
 # search) are LEFT AT IDENTITY -- dense's own affine fit above is too weak
 # (R^2=0.268, wrong-signed) to trust for that post-hoc hard-cap check.
-_FORCED_DSP_LUT_FACTOR = _S12_DENSE_DSP_FORCED_LUT_FACTOR
-_FORCED_DSP_BRAM_FACTOR = _S12_DENSE_DSP_FORCED_BRAM_FACTOR
+#
+# 2026-09-17: BOTH flat factors reset to IDENTITY. Every S12 factor above
+# was fit on builds whose MVAU_hls nodes carried FUSED thresholds
+# (outputDataType=UINTx on 172/173 calibration nodes -- the very thing that
+# made FINN pick HLS over RTL and produced the 4-6x LUT blow-up). The model
+# now assumes noActivation=1 + MVAU_rtl and prices the standalone
+# Thresholding_rtl explicitly (conv_cost_pe_simd), so those factors no
+# longer describe the regime being estimated; the six real noActivation/RTL
+# probes in hardware/results.csv sit at 1.1-1.7x of the raw model. Refit
+# against the RTL production rebuild when it lands; the S12 constants are
+# kept above for provenance only.
+_FORCED_DSP_LUT_FACTOR = 1.0
+_FORCED_DSP_BRAM_FACTOR = 1.0
 _FORCED_DSP_LUT_AFFINE = (1.0, 0.0)
 _FORCED_DSP_BRAM_AFFINE = (1.0, 0.0)
 
@@ -325,6 +351,34 @@ def forced_dsp_bram_total(raw_total_bram18k: float, n_partitions: int) -> float:
 RamStyle = Literal["block", "ultra"]
 RAM_STYLE_BLOCK: RamStyle = "block"
 RAM_STYLE_ULTRA: RamStyle = "ultra"
+
+# Which FINN backend the MVAU specializes to (step_specialize_layers). RTL is
+# what FINN picks by itself for an MVAU with noActivation=1, SIGNED weights
+# (>= 2 bit) and <= 8-bit operands on DSP48E2 (_mvu_rtl_possible); anything
+# with a fused activation or UNSIGNED weights (this repo's UINT7/UINT3
+# weight nodes) stays HLS. VVAU_rtl is Versal-only, so depthwise layers are
+# always HLS on xczu7ev regardless of this setting.
+ImplStyle = Literal["hls", "rtl"]
+IMPL_STYLE_HLS: ImplStyle = "hls"
+IMPL_STYLE_RTL: ImplStyle = "rtl"
+
+# Standalone Thresholding_rtl, EMPIRICAL per-node cost (2026-09-17). FINN's
+# own Thresholding_rtl.lut_estimation() counts LUTRAM primitives for the
+# per-output-bit threshold memories (get_pe_mem_geometries + min-waste
+# primitive choice) -- but the 66 real standalone Thresholding_rtl nodes in
+# the S12-separable alpha025 build (hardware/_tmp_hier_partition_*.rpt,
+# Vivado report_utilization -hierarchical) show LUTRAM = 0 in EVERY one:
+# Vivado put the memories in RAMB18 (141 total, ~2.1/node) + FFs (~227/
+# node) and left ~68 LUTs of logic+SRL per node (median; 4482 total). All 66
+# were built at PE=1 (the folding config carried no Thresholding entries,
+# so FINN's default applied). The RTL core replicates its comparator/memory
+# per PE lane, so LUT is scaled by PE here; the BRAM count is kept flat per
+# node because its PE dependence is unknown from PE=1 data (per-lane
+# memories get shallower, so it will NOT grow linearly). Refit both against
+# the noActivation/RTL production rebuild, where every MVAU is followed by
+# one of these at the MVAU's own PE.
+_THR_RTL_LUT_PER_PE = 68.0
+_THR_RTL_BRAM18_PER_NODE = 141 / 66
 
 
 @dataclass
@@ -438,9 +492,98 @@ def divisors(n: int) -> list[int]:
     return [d for d in range(1, n + 1) if n % d == 0]
 
 
+def _finn_wm_bram18(omega: float, mem_width: int, depthwise: bool) -> int:
+    """FINN MVAU.bram_estimation()/VVAU.bram_estimation() (base classes,
+    shared by the _hls and _rtl backends), ram_style="block": RAMB18 count
+    for the decoupled weight memory, omega words deep x mem_width bits wide,
+    using FINN's SDP-mode aspect-ratio table (UG573 Table 1-10). The VVAU
+    variant assumes slightly narrower usable widths (8/16/32 vs 9/18/36)."""
+    w9, w18, w36 = (8, 16, 32) if depthwise else (9, 18, 36)
+    if mem_width == 1:
+        return math.ceil(omega / 16384)
+    if mem_width == 2:
+        return math.ceil(omega / 8192)
+    if mem_width <= 4:
+        return math.ceil(omega / 4096) * math.ceil(mem_width / 4)
+    if mem_width <= 9:
+        return math.ceil(omega / 2048) * math.ceil(mem_width / w9)
+    if mem_width <= 18 or omega > 512:
+        return math.ceil(omega / 1024) * math.ceil(mem_width / w18)
+    return math.ceil(omega / 512) * math.ceil(mem_width / w36)
+
+
+def _finn_buffer_bram18(buffer_width: int, buffer_depth: int) -> int:
+    """FINN ConvolutionInputGenerator_rtl.bram_estimation()'s RAMB18 count
+    for ONE line buffer (ram_style block/auto): aspect ratio chosen by depth,
+    cascaded past 16384 words, with FINN's own remainder-cascade saving."""
+    def ram_width_for(depth: int) -> int:
+        for limit, width in ((512, 36), (1024, 18), (2048, 9), (4096, 4), (8192, 2)):
+            if depth <= limit:
+                return width
+        return 1
+
+    cascade_depth = math.ceil(buffer_depth / 16384)
+    cascade_width = math.ceil(buffer_width / ram_width_for(buffer_depth))
+    savings = 0
+    if buffer_depth > 16384:
+        savings = cascade_width - math.ceil(buffer_width / ram_width_for(buffer_depth % 16384))
+    return int(cascade_depth * cascade_width - savings)
+
+
+def _finn_swu(layer: LayerGeometry, act_bits: int, simd_swu: int, depthwise: bool, parallel_window: bool) -> tuple[int, int, int]:
+    """FINN ConvolutionInputGenerator_rtl (the sliding-window unit feeding
+    this layer's MVAU/VVAU): (swu_lut, swu_bram18, swu_cycles).
+
+    LUT is a flat 300 (lut_estimation(); the LUTRAM term only exists for
+    ram_style="distributed"). BRAM and cycles depend on the SWU's OWN SIMD
+    through channel_factor = IFMChannels/SIMD: a small SIMD means a DEEP,
+    NARROW line buffer (worse RAMB18 aspect ratio) and proportionally more
+    cycles per output row -- this is where FINN's "unfold SIMD before PE"
+    guidance is actually grounded. impl_style follows select_impl_style():
+    "parallel" for 1x1 kernels or parallel_window=1 (window emitted whole,
+    cycles = number of input words + 2, only (kh-1) row buffers), else
+    "default" (get_buffer_depth()/get_exp_cycles()'s 2D branch). The 1D-input
+    branch (ifm_dim_h==1 or ifm_dim_w==1) is not reproduced -- no layer in
+    this repo has a 1-pixel-high/wide input."""
+    A = act_bits
+    kh, kw, dh, dw, sh, sw = layer.kh, layer.kw, layer.dh, layer.dw, layer.sh, layer.sw
+    hin, win, hout, wout = layer.hin, layer.win, layer.hout, layer.wout
+    cf = layer.cin // simd_swu  # channel_factor
+    buffer_width = simd_swu * A
+    if parallel_window or (kh == 1 and kw == 1):
+        kernel_width = (kw - 1) * dw + 1
+        buffer_depth = (win - kernel_width) + win * (dh - 1)
+        buffer_count = kh - 1
+        swu_bram18 = _finn_buffer_bram18(buffer_width, buffer_depth) * buffer_count if buffer_count > 0 else 0
+        swu_cycles = hin * win * cf + 2
+    else:
+        buffer_min_size = ((kh - 1) * dh * win + (kw - 1) * dw + 1) * cf
+        buffer_depth = (
+            buffer_min_size
+            + max(0, ((sw - 1) - kh * kw) * cf)
+            + max(0, ((sh - 1) * win - kh * kw) * cf)
+        )
+        swu_bram18 = _finn_buffer_bram18(buffer_width, buffer_depth)
+        max_cycles = max(wout * kw * kh * cf, sw * win * cf)
+        if depthwise:
+            max_cycles += wout * (sw - 1) * (cf - 1)
+        swu_cycles = buffer_min_size + hout * max_cycles
+        if depthwise:
+            swu_cycles += (sh - 1) * win * cf
+    return 300, int(swu_bram18), int(swu_cycles)
+
+
+def _thresholding_rtl_cost(pe: int) -> tuple[float, float, int]:
+    """(lut, bram18, uram) of the STANDALONE Thresholding_rtl node that
+    follows this layer's MVAU/VVAU under noActivation=1 -- empirical, see
+    _THR_RTL_LUT_PER_PE / _THR_RTL_BRAM18_PER_NODE for the real-data basis
+    and why FINN's own LUTRAM-count estimator is not used."""
+    return _THR_RTL_LUT_PER_PE * pe, _THR_RTL_BRAM18_PER_NODE, 0
+
+
 def conv_cost_pe_simd(
     layer: LayerGeometry, weight_bits: int, act_bits: int, pe: int, simd: int, ram_style: RamStyle = RAM_STYLE_BLOCK,
-    force_dsp: bool = False,
+    force_dsp: bool = False, impl_style: ImplStyle = IMPL_STYLE_RTL, act_signed: bool = False,
 ) -> dict:
     """The general per-layer cost, given EXPLICIT PE/SIMD (the actual
     folding decision variables a folding search chooses over) instead of
@@ -476,24 +619,56 @@ def conv_cost_pe_simd(
     build (e.g. the one already threaded into calibrated_lut/
     calibrated_bram18k) for consistency; the two used to disagree (raw
     mvu_lut always included a multiplier term regardless of force_dsp,
-    only the separate calibration factor knew about it)."""
+    only the separate calibration factor knew about it).
+
+    impl_style (default RTL, the go-forward build target) only changes the
+    DSP count (FINN's MVAU_rtl.lut_estimation() is 0 -- there is no RTL LUT
+    model, the HLS one is used as the proxy for both) and implies DSP
+    multipliers. Depthwise layers are forced to HLS (VVAU_rtl is
+    Versal-only). act_signed feeds FINN's accumulator-width bound (this
+    repo's post-ReLU activations are UINT).
+
+    Every conv layer is assumed to have noActivation=1, i.e. a separate
+    Thresholding_rtl node (PE assumed == this layer's PE) priced
+    empirically as thr_lut/thr_bram18/thr_uram18 and folded into
+    total_lut. cycles = max(MVAU cycles, SWU cycles): a layer runs at the
+    speed of its slowest node."""
     W, A = weight_bits, act_bits
     P, Q = pe, simd
     M = 1  # spatial replication -- already minimal in every convention this file implements
+    depthwise = layer.groups > 1
+    if depthwise:
+        impl_style = IMPL_STYLE_HLS  # _vvu_rtl_possible(): VVAU_rtl needs a Versal DSP58 -- always VVAU_hls on xczu7ev
 
-    k_eff = _k_eff(layer.kh, layer.dh)  # height dimension drives row-buffer depth (asymmetric-kernel note)
-    # SWU depends on M/kernel/stride/dilation/channels/A ONLY -- NOT on P or Q,
-    # i.e. NOT on folding. Identical across every (PE, SIMD) choice.
-    swu_bram18 = M * (math.ceil(k_eff / layer.sh) + 1) * math.ceil(layer.sh * layer.win / 512) * math.ceil(layer.cin * A / 36)
+    # SWU (ConvolutionInputGenerator_rtl). Its SIMD is a DIFFERENT axis from
+    # the MVAU's: it must divide IFMChannels (cin), while MVAU SIMD ranges over
+    # cin*kh*kw. Dense conv: MVAU SIMD up to cin -> SWU SIMD = the part of it
+    # that divides cin (gcd; a non-divisor forces the SWU narrower and a DWC
+    # in between); MVAU SIMD beyond cin (spanning kernel elements) is only
+    # feedable with the SWU in parallel_window mode (whole window per cycle,
+    # SIMD == cin, select_impl_style() asserts exactly that). Depthwise: the
+    # SWU emits PE channels per cycle (== VVAU PE, see swu_max_simd_depthwise);
+    # VVAU SIMD > 1 (several kernel elements per cycle) again needs
+    # parallel_window.
+    if depthwise:
+        simd_swu = P
+        parallel_window = Q > 1
+    else:
+        parallel_window = Q > layer.cin
+        simd_swu = layer.cin if parallel_window else math.gcd(Q, layer.cin)
+    swu_lut, swu_bram18, swu_cycles = _finn_swu(layer, A, simd_swu, depthwise, parallel_window)
+
+    # Weight memory (mem_mode internal_decoupled): FINN's base-class
+    # bram_estimation()/uram_estimation(), identical for the HLS and RTL
+    # backends. omega = words, mem_width = bits per word.
     omega = (layer.kh * layer.kw * (layer.cin // layer.groups) * layer.cout) / (Q * P)
     mem_width = Q * W * P
     if ram_style == RAM_STYLE_ULTRA:
         wm_bram18 = 0
         wm_uram18 = math.ceil(mem_width / 72) * math.ceil(omega / 4096)
     else:
-        wm_bram18 = P * math.ceil(omega / 512) * math.ceil(Q * W / 36)
+        wm_bram18 = _finn_wm_bram18(omega, mem_width, depthwise)
         wm_uram18 = 0
-    swu_lut = M * 426
 
     # mvu_lut: real FINN's MatrixVectorActivation_hls/VectorVectorActivation_
     # hls.lut_estimation() (Blott et al. FINN-R, confirmed via container
@@ -508,70 +683,89 @@ def conv_cost_pe_simd(
     # no way to express (root cause of the dense-vs-separable LUT
     # under-prediction, see repo memory finn_calibrated_8way_build_status.md's
     # "LUT model mismatch: CONFIRMED root cause" section). thr_luts/
-    # comp_luts (fused-threshold LUTs) are NOT modeled -- every build in
-    # this repo uses a standalone Thresholding_rtl node rather than a fused
-    # MVAU/VVAU activation (noActivation=1), so real FINN charges 0 for that
-    # term here too.
-    c0, c1 = 300, 1.1
+    # comp_luts (FUSED-threshold LUTs, (2^B-1)*acc_bits per PE) are NOT
+    # modeled because noActivation=1 is assumed from 2026-09-17 on. NOTE the
+    # pre-2026-09-17 production builds did NOT satisfy that: 172/173 nodes in
+    # hardware/mvau_lut_calibration_dataset*.csv have outputDataType=UINTx,
+    # i.e. fused thresholds -> forced MVAU_hls (RTL needs noActivation=1) and
+    # a PE*2^B-scaled LUT blow-up that the former "imbalance_luts" term was
+    # chasing empirically. Standalone-threshold builds are priced via
+    # thr_lut below instead.
     mw = max_simd(layer)  # full reduction depth (cin/groups * kh * kw) -- same domain as max_simd(), NOT the folded Q
-    mult_luts = 0 if force_dsp else Q * (2 * math.ceil((W + A) / 6) - 1) * (W + A)
+    use_dsp = force_dsp or impl_style == IMPL_STYLE_RTL  # the RTL MVU is DSP-only
+    mult_luts = 0 if use_dsp else Q * (2 * math.ceil((W + A) / 6) - 1) * (W + A)
     addertree_luts = (W + A) * (2 * Q - 1)
-    # "-1" signedness term: assumes signed activations (typical after this
-    # repo's PReLU/ReLU quantization), a <=1-bit rounding effect not modeled
-    # per-layer here (real FINN's own idt.signed() would resolve it exactly).
-    alpha = math.log2(mw) + W + A - 1 - 1
-    acc_luts = min(32, alpha + math.log2(1 + 2 ** -alpha) + 1)  # capped at FINN's default INT32 accumulator width
+    # FINN: alpha = log2(MW) + W + A - 1 - int(idt.signed()), acc_bits =
+    # min(accDataType width, ceil(alpha + log2(1+2^-alpha) + 1)) -- the
+    # https://arxiv.org/abs/2301.13376 bound, capped at the INT32 default.
+    # This repo's post-ReLU activations are UNSIGNED (165/173 calibration
+    # nodes UINT4/6/8), hence act_signed=False by default.
+    alpha = math.log2(mw) + W + A - 1 - int(act_signed)
+    acc_bits = min(32, math.ceil(alpha + math.log2(1 + 2 ** -alpha) + 1))
+    acc_luts = acc_bits
 
-    # imbalance_luts: EMPIRICALLY-FIT correction (NOT source-derived like the
-    # rest of this formula) for two real patterns in
-    # hardware/mvau_lut_calibration_dataset.csv left unexplained by the
-    # physically-derived terms above: (1) PE>SIMD folding points (all
-    # parallelism on the output-channel axis, ~none on the reduction axis)
-    # are dramatically more expensive in real synthesis than adder-tree/
-    # accumulator terms predict -- scaled by A since the extra per-lane
-    # control/interconnect logic this term stands in for plausibly grows
-    # with activation width, not just lane count; (2) MH (output channel
-    # count, i.e. max_pe(layer)) has its own independent, PE/SIMD-agnostic
-    # correlation with real_LUT (0.62 alone, see
-    # hardware/mvau_lut_correlation_report.txt) that the PE-scaled terms
-    # above don't capture -- MH is deliberately left UNCONDITIONAL here
-    # (not gated by max(0,PE-SIMD)) since gating it that way fits far worse
-    # (tried: max(0,PE-SIMD)*(c3*A+c4*MH) only reaches R^2=0.570 and gives
-    # MH a wrong-signed NEGATIVE coefficient; c3*max(0,PE-SIMD)*A + c4*MH
-    # unconditional reaches R^2=0.658, both coefficients correctly signed).
-    # Both coefficients fit THROUGH THE ORIGIN against this file's own
-    # baseline prediction's residual -- c_imbalance alone (no MH) reached
-    # R^2=0.566; adding the unconditional MH term raises this to 0.658,
-    # just short of the simple PE*act_bits+MH regression's 0.669 (see
-    # correlation report) but additive on top of the physically-derived
-    # structure rather than replacing it. Only validated at force_dsp=True
-    # (100% of the calibration rows); may not generalize to force_dsp=False.
-    MH = layer.cout  # == max_pe(layer)
-    c_imbalance, c_mh = 167.38, 274.14
-    imbalance_luts = c_imbalance * max(0, P - Q) * A + c_mh * MH
+    # (The former empirical "imbalance_luts" term -- (k_pe*PE/SIMD +
+    # k_mh*max(0,MH-mw))*A, pooled R^2=0.779 on the two fused-threshold
+    # calibration sets -- was REMOVED 2026-09-17. It was a proxy for FINN's
+    # own thr_luts/comp_luts: LUT/PE in that data scales ~3x per +2 output
+    # bits, every "SIMD=1 cliff" row had 8-bit outputs, and geometry-
+    # identical MVAU_rtl/noActivation probes show none of it. See
+    # analysis/hardware_calibration/ for the exploration.)
+    # FINN-R constants (MVAU_hls/VVAU_hls.lut_estimation()). c2, FINN's extra
+    # LUTRAM term, only applies to ram_style="distributed" (or embedded
+    # weights <= 128 words) -- neither is selectable here (block/ultra), so 0.
+    # MVAU_rtl.lut_estimation() is literally `return 0` in FINN v1.0.0-alpha:
+    # there is NO RTL LUT model, so this HLS formula is the proxy for both
+    # backends. The six real noActivation/MVAU_rtl probe builds in hardware/
+    # results.csv (probe_s12_context_*) land at 1.1-1.7x of it with no
+    # correction at all.
+    c0, c1 = 300, 1.1
+    mvu_lut = c0 + c1 * M * P * (mult_luts + addertree_luts + acc_luts)
 
-    mvu_lut = c0 + c1 * M * P * (mult_luts + addertree_luts + acc_luts) + imbalance_luts
-    total_lut = swu_lut + mvu_lut
+    # Standalone Thresholding_rtl that consumes this layer's accumulators
+    # under noActivation=1. Its PE is NOT a free choice and NOT simply == the
+    # MVAU's PE: the MVAU emits one fold of P outputs every SF = MW/Q cycles,
+    # so per output pixel the threshold node has NF*SF = (MH/P)*(MW/Q) cycles
+    # to process MH channels at PE_thr per cycle -> it keeps up iff
+    # PE_thr >= P*Q/MW (and FINN requires PE_thr | NumChannels). The smallest
+    # such divisor is what SetFolding-style balancing would pick; anything
+    # larger only costs LUT. NOTE for the build side: FINN's default
+    # Thresholding PE is 1, and the folding configs carry no Thresholding
+    # entries -- the bridge must write thr_pe (returned below) explicitly, or
+    # a PE=1 node throttles any layer whose MVAU needs PE_thr > 1.
+    thr_pe = next(d for d in divisors(layer.cout) if d * mw >= P * Q)
+    thr_lut, thr_bram18, thr_uram18 = _thresholding_rtl_cost(thr_pe)
+    total_lut = swu_lut + mvu_lut + thr_lut
 
-    # mvu_dsp: real FINN's MatrixVectorActivation_hls.dsp_estimation() --
-    # P*Q*ceil((W+A)/48) DSP48E2 slices, ZERO unless force_dsp (resType="lut"/
-    # "auto" keeps the multiply in mult_luts above instead) -- see
-    # hardware/resource_equivalence_int8.md for the source-read derivation
-    # (int8: ceil(16/48)=1 DSP/lane). Cross-checked exactly against 3 of 4
-    # sampled rows of hardware/mvau_lut_calibration_dataset.csv's real_DSP
-    # column (4th off by a handful, likely threshold/accumulator DSPs this
-    # simple per-lane count doesn't capture).
-    mvu_dsp = M * P * Q * math.ceil((W + A) / 48) if force_dsp else 0
+    # DSP. HLS: MVAU_hls.dsp_estimation() P*Q*ceil((W+A)/48) (one DSP48E2 per
+    # MAC lane; VVAU_hls's own formula is P*ceil((W+A)/48), no SIMD factor --
+    # transcribed as-is), zero unless the multiply is on DSP. RTL (DSP48):
+    # MVAU_rtl.dsp_estimation() ceil(P/4)*Q -- 4 PE lanes packed per DSP per
+    # SIMD lane. That packing is only real for <=4-bit operands: the two
+    # real 8-bit PE=MH/SIMD=1 probes (hardware/results.csv, probe_s12_context_
+    # *_int8_pemh) each measured EXACTLY 2x FINN's own estimate (64 vs 32,
+    # 72 vs 36), while the 4/6-bit PE=SIMD=1 probes matched 1:1 -- so >4-bit
+    # operands are charged 2 lanes per DSP here.
+    if impl_style == IMPL_STYLE_RTL:
+        lanes_per_dsp = 4 if max(W, A) <= 4 else 2
+        mvu_dsp = M * math.ceil(P / lanes_per_dsp) * Q
+    elif use_dsp:
+        mvu_dsp = M * P * math.ceil((W + A) / 48) if depthwise else M * P * Q * math.ceil((W + A) / 48)
+    else:
+        mvu_dsp = 0
 
     total_pe = P * M
     total_simd_lanes = P * Q * M
-    cycles = math.ceil(layer.hout * layer.wout / M) * math.ceil(max_pe(layer) / P) * math.ceil(max_simd(layer) / Q)
+    mvu_cycles = math.ceil(layer.hout * layer.wout / M) * math.ceil(max_pe(layer) / P) * math.ceil(max_simd(layer) / Q)
+    cycles = max(mvu_cycles, swu_cycles)
     return {
         "total_pe": total_pe, "total_simd_lanes": total_simd_lanes,
         "swu_bram18": swu_bram18, "wm_bram18": wm_bram18, "wm_uram18": wm_uram18,
-        "swu_lut": swu_lut, "mvu_lut": mvu_lut, "mp_lut": 0,
+        "thr_bram18": thr_bram18, "thr_uram18": thr_uram18,
+        "swu_lut": swu_lut, "mvu_lut": mvu_lut, "thr_lut": thr_lut, "mp_lut": 0,
         "total_lut": total_lut, "mvu_dsp": mvu_dsp, "total_dsp": mvu_dsp,
-        "cycles": cycles,
+        "cycles": cycles, "mvu_cycles": mvu_cycles, "swu_cycles": swu_cycles,
+        "impl_style": impl_style, "simd_swu": simd_swu, "thr_pe": thr_pe, "acc_bits": acc_bits,
     }
 
 
@@ -653,16 +847,17 @@ def layer_cost(
 
 def layer_cost_pe_simd(
     layer: LayerGeometry, weight_bits: int, act_bits: int, pe: int, simd: int, ram_style: RamStyle = RAM_STYLE_BLOCK,
-    force_dsp: bool = False,
+    force_dsp: bool = False, **kw,
 ) -> dict:
     """Like layer_cost, but for an explicit (PE, SIMD) folding choice
     (what a real folding search sweeps over) instead of one of the two
     presets. MaxPool2d has no PE/SIMD/weights at all -- pe/simd/ram_style
     are ignored for it (asserted to be the sentinel max_pe/max_simd=1 by
     the caller's own candidate enumeration, see folding_ilp.py's PoolCost,
-    so this never silently drops a real folding choice)."""
+    so this never silently drops a real folding choice). **kw is passed
+    straight to conv_cost_pe_simd (impl_style/act_signed)."""
     if layer.op_type == "Conv2d":
-        return conv_cost_pe_simd(layer, weight_bits, act_bits, pe, simd, ram_style, force_dsp=force_dsp)
+        return conv_cost_pe_simd(layer, weight_bits, act_bits, pe, simd, ram_style, force_dsp=force_dsp, **kw)
     if layer.op_type == "ConvTranspose2d":
         n_eff_h = (layer.hin - 1) * layer.sh + 1 + 2 * (layer.kh - 1)
         n_eff_w = (layer.win - 1) * layer.sw + 1 + 2 * (layer.kw - 1)
@@ -671,14 +866,14 @@ def layer_cost_pe_simd(
             cin=layer.cin, hin=n_eff_h, win=n_eff_w, cout=layer.cout, hout=layer.hout, wout=layer.wout,
             kh=layer.kh, kw=layer.kw, sh=1, sw=1, dh=1, dw=1,
         )
-        return conv_cost_pe_simd(equivalent, weight_bits, act_bits, pe, simd, ram_style, force_dsp=force_dsp)
+        return conv_cost_pe_simd(equivalent, weight_bits, act_bits, pe, simd, ram_style, force_dsp=force_dsp, **kw)
     if layer.op_type == "MaxPool2d":
         return maxpool_cost(layer, act_bits)
     raise ValueError(f"Unknown op_type {layer.op_type!r} for layer {layer.name}")
 
 
 def layer_cost_pe_simd_auto_ram(
-    layer: LayerGeometry, weight_bits: int, act_bits: int, pe: int, simd: int, force_dsp: bool = False,
+    layer: LayerGeometry, weight_bits: int, act_bits: int, pe: int, simd: int, force_dsp: bool = False, **kw,
 ) -> dict:
     """Like layer_cost_pe_simd, but picks ram_style per-layer instead of
     taking it as a fixed input -- the "leave memory type as auto" default
@@ -694,9 +889,9 @@ def layer_cost_pe_simd_auto_ram(
     directly accessible from this repo). MaxPool2d has no weight memory at
     all -- ram_style is irrelevant there, both calls would return identical
     results anyway, so it's skipped."""
-    block = layer_cost_pe_simd(layer, weight_bits, act_bits, pe, simd, ram_style=RAM_STYLE_BLOCK, force_dsp=force_dsp)
+    block = layer_cost_pe_simd(layer, weight_bits, act_bits, pe, simd, ram_style=RAM_STYLE_BLOCK, force_dsp=force_dsp, **kw)
     if layer.op_type == "MaxPool2d":
         return block
-    ultra = layer_cost_pe_simd(layer, weight_bits, act_bits, pe, simd, ram_style=RAM_STYLE_ULTRA, force_dsp=force_dsp)
+    ultra = layer_cost_pe_simd(layer, weight_bits, act_bits, pe, simd, ram_style=RAM_STYLE_ULTRA, force_dsp=force_dsp, **kw)
     chosen = ultra if ultra["wm_uram18"] < block["wm_bram18"] else block
     return {**chosen, "ram_style_chosen": "ultra" if chosen is ultra else "block"}
