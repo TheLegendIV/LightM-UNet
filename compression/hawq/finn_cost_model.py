@@ -512,7 +512,6 @@ def conv_cost_pe_simd(
     # this repo uses a standalone Thresholding_rtl node rather than a fused
     # MVAU/VVAU activation (noActivation=1), so real FINN charges 0 for that
     # term here too.
-    c0, c1 = 300, 1.1
     mw = max_simd(layer)  # full reduction depth (cin/groups * kh * kw) -- same domain as max_simd(), NOT the folded Q
     mult_luts = 0 if force_dsp else Q * (2 * math.ceil((W + A) / 6) - 1) * (W + A)
     addertree_luts = (W + A) * (2 * Q - 1)
@@ -523,32 +522,56 @@ def conv_cost_pe_simd(
     acc_luts = min(32, alpha + math.log2(1 + 2 ** -alpha) + 1)  # capped at FINN's default INT32 accumulator width
 
     # imbalance_luts: EMPIRICALLY-FIT correction (NOT source-derived like the
-    # rest of this formula) for two real patterns in
-    # hardware/mvau_lut_calibration_dataset.csv left unexplained by the
-    # physically-derived terms above: (1) PE>SIMD folding points (all
-    # parallelism on the output-channel axis, ~none on the reduction axis)
-    # are dramatically more expensive in real synthesis than adder-tree/
-    # accumulator terms predict -- scaled by A since the extra per-lane
-    # control/interconnect logic this term stands in for plausibly grows
-    # with activation width, not just lane count; (2) MH (output channel
-    # count, i.e. max_pe(layer)) has its own independent, PE/SIMD-agnostic
-    # correlation with real_LUT (0.62 alone, see
-    # hardware/mvau_lut_correlation_report.txt) that the PE-scaled terms
-    # above don't capture -- MH is deliberately left UNCONDITIONAL here
-    # (not gated by max(0,PE-SIMD)) since gating it that way fits far worse
-    # (tried: max(0,PE-SIMD)*(c3*A+c4*MH) only reaches R^2=0.570 and gives
-    # MH a wrong-signed NEGATIVE coefficient; c3*max(0,PE-SIMD)*A + c4*MH
-    # unconditional reaches R^2=0.658, both coefficients correctly signed).
-    # Both coefficients fit THROUGH THE ORIGIN against this file's own
-    # baseline prediction's residual -- c_imbalance alone (no MH) reached
-    # R^2=0.566; adding the unconditional MH term raises this to 0.658,
-    # just short of the simple PE*act_bits+MH regression's 0.669 (see
-    # correlation report) but additive on top of the physically-derived
-    # structure rather than replacing it. Only validated at force_dsp=True
+    # rest of this formula), refit 2026-09-16 against hardware/
+    # mvau_lut_calibration_dataset.csv (89 real MVAU/VVAU nodes, one
+    # force_dsp=True S12 DENSE build -- see compression/hawq/
+    # fit_imbalance_luts_quadratic.py and analysis/hardware_calibration/
+    # visualize_lut_dependence.ipynb for the exploration this came from).
+    #
+    # SUPERSEDES an earlier form, `167.38*max(0,PE-SIMD)*A + 274.14*MH`
+    # (R^2=0.654 on this same dataset, 2 free coefficients, MH left
+    # UNCONDITIONAL) -- REMOVED because it badly over-corrected when
+    # cross-checked against SEPARABLE-geometry real data (a min4/hardcap131
+    # partition-level check turned a 1.17x UNDER-prediction into a 4.3x
+    # OVER-prediction): raw PE/MH counts don't carry over between
+    # architectures with very different absolute channel/folding scales, and
+    # an unconditional (never-zero) MH term can never vanish for a
+    # small-MW/small-MH architecture the way it needs to.
+    #
+    # This form uses DIMENSIONLESS RATIOS instead (PE/SIMD, MH/mw), motivated
+    # directly by inspecting the calibration set's own worst-predicted rows:
+    # the worst under-predictions ALL have PE/SIMD>=8 AND MH/mw>=2
+    # simultaneously (mostly exactly 4); the worst over-predictions are the
+    # mirror image (both ratios small, <=2 and <=0.44). Real hardware
+    # responds to BOTH ratios TOGETHER in the same direction. Each ratio gets
+    # its OWN coefficient (k_pe, k_mh) rather than a single shared one --
+    # tried shared first (k=104.56, R^2=0.636) but separate coefficients fit
+    # meaningfully better (R^2=0.644) and come out both positive/sensible
+    # (k_mh > k_pe: an MH/mw imbalance unit costs more than a PE/SIMD one) --
+    # unlike a further 4-way split (separating the (W+A) scaling into
+    # per-ratio W and A terms too), which reaches R^2=0.675 but gives one
+    # coefficient (PE/SIMD x weight_bits) a NEGATIVE sign with no sensible
+    # physical story, i.e. overfitting 4 free params on 89 noisy rows rather
+    # than a real structural signal -- rejected for that reason.
+    #
+    # c0/c1 DELIBERATELY LEFT at their real-FINN-source-derived values
+    # (c0=300, c1=1.1, per the lut_estimation() source read cited above) --
+    # a joint refit of c0/c1 alongside the imbalance coefficients was tried
+    # (c0=870.27, c1=1.0178) and only moved R^2 from 0.636 to 0.638, not
+    # worth trading away their source provenance for a rounding-error gain.
+    # Still only R^2=0.64 -- real per-row noise in the calibration set (e.g.
+    # two rows with IDENTICAL PE/SIMD/MH/mw differing only in act_bits 4 vs 6
+    # show a 15x real_LUT swing) puts a real ceiling on how well any smooth
+    # function of these columns can do. Only validated at force_dsp=True
     # (100% of the calibration rows); may not generalize to force_dsp=False.
+    # Being ratio-based rather than raw-count-based, this is expected (not
+    # yet confirmed -- no separable-geometry rows exist in this calibration
+    # set) to generalize better across architectures than the superseded
+    # form did.
+    c0, c1 = 300, 1.1
     MH = layer.cout  # == max_pe(layer)
-    c_imbalance, c_mh = 167.38, 274.14
-    imbalance_luts = c_imbalance * max(0, P - Q) * A + c_mh * MH
+    k_pe, k_mh = 92.5386, 155.8369
+    imbalance_luts = (k_pe * (P / Q) + k_mh * (MH / mw)) * (W + A)
 
     mvu_lut = c0 + c1 * M * P * (mult_luts + addertree_luts + acc_luts) + imbalance_luts
     total_lut = swu_lut + mvu_lut
