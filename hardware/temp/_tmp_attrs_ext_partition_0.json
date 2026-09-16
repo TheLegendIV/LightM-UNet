@@ -1,0 +1,96 @@
+[
+  {
+    "node_name": "Thresholding_rtl_0",
+    "op_type": "Thresholding_rtl",
+    "attrs": {
+      "PE": 1,
+      "NumChannels": 1,
+      "numSteps": 255,
+      "ActVal": -128,
+      "weightDataType": "UINT8",
+      "inputDataType": "UINT8",
+      "outputDataType": "INT8",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "Thresholding_rtl_1",
+    "op_type": "Thresholding_rtl",
+    "attrs": {
+      "PE": 1,
+      "NumChannels": 1,
+      "numSteps": 255,
+      "ActVal": -128,
+      "weightDataType": "INT9",
+      "inputDataType": "INT8",
+      "outputDataType": "INT8",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "ConvolutionInputGenerator_rtl_0",
+    "op_type": "ConvolutionInputGenerator_rtl",
+    "attrs": {
+      "SIMD": 1,
+      "IFMChannels": 1,
+      "IFMDim": [
+        66,
+        66
+      ],
+      "OFMDim": [
+        32,
+        32
+      ],
+      "ConvKernelDim": [
+        3,
+        3
+      ],
+      "Stride": [
+        2,
+        2
+      ],
+      "Dilation": [
+        1,
+        1
+      ],
+      "depthwise": 0,
+      "parallel_window": 0,
+      "inputDataType": "INT8",
+      "outputDataType": "INT8",
+      "ram_style": "distributed"
+    }
+  },
+  {
+    "node_name": "MVAU_hls_0",
+    "op_type": "MVAU_hls",
+    "attrs": {
+      "MH": 3,
+      "MW": 9,
+      "PE": 1,
+      "SIMD": 9,
+      "ActVal": -128,
+      "weightDataType": "INT6",
+      "inputDataType": "INT8",
+      "outputDataType": "INT8",
+      "accDataType": "INT16",
+      "resType": "dsp",
+      "ram_style": "block",
+      "mem_mode": "internal_decoupled",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "Thresholding_rtl_2",
+    "op_type": "Thresholding_rtl",
+    "attrs": {
+      "PE": 1,
+      "NumChannels": 4,
+      "numSteps": 255,
+      "ActVal": 0,
+      "weightDataType": "INT9",
+      "inputDataType": "INT8",
+      "outputDataType": "UINT8",
+      "runtime_writeable_weights": 0
+    }
+  }
+]

@@ -1,0 +1,383 @@
+[
+  {
+    "node_name": "MVAU_rtl_0",
+    "op_type": "MVAU_rtl",
+    "attrs": {
+      "MH": 32,
+      "MW": 1,
+      "PE": 32,
+      "SIMD": 1,
+      "ActVal": 0,
+      "weightDataType": "INT6",
+      "inputDataType": "UINT8",
+      "outputDataType": "INT14",
+      "accDataType": "INT14",
+      "resType": "dsp",
+      "ram_style": "auto",
+      "mem_mode": "internal_decoupled",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "Thresholding_rtl_0",
+    "op_type": "Thresholding_rtl",
+    "attrs": {
+      "PE": 1,
+      "NumChannels": 32,
+      "numSteps": 63,
+      "ActVal": 0,
+      "weightDataType": "INT14",
+      "inputDataType": "INT14",
+      "outputDataType": "UINT6",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "MVAU_rtl_1",
+    "op_type": "MVAU_rtl",
+    "attrs": {
+      "MH": 8,
+      "MW": 32,
+      "PE": 8,
+      "SIMD": 1,
+      "ActVal": 0,
+      "weightDataType": "INT6",
+      "inputDataType": "UINT6",
+      "outputDataType": "INT16",
+      "accDataType": "INT16",
+      "resType": "dsp",
+      "ram_style": "auto",
+      "mem_mode": "internal_decoupled",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "Thresholding_rtl_1",
+    "op_type": "Thresholding_rtl",
+    "attrs": {
+      "PE": 1,
+      "NumChannels": 32,
+      "numSteps": 255,
+      "ActVal": 0,
+      "weightDataType": "UINT6",
+      "inputDataType": "UINT6",
+      "outputDataType": "UINT8",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "Thresholding_rtl_2",
+    "op_type": "Thresholding_rtl",
+    "attrs": {
+      "PE": 1,
+      "NumChannels": 8,
+      "numSteps": 63,
+      "ActVal": 0,
+      "weightDataType": "INT16",
+      "inputDataType": "INT16",
+      "outputDataType": "UINT6",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "ConvolutionInputGenerator_rtl_0",
+    "op_type": "ConvolutionInputGenerator_rtl",
+    "attrs": {
+      "SIMD": 8,
+      "IFMChannels": 8,
+      "IFMDim": [
+        36,
+        36
+      ],
+      "OFMDim": [
+        32,
+        32
+      ],
+      "ConvKernelDim": [
+        3,
+        3
+      ],
+      "Stride": [
+        1,
+        1
+      ],
+      "Dilation": [
+        2,
+        2
+      ],
+      "depthwise": 0,
+      "parallel_window": 0,
+      "inputDataType": "UINT6",
+      "outputDataType": "UINT6",
+      "ram_style": "distributed"
+    }
+  },
+  {
+    "node_name": "MVAU_rtl_2",
+    "op_type": "MVAU_rtl",
+    "attrs": {
+      "MH": 8,
+      "MW": 72,
+      "PE": 8,
+      "SIMD": 1,
+      "ActVal": 0,
+      "weightDataType": "INT6",
+      "inputDataType": "UINT6",
+      "outputDataType": "INT17",
+      "accDataType": "INT17",
+      "resType": "dsp",
+      "ram_style": "auto",
+      "mem_mode": "internal_decoupled",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "Thresholding_rtl_3",
+    "op_type": "Thresholding_rtl",
+    "attrs": {
+      "PE": 1,
+      "NumChannels": 8,
+      "numSteps": 63,
+      "ActVal": 0,
+      "weightDataType": "INT17",
+      "inputDataType": "INT17",
+      "outputDataType": "UINT6",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "MVAU_rtl_3",
+    "op_type": "MVAU_rtl",
+    "attrs": {
+      "MH": 32,
+      "MW": 8,
+      "PE": 32,
+      "SIMD": 1,
+      "ActVal": 0,
+      "weightDataType": "INT6",
+      "inputDataType": "UINT6",
+      "outputDataType": "INT15",
+      "accDataType": "INT15",
+      "resType": "dsp",
+      "ram_style": "auto",
+      "mem_mode": "internal_decoupled",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "Thresholding_rtl_4",
+    "op_type": "Thresholding_rtl",
+    "attrs": {
+      "PE": 1,
+      "NumChannels": 32,
+      "numSteps": 255,
+      "ActVal": 0,
+      "weightDataType": "INT15",
+      "inputDataType": "INT15",
+      "outputDataType": "UINT8",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "Thresholding_rtl_5",
+    "op_type": "Thresholding_rtl",
+    "attrs": {
+      "PE": 1,
+      "NumChannels": 32,
+      "numSteps": 255,
+      "ActVal": 0,
+      "weightDataType": "UINT9",
+      "inputDataType": "UINT9",
+      "outputDataType": "UINT8",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "Thresholding_rtl_6",
+    "op_type": "Thresholding_rtl",
+    "attrs": {
+      "PE": 1,
+      "NumChannels": 32,
+      "numSteps": 63,
+      "ActVal": 0,
+      "weightDataType": "UINT8",
+      "inputDataType": "UINT8",
+      "outputDataType": "UINT6",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "MVAU_rtl_4",
+    "op_type": "MVAU_rtl",
+    "attrs": {
+      "MH": 8,
+      "MW": 32,
+      "PE": 8,
+      "SIMD": 1,
+      "ActVal": 0,
+      "weightDataType": "INT6",
+      "inputDataType": "UINT6",
+      "outputDataType": "INT16",
+      "accDataType": "INT16",
+      "resType": "dsp",
+      "ram_style": "auto",
+      "mem_mode": "internal_decoupled",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "Thresholding_rtl_7",
+    "op_type": "Thresholding_rtl",
+    "attrs": {
+      "PE": 1,
+      "NumChannels": 32,
+      "numSteps": 255,
+      "ActVal": 0,
+      "weightDataType": "UINT6",
+      "inputDataType": "UINT6",
+      "outputDataType": "UINT8",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "Thresholding_rtl_8",
+    "op_type": "Thresholding_rtl",
+    "attrs": {
+      "PE": 1,
+      "NumChannels": 8,
+      "numSteps": 63,
+      "ActVal": 0,
+      "weightDataType": "INT16",
+      "inputDataType": "INT16",
+      "outputDataType": "UINT6",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "ConvolutionInputGenerator_rtl_1",
+    "op_type": "ConvolutionInputGenerator_rtl",
+    "attrs": {
+      "SIMD": 8,
+      "IFMChannels": 8,
+      "IFMDim": [
+        40,
+        40
+      ],
+      "OFMDim": [
+        32,
+        32
+      ],
+      "ConvKernelDim": [
+        3,
+        3
+      ],
+      "Stride": [
+        1,
+        1
+      ],
+      "Dilation": [
+        4,
+        4
+      ],
+      "depthwise": 0,
+      "parallel_window": 0,
+      "inputDataType": "UINT6",
+      "outputDataType": "UINT6",
+      "ram_style": "distributed"
+    }
+  },
+  {
+    "node_name": "MVAU_rtl_5",
+    "op_type": "MVAU_rtl",
+    "attrs": {
+      "MH": 8,
+      "MW": 72,
+      "PE": 8,
+      "SIMD": 1,
+      "ActVal": 0,
+      "weightDataType": "INT6",
+      "inputDataType": "UINT6",
+      "outputDataType": "INT17",
+      "accDataType": "INT17",
+      "resType": "dsp",
+      "ram_style": "auto",
+      "mem_mode": "internal_decoupled",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "Thresholding_rtl_9",
+    "op_type": "Thresholding_rtl",
+    "attrs": {
+      "PE": 1,
+      "NumChannels": 8,
+      "numSteps": 63,
+      "ActVal": 0,
+      "weightDataType": "INT17",
+      "inputDataType": "INT17",
+      "outputDataType": "UINT6",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "MVAU_rtl_6",
+    "op_type": "MVAU_rtl",
+    "attrs": {
+      "MH": 32,
+      "MW": 8,
+      "PE": 32,
+      "SIMD": 1,
+      "ActVal": 0,
+      "weightDataType": "INT6",
+      "inputDataType": "UINT6",
+      "outputDataType": "INT14",
+      "accDataType": "INT14",
+      "resType": "dsp",
+      "ram_style": "auto",
+      "mem_mode": "internal_decoupled",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "Thresholding_rtl_10",
+    "op_type": "Thresholding_rtl",
+    "attrs": {
+      "PE": 1,
+      "NumChannels": 32,
+      "numSteps": 255,
+      "ActVal": 0,
+      "weightDataType": "INT14",
+      "inputDataType": "INT14",
+      "outputDataType": "UINT8",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "Thresholding_rtl_11",
+    "op_type": "Thresholding_rtl",
+    "attrs": {
+      "PE": 1,
+      "NumChannels": 32,
+      "numSteps": 255,
+      "ActVal": 0,
+      "weightDataType": "UINT9",
+      "inputDataType": "UINT9",
+      "outputDataType": "UINT8",
+      "runtime_writeable_weights": 0
+    }
+  },
+  {
+    "node_name": "Thresholding_rtl_12",
+    "op_type": "Thresholding_rtl",
+    "attrs": {
+      "PE": 1,
+      "NumChannels": 32,
+      "numSteps": 63,
+      "ActVal": 0,
+      "weightDataType": "UINT8",
+      "inputDataType": "UINT8",
+      "outputDataType": "UINT6",
+      "runtime_writeable_weights": 0
+    }
+  }
+]
