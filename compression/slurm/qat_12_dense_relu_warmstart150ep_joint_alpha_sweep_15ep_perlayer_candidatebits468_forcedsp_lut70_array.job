@@ -50,18 +50,18 @@ TRAINER_CLASS="nnUNetTrainerLayerQuantENet_12_dense_relu_warmstart150ep_perlayer
 FP32_SOURCE_NET_NAME="nnUNetTrainerENet_12_dense_relu_warmstart150ep"
 
 LAYER_BITS_ILP_ARR=(
-    "compression/hawq/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.0_candidatebits468_forcedsp_lut70.json"
-    "compression/hawq/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.25_candidatebits468_forcedsp_lut70.json"
-    "compression/hawq/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.5_candidatebits468_forcedsp_lut70.json"
-    "compression/hawq/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.75_candidatebits468_forcedsp_lut70.json"
-    "compression/hawq/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha1.0_candidatebits468_forcedsp_lut70.json"
+    "compression/MILP/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.0_candidatebits468_forcedsp_lut70.json"
+    "compression/MILP/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.25_candidatebits468_forcedsp_lut70.json"
+    "compression/MILP/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.5_candidatebits468_forcedsp_lut70.json"
+    "compression/MILP/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.75_candidatebits468_forcedsp_lut70.json"
+    "compression/MILP/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha1.0_candidatebits468_forcedsp_lut70.json"
 )
 LAYER_BITS_SITES_ARR=(
-    "compression/hawq/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_dense_relu_warmstart150ep_joint_alpha0.0_candidatebits468_forcedsp_lut70.json"
-    "compression/hawq/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_dense_relu_warmstart150ep_joint_alpha0.25_candidatebits468_forcedsp_lut70.json"
-    "compression/hawq/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_dense_relu_warmstart150ep_joint_alpha0.5_candidatebits468_forcedsp_lut70.json"
-    "compression/hawq/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_dense_relu_warmstart150ep_joint_alpha0.75_candidatebits468_forcedsp_lut70.json"
-    "compression/hawq/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_dense_relu_warmstart150ep_joint_alpha1.0_candidatebits468_forcedsp_lut70.json"
+    "compression/MILP/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_dense_relu_warmstart150ep_joint_alpha0.0_candidatebits468_forcedsp_lut70.json"
+    "compression/MILP/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_dense_relu_warmstart150ep_joint_alpha0.25_candidatebits468_forcedsp_lut70.json"
+    "compression/MILP/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_dense_relu_warmstart150ep_joint_alpha0.5_candidatebits468_forcedsp_lut70.json"
+    "compression/MILP/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_dense_relu_warmstart150ep_joint_alpha0.75_candidatebits468_forcedsp_lut70.json"
+    "compression/MILP/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_dense_relu_warmstart150ep_joint_alpha1.0_candidatebits468_forcedsp_lut70.json"
 )
 CALIBRATED_NET_ARR=(
     nnUNetTrainerLayerQuantENet_12_dense_relu_warmstart150ep_perlayer_joint_alpha0.0_candidatebits468_forcedsp_lut70_calibrated
@@ -135,7 +135,7 @@ cd "$HOME/LightM-UNet"
 
 if [ ! -f "$LAYER_BITS_ILP_FILE" ]; then
     echo "ERROR: $LAYER_BITS_ILP_FILE not found -- run the per-layer candidate-bits={4,6,8} --hard-lut-fraction 0.7 " \
-         "--force-dsp joint ILP sweep first (see compression/hawq/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/run_args.json " \
+         "--force-dsp joint ILP sweep first (see compression/MILP/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/run_args.json " \
          "for the exact command)." >&2
     exit 1
 fi
@@ -144,7 +144,7 @@ echo "=== STEP 0: expand per-conv-layer bits to LayerQuantENet's full per-site s
 if [ -f "$LAYER_BITS_SITES_FILE" ]; then
     echo "Site-level bits file already exists at ${LAYER_BITS_SITES_FILE} -- skipping expansion."
 else
-    python compression/hawq/expand_layer_bits.py \
+    python compression/MILP/expand_layer_bits.py \
         --config config_12_dense_relu_warmstart150ep \
         --ilp-result "${LAYER_BITS_ILP_FILE}" \
         --out-file "${LAYER_BITS_SITES_FILE}"

@@ -4,7 +4,7 @@ CALIBRATES the newly-introduced Brevitas quantizers on real data before
 saving -- byte-for-byte the same mechanism as calibrate_12_separable_dense_
 relu_perlayer.py, just for the WARM-STARTED 12_dense_relu architecture
 (separable_dilated=False -- dense KxK dilated convs, plain "dense_dilation"
-context pattern, no reg-trailing block -- see compression/hawq/
+context pattern, no reg-trailing block -- see compression/MILP/
 config_12_dense_relu_warmstart150ep.py).
 
 Output checkpoint is meant as the WARM START for
@@ -14,7 +14,7 @@ artifact on its own.
 
 Usage:
     python compression/post-quantization/calibrate_12_dense_relu_warmstart150ep_perlayer.py \\
-        --layer-bits-file compression/hawq/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_dense_relu_warmstart150ep_joint_alpha0.5_candidatebits468_forcedsp_lut70.json \\
+        --layer-bits-file compression/MILP/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_dense_relu_warmstart150ep_joint_alpha0.5_candidatebits468_forcedsp_lut70.json \\
         --out-net-name nnUNetTrainerLayerQuantENet_12_dense_relu_warmstart150ep_joint_alpha0.5_candidatebits468_calibrated
 """
 from __future__ import annotations
@@ -84,7 +84,7 @@ def main() -> None:
     parser.add_argument("--out-net-name", required=True)
     parser.add_argument("--dataset-name", default="Dataset509_ARCADE_1x1_4c")
     parser.add_argument("--layer-bits-file", required=True, type=Path,
-                         help="compression/hawq/expand_layer_bits.py's own output -- "
+                         help="compression/MILP/expand_layer_bits.py's own output -- "
                               "{'layer_weight_bits': {...}, 'layer_act_bits': {...}}, one entry per real "
                               "LayerQuantENet quantizer SITE (NOT the coarser per-conv-layer joint_bits_"
                               "folding_ilp_perlayer.py output directly -- run that through expand_layer_bits.py "
