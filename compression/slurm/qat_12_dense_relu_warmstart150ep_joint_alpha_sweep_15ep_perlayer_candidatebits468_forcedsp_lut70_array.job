@@ -25,6 +25,23 @@ set -e
 # 70%-LUT array jobs, just pointed at this dense (non-separable) architecture
 # and its own warm-started FP32 source.
 #
+# _crosscheck0917 SUFFIX (2026-09-17): every CALIBRATED_NET_ARR/RUN_NAME_ARR
+# entry carries this suffix to avoid colliding with an EARLIER completed
+# 15-epoch/5-alpha sweep already sitting under the un-suffixed names in
+# nnUNet_results -- that one was calibrated and trained against the
+# per-layer bits/folding this repo's ILP produced BEFORE a 2026-09-17 FINN-
+# source cross-check fixed several real cost-model bugs (RTL MVAU DSP
+# packing, missing/wrong SWU LUT terms, a nonexistent-SWU-for-1x1-kernel
+# miscount -- see finn_cost_model.py's own docstrings and compression/MILP/
+# artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/
+# archive_pre_20260917_swu_thr_dsp_crosscheck/README.md). Without the
+# suffix, this job's own skip-if-exists checks (both the calibration and
+# training steps below) would find those old checkpoints already at epoch
+# 15 and silently skip re-running anything, reporting stale results as
+# done. LAYER_BITS_ILP_ARR/LAYER_BITS_SITES_ARR below do NOT need a
+# suffix -- those are just data files at fixed paths, already regenerated
+# in place (old versions preserved in the archive dir above).
+#
 # ENET_SEED/CALIBRATION_SEED fixed identically across every alpha in this
 # array -- same rationale as the S12/S27.2 jobs: DownsamplingBottleneck/
 # UpsamplingBottleneck's nn.Dropout2d is active during both calibration
