@@ -168,7 +168,13 @@ def calibrated_lut(raw_total_lut: float, weight_bits: float, act_bits: float, fo
 
     force_dsp=True switches to the FORCED-DSP regime's own flat factor
     (see _FORCED_DSP_LUT_FACTOR below) instead -- default False preserves
-    this function's exact prior behavior for every existing caller."""
+    this function's exact prior behavior for every existing caller.
+
+    A no_activation=False ("hls_lut_noact0") caller also takes this
+    force_dsp=False path (it never sets force_dsp) -- this derating table's
+    accuracy for that specific fused-threshold-HLS regime is untested (its
+    own anchors predate the noActivation regime entirely, see module
+    comment); a real known-scope caveat, not a blocker."""
     if force_dsp:
         return raw_total_lut * _FORCED_DSP_LUT_FACTOR
     avg_bits = (weight_bits + act_bits) / 2
@@ -630,6 +636,7 @@ def _thresholding_rtl_cost(pe: int) -> tuple[float, float, int]:
 def conv_cost_pe_simd(
     layer: LayerGeometry, weight_bits: int, act_bits: int, pe: int, simd: int, ram_style: RamStyle = RAM_STYLE_BLOCK,
     force_dsp: bool = False, impl_style: ImplStyle = IMPL_STYLE_RTL, act_signed: bool = False,
+    no_activation: bool = True, ram_style_thresholds: str = "auto",
 ) -> dict:
     """The general per-layer cost, given EXPLICIT PE/SIMD (the actual
     folding decision variables a folding search chooses over) instead of
@@ -674,11 +681,49 @@ def conv_cost_pe_simd(
     Versal-only). act_signed feeds FINN's accumulator-width bound (this
     repo's post-ReLU activations are UINT).
 
-    Every conv layer is assumed to have noActivation=1, i.e. a separate
-    Thresholding_rtl node (PE assumed == this layer's PE) priced
+    Every conv layer defaults to noActivation=1 (no_activation=True), i.e. a
+    separate Thresholding_rtl node (PE assumed == this layer's PE) priced
     empirically as thr_lut/thr_bram18/thr_uram18 and folded into
     total_lut. cycles = max(MVAU cycles, SWU cycles): a layer runs at the
-    speed of its slowest node."""
+    speed of its slowest node.
+
+    no_activation=False (2026-09-17 addition, additive/opt-in -- every
+    existing caller keeps no_activation=True by default, i.e. byte-identical
+    behavior) models FINN's OTHER real regime: the activation/threshold is
+    FUSED into this MVAU/VVAU node itself (noActivation=0 in real FINN's own
+    nodeattr) instead of living in a separate standalone node. This is only
+    a legal FINN configuration under the HLS backend (impl_style="hls") --
+    MVAU_rtl/VVAU_rtl structurally require noActivation=1, see the module
+    docstring and finn_milp.py's own eligibility filter for the ILP's
+    "rtl_dsp_noact1" vs "hls_lut_noact0" variants; this function itself does
+    NOT enforce that (it's a pure cost formula, calling it with an illegal
+    impl_style/no_activation combination just produces a number nothing in
+    real FINN could build).
+
+    When no_activation=False: thr_lut/thr_bram18/thr_uram18 are all 0 (no
+    separate node exists in the graph any more -- its resources are gone,
+    not moved), and thr_pe is 0 (meaningless, no such node). Instead, real
+    FINN's OWN MVAU_hls.lut_estimation() (transcribed directly, container
+    source read) adds a "thr_luts + comp_luts" term INSIDE this node's own
+    mvu_lut, gated on ram_style_thresholds (FINN's own nodeattr for where
+    the fused threshold memory lives, default "auto"): thr_luts/comp_luts
+    are literally 0 unless ram_style_thresholds=="distributed" -- FINN's OWN
+    static resource estimator has NO modeled LUT/BRAM cost for fused
+    thresholds under its own default ("auto") or "block" styles (Vivado
+    decides at synthesis time; FINN's own analytical model just doesn't
+    price it). This is a real, confirmed blind spot in FINN's own estimator,
+    not a gap specific to this repo's calibration -- so at the default
+    ram_style_thresholds="auto", no_activation=False is modeled as PURE
+    savings (the standalone node's cost disappears, nothing is added in its
+    place) exactly mirroring what FINN's own report would show. Only pass
+    ram_style_thresholds="distributed" to exercise the real fused-LUT term;
+    B (the output activation bit-width FINN's own formula uses,
+    self.get_output_datatype().bitwidth()) is approximated here as this
+    layer's own `act_bits` -- this cost model has no separate output-
+    precision axis distinct from a layer's own (weight_bits, act_bits) pair
+    (see finn_milp.py's module docstring on act_bits' own INPUT-stream
+    convention) -- a real approximation, not a FINN-source transcription,
+    and untested against hardware; treat it as provisional if ever used."""
     W, A = weight_bits, act_bits
     P, Q = pe, simd
     M = 1  # spatial replication -- already minimal in every convention this file implements
@@ -729,8 +774,12 @@ def conv_cost_pe_simd(
     # no way to express (root cause of the dense-vs-separable LUT
     # under-prediction, see repo memory finn_calibrated_8way_build_status.md's
     # "LUT model mismatch: CONFIRMED root cause" section). thr_luts/
-    # comp_luts (FUSED-threshold LUTs, (2^B-1)*acc_bits per PE) are NOT
-    # modeled because noActivation=1 is assumed from 2026-09-17 on. NOTE the
+    # comp_luts (FUSED-threshold LUTs, (2^B-1)*acc_bits per PE) are 0.0 here
+    # whenever no_activation=True (the module default, unchanged) or
+    # ram_style_thresholds != "distributed" (also the default -- see
+    # conv_cost_pe_simd's own docstring for why that's FINN-faithful, not
+    # just unmodeled) -- see thr_luts_fused/comp_luts_fused below for the
+    # no_activation=False + "distributed" case. NOTE the
     # pre-2026-09-17 production builds did NOT satisfy that: 172/173 nodes in
     # hardware/mvau_lut_calibration_dataset*.csv have outputDataType=UINTx,
     # i.e. fused thresholds -> forced MVAU_hls (RTL needs noActivation=1) and
@@ -750,6 +799,23 @@ def conv_cost_pe_simd(
     acc_bits = min(32, math.ceil(alpha + math.log2(1 + 2 ** -alpha) + 1))
     acc_luts = acc_bits
 
+    # thr_luts_fused/comp_luts_fused: real FINN's MVAU_hls.lut_estimation()
+    # own fused-threshold term (transcribed from matrixvectoractivation_hls.py,
+    # container source read 2026-09-17), additive/opt-in via no_activation --
+    # see conv_cost_pe_simd's own docstring. 0.0 unless no_activation=False
+    # AND ram_style_thresholds=="distributed" (FINN's own condition, not this
+    # repo's invention: its lut_estimation() only counts this term for
+    # "distributed", leaving fused thresholds under the "auto"/"block"
+    # default un-costed). B approximates FINN's own output-datatype bitwidth
+    # with this layer's own act_bits (see docstring caveat).
+    if no_activation or ram_style_thresholds != "distributed":
+        thr_luts_fused, comp_luts_fused = 0.0, 0.0
+    else:
+        tmem = layer.cout // P
+        B = A
+        thr_luts_fused = (2 ** B - 1) * acc_bits * math.ceil(tmem / 64)
+        comp_luts_fused = (2 ** B - 1) * acc_bits
+
     # (The former empirical "imbalance_luts" term -- (k_pe*PE/SIMD +
     # k_mh*max(0,MH-mw))*A, pooled R^2=0.779 on the two fused-threshold
     # calibration sets -- was REMOVED 2026-09-17. It was a proxy for FINN's
@@ -761,7 +827,7 @@ def conv_cost_pe_simd(
     # LUTRAM term, only applies to ram_style="distributed" (or embedded
     # weights <= 128 words) -- neither is selectable here (block/ultra), so 0.
     c0, c1 = 300, 1.1
-    mvu_lut = c0 + c1 * M * P * (mult_luts + addertree_luts + acc_luts)
+    mvu_lut = c0 + c1 * M * P * (mult_luts + addertree_luts + acc_luts + thr_luts_fused + comp_luts_fused)
 
     # RTL LUT derating (2026-09-17): MVAU_rtl.lut_estimation() is literally
     # `return 0` in FINN v1.0.0-alpha -- there is NO real RTL LUT model, so
@@ -798,8 +864,17 @@ def conv_cost_pe_simd(
     # Thresholding PE is 1, and the folding configs carry no Thresholding
     # entries -- the bridge must write thr_pe (returned below) explicitly, or
     # a PE=1 node throttles any layer whose MVAU needs PE_thr > 1.
-    thr_pe = next(d for d in divisors(layer.cout) if d * mw >= P * Q)
-    thr_lut, thr_bram18, thr_uram18 = _thresholding_rtl_cost(thr_pe)
+    #
+    # no_activation=False: no standalone Thresholding node exists in the
+    # graph at all (the activation is fused into this MVAU/VVAU node
+    # instead, see thr_luts_fused/comp_luts_fused above) -- its resources
+    # are simply gone, not moved, so thr_lut/thr_bram18/thr_uram18=0 and
+    # thr_pe=0 (meaningless, no such node to give a PE to).
+    if no_activation:
+        thr_pe = next(d for d in divisors(layer.cout) if d * mw >= P * Q)
+        thr_lut, thr_bram18, thr_uram18 = _thresholding_rtl_cost(thr_pe)
+    else:
+        thr_pe, thr_lut, thr_bram18, thr_uram18 = 0, 0.0, 0.0, 0
     total_lut = swu_lut + mvu_lut + thr_lut
 
     # DSP. HLS: MVAU_hls.dsp_estimation() P*Q*ceil((W+A)/48) (one DSP48E2 per
@@ -932,7 +1007,8 @@ def layer_cost_pe_simd(
     are ignored for it (asserted to be the sentinel max_pe/max_simd=1 by
     the caller's own candidate enumeration, see folding_ilp.py's PoolCost,
     so this never silently drops a real folding choice). **kw is passed
-    straight to conv_cost_pe_simd (impl_style/act_signed)."""
+    straight to conv_cost_pe_simd (impl_style/act_signed/no_activation/
+    ram_style_thresholds)."""
     if layer.op_type == "Conv2d":
         return conv_cost_pe_simd(layer, weight_bits, act_bits, pe, simd, ram_style, force_dsp=force_dsp, **kw)
     if layer.op_type == "ConvTranspose2d":
