@@ -2,7 +2,7 @@ import os
 import sys
 sys.path.insert(0, "/home/thelegendiv/finn/notebooks/enet")
 
-import finn_enet_build_decomposed_prelu as m  # patched module; sets up sys.path
+import finn_enet_build_fixups as m  # patched module; sets up sys.path
 
 import finn.builder.build_dataflow as build
 import finn.builder.build_dataflow_config as build_cfg

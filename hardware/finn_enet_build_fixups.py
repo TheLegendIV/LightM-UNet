@@ -1,6 +1,16 @@
-"""FINN estimation build for QuantENet configs that use the decomposed-PReLU
-activation (PReLU(x) = alpha*x + (1-alpha)*ReLU(x)) -- currently just
-S5-DscNoProjDense (quantEnet_s5_dscnoproj_dense_int8).
+"""RENAMED 2026-09-17 from finn_enet_build_decomposed_prelu.py -- despite the
+original name, this module is now the shared, general-purpose collection of
+extra FINN enet build-step fixups (step_fuse_leaky_relu_to_threshold,
+step_absorb_leftover_scale_before_matmul,
+step_fuse_forked_dequant_into_duplicate_threshold,
+step_dedup_forked_matmul_before_threshold, enet_estimate_steps, etc.),
+imported by the live 8-way partitioned build
+(finn_enet_ip_build_partitioned_8way.py), not just the original
+decomposed-PReLU (S5-DscNoProjDense) estimation build described below.
+
+Original docstring: FINN estimation build for QuantENet configs that use
+the decomposed-PReLU activation (PReLU(x) = alpha*x + (1-alpha)*ReLU(x)) --
+currently just S5-DscNoProjDense (quantEnet_s5_dscnoproj_dense_int8).
 
 Identical to finn_enet_build.py's pipeline (imported directly, not
 duplicated) except for one extra step inserted between step_enet_streamline
@@ -806,6 +816,20 @@ def step_fuse_forked_dequant_into_duplicate_threshold(model: ModelWrapper, cfg: 
             graph.node.remove(n2)
         graph.node.append(new_mt)
         graph.node.append(new_mul)
+
+        # BUGFIX (found 2026-09-17): this function no longer gates on
+        # is_fork_node(mt) (see the NOTE above) -- it also fires when `mt`'s
+        # ONLY real consumer was the chain just deleted (chain_nodes), i.e.
+        # `mt` was never actually forked. In that case `mt` is now fully
+        # superseded by `new_mt` but is never itself removed, leaving it
+        # with 0 consumers -- a dangling node (still gets HW-converted and
+        # synthesized, computing nothing anyone uses) that survives all the
+        # way to the final partitioned graph. `mt`'s remaining consumers
+        # can only be found among the ORIGINAL node set still in the
+        # graph -- chain_nodes were already removed above, so a plain
+        # find_consumers check here is accurate.
+        if not (model.find_consumers(mt.output[0]) or []):
+            graph.node.remove(mt)
         fused += 1
 
     if fused:
