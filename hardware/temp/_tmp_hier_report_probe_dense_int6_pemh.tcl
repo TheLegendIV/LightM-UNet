@@ -1,2 +1,0 @@
-open_checkpoint /tmp/finn_dev_thelegendiv/synth_out_of_context_al5lxv0p/results_finn_design_wrapper/vivadocompile/vivadocompile.runs/impl_1/finn_design_wrapper_routed.dcp
-report_utilization -hierarchical -hierarchical_depth 4 -file /tmp/hier_probe_dense_int6_pemh.rpt
