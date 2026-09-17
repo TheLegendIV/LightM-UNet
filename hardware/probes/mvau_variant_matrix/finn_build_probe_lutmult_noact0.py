@@ -158,6 +158,23 @@ def step_reapply_unique_names(model: ModelWrapper, cfg: DataflowBuildConfig):
     return model.transform(GiveUniqueNodeNames())
 
 
+def step_force_impl_style(model: ModelWrapper, cfg: DataflowBuildConfig):
+    """Sets preferred_impl_style=hls on every MVAU/VVAU node, overriding
+    FINN's own RTL-eligibility auto-detection. This probe's premise is
+    noActivation=0/fused, which should always land as HLS -- but FINN's
+    auto specialize_layers can still pick RTL for some folds (e.g. PE=MH,
+    SIMD=1), which then crashes later when resType=lut is forced (RTL-MVU
+    doesn't support LUT-based implementation). MUST run before
+    "step_specialize_layers"."""
+    n = 0
+    for node in model.graph.node:
+        if node.op_type in ("MVAU", "VVAU"):
+            getCustomOp(node).set_nodeattr("preferred_impl_style", "hls")
+            n += 1
+    print(f"[step_force_impl_style] forced preferred_impl_style=hls on {n} MVAU/VVAU node(s)")
+    return model
+
+
 def step_print_noactivation_diagnostic(model: ModelWrapper, cfg: DataflowBuildConfig):
     """Verification, not a transform (model unchanged) -- confirms every
     MVAU/VVAU node actually landed noActivation=0 (this probe's whole premise)
@@ -395,6 +412,7 @@ probe_steps = [
     step_probe_streamline,
     step_probe_convert_to_hw,
     "step_create_dataflow_partition",
+    step_force_impl_style,  # MUST run before "step_specialize_layers"
     "step_specialize_layers",
     step_reapply_unique_names,
     step_print_noactivation_diagnostic,
