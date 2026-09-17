@@ -2,7 +2,7 @@ import sys
 sys.path.insert(0, "/home/thelegendiv/finn/notebooks/enet")
 
 # Import the PATCHED module FIRST -- it sets up sys.path for finn/qonnx/brevitas itself
-import finn_enet_build_decomposed_prelu as m
+import finn_enet_build_fixups as m
 
 from qonnx.core.modelwrapper import ModelWrapper
 

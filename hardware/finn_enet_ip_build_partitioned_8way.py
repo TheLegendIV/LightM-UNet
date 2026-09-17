@@ -31,7 +31,7 @@ from datetime import datetime
 
 sys.path.insert(0, "/home/thelegendiv/finn/notebooks/enet")
 
-from finn_enet_build_decomposed_prelu import (
+from finn_enet_build_fixups import (
     ENET_DIR,
     step_enet_tidy,
     step_fuse_leaky_relu_to_threshold,

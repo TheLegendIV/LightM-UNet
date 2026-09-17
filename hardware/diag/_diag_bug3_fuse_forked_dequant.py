@@ -10,7 +10,7 @@ from qonnx.core.modelwrapper import ModelWrapper
 from qonnx.custom_op.registry import getCustomOp
 import numpy as np
 
-from finn_enet_build_decomposed_prelu import _walk_back_through_transpose_and_affine
+from finn_enet_build_fixups import _walk_back_through_transpose_and_affine
 
 BASE = "/home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/12_dense_relu_warmstart150ep_alpha025_trained_preamble_20260908_223941/intermediate_models/"
 model = ModelWrapper(BASE + "step_absorb_leftover_scale_before_matmul.onnx")

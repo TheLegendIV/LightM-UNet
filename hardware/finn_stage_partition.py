@@ -82,16 +82,33 @@ def find_stage_boundaries(model):
     """Returns a sorted list of 4 node indices marking the start of
     stage1, stage2/3, stage4, stage5 respectively (partition 0/initial
     always starts at index 0). Raises AssertionError if the expected
-    marker node counts aren't found (2 or 3 StreamingMaxPool, 2
-    UpsampleNearestNeighbour_*, 3 FMPadding_Pixel) -- this is a deliberate
-    fail-fast so a topology change doesn't silently mis-partition the graph.
+    marker node counts aren't found (2 or 3 StreamingMaxPool) -- this is a
+    deliberate fail-fast so a topology change doesn't silently mis-
+    partition the graph.
 
     2 StreamingMaxPool = down1/down2 shortcut_pool only (the original
     fresh-init single-conv initial block, e.g. 26_5_w24). 3 = same plus
     the real Concat-based initial block's own MaxPool branch
     (FINNInitialBlockHAWQ, added 2026-08-28, e.g. 26_9_w24_ptq) --
     whichever it is, down1/down2 are always the LAST two by node index
-    (any initial-block pool always precedes down1 entirely)."""
+    (any initial-block pool always precedes down1 entirely).
+
+    RELAXED 2026-09-16/17 (merged in from the rtl_mvau preamble's own
+    `_find_stage_boundaries_relaxed` monkeypatch, now the permanent
+    default since a second script independently needed the same fix):
+    the FMPadding_Pixel==3 count is no longer hard-asserted -- forcing
+    standalone thresholds (step_enet_convert_to_hw_rtl_mvau) changes how
+    many FMPadding_Pixel nodes survive (5 vs the historical 3), harmless
+    to the actual boundary computation. up4_start/up5_start also no
+    longer require exactly 2 UpsampleNearestNeighbour_* nodes: the
+    post-2026-09-14 "tent-kernel depthwise conv" main_up substitute never
+    produces a separate Resize/Upsample node at all (0 such nodes at
+    every checkpoint of this topology) -- falls back to detecting main_up's
+    own FMPadding_Pixel pair (kernel padding for the tent conv) as the
+    first HW-visible op of each upsampling bottleneck: FMPadding_Pixel
+    nodes cluster into 2 adjacent pairs (up4's, up5's) plus 1 isolated
+    trailing one (final's own ConvTranspose2d), regardless of the 3-vs-5
+    total count."""
 
     maxpools = model.get_nodes_by_op_type("StreamingMaxPool")
     assert len(maxpools) in (2, 3), (
@@ -100,26 +117,21 @@ def find_stage_boundaries(model):
         "update find_stage_boundaries()." % len(maxpools)
     )
     # fail-fast sanity check only -- no longer used to derive up4_start/
-    # up5_start (see module docstring: main_up's topology change means it
-    # no longer lowers to FMPadding_Pixel). Still 1 per up4.up/up5.up + 1
-    # for final's own ConvTranspose2d = 3.
+    # up5_start directly (see docstring above), but still logged if it
+    # deviates from the historical count.
     fmpad = model.get_nodes_by_op_type("FMPadding_Pixel")
-    assert len(fmpad) == 3, (
-        "Expected exactly 3 FMPadding_Pixel nodes (up4.up, up5.up, final), "
-        "found %d. Topology may have changed -- update find_stage_boundaries()."
-        % len(fmpad)
-    )
+    if len(fmpad) != 3:
+        print(f"[find_stage_boundaries] found {len(fmpad)} FMPadding_Pixel "
+              "nodes (historically 3) -- not used to derive boundaries directly.")
 
     # main_up now lowers to a Resize node, then (post step_enet_convert_to_hw's
     # InferUpsample) an UpsampleNearestNeighbour_hls/_rtl HW node -- this is
     # the new FIRST op of each upsampling bottleneck (main_act(main_bn(
-    # main_up(x))) is computed first in FINNUpsamplingBottleneck.forward()).
+    # main_up(x))) is computed first in FINNUpsamplingBottleneck.forward()),
+    # UNLESS main_up is the tent-kernel depthwise-conv substitute (see
+    # docstring), in which case there are 0 such nodes and we fall back to
+    # FMPadding_Pixel pairs below.
     upsample = [n for n in model.graph.node if n.op_type.startswith("UpsampleNearestNeighbour")]
-    assert len(upsample) == 2, (
-        "Expected exactly 2 UpsampleNearestNeighbour_* nodes (up4's and up5's "
-        "main_up), found %d. Topology may have changed -- update "
-        "find_stage_boundaries()." % len(upsample)
-    )
 
     # sort each group by their position in the graph, so "first occurrence"
     # is well defined regardless of get_nodes_by_op_type's internal order
@@ -130,8 +142,29 @@ def find_stage_boundaries(model):
     # (index 0 of 3) is the initial block's own pool branch, not a boundary.
     down1_start = _node_index(model, maxpools[-2])
     down2_start = _node_index(model, maxpools[-1])
-    up4_start = _node_index(model, upsample[0])
-    up5_start = _node_index(model, upsample[1])
+
+    if len(upsample) == 2:
+        up4_start = _node_index(model, upsample[0])
+        up5_start = _node_index(model, upsample[1])
+    else:
+        print(f"[find_stage_boundaries] found {len(upsample)} "
+              "UpsampleNearestNeighbour_* nodes (expected 2) -- main_up has no "
+              "separate Resize/Upsample node in this checkpoint, falling back "
+              "to FMPadding_Pixel-pair detection for up4_start/up5_start.")
+        fmpad_idx = sorted(_node_index(model, n) for n in fmpad)
+        groups = []
+        for idx in fmpad_idx:
+            if groups and idx - groups[-1][-1] <= 5:
+                groups[-1].append(idx)
+            else:
+                groups.append([idx])
+        pair_groups = [g for g in groups if len(g) >= 2]
+        assert len(pair_groups) == 2, (
+            "Expected exactly 2 FMPadding_Pixel pairs (up4.up, up5.up) as a "
+            "fallback for missing Upsample nodes, found %d qualifying groups "
+            "(all groups: %s)." % (len(pair_groups), groups)
+        )
+        up4_start, up5_start = pair_groups[0][0], pair_groups[1][0]
 
     boundaries = [down1_start, down2_start, up4_start, up5_start]
     assert boundaries == sorted(boundaries), (
