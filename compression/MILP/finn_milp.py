@@ -91,16 +91,46 @@ already is for every layer), both mean-normalized by n_layers:
     latency_term     = (1/n_layers) * sum_{layer,fold,w,a} z[layer,fold,w,a] * cycles_norm[layer,fold,w,a]
     minimize alpha * sensitivity_term + (1-alpha) * latency_term
 
-HARD CONSTRAINTS: real `<=` LUT/BRAM_18K/DSP/max-cycles constraints (not a
-soft penalty) -- --hard-lut-fraction/--hard-bram-fraction/--hard-dsp-
-fraction (all default 1.0, always enforced) cap each resource at that
-fraction of XCZU7EV's nominal budget. BRAM_18K includes the standalone
-Thresholding_rtl's own memory (thr_bram18, noActivation=1 regime -- see
-finn_cost_model.conv_cost_pe_simd) alongside the SWU line buffer and weight
-memory. DSP was added 2026-09-17: uncapped, the RTL DSP-packing rule
+HARD CONSTRAINTS: real `<=` LUT/BRAM_18K/DSP/URAM/max-cycles constraints
+(not a soft penalty) -- --hard-lut-fraction/--hard-bram-fraction/--hard-dsp-
+fraction/--hard-uram-fraction (all default 1.0, always enforced) cap each
+resource at that fraction of XCZU7EV's nominal budget. BRAM_18K includes the
+standalone Thresholding_rtl's own memory (thr_bram18, noActivation=1 regime
+-- see finn_cost_model.conv_cost_pe_simd) alongside the SWU line buffer and
+weight memory. DSP was added 2026-09-17: uncapped, the RTL DSP-packing rule
 (ceil(PE/lanes)*SIMD) let an S12-dense alpha=0.25 solve pick a plan needing
 2564 DSP48s on a 1728-DSP device -- it is now always a real constraint, not
-just tracked in diagnostics.
+just tracked in diagnostics. URAM was added the same day for the same
+reason: uncapped, an S12-dense alpha=0.25 solve picked wm_uram18=205 (all on
+the MVAU's own weight memory), but the real 8-way hardware build for that
+exact solve landed at URAM=2/96 -- real hardware essentially never realized
+the ILP's own "ultra" choice for MVAU weights. Response: MVAU's own
+`ram_style` is now hard-fixed to "block" (ultra DISABLED for MVAU weight
+memory, candidate_folds no longer offers it). SWU's own line-buffer memory
+was briefly repointed to the freed decision variable, but real data then
+showed standalone Thresholding_rtl nodes -- NOT SWU -- are the dominant real
+BRAM consumer (up to 24 blocks/node in the 8-way build), while URAM sits
+almost entirely idle on real hardware. So SWU's own ram_style pick is now
+DETERMINISTIC ("auto_efficient": a geometry-driven, per-layer block-vs-ultra
+choice with no ILP degree of freedom -- see finn_cost_model.py's _finn_swu
+docstring), and the per-layer `ram_style` decision variable is repointed a
+second time to select the standalone Thresholding_rtl node's OWN memory
+(thr_bram18/thr_uram18) instead -- a real, free per-layer tradeoff, since
+whether to spend scarce BRAM_18K or (real-hardware-idle) URAM on threshold
+memory is exactly the kind of global-resource-pressure decision the ILP
+itself should make, not a local per-node heuristic. The URAM cost constant
+for Thresholding is DERIVED, not fit (no real Thresholding+URAM hardware
+data exists anywhere): it comes from the real, calibrated BRAM constant
+scaled by the fixed, device-family-independent 16x BRAM18-vs-URAM288
+capacity ratio (18,432 bits vs 294,912 bits) -- see finn_cost_model.py's
+_thresholding_rtl_cost docstring for the full derivation and why this holds
+regardless of target part family (this project targets a non-Versal
+Zynq UltraScale+ part; FINN's own primitive-selection logic is confirmed,
+via source read, to use the same primitive table unconditionally regardless
+of device family, so the Versal-flavored naming doesn't change the physics).
+FIFOs are a separate resource this cost model does NOT model at all yet (see
+finn_cost_model.py's own top-of-file "Still not covered" list) -- URAM/BRAM
+used by real FIFOs is invisible to this ILP entirely, not just uncapped.
 
 --pin-bits-file expects a layer_bits_*.json's own {"layer_weight_bits":
 {...}, "layer_act_bits": {...}} shape (one entry per layer name) -- TEST-
@@ -154,10 +184,19 @@ PACKAGE_ROOT = REPO_ROOT / "enet"
 sys.path.insert(0, str(PACKAGE_ROOT))
 from nnunetv2.nets.ENet import ENet  # noqa: E402
 
-XCZU7EV = {"LUT": 230_400, "BRAM_18K": 624, "DSP": 1_728}  # xczu7ev-ffvc1156-2-e (DSP48E2 count matches hardware/results.csv's DSP_pct column)
+XCZU7EV = {"LUT": 230_400, "BRAM_18K": 624, "DSP": 1_728, "URAM": 96}  # xczu7ev-ffvc1156-2-e (DSP48E2 count matches hardware/results.csv's DSP_pct column; URAM=96 real URAM288 blocks, 96*288Kib=27Mib, confirmed against the real S12-dense-warmstart hardware build's own URAM=2/96 utilization row)
 CANDIDATE_BITS = (2, 4, 6, 8, 16)
 INPUT_HW = (512, 512)  # real nnU-Net patch size (see debug.json's configuration_manager.patch_size)
-RAM_STYLES = (RAM_STYLE_BLOCK, RAM_STYLE_ULTRA)
+RAM_STYLES = (RAM_STYLE_BLOCK, RAM_STYLE_ULTRA)  # 2026-09-17: RESTORED to a real 2-value choice --
+# briefly collapsed to (block,) when MVAU-ultra was disabled and SWU's own pick became deterministic
+# ("auto_efficient"), but this axis now drives a THIRD, different consumer: the standalone
+# Thresholding_rtl node's own memory (thr_ram_style). Unlike SWU, this one stays a real, FREE per-layer
+# ILP choice on purpose -- FINN's own local per-primitive min-waste selection never favors URAM for
+# Thresholding memory (confirmed: real_URAM=0 for all 168 real nodes checked), but that's the wrong
+# criterion once BRAM is the globally scarce resource (100% used in the real S12-dense-warmstart build)
+# and URAM sits mostly idle (19.8%) -- a genuine resource trade the ILP's own joint optimization should
+# make, not something to bake in as a fixed local rule. See candidate_folds' and finn_cost_model.py's
+# _thresholding_rtl_cost docstrings.
 FORCE_SERIAL = False  # set True by --force-serial: restricts every layer to (PE, SIMD) = (1, 1)
 
 # Curated per-layer resource variants (2026-09-17 addition, additive/opt-in
@@ -223,6 +262,25 @@ def _variant_cost_kwargs(variant: str, force_dsp: bool) -> dict:
     if variant == VARIANT_HLS_DSP_NOACT0:
         return {"impl_style": IMPL_STYLE_HLS, "force_dsp": True, "no_activation": False}
     raise ValueError(f"unknown resource variant {variant!r}")
+
+
+def _calibration_force_dsp(variant_kwargs: dict) -> bool:
+    """The `force_dsp` calibrated_lut/calibrated_bram18k should be told for
+    a given variant's own cost -- NOT simply variant_kwargs["force_dsp"]
+    (the raw CLI flag value), because that flag is not the same question as
+    "was this node's multiplication actually forced onto DSP". Mirrors
+    conv_cost_pe_simd's own `use_dsp = force_dsp or impl_style == IMPL_STYLE_
+    RTL` exactly: rtl_dsp_noact1 ALWAYS gets _RTL_MVU_LUT_DERATE applied
+    inside conv_cost_pe_simd regardless of --force-dsp (impl_style=RTL alone
+    forces it), so calibrated_lut must ALWAYS bypass its own avg_bits table
+    for this variant too -- not just when --force-dsp happens to be set.
+    Every run so far has passed --force-dsp, which made variant_kwargs
+    ["force_dsp"] already True for rtl_dsp_noact1 and masked this: a run
+    WITHOUT --force-dsp would otherwise double/mis-derate RTL's already-
+    node-derated LUT through the wrong (unrelated, pre-noActivation-choice)
+    avg_bits table, same failure mode _HLS_MVU_LUT_MULT_DERATE's own
+    lut_mult bypass exists to avoid."""
+    return variant_kwargs["force_dsp"] or variant_kwargs["impl_style"] == IMPL_STYLE_RTL
 
 
 def load_config(config_module: str) -> None:
@@ -293,13 +351,48 @@ def candidate_folds(layer: LayerGeometry) -> list[tuple[int, int, str, str]]:
     no activation to fuse), so it gets the single sentinel
     (1, 1, "block", VARIANT_RTL_DSP_NOACT1), which layer_cost_pe_simd
     ignores for that op_type anyway (its cost/cycles don't depend on any of
-    those at all -- see maxpool_cost). Conv2d/ConvTranspose2d get BOTH
-    ram_style options per (PE, SIMD) -- the ILP picks whichever (block=BRAM
-    vs ultra=URAM) fits/minimizes cycles per layer, since real FINN's
-    LUT/cycle cost is identical either way (only the BRAM_18K vs URAM
-    resource ledger differs, see finn_cost_model.py's conv_cost_pe_simd
-    docstring). FORCE_SERIAL (set via --force-serial) restricts every layer
-    to (1, 1).
+    those at all -- see maxpool_cost).
+
+    ram_style (2026-09-17: REPURPOSED twice in one day): RAM_STYLES is a
+    real 2-value choice again (RAM_STYLE_BLOCK, RAM_STYLE_ULTRA), but it has
+    changed WHICH consumer it drives twice:
+      - MVAU's own weight memory is hard-fixed to RAM_STYLE_BLOCK
+        unconditionally (ultra DISABLED, permanently). Why: the S12-dense-
+        warmstart alpha=0.25 solve picked wm_uram18=205 total under the old
+        (MVAU-ultra-eligible, uncapped) scheme, but the real 8-way hardware
+        build for that exact solve landed at URAM=2/96 -- real hardware
+        essentially never materialized the ILP's own "ultra" choice for
+        MVAU weights.
+      - SWU's own line-buffer memory (swu_bram18 vs swu_uram18) was briefly
+        the repointed consumer, but is now DETERMINISTIC instead: a
+        geometry-driven "auto_efficient" pick (passed as conv_cost_pe_simd's
+        swu_ram_style, fixed, not looped over) -- for each layer's own real
+        buffer_width/buffer_depth, whichever of block/ultra needs fewer
+        physical blocks is used, computed directly rather than left for the
+        ILP to (re)discover despite it being a pure function of geometry.
+        See finn_cost_model.py's _finn_swu docstring for exactly how that
+        comparison works and its own calibration caveats (zero real "ultra"
+        SWU ground truth exists yet either).
+      - The freed `ram_style` decision variable now drives a THIRD, real
+        consumer: the standalone Thresholding_rtl node's OWN memory
+        (thr_bram18 vs thr_uram18, passed as conv_cost_pe_simd's
+        thr_ram_style). Real data showed Thresholding_rtl -- not SWU or
+        MVAU -- is the dominant real BRAM consumer (up to 24 blocks/node in
+        the 8-way build) while URAM sits almost entirely idle on real
+        hardware. Unlike SWU's deterministic pick, this is a genuine global
+        resource-pressure tradeoff (spend scarce BRAM_18K vs abundant-but-
+        real-hardware-idle URAM) that the ILP itself should make per layer,
+        not a local per-node heuristic -- so it is left as a real, free
+        binary choice. See finn_cost_model.py's _thresholding_rtl_cost
+        docstring for the cost formula and for why its URAM constant is
+        DERIVED (not fit) from the real, calibrated BRAM constant via the
+        fixed 16x BRAM18-vs-URAM288 capacity ratio (no real Thresholding+
+        URAM hardware data exists anywhere yet).
+    FIFOs remain a separate, NOT-YET-modeled resource in this cost model
+    (see finn_cost_model.py's own top-of-file "Still not covered" list) --
+    their own real ram_style choice is not part of this ILP at all yet.
+
+    FORCE_SERIAL (set via --force-serial) restricts every layer to (1, 1).
 
     variant (2026-09-17 addition, additive/opt-in): VARIANT_RTL_DSP_NOACT1 is
     always eligible for every Conv2d/ConvTranspose2d layer (today's only
@@ -374,6 +467,7 @@ def solve_joint_perlayer(
     force_dsp: bool = False,
     require_simd_ge_pe: bool = False,
     hard_dsp_fraction: float = 1.0,
+    hard_uram_fraction: float = 1.0,
 ) -> dict:
     """The per-layer combined MILP -- see module docstring for the full
     formulation.
@@ -425,6 +519,7 @@ def solve_joint_perlayer(
     raw_lut: dict[tuple, float] = {}
     raw_bram: dict[tuple, float] = {}
     raw_dsp: dict[tuple, float] = {}
+    raw_uram: dict[tuple, float] = {}
     layer_folds: dict[str, list[tuple[int, int, str, str]]] = {}
 
     for layer in geometries:
@@ -445,11 +540,25 @@ def solve_joint_perlayer(
         for pe, simd, ram_style, variant in folds:
             variant_kwargs = _variant_cost_kwargs(variant, force_dsp)
             for w, a in candidate_pairs:
-                cost = layer_cost_pe_simd(layer, w, a, pe, simd, ram_style, **variant_kwargs)
+                # MVAU's own weight memory is hard-fixed to RAM_STYLE_BLOCK (ultra DISABLED
+                # for MVAU, 2026-09-17 -- see candidate_folds' own docstring). SWU's own
+                # line-buffer memory uses "auto_efficient" -- a deterministic, per-layer
+                # geometry-driven block-vs-ultra pick (see finn_cost_model._finn_swu's own
+                # docstring). The `ram_style` loop variable now drives the standalone
+                # Thresholding_rtl node's own memory instead (thr_ram_style) -- a real, free
+                # per-layer choice, unlike SWU's deterministic one (see RAM_STYLES' own
+                # comment above for why).
+                cost = layer_cost_pe_simd(
+                    layer, w, a, pe, simd, RAM_STYLE_BLOCK,
+                    swu_ram_style="auto_efficient", thr_ram_style=ram_style, **variant_kwargs,
+                )
                 key = (layer.name, pe, simd, ram_style, variant, w, a)
                 layer_costs[key] = cost
                 raw_cycles[key] = cost["cycles"]
-                raw_lut[key] = calibrated_lut(cost["total_lut"], w, a, force_dsp=variant_kwargs["force_dsp"])
+                raw_lut[key] = calibrated_lut(
+                    cost["total_lut"], w, a, force_dsp=_calibration_force_dsp(variant_kwargs),
+                    lut_mult=(variant == VARIANT_HLS_LUT_NOACT0),
+                )
                 # thr_bram18: the standalone Thresholding_rtl's own memory (noActivation=1 regime, see
                 # finn_cost_model.conv_cost_pe_simd) -- absent for MaxPool2d, and 0 for VARIANT_HLS_LUT_NOACT0
                 # (no separate node -- see that function's no_activation=False docstring).
@@ -458,6 +567,11 @@ def solve_joint_perlayer(
                     force_dsp=variant_kwargs["force_dsp"],
                 )
                 raw_dsp[key] = cost["total_dsp"]
+                # wm_uram18 is always 0 now (MVAU ram_style hard-fixed to block above).
+                # swu_uram18 comes from SWU's own deterministic "auto_efficient" pick.
+                # thr_uram18 comes from the `ram_style` loop variable (Thresholding's
+                # own real, free ILP choice) -- see candidate_folds' docstring.
+                raw_uram[key] = cost.get("wm_uram18", 0) + cost.get("swu_uram18", 0) + cost.get("thr_uram18", 0)
                 z[key] = pulp.LpVariable(f"z_{layer.name}_{pe}_{simd}_{ram_style}_{variant}_{w}_{a}", cat=pulp.LpBinary)
 
     cycles_norm = _normalize(raw_cycles)
@@ -493,6 +607,17 @@ def solve_joint_perlayer(
     # rule (ceil(PE/lanes)*SIMD) let the S12 dense alpha=0.25 solve pick a
     # plan needing 2564 DSP48s on a 1728-DSP device.
     prob += pulp.lpSum(z[k] * raw_dsp[k] for k in z) <= hard_dsp_fraction * XCZU7EV["DSP"], "hard_dsp_budget"
+    # URAM: real hard constraint too (2026-09-17). Previously UNCAPPED --
+    # the S12 dense alpha=0.25 solve picked wm_uram18=205 total (an
+    # unconstrained "ultra" ram_style choice with zero resource pressure
+    # pushing back), while the real 8-way hardware build for that exact
+    # solve landed at URAM=2/96 -- either the ILP's own ram_style choice was
+    # never applied to the real per-node build (a bridge gap, see thr_pe's
+    # own analogous note), or an unconstrained URAM axis alone can already
+    # produce plans far past the real 96-block budget. Capping it here fixes
+    # the latter regardless of the former. XCZU7EV["URAM"]=96 real URAM288
+    # blocks (96*288Kib=27Mib) on xczu7ev-ffvc1156-2-e.
+    prob += pulp.lpSum(z[k] * raw_uram[k] for k in z) <= hard_uram_fraction * XCZU7EV["URAM"], "hard_uram_budget"
     if max_cycles is not None:
         prob += pulp.lpSum(z[k] * raw_cycles[k] for k in z) <= max_cycles, "max_cycles_budget"
 
@@ -508,7 +633,7 @@ def solve_joint_perlayer(
         raise RuntimeError(f"per-layer ILP hit an unexpected solver status: {status_name!r}.")
 
     n_binary_vars = len(y) + len(z)
-    n_constraints = n_layers + sum(len(candidate_pairs) for _ in geometries) + 3 + (1 if max_cycles is not None else 0)
+    n_constraints = n_layers + sum(len(candidate_pairs) for _ in geometries) + 4 + (1 if max_cycles is not None else 0)
 
     if status_name != "Optimal":
         return {
@@ -519,13 +644,14 @@ def solve_joint_perlayer(
                 "alpha": alpha, "candidate_bits": list(CANDIDATE_BITS), "n_layers": n_layers,
                 "n_binary_vars": n_binary_vars, "n_constraints": n_constraints,
                 "hard_lut_fraction": hard_lut_fraction, "hard_bram_fraction": hard_bram_fraction,
-                "hard_dsp_fraction": hard_dsp_fraction,
+                "hard_dsp_fraction": hard_dsp_fraction, "hard_uram_fraction": hard_uram_fraction,
                 "max_cycles": max_cycles,
                 "solver_time_limit_s": time_limit, "solver_gap_rel": gap_rel, "force_serial": FORCE_SERIAL,
                 "force_dsp": force_dsp, "require_simd_ge_pe": require_simd_ge_pe, "allow_lut_mult": ALLOW_LUT_MULT,
                 "note": f"Solver status {status_name!r} -- no joint per-layer (bits, folding) assignment "
-                        f"satisfies the requested hard LUT/BRAM/DSP budget(s) (hard_lut_fraction={hard_lut_fraction}, "
-                        f"hard_bram_fraction={hard_bram_fraction}, hard_dsp_fraction={hard_dsp_fraction})"
+                        f"satisfies the requested hard LUT/BRAM/DSP/URAM budget(s) (hard_lut_fraction={hard_lut_fraction}, "
+                        f"hard_bram_fraction={hard_bram_fraction}, hard_dsp_fraction={hard_dsp_fraction}, "
+                        f"hard_uram_fraction={hard_uram_fraction})"
                         + (f" and max_cycles={max_cycles:.0f}" if max_cycles is not None else "") + " at all.",
             },
         }
@@ -549,8 +675,17 @@ def solve_joint_perlayer(
         assert chosen_fold is not None, f"layer {layer.name}: no folding choice selected at its own chosen (w,a)={w,a}"
         pe, simd, ram_style, variant = chosen_fold
         cost = layer_costs[(layer.name, pe, simd, ram_style, variant, w, a)]
+        variant_kwargs = _variant_cost_kwargs(variant, force_dsp)
         per_layer[layer.name] = {
             "stage": layer.stage, "pe": pe, "simd": simd, "ram_style": ram_style, "variant": variant,
+            # force_dsp/mvau_noAct: the same two axes packed into `variant`
+            # (impl_style is already its own field, from **cost below), split
+            # out explicitly for readability -- `variant` itself is KEPT (not
+            # replaced) since it's still used internally below (the per-layer
+            # force_dsp lookup for calibrated_lut/calibrated_bram18k re-derives
+            # this same variant_kwargs from `variant` again, see the comment
+            # a few lines down) and as the z-key/candidate_folds identity.
+            "force_dsp": variant_kwargs["force_dsp"], "mvau_noAct": variant_kwargs["no_activation"],
             "weight_bits": w, "act_bits": a, **cost,
         }
 
@@ -562,7 +697,8 @@ def solve_joint_perlayer(
     total_lut = sum(
         calibrated_lut(
             v["total_lut"], v["weight_bits"], v["act_bits"],
-            force_dsp=_variant_cost_kwargs(v["variant"], force_dsp)["force_dsp"],
+            force_dsp=_calibration_force_dsp(_variant_cost_kwargs(v["variant"], force_dsp)),
+            lut_mult=(v["variant"] == VARIANT_HLS_LUT_NOACT0),
         )
         for v in per_layer.values()
     )
@@ -573,7 +709,9 @@ def solve_joint_perlayer(
         )
         for v in per_layer.values()
     )
-    total_uram = sum(v.get("wm_uram18", 0) for v in per_layer.values())
+    total_uram = sum(
+        v.get("wm_uram18", 0) + v.get("swu_uram18", 0) + v.get("thr_uram18", 0) for v in per_layer.values()
+    )
     total_dsp = sum(v["total_dsp"] for v in per_layer.values())
     total_cycles = sum(v["cycles"] for v in per_layer.values())
 
@@ -590,22 +728,25 @@ def solve_joint_perlayer(
             "lut_pct_of_budget": 100 * total_lut / XCZU7EV["LUT"],
             "total_bram18k_calibrated": total_bram, "xczu7ev_bram18k_budget": XCZU7EV["BRAM_18K"],
             "bram_pct_of_budget": 100 * total_bram / XCZU7EV["BRAM_18K"],
-            "total_uram18": total_uram, "total_cycles": total_cycles,
+            "total_uram18": total_uram, "xczu7ev_uram_budget": XCZU7EV["URAM"],
+            "uram_pct_of_budget": 100 * total_uram / XCZU7EV["URAM"], "total_cycles": total_cycles,
             "total_dsp": total_dsp, "xczu7ev_dsp_budget": XCZU7EV["DSP"],
             "dsp_pct_of_budget": 100 * total_dsp / XCZU7EV["DSP"],
             "hard_lut_fraction": hard_lut_fraction, "hard_bram_fraction": hard_bram_fraction,
-            "hard_dsp_fraction": hard_dsp_fraction,
+            "hard_dsp_fraction": hard_dsp_fraction, "hard_uram_fraction": hard_uram_fraction,
             "max_cycles": max_cycles,
             "solver_time_limit_s": time_limit, "solver_gap_rel": gap_rel, "force_serial": FORCE_SERIAL,
             "force_dsp": force_dsp, "require_simd_ge_pe": require_simd_ge_pe, "allow_lut_mult": ALLOW_LUT_MULT,
             "note": "Joint per-LAYER MILP: y[layer,w,a] (sensitivity) linked to z[layer,pe,simd,ram_style,w,a] "
-                    "(cycles/LUT/BRAM/DSP) via a same-layer equality constraint -- LUT/BRAM/DSP are REAL hard "
-                    "<= XCZU7EV constraints here (not a soft penalty). Objective = alpha*mean(sens_norm) + "
-                    "(1-alpha)*mean(cycles_norm), both mean-normalized by the SAME n_layers. GUARANTEED to fit "
-                    "the requested hard budget(s) under this cost model's own calibration -- a steering signal "
-                    "at that calibration, not a certified hardware guarantee. Coarser than "
-                    "nnunetv2.nets.LayerQuantENet's own full per-quantizer-site deployment schema -- see module "
-                    "docstring's SCOPE BOUNDARY.",
+                    "(cycles/LUT/BRAM/DSP/URAM) via a same-layer equality constraint -- LUT/BRAM/DSP/URAM are REAL "
+                    "hard <= XCZU7EV constraints here (not a soft penalty). ram_style selects the SWU's own line-"
+                    "buffer memory (2026-09-17: MVAU's own weight-memory ram_style is hard-fixed to block, ultra "
+                    "disabled -- real hardware never used it, see candidate_folds' own docstring). Objective = "
+                    "alpha*mean(sens_norm) + (1-alpha)*mean(cycles_norm), both mean-normalized by the SAME "
+                    "n_layers. GUARANTEED to fit the requested hard budget(s) under this cost model's own "
+                    "calibration -- a steering signal at that calibration, not a certified hardware guarantee. "
+                    "Coarser than nnunetv2.nets.LayerQuantENet's own full per-quantizer-site deployment schema -- "
+                    "see module docstring's SCOPE BOUNDARY.",
         },
     }
 
@@ -673,7 +814,7 @@ def _update_sweep_summary(out_dir: Path, args: argparse.Namespace, result: dict)
         "config": args.config, "sensitivity-file": str(args.sensitivity_file),
         "candidate-bits": ",".join(str(b) for b in CANDIDATE_BITS),
         "hard-lut-fraction": args.hard_lut_fraction, "hard-bram-fraction": args.hard_bram_fraction,
-        "hard-dsp-fraction": args.hard_dsp_fraction, "force-dsp": args.force_dsp,
+        "hard-dsp-fraction": args.hard_dsp_fraction, "hard-uram-fraction": args.hard_uram_fraction, "force-dsp": args.force_dsp,
         "max-latency-ms": args.max_latency_ms, "clock-mhz": args.clock_mhz,
         "force-serial": FORCE_SERIAL, "require-simd-ge-pe": args.require_simd_ge_pe,
         "allow-lut-mult": ALLOW_LUT_MULT,
@@ -728,6 +869,14 @@ def main() -> None:
     parser.add_argument("--hard-bram-fraction", type=float, default=1.0, help="Same as --hard-lut-fraction, for BRAM_18K.")
     parser.add_argument("--hard-dsp-fraction", type=float, default=1.0,
                          help="Same as --hard-lut-fraction, for DSP48E2 slices (XCZU7EV['DSP']=1728). Always enforced.")
+    parser.add_argument("--hard-uram-fraction", type=float, default=1.0,
+                         help="Same as --hard-lut-fraction, for URAM288 blocks (XCZU7EV['URAM']=96, 27Mib). Always "
+                              "enforced (2026-09-17 addition -- previously uncapped, see candidate_folds' own "
+                              "docstring for why: the S12-dense-warmstart alpha=0.25 solve picked wm_uram18=205 "
+                              "under the old uncapped/MVAU-eligible scheme, but the real 8-way hardware build for "
+                              "that solve landed at URAM=2/96). This axis now selects the standalone "
+                              "Thresholding_rtl node's own memory, not the MVAU's weight memory (hard-fixed to "
+                              "block) or SWU's own line-buffer memory (deterministic \"auto_efficient\" pick).")
     parser.add_argument("--force-dsp", action="store_true",
                          help="Cost every (layer, fold, bits) combination under the FORCED-DSP regime's own "
                               "flat empirical LUT/BRAM factor (finn_cost_model.py's _FORCED_DSP_LUT_FACTOR/"
@@ -863,7 +1012,7 @@ def main() -> None:
         sensitivity, geometries, args.alpha, args.hard_lut_fraction, args.hard_bram_fraction,
         args.time_limit, args.gap_rel, max_cycles=max_cycles, pinned_bits=pinned_bits,
         predecessor_map=predecessor_map, force_dsp=args.force_dsp, require_simd_ge_pe=args.require_simd_ge_pe,
-        hard_dsp_fraction=args.hard_dsp_fraction,
+        hard_dsp_fraction=args.hard_dsp_fraction, hard_uram_fraction=args.hard_uram_fraction,
     )
 
     args.out_file.parent.mkdir(parents=True, exist_ok=True)

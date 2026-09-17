@@ -1,0 +1,29 @@
+{
+  "pipeline": [
+    "compression/MILP/layer_sensitivity.py --candidate-bits ...",
+    "compression/MILP/finn_milp.py --candidate-bits ... --hard-lut-fraction ... --hard-bram-fraction ... --hard-dsp-fraction ... --force-dsp",
+    "compression/MILP/expand_layer_bits.py"
+  ],
+  "shared_args": {
+    "config": "config_12_dense_relu_warmstart150ep",
+    "sensitivity-file": "artifacts\\layer_sensitivity_12_dense_relu_warmstart150ep.json",
+    "candidate-bits": "4,6,8",
+    "hard-lut-fraction": 0.7,
+    "hard-bram-fraction": 0.9,
+    "hard-dsp-fraction": 0.9,
+    "hard-uram-fraction": 1.0,
+    "force-dsp": true,
+    "max-latency-ms": 1000.0,
+    "clock-mhz": 100.0,
+    "force-serial": false,
+    "require-simd-ge-pe": false,
+    "allow-lut-mult": false,
+    "time-limit": 300,
+    "gap-rel": 0.02
+  },
+  "alphas": [
+    0.25
+  ],
+  "granularity": "layer",
+  "notes": "Per-layer joint bits+folding MILP for config_12_dense_relu_warmstart150ep, hard LUT/BRAM/DSP caps 0.7/0.9/0.9 under force_dsp=True. See summary.csv for per-alpha results."
+}

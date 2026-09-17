@@ -1,8 +1,0 @@
-partition,node_name,op_type,MH,MW,PE,SIMD,PE_folding_json,SIMD_folding_json,pe_simd_landed_matches_json,weightDataType,inputDataType,outputDataType,weight_bits,act_bits,resType,force_dsp,ram_style,mem_mode,PE_times_SIMD,log2_MW,real_LUT,real_LUTRAM,real_SRL,real_FF,real_BRAM36,real_BRAM18,real_URAM,real_DSP
-0,MVAU_rtl_0,MVAU_rtl,32,1,32,1,32,1,True,INT6,UINT8,INT14,6,8,dsp,True,auto,internal_decoupled,32,0.0,508,0,0,1850,0,0,0,16
-0,MVAU_rtl_1,MVAU_rtl,8,32,8,1,8,1,True,INT6,UINT6,INT16,6,6,dsp,True,auto,internal_decoupled,8,5.0,276,24,0,613,0,0,0,4
-0,MVAU_rtl_2,MVAU_rtl,8,72,8,1,8,1,True,INT6,UINT6,INT17,6,6,dsp,True,auto,internal_decoupled,8,6.17,385,72,0,652,0,0,0,4
-0,MVAU_rtl_3,MVAU_rtl,32,8,32,1,32,1,True,INT6,UINT6,INT15,6,6,dsp,True,auto,internal_decoupled,32,3.0,970,96,0,2247,0,0,0,16
-0,MVAU_rtl_4,MVAU_rtl,8,32,8,1,8,1,True,INT6,UINT6,INT16,6,6,dsp,True,auto,internal_decoupled,8,5.0,276,24,0,613,0,0,0,4
-0,MVAU_rtl_5,MVAU_rtl,8,72,8,1,8,1,True,INT6,UINT6,INT17,6,6,dsp,True,auto,internal_decoupled,8,6.17,387,72,0,652,0,0,0,4
-0,MVAU_rtl_6,MVAU_rtl,32,8,32,1,32,1,True,INT6,UINT6,INT14,6,6,dsp,True,auto,internal_decoupled,32,3.0,684,96,0,2115,0,0,0,16
