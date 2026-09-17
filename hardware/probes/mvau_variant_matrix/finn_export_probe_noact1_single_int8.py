@@ -48,7 +48,7 @@ from pathlib import Path
 import torch
 from torch import nn
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent  # hardware/probes/mvau_variant_matrix/<this file>.py -> repo root
 sys.path.insert(0, str(REPO_ROOT / "enet"))
 sys.path.insert(0, str(REPO_ROOT / "compression" / "MILP"))
 

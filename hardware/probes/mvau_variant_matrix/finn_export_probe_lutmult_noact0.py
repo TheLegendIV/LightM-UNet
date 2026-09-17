@@ -90,7 +90,7 @@ from pathlib import Path
 import torch
 from torch import nn
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent  # hardware/probes/mvau_variant_matrix/<this file>.py -> repo root
 sys.path.insert(0, str(REPO_ROOT / "enet"))
 sys.path.insert(0, str(REPO_ROOT / "compression" / "MILP"))
 
@@ -195,7 +195,13 @@ def raw_estimate(geometries: list[LayerGeometry], bit_width: int = BIT_WIDTH) ->
     for g in geometries:
         per_layer[g.name] = {"stage": g.stage, "cin": g.cin, "cout": g.cout, "kh": g.kh, "kw": g.kw, "dh": g.dh}
         for res_type, force_dsp in (("dsp", True), ("lut", False)):
-            r = layer_cost_pe_simd_auto_ram(g, bit_width, bit_width, pe=1, simd=1, force_dsp=force_dsp, no_activation=False)
+            # impl_style="hls" is REQUIRED here -- conv_cost_pe_simd's use_dsp
+            # is `force_dsp or impl_style==RTL`, and impl_style defaults to
+            # RTL, so omitting this collapses BOTH regimes to DSP regardless
+            # of force_dsp (caught 2026-09-17: dsp/lut raw estimates were
+            # printing identical total_dsp until this was added).
+            r = layer_cost_pe_simd_auto_ram(g, bit_width, bit_width, pe=1, simd=1,
+                                             impl_style="hls", force_dsp=force_dsp, no_activation=False)
             per_layer[g.name][res_type] = r
             totals[res_type]["lut"] += r["total_lut"]
             totals[res_type]["bram18"] += r["swu_bram18"] + r["wm_bram18"]
