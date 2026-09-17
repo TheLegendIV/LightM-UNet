@@ -126,5 +126,74 @@ class ConvCostPeSimdProbeTest(unittest.TestCase):
                 self.assertGreater(total, 0)
 
 
+class NoActivationVariantTest(unittest.TestCase):
+    """no_activation=False ("hls_lut_noact0", 2026-09-17 addition) regression
+    checks -- default (no_activation=True) path must stay byte-identical to
+    every existing assertion above; the new branch's own behavior is
+    checked directly against conv_cost_pe_simd's own docstring claims."""
+
+    def setUp(self) -> None:
+        name, cin, cout, kh, kw, dilation, _real_lut, _real_dsp = next(
+            row for row in _LAYERS if row[0] == "bottlenecks.0.reduce.0"
+        )
+        self.layer = _make_layer(name, cin, cout, kh, kw, dilation)
+
+    def test_default_no_activation_true_matches_prior_behavior(self):
+        """no_activation defaults to True -- omitting it must be identical
+        to passing it explicitly (the additive/opt-in guarantee)."""
+        explicit = conv_cost_pe_simd(self.layer, weight_bits=W, act_bits=A, pe=8, simd=1, force_dsp=True, no_activation=True)
+        default = conv_cost_pe_simd(self.layer, weight_bits=W, act_bits=A, pe=8, simd=1, force_dsp=True)
+        self.assertEqual(explicit, default)
+
+    def test_no_activation_false_removes_standalone_threshold_node(self):
+        """No separate Thresholding node exists once the activation is
+        fused -- its resources are gone, not moved elsewhere."""
+        cost = conv_cost_pe_simd(
+            self.layer, weight_bits=W, act_bits=A, pe=8, simd=1,
+            impl_style="hls", force_dsp=False, no_activation=False,
+        )
+        self.assertEqual(cost["thr_lut"], 0)
+        self.assertEqual(cost["thr_bram18"], 0)
+        self.assertEqual(cost["thr_pe"], 0)
+
+    def test_no_activation_false_is_dsp_free(self):
+        """hls_lut_noact0's whole point: force_dsp=False + impl_style=hls
+        means the multiplier array is LUT-based, not DSP48-based."""
+        cost = conv_cost_pe_simd(
+            self.layer, weight_bits=W, act_bits=A, pe=8, simd=1,
+            impl_style="hls", force_dsp=False, no_activation=False,
+        )
+        self.assertEqual(cost["total_dsp"], 0)
+        self.assertEqual(cost["mvu_dsp"], 0)
+
+    def test_fused_threshold_lut_is_zero_at_default_ram_style(self):
+        """FINN's OWN lut_estimation() only counts the fused-threshold term
+        for ram_style_thresholds=='distributed' -- at the default 'auto' it
+        is exactly the no_activation=True total_lut MINUS the standalone
+        node's own thr_lut (pure savings, nothing added in its place)."""
+        noact1 = conv_cost_pe_simd(
+            self.layer, weight_bits=W, act_bits=A, pe=8, simd=1,
+            impl_style="hls", force_dsp=False, no_activation=True,
+        )
+        noact0_auto = conv_cost_pe_simd(
+            self.layer, weight_bits=W, act_bits=A, pe=8, simd=1,
+            impl_style="hls", force_dsp=False, no_activation=False, ram_style_thresholds="auto",
+        )
+        self.assertAlmostEqual(noact0_auto["total_lut"], noact1["total_lut"] - noact1["thr_lut"])
+
+    def test_fused_threshold_lut_is_positive_at_distributed_ram_style(self):
+        """Only ram_style_thresholds='distributed' exercises the real
+        fused-LUT term -- must strictly exceed the 'auto' (zero-added) case."""
+        noact0_auto = conv_cost_pe_simd(
+            self.layer, weight_bits=W, act_bits=A, pe=8, simd=1,
+            impl_style="hls", force_dsp=False, no_activation=False, ram_style_thresholds="auto",
+        )
+        noact0_distributed = conv_cost_pe_simd(
+            self.layer, weight_bits=W, act_bits=A, pe=8, simd=1,
+            impl_style="hls", force_dsp=False, no_activation=False, ram_style_thresholds="distributed",
+        )
+        self.assertGreater(noact0_distributed["total_lut"], noact0_auto["total_lut"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -69,8 +69,17 @@ pre-existing, imperfect convention -- since no better signal is available.
 
 VARIABLES:
     y[layer, w, a]   one-hot per INDIVIDUAL LAYER -- sensitivity attaches here.
-    z[layer, pe, simd, ram_style, w, a]   one binary per (layer, fold, w, a)
-                     combination; cycles/LUT/BRAM/DSP attach here.
+    z[layer, pe, simd, ram_style, variant, w, a]   one binary per (layer,
+                     fold, variant, w, a) combination; cycles/LUT/BRAM/DSP
+                     attach here. `variant` (2026-09-17 addition, additive/
+                     opt-in via --allow-lut-mult, see VARIANT_RTL_DSP_NOACT1/
+                     VARIANT_HLS_LUT_NOACT0/candidate_folds below) is always
+                     VARIANT_RTL_DSP_NOACT1 unless --allow-lut-mult is set,
+                     in which case VARIANT_HLS_LUT_NOACT0 (HLS backend,
+                     LUT-based multiplication instead of DSP, fused
+                     activation instead of a separate Thresholding node) also
+                     becomes eligible per layer -- lets the ILP spend spare
+                     LUT budget instead of DSP budget on specific layers.
 
 LINKING CONSTRAINT (same-layer identity):
     for layer, (w,a):  sum_{pe,simd,ram_style} z[layer,...,w,a] == y[layer,w,a]
@@ -135,8 +144,8 @@ import torch  # noqa: F401 -- imported for side-effect parity with the model-tra
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from block_utils import enumerate_blocks, path_to_block_map  # noqa: E402
 from finn_cost_model import (  # noqa: E402
-    RAM_STYLE_BLOCK, RAM_STYLE_ULTRA, LayerGeometry, calibrated_bram18k, calibrated_lut,
-    divisors, layer_cost_pe_simd, max_pe, max_simd,
+    IMPL_STYLE_HLS, IMPL_STYLE_RTL, RAM_STYLE_BLOCK, RAM_STYLE_ULTRA, LayerGeometry, calibrated_bram18k,
+    calibrated_lut, divisors, layer_cost_pe_simd, max_pe, max_simd,
 )
 from layer_topology import compute_predecessor_map  # noqa: E402 -- the predecessor-correction fix
 
@@ -150,6 +159,70 @@ CANDIDATE_BITS = (2, 4, 6, 8, 16)
 INPUT_HW = (512, 512)  # real nnU-Net patch size (see debug.json's configuration_manager.patch_size)
 RAM_STYLES = (RAM_STYLE_BLOCK, RAM_STYLE_ULTRA)
 FORCE_SERIAL = False  # set True by --force-serial: restricts every layer to (PE, SIMD) = (1, 1)
+
+# Curated per-layer resource variants (2026-09-17 addition, additive/opt-in
+# via --allow-lut-mult -- see module docstring's RESOURCE VARIANTS section).
+# "rtl_dsp_noact1" is today's ONLY variant, unchanged in every existing
+# invocation. "hls_lut_noact0" is the new "spend spare LUT instead of DSP"
+# option: HLS backend, LUT-based multiplication (force_dsp=False), fused
+# activation (no separate Thresholding node). Deliberately NOT a full
+# {hls,rtl}x{dsp,lut}x{0,1} cross product -- rtl_dsp_noact0 is never a legal
+# FINN config (MVAU_rtl structurally requires noActivation=1), and
+# hls_dsp_noact1 is dominated by rtl_dsp_noact1 wherever RTL is legal (same
+# DSP pricing, without RTL's own derating/packing efficiency) so it's left
+# out of the curated set for now -- see the plan this was built from,
+# C:\Users\win32\.claude\plans\the-current-ilp-inherited-lynx.md.
+VARIANT_RTL_DSP_NOACT1 = "rtl_dsp_noact1"
+VARIANT_HLS_LUT_NOACT0 = "hls_lut_noact0"
+
+# VARIANT_HLS_DSP_NOACT0 -- PLACEHOLDER ONLY, not yet wired into
+# candidate_folds/any CLI flag (deliberately absent from every variants list
+# below, so its mere existence here has ZERO effect on any run). Real FINN
+# config: HLS backend, DSP-based multiplication (force_dsp=True), fused
+# activation (no separate Thresholding node) -- i.e. "keep DSP, but still
+# shed the standalone Thresholding node's cost." _variant_cost_kwargs
+# already handles it correctly (same 3 already-implemented cost-model knobs,
+# no new formula needed), but do NOT add it to any layer's eligible variant
+# list without ALSO hard-restricting that layer's own candidate folds to
+# PE<=SIMD first -- confirmed via hardware/datasets/mvau_lut_calibration_
+# dataset.csv (89 real MVAU_hls nodes, ALL resType=dsp/force_dsp=True,
+# fused-threshold outputDataType -- i.e. exactly this variant) and hardware/
+# mvau_lut_correlation_report.txt: this repo's own structural LUT formula
+# (mult_luts+addertree_luts+acc_luts, the same family thr_luts_fused/
+# comp_luts_fused extends) gets R^2=0.009 against that real data -- "beyond
+# useless" -- while PE alone correlates at 0.69 and SIMD is NEGATIVELY
+# correlated (-0.41); PE>SIMD rows are 36% of that dataset but 70.7% of its
+# real_LUT (see --require-simd-ge-pe's own docstring, same finding). This is
+# NOT evidence against VARIANT_HLS_LUT_NOACT0 above (that dataset is 100%
+# resType=dsp, zero variance, so it says nothing about resType=lut behavior)
+# -- it is specifically about the DSP-multiplier + fused-threshold
+# combination this placeholder represents. When this variant is actually
+# enabled, bake PE<=SIMD into ITS OWN eligibility in candidate_folds (not a
+# bolt-on --require-simd-ge-pe the user has to remember to pass).
+VARIANT_HLS_DSP_NOACT0 = "hls_dsp_noact0"
+
+ALLOW_LUT_MULT = False  # set True by --allow-lut-mult: makes VARIANT_HLS_LUT_NOACT0 eligible alongside the RTL default
+
+
+def _variant_cost_kwargs(variant: str, force_dsp: bool) -> dict:
+    """Maps a curated `variant` to the (impl_style, force_dsp, no_activation)
+    triple conv_cost_pe_simd (via layer_cost_pe_simd's **kw) expects.
+    "rtl_dsp_noact1" honors the CLI-level --force-dsp flag exactly as every
+    existing caller already does (in practice always DSP regardless of the
+    flag, since impl_style=rtl alone already forces it -- see finn_cost_
+    model.py's conv_cost_pe_simd docstring). "hls_lut_noact0" is DSP-free by
+    construction -- --force-dsp has no effect on it, deliberately, since
+    forcing DSP on the free-LUT variant would defeat its whole purpose.
+    "hls_dsp_noact0" is a PLACEHOLDER (see its own module-level comment
+    above) -- handled here for completeness/testability, but never reachable
+    from any live run since it's never added to a layer's variants list."""
+    if variant == VARIANT_RTL_DSP_NOACT1:
+        return {"impl_style": IMPL_STYLE_RTL, "force_dsp": force_dsp, "no_activation": True}
+    if variant == VARIANT_HLS_LUT_NOACT0:
+        return {"impl_style": IMPL_STYLE_HLS, "force_dsp": False, "no_activation": False}
+    if variant == VARIANT_HLS_DSP_NOACT0:
+        return {"impl_style": IMPL_STYLE_HLS, "force_dsp": True, "no_activation": False}
+    raise ValueError(f"unknown resource variant {variant!r}")
 
 
 def load_config(config_module: str) -> None:
@@ -214,22 +287,46 @@ def trace_layer_geometry(model: torch.nn.Module, input_hw: tuple[int, int], in_c
     return geometries, list(blocks.keys())
 
 
-def candidate_folds(layer: LayerGeometry) -> list[tuple[int, int, str]]:
-    """Every valid (PE, SIMD, ram_style) triple for this layer -- MaxPool2d
-    has neither (no MVAU, no weights), so it gets the single sentinel
-    (1, 1, "block"), which layer_cost_pe_simd ignores for that op_type
-    anyway (its cost/cycles don't depend on pe/simd/ram_style at all -- see
-    maxpool_cost). Conv2d/ConvTranspose2d get BOTH ram_style options per
-    (PE, SIMD) -- the ILP picks whichever (block=BRAM vs ultra=URAM) fits/
-    minimizes cycles per layer, since real FINN's LUT/cycle cost is
-    identical either way (only the BRAM_18K vs URAM resource ledger
-    differs, see finn_cost_model.py's conv_cost_pe_simd docstring).
-    FORCE_SERIAL (set via --force-serial) restricts every layer to (1, 1)."""
+def candidate_folds(layer: LayerGeometry) -> list[tuple[int, int, str, str]]:
+    """Every valid (PE, SIMD, ram_style, variant) 4-tuple for this layer --
+    MaxPool2d has neither PE/SIMD/ram_style/variant (no MVAU, no weights,
+    no activation to fuse), so it gets the single sentinel
+    (1, 1, "block", VARIANT_RTL_DSP_NOACT1), which layer_cost_pe_simd
+    ignores for that op_type anyway (its cost/cycles don't depend on any of
+    those at all -- see maxpool_cost). Conv2d/ConvTranspose2d get BOTH
+    ram_style options per (PE, SIMD) -- the ILP picks whichever (block=BRAM
+    vs ultra=URAM) fits/minimizes cycles per layer, since real FINN's
+    LUT/cycle cost is identical either way (only the BRAM_18K vs URAM
+    resource ledger differs, see finn_cost_model.py's conv_cost_pe_simd
+    docstring). FORCE_SERIAL (set via --force-serial) restricts every layer
+    to (1, 1).
+
+    variant (2026-09-17 addition, additive/opt-in): VARIANT_RTL_DSP_NOACT1 is
+    always eligible for every Conv2d/ConvTranspose2d layer (today's only
+    variant, unchanged) -- INCLUDING depthwise ones: conv_cost_pe_simd
+    itself already silently overrides impl_style to HLS for depthwise
+    layers regardless of what's requested (finn_cost_model.py:686-687,
+    VVAU_rtl needs a Versal DSP58), so requesting VARIANT_RTL_DSP_NOACT1
+    for a depthwise layer already resolves to exactly today's real
+    behavior (HLS + force_dsp + noActivation=1) -- excluding it here would
+    silently change depthwise layers' candidate set instead of preserving
+    it. VARIANT_HLS_LUT_NOACT0 is eligible for every layer too, but only
+    ADDED to the candidate set when ALLOW_LUT_MULT is set
+    (--allow-lut-mult) -- with it unset (the default), every layer's
+    candidate set is IDENTICAL to before this addition, just each tuple now
+    carries an extra, constant VARIANT_RTL_DSP_NOACT1 tag. Note: RTL's
+    further bit-width eligibility (weights signed, 2<=w<=8, a<=8) can't be
+    checked here -- candidate_folds doesn't see (w,a) at all -- it's
+    filtered in solve_joint_perlayer's own (w,a) inner loop instead."""
     if layer.op_type == "MaxPool2d":
-        return [(1, 1, "block")]
+        return [(1, 1, "block", VARIANT_RTL_DSP_NOACT1)]
+    variants = [VARIANT_RTL_DSP_NOACT1]
+    if ALLOW_LUT_MULT:
+        variants.append(VARIANT_HLS_LUT_NOACT0)
     folds = [
-        (pe, simd, ram_style)
-        for pe in divisors(max_pe(layer)) for simd in divisors(max_simd(layer)) for ram_style in RAM_STYLES
+        (pe, simd, ram_style, variant)
+        for pe in divisors(max_pe(layer)) for simd in divisors(max_simd(layer))
+        for ram_style in RAM_STYLES for variant in variants
     ]
     if FORCE_SERIAL:
         folds = [f for f in folds if f[0] == 1 and f[1] == 1]
@@ -314,17 +411,24 @@ def solve_joint_perlayer(
             raw_sensitivity[(name, w, a)] = sens_w + sens_a
     sens_norm = _normalize(raw_sensitivity)
 
-    # -- z[layer,pe,simd,ram_style,w,a]: cycles/LUT/BRAM/DSP attach here, at the EXACT (fold,bits) combination.
+    # -- z[layer,pe,simd,ram_style,variant,w,a]: cycles/LUT/BRAM/DSP attach
+    # here, at the EXACT (fold,variant,bits) combination. `variant` is the
+    # 2026-09-17 addition (see VARIANT_RTL_DSP_NOACT1/VARIANT_HLS_LUT_NOACT0
+    # above) -- additive/opt-in, see candidate_folds' own docstring: with
+    # ALLOW_LUT_MULT unset (the default) every layer's folds list carries
+    # only VARIANT_RTL_DSP_NOACT1, so this loop and everything downstream is
+    # BYTE-IDENTICAL to before this addition (force_dsp resolves to the same
+    # `force_dsp` argument via _variant_cost_kwargs).
     z: dict[tuple, pulp.LpVariable] = {}
     layer_costs: dict[tuple, dict] = {}
     raw_cycles: dict[tuple, float] = {}
     raw_lut: dict[tuple, float] = {}
     raw_bram: dict[tuple, float] = {}
     raw_dsp: dict[tuple, float] = {}
-    layer_folds: dict[str, list[tuple[int, int, str]]] = {}
+    layer_folds: dict[str, list[tuple[int, int, str, str]]] = {}
 
     for layer in geometries:
-        folds = candidate_folds(layer)  # respects module-level FORCE_SERIAL if set
+        folds = candidate_folds(layer)  # respects module-level FORCE_SERIAL/ALLOW_LUT_MULT if set
         if require_simd_ge_pe:
             # Hard structural fix for the PE>>SIMD real-LUT blowup documented in
             # hardware/mvau_lut_correlation_report.txt: 36% of the 89-row real
@@ -334,23 +438,27 @@ def solve_joint_perlayer(
             # (that term has since been REMOVED from finn_cost_model.py -- see
             # its own module docstring's 2026-09-17 refresh). PE=1 is always
             # paired with SIMD=max_simd(layer)>=1 by candidate_folds, so this
-            # never empties a layer's fold set.
+            # never empties a layer's fold set. (f[1]=simd, f[0]=pe -- unaffected
+            # by the variant element now at f[3].)
             folds = [f for f in folds if f[1] >= f[0]]
         layer_folds[layer.name] = folds
-        for pe, simd, ram_style in folds:
+        for pe, simd, ram_style, variant in folds:
+            variant_kwargs = _variant_cost_kwargs(variant, force_dsp)
             for w, a in candidate_pairs:
-                cost = layer_cost_pe_simd(layer, w, a, pe, simd, ram_style, force_dsp=force_dsp)
-                key = (layer.name, pe, simd, ram_style, w, a)
+                cost = layer_cost_pe_simd(layer, w, a, pe, simd, ram_style, **variant_kwargs)
+                key = (layer.name, pe, simd, ram_style, variant, w, a)
                 layer_costs[key] = cost
                 raw_cycles[key] = cost["cycles"]
-                raw_lut[key] = calibrated_lut(cost["total_lut"], w, a, force_dsp=force_dsp)
+                raw_lut[key] = calibrated_lut(cost["total_lut"], w, a, force_dsp=variant_kwargs["force_dsp"])
                 # thr_bram18: the standalone Thresholding_rtl's own memory (noActivation=1 regime, see
-                # finn_cost_model.conv_cost_pe_simd) -- absent for MaxPool2d.
+                # finn_cost_model.conv_cost_pe_simd) -- absent for MaxPool2d, and 0 for VARIANT_HLS_LUT_NOACT0
+                # (no separate node -- see that function's no_activation=False docstring).
                 raw_bram[key] = calibrated_bram18k(
-                    cost["swu_bram18"] + cost["wm_bram18"] + cost.get("thr_bram18", 0), w, a, force_dsp=force_dsp,
+                    cost["swu_bram18"] + cost["wm_bram18"] + cost.get("thr_bram18", 0), w, a,
+                    force_dsp=variant_kwargs["force_dsp"],
                 )
                 raw_dsp[key] = cost["total_dsp"]
-                z[key] = pulp.LpVariable(f"z_{layer.name}_{pe}_{simd}_{ram_style}_{w}_{a}", cat=pulp.LpBinary)
+                z[key] = pulp.LpVariable(f"z_{layer.name}_{pe}_{simd}_{ram_style}_{variant}_{w}_{a}", cat=pulp.LpBinary)
 
     cycles_norm = _normalize(raw_cycles)
 
@@ -374,7 +482,7 @@ def solve_joint_perlayer(
         folds = layer_folds[layer.name]
         for w, a in candidate_pairs:
             prob += (
-                pulp.lpSum(z[(layer.name, pe, simd, ram_style, w, a)] for pe, simd, ram_style in folds)
+                pulp.lpSum(z[(layer.name, pe, simd, ram_style, variant, w, a)] for pe, simd, ram_style, variant in folds)
                 == y[(layer.name, w, a)]
             ), f"link_{layer.name}_{w}_{a}"
 
@@ -414,7 +522,7 @@ def solve_joint_perlayer(
                 "hard_dsp_fraction": hard_dsp_fraction,
                 "max_cycles": max_cycles,
                 "solver_time_limit_s": time_limit, "solver_gap_rel": gap_rel, "force_serial": FORCE_SERIAL,
-                "force_dsp": force_dsp, "require_simd_ge_pe": require_simd_ge_pe,
+                "force_dsp": force_dsp, "require_simd_ge_pe": require_simd_ge_pe, "allow_lut_mult": ALLOW_LUT_MULT,
                 "note": f"Solver status {status_name!r} -- no joint per-layer (bits, folding) assignment "
                         f"satisfies the requested hard LUT/BRAM/DSP budget(s) (hard_lut_fraction={hard_lut_fraction}, "
                         f"hard_bram_fraction={hard_bram_fraction}, hard_dsp_fraction={hard_dsp_fraction})"
@@ -434,22 +542,34 @@ def solve_joint_perlayer(
         w, a = layer_weight_bits[layer.name], layer_act_bits[layer.name]
         folds = layer_folds[layer.name]
         chosen_fold = None
-        for pe, simd, ram_style in folds:
-            if pulp.value(z[(layer.name, pe, simd, ram_style, w, a)]) > 0.5:
-                chosen_fold = (pe, simd, ram_style)
+        for pe, simd, ram_style, variant in folds:
+            if pulp.value(z[(layer.name, pe, simd, ram_style, variant, w, a)]) > 0.5:
+                chosen_fold = (pe, simd, ram_style, variant)
                 break
         assert chosen_fold is not None, f"layer {layer.name}: no folding choice selected at its own chosen (w,a)={w,a}"
-        pe, simd, ram_style = chosen_fold
-        cost = layer_costs[(layer.name, pe, simd, ram_style, w, a)]
+        pe, simd, ram_style, variant = chosen_fold
+        cost = layer_costs[(layer.name, pe, simd, ram_style, variant, w, a)]
         per_layer[layer.name] = {
-            "stage": layer.stage, "pe": pe, "simd": simd, "ram_style": ram_style,
+            "stage": layer.stage, "pe": pe, "simd": simd, "ram_style": ram_style, "variant": variant,
             "weight_bits": w, "act_bits": a, **cost,
         }
 
-    total_lut = sum(calibrated_lut(v["total_lut"], v["weight_bits"], v["act_bits"], force_dsp=force_dsp) for v in per_layer.values())
+    # Per-layer force_dsp for the post-hoc calibration below MUST follow each
+    # layer's OWN chosen variant, not the single global `force_dsp` CLI flag
+    # -- with ALLOW_LUT_MULT unset every v["variant"] is VARIANT_RTL_DSP_NOACT1,
+    # for which _variant_cost_kwargs(...)["force_dsp"] == force_dsp exactly,
+    # so this is byte-identical to before for every existing invocation.
+    total_lut = sum(
+        calibrated_lut(
+            v["total_lut"], v["weight_bits"], v["act_bits"],
+            force_dsp=_variant_cost_kwargs(v["variant"], force_dsp)["force_dsp"],
+        )
+        for v in per_layer.values()
+    )
     total_bram = sum(
         calibrated_bram18k(
-            v["swu_bram18"] + v["wm_bram18"] + v.get("thr_bram18", 0), v["weight_bits"], v["act_bits"], force_dsp=force_dsp,
+            v["swu_bram18"] + v["wm_bram18"] + v.get("thr_bram18", 0), v["weight_bits"], v["act_bits"],
+            force_dsp=_variant_cost_kwargs(v["variant"], force_dsp)["force_dsp"],
         )
         for v in per_layer.values()
     )
@@ -477,7 +597,7 @@ def solve_joint_perlayer(
             "hard_dsp_fraction": hard_dsp_fraction,
             "max_cycles": max_cycles,
             "solver_time_limit_s": time_limit, "solver_gap_rel": gap_rel, "force_serial": FORCE_SERIAL,
-            "force_dsp": force_dsp, "require_simd_ge_pe": require_simd_ge_pe,
+            "force_dsp": force_dsp, "require_simd_ge_pe": require_simd_ge_pe, "allow_lut_mult": ALLOW_LUT_MULT,
             "note": "Joint per-LAYER MILP: y[layer,w,a] (sensitivity) linked to z[layer,pe,simd,ram_style,w,a] "
                     "(cycles/LUT/BRAM/DSP) via a same-layer equality constraint -- LUT/BRAM/DSP are REAL hard "
                     "<= XCZU7EV constraints here (not a soft penalty). Objective = alpha*mean(sens_norm) + "
@@ -556,6 +676,7 @@ def _update_sweep_summary(out_dir: Path, args: argparse.Namespace, result: dict)
         "hard-dsp-fraction": args.hard_dsp_fraction, "force-dsp": args.force_dsp,
         "max-latency-ms": args.max_latency_ms, "clock-mhz": args.clock_mhz,
         "force-serial": FORCE_SERIAL, "require-simd-ge-pe": args.require_simd_ge_pe,
+        "allow-lut-mult": ALLOW_LUT_MULT,
         "time-limit": args.time_limit, "gap-rel": args.gap_rel,
     }
     existing_alphas = []
@@ -620,6 +741,15 @@ def main() -> None:
                          help="Clock frequency --max-latency-ms is expressed against (default 100.0).")
     parser.add_argument("--force-serial", action="store_true",
                          help="Force FOLDING_SERIAL (PE=SIMD=1) on every layer before solving.")
+    parser.add_argument("--allow-lut-mult", action="store_true",
+                         help="Additive/opt-in (2026-09-17): let the ILP choose, PER LAYER, a new "
+                              "'hls_lut_noact0' resource variant (HLS backend, LUT-based multiplication instead "
+                              "of DSP, fused activation instead of a separate Thresholding node) alongside "
+                              "today's default 'rtl_dsp_noact1' variant, to spend spare LUT budget instead of "
+                              "DSP budget on specific layers. Default False preserves prior behavior EXACTLY "
+                              "(every layer stays 'rtl_dsp_noact1' only). The new variant's fused-threshold LUT "
+                              "term is a direct FINN-source transcription, not independently calibrated against "
+                              "real hardware yet -- see finn_cost_model.py's conv_cost_pe_simd docstring.")
     parser.add_argument("--require-simd-ge-pe", action="store_true",
                          help="Drop every (PE,SIMD) candidate fold with PE>SIMD before solving -- a hard, "
                               "zero-fitted-parameter fix for the real-LUT blowup documented in "
@@ -649,6 +779,12 @@ def main() -> None:
         global FORCE_SERIAL
         FORCE_SERIAL = True
         print("--force-serial: every layer restricted to (PE, SIMD) = (1, 1) before solving.")
+
+    if args.allow_lut_mult:
+        global ALLOW_LUT_MULT
+        ALLOW_LUT_MULT = True
+        print("--allow-lut-mult: 'hls_lut_noact0' (LUT-mult, fused activation) made eligible alongside "
+              "'rtl_dsp_noact1' on every layer -- PROVISIONAL fused-threshold LUT term, see --help.")
 
     with open(args.sensitivity_file) as f:
         sensitivity = json.load(f)
