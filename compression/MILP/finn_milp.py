@@ -100,37 +100,47 @@ standalone Thresholding_rtl's own memory (thr_bram18, noActivation=1 regime
 weight memory. DSP was added 2026-09-17: uncapped, the RTL DSP-packing rule
 (ceil(PE/lanes)*SIMD) let an S12-dense alpha=0.25 solve pick a plan needing
 2564 DSP48s on a 1728-DSP device -- it is now always a real constraint, not
-just tracked in diagnostics. URAM was added the same day for the same
-reason: uncapped, an S12-dense alpha=0.25 solve picked wm_uram18=205 (all on
-the MVAU's own weight memory), but the real 8-way hardware build for that
-exact solve landed at URAM=2/96 -- real hardware essentially never realized
-the ILP's own "ultra" choice for MVAU weights. Response: MVAU's own
-`ram_style` is now hard-fixed to "block" (ultra DISABLED for MVAU weight
-memory, candidate_folds no longer offers it). SWU's own line-buffer memory
-was briefly repointed to the freed decision variable, but real data then
-showed standalone Thresholding_rtl nodes -- NOT SWU -- are the dominant real
-BRAM consumer (up to 24 blocks/node in the 8-way build), while URAM sits
-almost entirely idle on real hardware. So SWU's own ram_style pick is now
-DETERMINISTIC ("auto_efficient": a geometry-driven, per-layer block-vs-ultra
-choice with no ILP degree of freedom -- see finn_cost_model.py's _finn_swu
-docstring), and the per-layer `ram_style` decision variable is repointed a
-second time to select the standalone Thresholding_rtl node's OWN memory
-(thr_bram18/thr_uram18) instead -- a real, free per-layer tradeoff, since
-whether to spend scarce BRAM_18K or (real-hardware-idle) URAM on threshold
-memory is exactly the kind of global-resource-pressure decision the ILP
-itself should make, not a local per-node heuristic. The URAM cost constant
-for Thresholding is DERIVED, not fit (no real Thresholding+URAM hardware
-data exists anywhere): it comes from the real, calibrated BRAM constant
-scaled by the fixed, device-family-independent 16x BRAM18-vs-URAM288
-capacity ratio (18,432 bits vs 294,912 bits) -- see finn_cost_model.py's
-_thresholding_rtl_cost docstring for the full derivation and why this holds
-regardless of target part family (this project targets a non-Versal
-Zynq UltraScale+ part; FINN's own primitive-selection logic is confirmed,
-via source read, to use the same primitive table unconditionally regardless
-of device family, so the Versal-flavored naming doesn't change the physics).
-FIFOs are a separate resource this cost model does NOT model at all yet (see
-finn_cost_model.py's own top-of-file "Still not covered" list) -- URAM/BRAM
-used by real FIFOs is invisible to this ILP entirely, not just uncapped.
+just tracked in diagnostics.
+
+URAM went through a whole rise-and-fall arc over 2026-09-17/18, ending with
+it permanently disabled for every consumer -- kept here for the record.
+Added 2026-09-17: uncapped, an S12-dense alpha=0.25 solve picked wm_uram18=
+205 (all on MVAU's own weight memory), but the real 8-way hardware build for
+that exact solve landed at URAM=2/96 -- real hardware essentially never
+realized the ILP's own "ultra" choice for MVAU weights. Response #1: MVAU's
+`ram_style` hard-fixed to "block" permanently. The freed decision variable
+was then repointed to SWU's own line-buffer memory, then to the standalone
+Thresholding_rtl node's own memory (real data showed THAT was the dominant
+real BRAM consumer, up to 24 blocks/node, while URAM sat mostly idle) -- but
+both of those turned out to have the same problem MVAU did, for different
+reasons: 48/48 real SWU nodes across both real hardware datasets used
+ram_style="distributed" regardless of what was requested (zero real
+block/ultra SWU evidence ever existed), and a REAL Vivado synthesis attempt
+of Thresholding_rtl with ram_style="ultra" FAILS outright -- URAM288 cannot
+be used as ROM, and Thresholding's memory is exactly that: a compile-time-
+constant lookup table, never written at runtime. See finn_milp.py's own
+RAM_STYLES/candidate_folds docstrings for the full blow-by-blow. Net result:
+total_uram18 is now structurally 0 for every layer, always -- URAM was never
+a real option on this device (xczu7ev, UltraScale+) for any consumer this
+cost model has. XCZU7EV["URAM"]/--hard-uram-fraction are kept, not removed,
+purely for provenance and in case a genuinely URAM-eligible consumer is ever
+added later.
+
+The freed `ram_style` decision variable was NOT left permanently inert,
+though: since 2026-09-18 it drives a different, real tradeoff for the same
+Thresholding_rtl node -- block (BRAM) vs. distributed (LUTRAM), not vs.
+ultra. Unlike "ultra", "distributed" IS structurally synthesis-safe here
+(thresholding.sv's own RAM_STYLE localparam genuinely supports it, forceable
+per-node via depth_trigger_bram) -- it's just never been exercised in real
+hardware (0/240 real Thresholding_rtl nodes across both datasets ever showed
+nonzero real_LUTRAM, since every real node used "auto", and Vivado's own
+choice always landed on BRAM for the geometries tested). So BRAM_18K usage
+now includes thr_bram18 only when a layer's Thresholding memory is on
+"block"; when it's on "distributed" instead, that same memory shows up in
+the LUT budget via thr_lut instead, using a DERIVED (not fit) LUTRAM cost --
+see finn_cost_model.py's _THR_RTL_LUTRAM_PER_PE_NUMSTEP docstring. FIFOs are
+a separate resource this cost model does NOT model at all yet (see finn_cost_
+model.py's own top-of-file "Still not covered" list).
 
 --pin-bits-file expects a layer_bits_*.json's own {"layer_weight_bits":
 {...}, "layer_act_bits": {...}} shape (one entry per layer name) -- TEST-
@@ -187,16 +197,32 @@ from nnunetv2.nets.ENet import ENet  # noqa: E402
 XCZU7EV = {"LUT": 230_400, "BRAM_18K": 624, "DSP": 1_728, "URAM": 96}  # xczu7ev-ffvc1156-2-e (DSP48E2 count matches hardware/results.csv's DSP_pct column; URAM=96 real URAM288 blocks, 96*288Kib=27Mib, confirmed against the real S12-dense-warmstart hardware build's own URAM=2/96 utilization row)
 CANDIDATE_BITS = (2, 4, 6, 8, 16)
 INPUT_HW = (512, 512)  # real nnU-Net patch size (see debug.json's configuration_manager.patch_size)
-RAM_STYLES = (RAM_STYLE_BLOCK, RAM_STYLE_ULTRA)  # 2026-09-17: RESTORED to a real 2-value choice --
-# briefly collapsed to (block,) when MVAU-ultra was disabled and SWU's own pick became deterministic
-# ("auto_efficient"), but this axis now drives a THIRD, different consumer: the standalone
-# Thresholding_rtl node's own memory (thr_ram_style). Unlike SWU, this one stays a real, FREE per-layer
-# ILP choice on purpose -- FINN's own local per-primitive min-waste selection never favors URAM for
-# Thresholding memory (confirmed: real_URAM=0 for all 168 real nodes checked), but that's the wrong
-# criterion once BRAM is the globally scarce resource (100% used in the real S12-dense-warmstart build)
-# and URAM sits mostly idle (19.8%) -- a genuine resource trade the ILP's own joint optimization should
-# make, not something to bake in as a fixed local rule. See candidate_folds' and finn_cost_model.py's
-# _thresholding_rtl_cost docstrings.
+RAM_STYLES = (RAM_STYLE_BLOCK, "distributed")  # 2026-09-18: a free choice again, FOURTH state in two
+# days, but a different axis than any before -- block vs. URAM ("ultra") for MVAU weight memory, then
+# SWU's line buffer, then Thresholding's own memory, each in turn found to have NO real, working URAM
+# path on this device (xczu7ev, UltraScale+): real hardware never materialized MVAU's "ultra" request,
+# 48/48 real SWU nodes always used "distributed" regardless of what was requested, and a real Vivado
+# synthesis attempt of Thresholding_rtl with ram_style="ultra" FAILS outright (URAM288 cannot be used
+# as ROM -- Thresholding's memory is a compile-time-constant lookup table, never written at runtime,
+# and URAM lacks the INIT-file-based ROM initialization mechanism BRAM primitives have). URAM is now
+# permanently 0 for every layer and every consumer -- XCZU7EV["URAM"]/--hard-uram-fraction are kept,
+# not removed, purely for provenance and in case a genuinely URAM-eligible consumer is ever added.
+#
+# This axis now drives block-vs-DISTRIBUTED for Thresholding_rtl's own memory instead (thr_ram_style)
+# -- a real LUT-vs-BRAM tradeoff, not a LUT-vs-URAM one. Unlike "ultra", "distributed" IS structurally
+# real here: thresholding.sv's own RAM_STYLE localparam has a genuine "auto"/"distributed" branch
+# (confirmed via direct .sv source read), forceable per-node via depth_trigger_bram (see thresholding.sv
+# comment inline where DEPTH_TRIGGER_BRAM resolves to "distributed" when the node's own depth never
+# reaches that trigger). It's just never been exercised in any real build -- every real node so far used
+# "auto" (i.e. Vivado's own choice), which always landed on BRAM for the geometries tested (0/240 real
+# Thresholding_rtl nodes across both datasets ever showed nonzero real_LUTRAM). The LUTRAM cost
+# (_THR_RTL_LUTRAM_PER_PE_NUMSTEP in finn_cost_model.py) is DERIVED the same way the now-dead URAM
+# constant was -- scaled from the real, validated BRAM18 constant by the real capacity ratio to FINN's
+# own LUTRAM primitive shape (finn.util.basic.mem_primitives_versal: "LUTRAM": (1, 64), a real Xilinx
+# RAM64X1S shape) -- so it correctly predicts distributed is a BAD deal at this project's typical
+# numSteps (e.g. ~840 LUTs vs ~3 BRAM18 blocks at numSteps=255), matching why Vivado's own "auto" never
+# picks it; it only wins at small numSteps, where BRAM's own fixed per-block overhead dominates -- a
+# real per-layer resource-pressure tradeoff an ILP can evaluate, unlike a fixed local heuristic.
 FORCE_SERIAL = False  # set True by --force-serial: restricts every layer to (PE, SIMD) = (1, 1)
 
 # Curated per-layer resource variants (2026-09-17 addition, additive/opt-in
@@ -353,41 +379,17 @@ def candidate_folds(layer: LayerGeometry) -> list[tuple[int, int, str, str]]:
     ignores for that op_type anyway (its cost/cycles don't depend on any of
     those at all -- see maxpool_cost).
 
-    ram_style (2026-09-17: REPURPOSED twice in one day): RAM_STYLES is a
-    real 2-value choice again (RAM_STYLE_BLOCK, RAM_STYLE_ULTRA), but it has
-    changed WHICH consumer it drives twice:
-      - MVAU's own weight memory is hard-fixed to RAM_STYLE_BLOCK
-        unconditionally (ultra DISABLED, permanently). Why: the S12-dense-
-        warmstart alpha=0.25 solve picked wm_uram18=205 total under the old
-        (MVAU-ultra-eligible, uncapped) scheme, but the real 8-way hardware
-        build for that exact solve landed at URAM=2/96 -- real hardware
-        essentially never materialized the ILP's own "ultra" choice for
-        MVAU weights.
-      - SWU's own line-buffer memory (swu_bram18 vs swu_uram18) was briefly
-        the repointed consumer, but is now DETERMINISTIC instead: a
-        geometry-driven "auto_efficient" pick (passed as conv_cost_pe_simd's
-        swu_ram_style, fixed, not looped over) -- for each layer's own real
-        buffer_width/buffer_depth, whichever of block/ultra needs fewer
-        physical blocks is used, computed directly rather than left for the
-        ILP to (re)discover despite it being a pure function of geometry.
-        See finn_cost_model.py's _finn_swu docstring for exactly how that
-        comparison works and its own calibration caveats (zero real "ultra"
-        SWU ground truth exists yet either).
-      - The freed `ram_style` decision variable now drives a THIRD, real
-        consumer: the standalone Thresholding_rtl node's OWN memory
-        (thr_bram18 vs thr_uram18, passed as conv_cost_pe_simd's
-        thr_ram_style). Real data showed Thresholding_rtl -- not SWU or
-        MVAU -- is the dominant real BRAM consumer (up to 24 blocks/node in
-        the 8-way build) while URAM sits almost entirely idle on real
-        hardware. Unlike SWU's deterministic pick, this is a genuine global
-        resource-pressure tradeoff (spend scarce BRAM_18K vs abundant-but-
-        real-hardware-idle URAM) that the ILP itself should make per layer,
-        not a local per-node heuristic -- so it is left as a real, free
-        binary choice. See finn_cost_model.py's _thresholding_rtl_cost
-        docstring for the cost formula and for why its URAM constant is
-        DERIVED (not fit) from the real, calibrated BRAM constant via the
-        fixed 16x BRAM18-vs-URAM288 capacity ratio (no real Thresholding+
-        URAM hardware data exists anywhere yet).
+    ram_style (2026-09-18): drives block-vs-distributed for the standalone
+    Thresholding_rtl node's OWN memory only (thr_ram_style) -- a real, free
+    per-layer LUT-vs-BRAM tradeoff. MVAU's own weight memory and SWU's own
+    line-buffer memory both have NO free choice left at all (hard-fixed to
+    block and distributed respectively) -- see RAM_STYLES' own module-level
+    comment for the full history and evidence on all three consumers, URAM's
+    now-permanent retirement everywhere, and why "distributed" is real for
+    Thresholding specifically (structurally synthesis-safe, just never yet
+    exercised in real hardware) unlike "ultra" (a confirmed real synthesis
+    failure). See finn_cost_model.py's _thresholding_rtl_cost and
+    _THR_RTL_LUTRAM_PER_PE_NUMSTEP docstrings for the cost formula itself.
     FIFOs remain a separate, NOT-YET-modeled resource in this cost model
     (see finn_cost_model.py's own top-of-file "Still not covered" list) --
     their own real ram_style choice is not part of this ILP at all yet.
@@ -540,17 +542,18 @@ def solve_joint_perlayer(
         for pe, simd, ram_style, variant in folds:
             variant_kwargs = _variant_cost_kwargs(variant, force_dsp)
             for w, a in candidate_pairs:
-                # MVAU's own weight memory is hard-fixed to RAM_STYLE_BLOCK (ultra DISABLED
-                # for MVAU, 2026-09-17 -- see candidate_folds' own docstring). SWU's own
-                # line-buffer memory uses "auto_efficient" -- a deterministic, per-layer
-                # geometry-driven block-vs-ultra pick (see finn_cost_model._finn_swu's own
-                # docstring). The `ram_style` loop variable now drives the standalone
-                # Thresholding_rtl node's own memory instead (thr_ram_style) -- a real, free
-                # per-layer choice, unlike SWU's deterministic one (see RAM_STYLES' own
-                # comment above for why).
+                # MVAU's own weight memory is hard-fixed to block (real hardware never
+                # materialized "ultra"). SWU's own line-buffer memory is hard-fixed to
+                # distributed (48/48 real nodes, regardless of what was requested). Neither
+                # has a real free choice left -- see RAM_STYLES' own comment above for the
+                # full story/evidence on both. The `ram_style` loop variable now drives
+                # block-vs-distributed for the standalone Thresholding_rtl node's own
+                # memory (thr_ram_style) -- a real, free per-layer LUT-vs-BRAM tradeoff
+                # (see RAM_STYLES' own comment for why "distributed" is real here but
+                # "ultra" never was).
                 cost = layer_cost_pe_simd(
                     layer, w, a, pe, simd, RAM_STYLE_BLOCK,
-                    swu_ram_style="auto_efficient", thr_ram_style=ram_style, **variant_kwargs,
+                    swu_ram_style="distributed", thr_ram_style=ram_style, **variant_kwargs,
                 )
                 key = (layer.name, pe, simd, ram_style, variant, w, a)
                 layer_costs[key] = cost
@@ -567,8 +570,9 @@ def solve_joint_perlayer(
                     force_dsp=variant_kwargs["force_dsp"],
                 )
                 raw_dsp[key] = cost["total_dsp"]
-                # wm_uram18 is always 0 now (MVAU ram_style hard-fixed to block above).
-                # swu_uram18 comes from SWU's own deterministic "auto_efficient" pick.
+                # wm_uram18 is always 0 (MVAU ram_style hard-fixed to block).
+                # swu_uram18 is always 0 too (SWU ram_style hard-fixed to distributed,
+                # 2026-09-18 -- see the cost call's own comment above for why).
                 # thr_uram18 comes from the `ram_style` loop variable (Thresholding's
                 # own real, free ILP choice) -- see candidate_folds' docstring.
                 raw_uram[key] = cost.get("wm_uram18", 0) + cost.get("swu_uram18", 0) + cost.get("thr_uram18", 0)
@@ -677,7 +681,13 @@ def solve_joint_perlayer(
         cost = layer_costs[(layer.name, pe, simd, ram_style, variant, w, a)]
         variant_kwargs = _variant_cost_kwargs(variant, force_dsp)
         per_layer[layer.name] = {
-            "stage": layer.stage, "pe": pe, "simd": simd, "ram_style": ram_style, "variant": variant,
+            # thr_ram_style (renamed from "ram_style" 2026-09-18): this loop
+            # variable/z-key element only ever drives the standalone
+            # Thresholding_rtl node's own memory now (see candidate_folds'
+            # docstring) -- MVAU's own weight memory is hard-fixed to block,
+            # SWU's own line-buffer memory is hard-fixed to distributed.
+            # "ram_style" was a stale, misleadingly-generic export name.
+            "stage": layer.stage, "pe": pe, "simd": simd, "thr_ram_style": ram_style, "variant": variant,
             # force_dsp/mvau_noAct: the same two axes packed into `variant`
             # (impl_style is already its own field, from **cost below), split
             # out explicitly for readability -- `variant` itself is KEPT (not
@@ -870,13 +880,16 @@ def main() -> None:
     parser.add_argument("--hard-dsp-fraction", type=float, default=1.0,
                          help="Same as --hard-lut-fraction, for DSP48E2 slices (XCZU7EV['DSP']=1728). Always enforced.")
     parser.add_argument("--hard-uram-fraction", type=float, default=1.0,
-                         help="Same as --hard-lut-fraction, for URAM288 blocks (XCZU7EV['URAM']=96, 27Mib). Always "
-                              "enforced (2026-09-17 addition -- previously uncapped, see candidate_folds' own "
-                              "docstring for why: the S12-dense-warmstart alpha=0.25 solve picked wm_uram18=205 "
-                              "under the old uncapped/MVAU-eligible scheme, but the real 8-way hardware build for "
-                              "that solve landed at URAM=2/96). This axis now selects the standalone "
-                              "Thresholding_rtl node's own memory, not the MVAU's weight memory (hard-fixed to "
-                              "block) or SWU's own line-buffer memory (deterministic \"auto_efficient\" pick).")
+                         help="Same as --hard-lut-fraction, for URAM288 blocks (XCZU7EV['URAM']=96, 27Mib). "
+                              "Currently INERT: total_uram18 is structurally 0 for every layer, always, since "
+                              "2026-09-18 -- MVAU weight memory, SWU line buffer, and Thresholding accumulator "
+                              "ROM (the three consumers this axis has driven, one at a time) each turned out to "
+                              "have no real, working URAM path on this device (xczu7ev, UltraScale+): real "
+                              "hardware never materialized MVAU's own 'ultra' request, 48/48 real SWU nodes used "
+                              "'distributed' regardless of what was requested, and a real Vivado synthesis "
+                              "attempt of Thresholding_rtl with ram_style='ultra' FAILS outright (URAM288 cannot "
+                              "be used as ROM). See RAM_STYLES' own comment for the full history. Kept, not "
+                              "removed, for provenance and in case a genuinely URAM-eligible consumer is added.")
     parser.add_argument("--force-dsp", action="store_true",
                          help="Cost every (layer, fold, bits) combination under the FORCED-DSP regime's own "
                               "flat empirical LUT/BRAM factor (finn_cost_model.py's _FORCED_DSP_LUT_FACTOR/"

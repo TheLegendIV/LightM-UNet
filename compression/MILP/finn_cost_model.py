@@ -451,13 +451,53 @@ _THR_RTL_BRAM18_PER_PE_NUMSTEP = 0.011444  # pure PE*numSteps interaction, no se
 # Thresholding node's memory into URAM preserves roughly the same relative
 # packing efficiency BRAM currently achieves, just in a 16x-bigger unit --
 # a reasonable structural assumption, not a validated one (zero real
-# Thresholding+URAM hardware data exists anywhere yet). Exists so the ILP
-# can make a genuine per-layer BRAM-vs-URAM trade for Thresholding memory
-# specifically when GLOBAL resource pressure favors it (BRAM scarce, URAM
-# idle) even though FINN's own LOCAL per-primitive min-waste choice never
-# would -- see finn_milp.py's own ram_style axis, now covering Thresholding
-# instead of (disabled) MVAU weight memory.
+# Thresholding+URAM hardware data exists anywhere yet). Was briefly a real,
+# free per-layer BRAM-vs-URAM choice in finn_milp.py's ILP (2026-09-17/18),
+# to trade BRAM pressure onto idle URAM -- RETIRED 2026-09-18: a real
+# attempted Vivado synthesis of Thresholding_rtl with ram_style="ultra"
+# FAILS outright. URAM288 cannot be used as ROM, and Thresholding's memory
+# is exactly that: a compile-time-constant lookup table (the threshold
+# values), never written at runtime -- URAM lacks the INIT-file-based ROM
+# initialization mechanism BRAM18/36 primitives have. finn_milp.py now
+# hard-fixes thr_ram_style="block" unconditionally; this constant and the
+# ram_style="ultra" branch below are KEPT (not deleted) for provenance and
+# any future diagnostic/what-if use, but are no longer reachable from any
+# live ILP run.
 _THR_RTL_URAM_PER_PE_NUMSTEP = _THR_RTL_BRAM18_PER_PE_NUMSTEP * (18_432 / 294_912)  # = 0.0007153
+
+# _THR_RTL_LUTRAM_PER_PE_NUMSTEP (2026-09-18): DERIVED, not fit, same method
+# as the URAM constant above but landing somewhere genuinely usable this
+# time. Unlike ram_style="ultra" (real Vivado synthesis FAILS outright --
+# URAM cannot be ROM, see finn_milp.py's RAM_STYLES comment), "distributed"
+# IS structurally real for Thresholding_rtl: thresholding.sv's own RAM_STYLE
+# localparam has a genuine "auto"/"distributed" choice (confirmed via direct
+# .sv source read, not just the Python cost-estimator), forceable per-node
+# by setting depth_trigger_bram above the node's own real depth (see that
+# same RAM_STYLES comment for exactly how). It's just never been exercised
+# in any real build (every real node so far used "auto", i.e. Vivado's own
+# choice, which always landed on BRAM for the geometries tested -- 0/240
+# real Thresholding_rtl nodes across both datasets ever showed nonzero
+# real_LUTRAM). So: no real per-node ratio to fit here either, same
+# situation as URAM. Scaled from the same real, validated BRAM18 constant,
+# but by the real capacity ratio to FINN's own LUTRAM primitive shape
+# instead of URAM288's: finn.util.basic.mem_primitives_versal defines
+# "LUTRAM": (1, 64) -- width=1 bit, depth=64 words, i.e. 64 bits per
+# primitive (this is a real, standard Xilinx shape: one LUT6 configured as
+# RAM64X1S distributed RAM, not an invented number). BRAM18 = 18,432 bits
+# per block is 288x denser than one 64-bit LUTRAM primitive, so the same
+# structural assumption as the URAM derivation (forcing this memory into a
+# different primitive preserves roughly BRAM's own real packing efficiency,
+# just in a much SMALLER unit this time, hence MORE primitives, not fewer)
+# gives a MUCH larger per-(pe,numStep) coefficient than URAM's -- and
+# correctly so: for this project's real numSteps range (commonly 255),
+# distributed genuinely IS a bad deal (predicts ~840 LUTs for a numSteps=255
+# node needing only ~3 BRAM18 blocks), which is exactly WHY Vivado's own
+# "auto" heuristic has never once picked it in any real build -- the
+# derivation reproduces that real-world avoidance rather than contradicting
+# it. It only becomes competitive at small numSteps, where BRAM's own fixed
+# per-block overhead dominates -- exactly the resource-pressure tradeoff an
+# ILP is suited to evaluate per layer, unlike a fixed local rule.
+_THR_RTL_LUTRAM_PER_PE_NUMSTEP = _THR_RTL_BRAM18_PER_PE_NUMSTEP * (18_432 / 64)  # = 3.295872
 
 
 @dataclass
@@ -688,17 +728,24 @@ def _finn_swu(
     buffer's own geometry favor URAM" means concretely: not real FINN's own
     "auto" (which never considers URAM at all, same blind spot as MVAU's own
     ram_style="auto"), but a genuine per-buffer efficiency comparison. This
-    is what finn_milp.py's ILP now passes for every layer (2026-09-17: SWU's
-    ram_style is deterministic/geometry-driven, not a free ILP choice --
-    coupling it to the MVAU's own weight-memory ram_style decision instead
-    was considered and rejected, since every real SWU node checked in this
-    repo's calibration data, 43/43, hardware/mvau_swu_threshold_calibration_
-    dataset.csv, used ram_style="distributed" with real_BRAM18==0 REGARDLESS
-    of what ram_style the paired MVAU's own weight memory used). Both
+    is what finn_milp.py's ILP passed for every layer BRIEFLY (2026-09-17),
+    before being retired the very next day (2026-09-18): by then 48/48 real
+    SWU nodes across BOTH real datasets (the original 43-node calibration
+    set AND the mvau_variant_matrix probe) had used ram_style="distributed"
+    with real_BRAM18==real_URAM==0, REGARDLESS of what ram_style the paired
+    MVAU's own weight memory used -- and for the actual deployed geometry
+    this "auto_efficient" mode predicted a NON-trivial 41 URAM blocks (42.7%
+    of the 96-block budget), a real, consequential-sized claim with zero
+    supporting evidence, not a rounding error. finn_milp.py now hard-fixes
+    SWU to swu_ram_style="distributed" instead (same treatment MVAU's own
+    "ultra" request already got, for the identical reason). This mode is
+    KEPT here (not deleted) for provenance and any future diagnostic/
+    what-if use, but is no longer reachable from any live ILP run. Both
     _finn_buffer_bram18/_finn_buffer_uram18 remain direct FINN-source
-    transcriptions with NO real "block"/"ultra" SWU ground truth yet (see
-    their own docstrings) -- this auto-pick is only as trustworthy as those
-    two formulas are, which is to say: plausible, not yet validated."""
+    transcriptions with NO real "block"/"ultra" SWU ground truth ANYWHERE
+    (see their own docstrings) -- this auto-pick was only ever as
+    trustworthy as those two formulas are, which is to say: plausible, and
+    now empirically shown to not match real hardware."""
     kh, kw, dh, dw, sh, sw = layer.kh, layer.kw, layer.dh, layer.dw, layer.sh, layer.sw
     if kh == 1 and kw == 1:
         return 0, 0, 0, 0
@@ -755,22 +802,25 @@ def _thresholding_rtl_cost(pe: int, output_bits: int, ram_style: str = "block") 
     imprecise, and why FINN's own LUTRAM-count estimator is not used
     instead).
 
-    ram_style (2026-09-17 addition, additive/opt-in, default "block"
+    ram_style (2026-09-17/18 additions, additive/opt-in, default "block"
     preserves prior behavior exactly): "block" returns the real, validated
     bram18 formula with uram18=0, matching every real node checked (FINN's
     own per-stage min-waste primitive selection never picked URAM here,
-    depth_trigger_uram=0 throughout). "ultra" instead returns bram18=0 and a
-    DERIVED (not fit) uram18 -- see _THR_RTL_URAM_PER_PE_NUMSTEP's own
-    comment for why FINN's LOCAL min-waste choice is the wrong criterion for
-    an ILP deciding under GLOBAL resource pressure (this repo's own real
-    S12-dense-warmstart build hit BRAM_18K=100% while URAM sat at 19.8% --
-    forcing some Thresholding memory to the otherwise-idle resource can be
-    the right per-design call even when it is not FINN's own local
-    per-node pick)."""
+    depth_trigger_uram=0 throughout). "ultra" is KEPT for provenance but is
+    DEAD -- real Vivado synthesis of a Thresholding_rtl node with
+    ram_style="ultra" FAILS outright (URAM cannot be ROM; see finn_milp.py's
+    RAM_STYLES comment) -- no live caller should ever pass it anymore.
+    "distributed" (2026-09-18) returns bram18=uram18=0 and adds a DERIVED
+    (not fit) LUTRAM-primitive-count term directly into `lut` instead --
+    see _THR_RTL_LUTRAM_PER_PE_NUMSTEP's own comment for the derivation and
+    why, unlike "ultra", this one is a real, synthesis-safe option (just
+    never yet exercised in real hardware, so still uncalibrated)."""
     num_steps = 2 ** output_bits - 1
     lut = pe * (_THR_RTL_LUT_BASE_PER_PE + _THR_RTL_LUT_PER_NUMSTEP_PE * num_steps)
     if ram_style == "ultra":
         return lut, 0.0, _THR_RTL_URAM_PER_PE_NUMSTEP * pe * num_steps
+    if ram_style == "distributed":
+        return lut + _THR_RTL_LUTRAM_PER_PE_NUMSTEP * pe * num_steps, 0.0, 0.0
     bram18 = _THR_RTL_BRAM18_PER_PE_NUMSTEP * pe * num_steps
     return lut, bram18, 0.0
 
