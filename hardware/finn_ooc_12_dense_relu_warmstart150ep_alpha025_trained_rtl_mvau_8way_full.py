@@ -90,10 +90,11 @@ from finn_partition_build_steps import (  # noqa: E402
 
 MODEL_NAME = "quantEnet_12_dense_relu_warmstart150ep_alpha025_trained_int8"
 CONV_ORDER_FILE = os.path.join(base.ENET_DIR, "quantEnet_12_dense_relu_warmstart150ep_alpha025_dummy_int8_conv_order.json")
-# Plain (non "_NOACT_RTL"-suffixed) filename -- as of 2026-09-17 this IS the
-# no-act-RTL-MVAU + DSP-cap + BRAM-cap + lut70 solve, see module docstring.
+# v2 MILP (2026-09-18): joint per-layer ram_style now also covers standalone
+# Thresholding memory (thr_bram18/thr_uram18), not just MVAU/VVAU weight mem.
 FOLDING_BLOCK_FILE = os.path.join(
-    base.ENET_DIR, "layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.25_candidatebits468_forcedsp_lut70.json"
+    base.ENET_DIR,
+    "layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.25_candidatebits468_forcedsp_lut70_bram90_dsp90_uram.json",
 )
 WEIGHT_OP_TYPES = ("MVAU_hls", "MVAU_rtl", "VVAU_hls", "VVAU_rtl")
 VVAU_OP_TYPES = ("VVAU_hls", "VVAU_rtl")
@@ -339,10 +340,19 @@ def build_partition_folding_config(preamble_dir, partition_idx, sdp_node_name, p
         if thr_pe is not None:
             thresh_node = find_following_thresholding(kernel_model, node)
             if thresh_node is not None:
-                folding_config[thresh_node.name] = {"PE": thr_pe}
+                # Leave threshold memory at FINN's own default (auto), same as
+                # MVAU/VVAU weight memory. depth_trigger_uram=1 (forcing every
+                # standalone Thresholding node to "ultra" regardless of its
+                # actual depth) was tried and reverted: Vivado 2022.2 crashes
+                # with an internal ramAssert/HARTGRamGen.cxx assertion when
+                # ram_style="ultra" is infeasible for a shallow threshold table
+                # (observed failing even at depth=3, not just depth=1/CF=1).
+                thr_config = {"PE": thr_pe}
+                folding_config[thresh_node.name] = thr_config
                 n_thresh += 1
+                thr_extra = "".join(f" {k}={v}" for k, v in thr_config.items() if k != "PE")
                 print(f"[partition {partition_idx}]  {thresh_node.name:30s} {thresh_node.op_type:12s} <- {logical_name:25s} "
-                      f"({json_key:25s}, thr_pe) PE={thr_pe}")
+                      f"({json_key:25s}, thr_pe) PE={thr_pe}{thr_extra}")
 
         if node_type == "depthwise_vvau_slot":
             if entry["swu"]["simd"] != compute_entry["pe"] or entry["fmpadding"]["simd"] != entry["swu"]["simd"]:

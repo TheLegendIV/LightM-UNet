@@ -595,7 +595,15 @@ def export_model(model: nn.Module, name: str, dummy: torch.Tensor) -> Path:
     out_path = OUT_DIR / f"{name}.onnx"
 
     model.cpu().eval()
-    export_qonnx(model, export_path=str(out_path), input_t=dummy)
+    # dynamo=False: torch>=2.5's torch.onnx.export() defaults to the newer
+    # torch.export/dynamo-based capture strategy, which brevitas's QONNXManager
+    # (designed around the legacy TorchScript-based tracer) is not compatible
+    # with -- dynamo tracing chokes on brevitas's IntQuantTensor.__torch_function__
+    # data-dependent branching (GuardOnDataDependentSymNode in
+    # int_torch_handler.py's quant_layer()) on this host's torch 2.12.1. Force
+    # the legacy exporter explicitly (passed straight through via
+    # ONNXBaseManager.export_onnx's **onnx_export_kwargs to torch.onnx.export).
+    export_qonnx(model, export_path=str(out_path), input_t=dummy, dynamo=False)
 
     qm = ModelWrapper(str(out_path))
     qm = _fast_cleanup(qm)
