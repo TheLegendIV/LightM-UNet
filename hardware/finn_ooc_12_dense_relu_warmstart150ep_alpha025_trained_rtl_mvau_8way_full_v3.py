@@ -1,0 +1,760 @@
+"""v3-MILP variant of finn_ooc_12_dense_relu_warmstart150ep_alpha025_trained_rtl_mvau_8way_full.py.
+
+Resumes from finn_hawq_preamble_12_dense_relu_warmstart150ep_alpha025_trained_rtl_mvau.py's
+`step_enet_convert_to_hw_rtl_mvau.onnx` (every MVAU/VVAU forced to
+noActivation=1, standalone Thresholding_hls/_rtl nodes) exactly like its v2
+sibling -- the preamble output is folding-source-independent and is REUSED
+as-is, do not re-run it.
+
+Folding source is now compression/MILP/artifacts/
+12_dense_relu_warmstart150ep_ILP_outputs_v3/layer_bits_folding_
+12_dense_relu_warmstart150ep_joint_alpha0.25_candidatebits468_forcedsp_
+lut50_bram70_dsp90.json (the v3 solve: hard LUT/BRAM/DSP fractions
+50%/70%/90%, URAM fraction forced to 0% -- `_diagnostics.total_uram18` in
+that file is literally 0.0, confirming the solve itself never plans on any
+URAM anywhere, weight memory or thresholds). Make sure this JSON has been
+`docker cp`'d into the container's base.ENET_DIR before running.
+
+Three deltas vs the v2 script, per an explicit user request after this
+session's probe work validated both techniques independently:
+  1. MVAU/VVAU weight memory: ram_style is NEVER forced -- left at FINN's
+     own "auto" default always (v3's per-layer entries don't even have a
+     plain "ram_style" key any more; this branch is now a documented no-op,
+     kept only so a future JSON that DOES include one isn't silently
+     ignored).
+  2. Standalone Thresholding memory: v3's per-layer entries carry a
+     "thr_ram_style" field ("block" or "distributed", NEVER "ultra" -- see
+     the _diagnostics note above). When "distributed", this bridge now
+     forces depth_trigger_bram to a large sentinel on that Thresholding
+     node -- the exact mechanism validated in hardware/probes/
+     mvau_variant_matrix/finn_build_probe_s12_context_noact1_int8.py earlier
+     this session (real Vivado OOC synth comparison, see
+     /memories/session/thresh_lutram_probe.md). depth_trigger_uram is NEVER
+     set (forcing that one crashes Vivado 2022.2 on shallow tables -- see
+     the dedicated comment at its call site below).
+  3. NEW step_force_fifo_uram: forces ram_style=ultra (URAM) on every
+     StreamingFIFO_rtl node with impl_style=vivado and depth>=64, run right
+     after step_set_fifo_depths (depth/impl_style are only finalized
+     there). Empirically validated on partition 2 with a real Vivado OOC
+     synth comparison earlier this session: BRAM_18K-equiv dropped 206->181
+     (-12%) for 15 URAMs, with fmax improving 173.31->225.68 MHz -- see
+     /memories/session/fifo_uram_test_p2.md.
+
+Otherwise byte-for-byte identical to the v2 sibling: same 8-way
+partitioning, same DSP forcing (step_force_dsp -- already unconditional,
+matches "force DSP for all" as-is, no change needed), same BIPOLAR
+weight-dtype fix, same deliberate stop before step_out_of_context_synthesis_
+multi (OOC synthesis done exclusively by finn_ooc_12_dense_relu_
+warmstart150ep_alpha025_8way_per_partition_synth.py, chained via `&&` right
+after this script).
+
+Run inside the FINN container (after the rtl_mvau preamble has completed),
+chaining full-build -> per-partition OOC synth automatically via `&&`:
+    docker exec -e HOME=/tmp/home_dir <container> bash -c \\
+        'cd /home/thelegendiv/finn/notebooks/enet && \\
+         OUTDIR=finn_deployment_outputs/12_dense_relu_warmstart150ep_alpha025_trained_rtl_mvau_8way_full_v3_$(date +%Y%m%d_%H%M%S) && \\
+         nohup bash -c "python3 finn_ooc_12_dense_relu_warmstart150ep_alpha025_trained_rtl_mvau_8way_full_v3.py \\
+           <rtl_mvau_preamble_output_dir> /home/thelegendiv/finn/notebooks/enet/\$OUTDIR && \\
+           python3 finn_ooc_12_dense_relu_warmstart150ep_alpha025_8way_per_partition_synth.py \\
+           /home/thelegendiv/finn/notebooks/enet/\$OUTDIR" \\
+         > /tmp/12_dense_relu_warmstart150ep_alpha025_trained_rtl_mvau_8way_full_v3_and_synth.log 2>&1 &'
+"""
+import concurrent.futures
+import dataclasses
+import json
+import math
+import os
+import sys
+from datetime import datetime
+
+import numpy as np
+
+sys.path.insert(0, "/home/thelegendiv/finn/notebooks/enet")
+
+from qonnx.core.datatype import DataType  # noqa: E402
+from qonnx.core.modelwrapper import ModelWrapper  # noqa: E402
+from qonnx.custom_op.registry import getCustomOp  # noqa: E402
+from qonnx.transformation.general import GiveUniqueNodeNames, GiveReadableTensorNames  # noqa: E402
+from qonnx.transformation.infer_datatypes import InferDataTypes  # noqa: E402
+from qonnx.util.basic import calculate_matvec_accumulator_range, roundup_to_integer_multiple  # noqa: E402
+
+from finn_stage_partition import (  # noqa: E402
+    compute_8way_boundaries,
+    validate_partition_single_output,
+)
+
+_real_argv = sys.argv
+sys.argv = _real_argv[:1]
+import finn_enet_ip_build_partitioned_8way as base  # noqa: E402
+sys.argv = _real_argv
+
+import finn.builder.build_dataflow as build  # noqa: E402
+from finn.transformation.fpgadataflow.create_stitched_ip import CreateStitchedIP  # noqa: E402
+from finn.transformation.fpgadataflow.prepare_ip import PrepareIP  # noqa: E402
+from finn.transformation.fpgadataflow.hlssynth_ip import HLSSynthIP  # noqa: E402
+from finn.transformation.fpgadataflow.set_fifo_depths import reset_implementation  # noqa: E402
+from finn.builder.build_dataflow_steps import (  # noqa: E402
+    step_specialize_layers,
+    step_target_fps_parallelization,
+    step_apply_folding_config,
+    step_minimize_bit_width,
+    step_hw_codegen,
+    step_hw_ipgen,
+    step_set_fifo_depths,
+)
+from finn.transformation.fpgadataflow.minimize_weight_bit_width import MinimizeWeightBitWidth  # noqa: E402
+from finn.util.fpgadataflow import is_fpgadataflow_node  # noqa: E402
+from finn_partition_build_steps import (  # noqa: E402
+    step_create_dataflow_partition_multi,
+    step_combine_partitions,
+    step_generate_estimate_reports_multi,
+    step_measure_rtlsim_performance_multi,
+)
+
+MODEL_NAME = "quantEnet_12_dense_relu_warmstart150ep_alpha025_trained_int8"
+CONV_ORDER_FILE = os.path.join(base.ENET_DIR, "quantEnet_12_dense_relu_warmstart150ep_alpha025_dummy_int8_conv_order.json")
+# v3 MILP (2026-09-18): hard LUT/BRAM/DSP fractions 50%/70%/90%, URAM
+# fraction forced to 0% -- see this file's own module docstring for the
+# rationale behind the 3 deltas vs the v2 script's folding-source JSON.
+FOLDING_BLOCK_FILE = os.path.join(
+    base.ENET_DIR,
+    "layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.25_candidatebits468_forcedsp_lut50_bram70_dsp90.json",
+)
+WEIGHT_OP_TYPES = ("MVAU_hls", "MVAU_rtl", "VVAU_hls", "VVAU_rtl")
+VVAU_OP_TYPES = ("VVAU_hls", "VVAU_rtl")
+THRESH_OP_TYPES = ("Thresholding_hls", "Thresholding_rtl")
+# Real FINN node types for the sliding-window unit and its preceding padding
+# block, feeding a VVAU -- see compression/hawq/folding_ilp.py's
+# solve_folding_nodewise, whose "depthwise_vvau_slot" output entries this
+# bridge also writes onto these two node types when present (this
+# architecture has 0 depthwise layers, so in practice these never fire --
+# kept for parity with the separable-family bridge logic).
+SWU_OP_TYPES = ("ConvolutionInputGenerator_hls", "ConvolutionInputGenerator_rtl")
+FMPAD_OP_TYPES = ("FMPadding_hls", "FMPadding_rtl", "FMPadding_Pixel")
+
+# Sentinel forcing thresholding.sv's RAM_STYLE ternary to "distributed" for
+# every real DEPTH (all real per-stage depths here are << this value, and
+# depth_trigger_uram is left at 0, so the "ultra" branch never triggers).
+THRESH_DISTRIBUTED_BRAM_TRIGGER = 999999
+# Matches the criterion already validated (real Vivado OOC synth) on
+# partition 2 earlier this session -- see /memories/session/fifo_uram_test_p2.md.
+FIFO_URAM_DEPTH_THRESHOLD = 64
+
+PARTITION_RANGE_ORDER = [
+    "down1_start", "down2_start", "q2_start", "q3_start", "q4_start", "up4_start", "up5_start",
+]
+
+
+def partition_node_index_range(partition_idx, boundaries):
+    edges = [0] + [boundaries[k] for k in PARTITION_RANGE_ORDER] + [None]
+    return edges[partition_idx], edges[partition_idx + 1]
+
+
+def load_all_partition_logical_names(preamble_dir):
+    # rtl_mvau preamble's converted checkpoint (standalone Thresholding,
+    # noActivation=1 everywhere) -- NOT the standard step_enet_convert_to_hw.onnx.
+    pre_partition_ckpt = os.path.join(preamble_dir, "intermediate_models", "step_enet_convert_to_hw_rtl_mvau.onnx")
+    full_model = ModelWrapper(pre_partition_ckpt)
+
+    boundaries = compute_8way_boundaries(full_model)
+    print(f"[bridge] 8-way boundaries: {boundaries}")
+
+    with open(CONV_ORDER_FILE) as f:
+        all_names = json.load(f)
+
+    weight_like_idx = [
+        idx for idx, node in enumerate(full_model.graph.node)
+        if node.op_type in ("MatrixVectorActivation", "MVAU", "VVAU") or "MaxPool" in node.op_type
+    ]
+
+    # step_dedup_forked_matmul_before_threshold (finn_enet_build_decomposed_
+    # prelu.py) deliberately DUPLICATES a MatMul node -- new node, SAME
+    # weight initializer tensor -- whenever its output has multiple
+    # MultiThreshold consumers (a workaround for a real FINN
+    # InferQuantizedMatrixVectorActivation bug, see that step's docstring).
+    # Both copies lower to separate MVAU nodes sharing one weight tensor, so
+    # the real graph can have MORE weight-like nodes than conv_order.json
+    # has logical names (confirmed here: 2 extra MVAU nodes, e.g.
+    # MVAU_69/MVAU_71 both referencing "MVAU_71_param0"). Detect this by
+    # weight-tensor-name reuse: a duplicate consumes NO new conv_order.json
+    # entry, instead inheriting the logical name already assigned to the
+    # first node that used that same tensor (correct -- it's literally the
+    # same conv/weight, just legitimately re-emitted for a second consumer).
+    def _weight_tensor(node):
+        for inp in node.input:
+            if full_model.get_initializer(inp) is not None:
+                return inp
+        return None
+
+    tensor_to_entry = {}
+    pos = 0
+    node_idx_to_entry = {}
+    for node_idx in weight_like_idx:
+        node = full_model.graph.node[node_idx]
+        wt = _weight_tensor(node)
+        if wt is not None and wt in tensor_to_entry:
+            node_idx_to_entry[node_idx] = tensor_to_entry[wt]
+            continue
+        if pos >= len(all_names):
+            raise RuntimeError(
+                f"ran out of conv_order.json entries at node_idx={node_idx} (pos={pos}, "
+                f"available={len(all_names)}) -- positional correspondence broken, do not proceed."
+            )
+        entry = all_names[pos]
+        pos += 1
+        if wt is not None:
+            tensor_to_entry[wt] = entry
+        node_idx_to_entry[node_idx] = entry
+    if pos != len(all_names):
+        raise RuntimeError(
+            f"consumed only {pos}/{len(all_names)} conv_order.json entries -- positional "
+            "correspondence broken, do not proceed."
+        )
+
+    result = {i: ([], []) for i in range(8)}
+    for node_idx in weight_like_idx:
+        pid = None
+        for i in range(8):
+            lo, hi = partition_node_index_range(i, boundaries)
+            if lo <= node_idx and (hi is None or node_idx < hi):
+                pid = i
+                break
+        assert pid is not None, f"node_idx {node_idx} not covered by any partition range"
+        entry = node_idx_to_entry[node_idx]
+        if "MaxPool" in entry["module_type"]:
+            result[pid][1].append(entry["logical_name"])
+        else:
+            result[pid][0].append(entry["logical_name"])
+    return result
+
+
+def resolve_folding_entry(logical_name, per_layer):
+    if logical_name in per_layer:
+        return per_layer[logical_name], logical_name
+    if logical_name.endswith(".conv.0"):
+        stripped = logical_name[: -len(".0")]
+        if stripped in per_layer:
+            return per_layer[stripped], stripped
+    return None, None
+
+
+def derive_fallback_pe_simd(logical_name, per_layer, node=None):
+    """For main_up/shortcut_proj nodes HAWQ's folding search never saw (they
+    don't exist in the trainable model -- FINN-export-only additions, both
+    frozen plain nn.Conv2d/nn.ConvTranspose2d, never appear as MVAU/VVAU
+    nodes at all -- see finn_export_..._alpha025_trained.py's module
+    docstring). Kept for parity with the separable-family bridge; in
+    practice this should never fire for this architecture since every real
+    MVAU/VVAU-producing module here has a per_layer entry."""
+    prefix = logical_name.split(".")[0]
+    reduce_entry = per_layer.get(f"{prefix}.reduce.0")
+    expand_entry = per_layer.get(f"{prefix}.expand.0")
+    if reduce_entry is not None and expand_entry is not None:
+        pe, simd = expand_entry["pe"], reduce_entry["simd"]
+        source = f"{prefix}.{{reduce,expand}}.0"
+        if node is not None:
+            inst = getCustomOp(node)
+            mh, mw = _get_pe_simd_bounds(inst)
+            safe_pe, safe_simd = _largest_divisor_leq(mh, pe), _largest_divisor_leq(mw, simd)
+            if (safe_pe, safe_simd) != (pe, simd):
+                source += f" (clamped PE {pe}->{safe_pe} for MH={mh}, SIMD {simd}->{safe_simd} for MW={mw})"
+            pe, simd = safe_pe, safe_simd
+        return {"PE": pe, "SIMD": simd}, source
+    return {"PE": 1, "SIMD": 1}, None
+
+
+def _largest_divisor_leq(n, cap):
+    cap = max(1, min(cap, n))
+    for d in range(cap, 0, -1):
+        if n % d == 0:
+            return d
+    return 1
+
+
+def _get_pe_simd_bounds(inst):
+    try:
+        return inst.get_nodeattr("MH"), inst.get_nodeattr("MW")
+    except AttributeError:
+        pass
+    k_h, k_w = inst.get_nodeattr("Kernel")
+    return inst.get_nodeattr("Channels"), k_h * k_w
+
+
+def find_preceding_swu_fmpad(all_nodes, name_to_idx, vvau_node):
+    idx = name_to_idx[vvau_node.name]
+    if idx < 2:
+        raise RuntimeError(f"{vvau_node.name}: expected 2 preceding nodes (FMPadding, SWU), only {idx} nodes before it")
+    swu_node, fmpad_node = all_nodes[idx - 1], all_nodes[idx - 2]
+    if swu_node.op_type not in SWU_OP_TYPES:
+        raise RuntimeError(f"{vvau_node.name}: expected an SWU node immediately before it, got "
+                            f"{swu_node.op_type} ({swu_node.name})")
+    if fmpad_node.op_type not in FMPAD_OP_TYPES:
+        raise RuntimeError(f"{vvau_node.name}: expected an FMPadding node 2 positions before it, got "
+                            f"{fmpad_node.op_type} ({fmpad_node.name})")
+    return fmpad_node, swu_node
+
+
+def find_following_thresholding(kernel_model, weight_node):
+    """standalone Thresholding_hls/_rtl node directly consuming this MVAU/
+    VVAU's output (noActivation=1 forced by step_enet_convert_to_hw_rtl_mvau,
+    so activation is never fused into the weight node here)."""
+    consumer = kernel_model.find_consumer(weight_node.output[0])
+    if consumer is not None and consumer.op_type in THRESH_OP_TYPES:
+        return consumer
+    return None
+
+
+def build_partition_folding_config(preamble_dir, partition_idx, sdp_node_name, partition_model_fn, logical_names, pool_names, per_layer, output_dir):
+    kernel_model = ModelWrapper(partition_model_fn)
+    print(f"[partition {partition_idx}] loaded raw model: {len(kernel_model.graph.node)} nodes")
+
+    dummy_cfg = dataclasses.replace(base.cfg_stitched_ip_partitioned_8way, output_dir=output_dir)
+    kernel_model = step_specialize_layers(kernel_model, dummy_cfg)
+    kernel_model = kernel_model.transform(GiveUniqueNodeNames(sdp_node_name + "_"))
+    kernel_model = kernel_model.transform(GiveReadableTensorNames())
+    kernel_model = step_target_fps_parallelization(kernel_model, dummy_cfg)
+    kernel_model = kernel_model.transform(GiveUniqueNodeNames())
+
+    all_nodes = list(kernel_model.graph.node)
+    name_to_idx = {n.name: i for i, n in enumerate(all_nodes)}
+    weight_nodes = [n for n in all_nodes if n.op_type in WEIGHT_OP_TYPES]
+    print(f"[partition {partition_idx}] {len(weight_nodes)} weight nodes vs {len(logical_names)} logical names "
+          f"(+{len(pool_names)} pool-type, skipped: {pool_names})")
+    if len(weight_nodes) != len(logical_names):
+        print(f"[partition {partition_idx}] MISMATCH -- FINN nodes: {[n.name + '/' + n.op_type for n in weight_nodes]}")
+        print(f"[partition {partition_idx}] MISMATCH -- logical names: {logical_names}")
+        raise RuntimeError(f"partition {partition_idx}: weight node count != logical name count, aborting.")
+
+    folding_config = {"Defaults": {}}
+    unmatched = []
+    n_swu_fmpad = 0
+    n_thresh = 0
+    for node, logical_name in zip(weight_nodes, logical_names):
+        entry, json_key = resolve_folding_entry(logical_name, per_layer)
+        if entry is None:
+            unmatched.append(logical_name)
+            fallback, source = derive_fallback_pe_simd(logical_name, per_layer, node)
+            folding_config[node.name] = fallback
+            print(f"[partition {partition_idx}]  {node.name:30s} {node.op_type:12s} <- {logical_name:25s} "
+                  f"(derived from {source}) PE={fallback['PE']} SIMD={fallback['SIMD']}")
+            continue
+
+        node_type = entry.get("node_type")  # None for a legacy solve_folding-shaped entry
+        compute_entry = entry["vvau"] if node_type == "depthwise_vvau_slot" else entry
+        pe, simd = compute_entry["pe"], compute_entry["simd"]
+        inst = getCustomOp(node)
+        mh, mw = _get_pe_simd_bounds(inst)
+        safe_pe, safe_simd = _largest_divisor_leq(mh, pe), _largest_divisor_leq(mw, simd)
+        if (safe_pe, safe_simd) != (pe, simd):
+            print(f"[partition {partition_idx}]  {node.name:30s} {node.op_type:12s} <- {logical_name:25s} "
+                  f"({json_key:25s}) CLAMPED PE {pe}->{safe_pe} (MH={mh}), SIMD {simd}->{safe_simd} (MW={mw})")
+        pe, simd = safe_pe, safe_simd
+        node_config = {"PE": pe, "SIMD": simd}
+        # v3's per-layer entries don't carry a plain "ram_style" key at all
+        # (MVAU/VVAU weight memory is always left at FINN's own "auto"
+        # default -- per explicit instruction, never forced to "block" or
+        # "ultra" here). This .get() is kept only so a future JSON variant
+        # that DOES include one for non-URAM values isn't silently ignored;
+        # "ultra" is still hard-excluded below (requires
+        # runtime_writeable_weights=1, which this bridge never sets -- see
+        # FINN's own CreateStitchedIP assertion in matrixvectoractivation.py's
+        # code_generation_ipi).
+        ram_style = compute_entry.get("ram_style")
+        if ram_style is not None and ram_style != "ultra":
+            node_config["ram_style"] = ram_style
+        if "mem_mode" in compute_entry:
+            node_config["mem_mode"] = compute_entry["mem_mode"]
+        folding_config[node.name] = node_config
+        extra = "".join(f" {k}={v}" for k, v in node_config.items() if k not in ("PE", "SIMD"))
+        print(f"[partition {partition_idx}]  {node.name:30s} {node.op_type:12s} <- {logical_name:25s} "
+              f"({json_key:25s}) PE={pe} SIMD={simd}{extra}")
+
+        # standalone Thresholding (noActivation=1 forced pre-partitioning)
+        # gets its PE straight from this same entry's own "thr_pe" -- solved
+        # jointly with pe/simd in the same ILP run, no fixup/clamping needed.
+        thr_pe = compute_entry.get("thr_pe")
+        if thr_pe is not None:
+            thresh_node = find_following_thresholding(kernel_model, node)
+            if thresh_node is not None:
+                thr_config = {"PE": thr_pe}
+                # v3's per-layer "thr_ram_style" is "block" or "distributed"
+                # (NEVER "ultra" -- _diagnostics.total_uram18 is 0.0 for the
+                # whole solve). "distributed" forces depth_trigger_bram to a
+                # large sentinel, which -- per thresholding.sv's own
+                # RAM_STYLE ternary -- resolves every real DEPTH to
+                # "distributed" (LUTRAM path) since depth_trigger_uram is
+                # left at 0 (so the "ultra" branch never triggers; forcing
+                # depth_trigger_uram nonzero crashed Vivado 2022.2 on shallow
+                # tables in an earlier regression, never re-enable it).
+                # "block" (or missing) leaves both triggers at their 0
+                # default, i.e. FINN's own "auto" heuristic -- validated via
+                # a real Vivado OOC synth comparison earlier this session,
+                # see /memories/session/thresh_lutram_probe.md.
+                thr_ram_style = compute_entry.get("thr_ram_style")
+                if thr_ram_style == "distributed":
+                    thr_config["depth_trigger_bram"] = THRESH_DISTRIBUTED_BRAM_TRIGGER
+                folding_config[thresh_node.name] = thr_config
+                n_thresh += 1
+                thr_extra = "".join(f" {k}={v}" for k, v in thr_config.items() if k != "PE")
+                print(f"[partition {partition_idx}]  {thresh_node.name:30s} {thresh_node.op_type:12s} <- {logical_name:25s} "
+                      f"({json_key:25s}, thr_pe) PE={thr_pe}{thr_extra}")
+
+        if node_type == "depthwise_vvau_slot":
+            if entry["swu"]["simd"] != compute_entry["pe"] or entry["fmpadding"]["simd"] != entry["swu"]["simd"]:
+                print(f"[partition {partition_idx}] WARNING: {logical_name}'s own ILP entry violates the "
+                      f"fmpadding.simd==swu.simd==vvau.pe invariant BEFORE clamping "
+                      f"(fmpadding={entry['fmpadding']['simd']}, swu={entry['swu']['simd']}, vvau.pe="
+                      f"{compute_entry['pe']}) -- investigate compression/hawq/folding_ilp.py's own solve; "
+                      f"forcing to the clamped VVAU PE below regardless.")
+            fmpad_node, swu_node = find_preceding_swu_fmpad(all_nodes, name_to_idx, node)
+            folding_config[swu_node.name] = {"SIMD": pe}
+            folding_config[fmpad_node.name] = {"SIMD": pe}
+            n_swu_fmpad += 1
+            print(f"[partition {partition_idx}]  {swu_node.name:30s} {swu_node.op_type:12s} <- {logical_name:25s} "
+                  f"(SWU, coupled to {node.name}'s PE) SIMD={pe}")
+            print(f"[partition {partition_idx}]  {fmpad_node.name:30s} {fmpad_node.op_type:12s} <- {logical_name:25s} "
+                  f"(FMPadding, chained to {swu_node.name}'s SIMD) SIMD={pe}")
+    if unmatched:
+        print(f"[partition {partition_idx}] WARNING: {len(unmatched)} unmatched logical names "
+              f"(derived fallback PE/SIMD applied): {unmatched}")
+    if n_swu_fmpad:
+        print(f"[partition {partition_idx}] bridged {n_swu_fmpad} FMPadding+SWU pair(s) for depthwise VVAU slots")
+    if n_thresh:
+        print(f"[partition {partition_idx}] bridged {n_thresh} standalone Thresholding node(s) via pe_thr")
+    return folding_config, len(unmatched)
+
+
+def step_force_dsp(model, cfg=None):
+    """Force resType=dsp on every MVAU (pointwise/1x1) AND VVAU (depthwise
+    KxK) node -- this architecture has 0 VVAU nodes (all-dense, non-
+    separable dilated context), so in practice this only ever touches MVAU."""
+    n_dsp = 0
+    for node in model.graph.node:
+        if "MVAU" in node.op_type or "VVAU" in node.op_type:
+            getCustomOp(node).set_nodeattr("resType", "dsp")
+            n_dsp += 1
+    print(f"[step_force_dsp] forced resType=dsp on {n_dsp} MVAU/VVAU node(s), ram_style left at default (auto)")
+    return model
+
+
+def step_force_fifo_uram(model, cfg):
+    """Force ram_style=ultra (URAM) on every StreamingFIFO_rtl node with
+    impl_style=vivado and depth>=FIFO_URAM_DEPTH_THRESHOLD. impl_style=rtl
+    (shallow, SRL-based) FIFOs have no ram_style concept at all and are
+    always skipped regardless of depth. Mechanism validated with a real
+    Vivado OOC synth comparison on partition 2 earlier this session -- see
+    /memories/session/fifo_uram_test_p2.md (BRAM_18K-equiv 206->181, -12%,
+    for 15 URAMs, fmax improved 173.31->225.68 MHz).
+
+    MUST run after step_set_fifo_depths and re-run PrepareIP/HLSSynthIP
+    itself: step_set_fifo_depths's own InsertAndSetFIFODepths already calls
+    PrepareIP+HLSSynthIP on every FIFO (baked in with ram_style="auto")
+    before returning, so setting the nodeattr alone here is inert --
+    CreateStitchedIP would just reuse that already-generated, stale IP.
+    reset_implementation() clears code_gen_dir_ipgen/ipgen_path/ip_path so
+    the subsequent PrepareIP/HLSSynthIP calls below actually regenerate
+    (idempotently -- they skip any node whose cached IP is still valid, so
+    this only touches the just-reset FIFO nodes, not the whole partition)."""
+    n_forced = 0
+    n_skipped_rtl = 0
+    n_skipped_shallow = 0
+    for node in model.graph.node:
+        if node.op_type != "StreamingFIFO_rtl":
+            continue
+        inst = getCustomOp(node)
+        if inst.get_nodeattr("impl_style") != "vivado":
+            n_skipped_rtl += 1
+            continue
+        depth = inst.get_nodeattr("depth")
+        if depth >= FIFO_URAM_DEPTH_THRESHOLD:
+            inst.set_nodeattr("ram_style", "ultra")
+            reset_implementation(inst)
+            n_forced += 1
+        else:
+            n_skipped_shallow += 1
+    if n_forced:
+        model = model.transform(PrepareIP(cfg._resolve_fpga_part(), cfg._resolve_hls_clk_period()))
+        model = model.transform(HLSSynthIP())
+    print(f"[step_force_fifo_uram] forced ram_style=ultra on {n_forced} StreamingFIFO_rtl (impl_style=vivado) "
+          f"node(s) with depth>={FIFO_URAM_DEPTH_THRESHOLD} ({n_skipped_shallow} impl_style=vivado node(s) below "
+          f"threshold left at auto, {n_skipped_rtl} impl_style=rtl node(s) skipped -- no ram_style concept), "
+          f"and regenerated their IP (PrepareIP/HLSSynthIP)")
+    return model
+
+
+def step_fix_weight_dtype_bipolar_bug(model, cfg=None):
+    """FINN's own MinimizeWeightBitWidth.minimize_weight_bit_width() picks
+    BIPOLAR based only on weights.min(), without verifying weights.max()
+    also fits BIPOLAR's exact {-1, +1} set -- see finn_ooc_8_2_relu_no_reg_
+    w16_acc2x_8way_full.py's identical helper for the full rationale."""
+    import numpy as np
+    from qonnx.core.datatype import DataType
+
+    n_fixed = 0
+    for node in model.graph.node:
+        if node.op_type not in WEIGHT_OP_TYPES:
+            continue
+        inst = getCustomOp(node)
+        wdt_name = inst.get_nodeattr("weightDataType")
+        if wdt_name != "BIPOLAR":
+            continue
+        w = model.get_initializer(node.input[1])
+        if w is None or np.all((w == -1.0) | (w == 1.0)):
+            continue
+        w_min, w_max = float(w.min()), float(w.max())
+        for cand in ["INT2", "INT3", "INT4", "INT5", "INT6", "INT7", "INT8"]:
+            dt = DataType[cand]
+            if dt.allowed(w_min) and dt.allowed(w_max):
+                inst.set_nodeattr("weightDataType", cand)
+                print(f"[step_fix_weight_dtype_bipolar_bug] {node.name}: BIPOLAR -> {cand} "
+                      f"(w_min={w_min}, w_max={w_max})")
+                n_fixed += 1
+                break
+        else:
+            raise RuntimeError(f"{node.name}: could not find a valid INT dtype for w_min={w_min}, w_max={w_max}")
+    if n_fixed:
+        print(f"[step_fix_weight_dtype_bipolar_bug] fixed {n_fixed} mis-assigned BIPOLAR weightDataType node(s)")
+    return model
+
+
+def _widen_standalone_mvau_acc_for_downstream_threshold(inst, node, model):
+    """Mirror the `thresholds is not None` widening branch of FINN's own
+    MatrixVectorActivation.minimize_accumulator_width() (matrixvectoractivation.py
+    line ~483), but sourcing the threshold min/max from a SEPARATE downstream
+    Thresholding_hls/_rtl node instead of a fused input[2] -- see
+    step_minimize_bit_width_standalone_thresh_aware's docstring for the full
+    root-cause rationale. Returns True if this node's accDataType/outputDataType
+    was (re)set here (caller should then skip calling the node's own
+    minimize_accumulator_width(), which would otherwise immediately clobber this
+    with its narrower/wrongly-signed weight+input-only computation)."""
+    if node.op_type not in WEIGHT_OP_TYPES:
+        return False
+    if len(node.input) > 2 or not inst.get_nodeattr("noActivation"):
+        return False  # fused-activation case, FINN's own logic already handles it correctly
+    consumers = model.find_consumers(node.output[0]) or []
+    if len(consumers) != 1 or consumers[0].op_type not in THRESH_OP_TYPES:
+        return False
+    thresh_node = consumers[0]
+    thresholds = model.get_initializer(thresh_node.input[1])
+    if thresholds is None:
+        return False
+    weights = model.get_initializer(node.input[1])
+    if inst.get_nodeattr("binaryXnorMode"):
+        weights = 2 * weights - 1
+    idt = inst.get_input_datatype()
+    acc_min, acc_max = calculate_matvec_accumulator_range(weights, idt)
+    min_thr, max_thr = float(thresholds.min()), float(thresholds.max())
+    if min_thr >= acc_min and max_thr <= acc_max:
+        return False  # real thresholds already fit the weight-derived range, nothing to fix
+    orig_min, orig_max = acc_min, acc_max
+    acc_min = min(acc_min, min_thr)
+    acc_max = max(acc_max, max_thr)
+    if acc_min >= 0:
+        adt = DataType[f"UINT{math.ceil(np.log2(acc_max + 1))}"]
+    else:
+        _acc_max = max(-acc_min, 1 + acc_max)
+        adt = DataType[f"INT{math.ceil(np.log2(_acc_max) + 1)}"]
+    if model.find_direct_successors(node) is None:
+        bw = roundup_to_integer_multiple(adt.bitwidth(), 8)
+        adt = DataType[adt.name.replace(str(adt.bitwidth()), str(bw))]
+    inst.set_nodeattr("accDataType", adt.name)
+    inst.set_nodeattr("outputDataType", adt.name)
+    print(f"[standalone-threshold acc widen] {node.name}: weight/input-only accumulator range "
+          f"[{orig_min}, {orig_max}] was too narrow/wrongly-signed for downstream "
+          f"{thresh_node.name}'s real threshold range [{min_thr}, {max_thr}] "
+          f"-- set accDataType=outputDataType={adt.name}")
+    return True
+
+
+def step_minimize_bit_width_standalone_thresh_aware(model, cfg):
+    """Drop-in replacement for finn.builder.build_dataflow_steps.step_minimize_bit_width
+    that additionally accounts for downstream STANDALONE Thresholding_hls/_rtl
+    consumers when computing an MVAU/VVAU node's accumulator/output dtype.
+
+    Root cause this works around: this build forces every MVAU/VVAU to
+    noActivation=1 with a SEPARATE downstream Thresholding node (see
+    finn_hawq_preamble_..._rtl_mvau.py's step_enet_convert_to_hw_rtl_mvau).
+    FINN's own MatrixVectorActivation.minimize_accumulator_width() only widens
+    its weight+input-derived accumulator range using a FUSED activation's
+    thresholds (its own input[2]); for a standalone Thresholding consumer it
+    has zero visibility into the real (calibrated, possibly negative)
+    threshold values, so it can conclude an UNSIGNED accDataType/outputDataType
+    purely from weights/input dtype even when the real downstream thresholds
+    genuinely need a signed range. Because MinimizeAccumulatorWidth.apply()
+    cascades each node's new dtype via InferDataTypes() immediately
+    (node-by-node, not once at the end), by the time the downstream
+    Thresholding node's own minimize_accumulator_width() runs, its
+    inputDataType nodeattr already reflects the too-narrow/wrongly-unsigned
+    MVAU dtype -- and get_hw_compatible_threshold_tensor() then hard-asserts
+    `(thresholds >= 0).all()` when inputDataType is unsigned, crashing on any
+    real negative threshold value. First observed on partition 1's
+    MVAU_rtl_1 -> Thresholding_rtl_0 (2026-09-18 8-way rtl_mvau build, after
+    ~7h of runtime)."""
+    if not cfg.minimize_bit_width:
+        return model
+    model = model.transform(MinimizeWeightBitWidth())
+    n_widened = 0
+    for node_id in range(len(model.graph.node)):
+        node = model.graph.node[node_id]
+        if not is_fpgadataflow_node(node):
+            continue
+        inst = getCustomOp(node)
+        if not hasattr(inst, "minimize_accumulator_width"):
+            continue
+        if _widen_standalone_mvau_acc_for_downstream_threshold(inst, node, model):
+            n_widened += 1
+        else:
+            inst.minimize_accumulator_width(model)
+        model = model.transform(InferDataTypes())
+    if n_widened:
+        print(f"[step_minimize_bit_width_standalone_thresh_aware] widened {n_widened} "
+              f"standalone-threshold MVAU/VVAU node(s) to cover their downstream "
+              f"Thresholding node's real threshold range")
+    return model
+
+
+def _build_one_partition_with_folding_and_dsp(dataflow_model_filename, cfg, prefix, folding_config_file):
+    part_cfg = dataclasses.replace(cfg, folding_config_file=folding_config_file)
+
+    kernel_model = ModelWrapper(dataflow_model_filename)
+    kernel_model = step_specialize_layers(kernel_model, part_cfg)
+    kernel_model = kernel_model.transform(GiveUniqueNodeNames(prefix))
+    kernel_model = kernel_model.transform(GiveReadableTensorNames())
+    kernel_model = step_target_fps_parallelization(kernel_model, part_cfg)
+    kernel_model = step_apply_folding_config(kernel_model, part_cfg)
+    kernel_model = step_minimize_bit_width_standalone_thresh_aware(kernel_model, part_cfg)
+    kernel_model = step_fix_weight_dtype_bipolar_bug(kernel_model, part_cfg)
+    kernel_model = step_force_dsp(kernel_model, part_cfg)
+    kernel_model = step_hw_codegen(kernel_model, part_cfg)
+    kernel_model = step_hw_ipgen(kernel_model, part_cfg)
+    kernel_model = step_set_fifo_depths(kernel_model, part_cfg)
+    kernel_model = step_force_fifo_uram(kernel_model, part_cfg)
+    kernel_model = kernel_model.transform(
+        CreateStitchedIP(part_cfg._resolve_fpga_part(), part_cfg.synth_clk_period_ns, prefix.rstrip("_"), False)
+    )
+    kernel_model.save(dataflow_model_filename)
+    return dataflow_model_filename
+
+
+def step_build_all_partitions_with_folding_and_dsp(model, cfg, folding_config_map, parallel=True, max_workers=4):
+    sdp_nodes = model.get_nodes_by_op_type("StreamingDataflowPartition")
+    assert len(sdp_nodes) == 8, f"expected 8 partitions, got {len(sdp_nodes)}"
+
+    jobs = []
+    for i, sdp_node in enumerate(sdp_nodes):
+        sdp_inst = getCustomOp(sdp_node)
+        dataflow_model_filename = sdp_inst.get_nodeattr("model")
+        prefix = sdp_node.name + "_"
+        jobs.append((dataflow_model_filename, prefix, folding_config_map[i]))
+
+    print("[step_build_all_partitions_with_folding_and_dsp] building %d partitions (parallel=%s)"
+          % (len(jobs), parallel))
+
+    if parallel:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as ex:
+            futures = {
+                ex.submit(_build_one_partition_with_folding_and_dsp, fn, cfg, prefix, ffile): prefix
+                for fn, prefix, ffile in jobs
+            }
+            for fut in concurrent.futures.as_completed(futures):
+                prefix = futures[fut]
+                fut.result()
+                print("[step_build_all_partitions_with_folding_and_dsp] partition %s done" % prefix)
+    else:
+        for fn, prefix, ffile in jobs:
+            _build_one_partition_with_folding_and_dsp(fn, cfg, prefix, ffile)
+            print("[step_build_all_partitions_with_folding_and_dsp] partition %s done" % prefix)
+
+    return model
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: finn_ooc_12_dense_relu_warmstart150ep_alpha025_trained_rtl_mvau_8way_full_v3.py "
+              "<rtl_mvau_preamble_output_dir> [explicit_output_dir]")
+        sys.exit(1)
+    preamble_dir = sys.argv[1]
+    flat_ckpt = os.path.join(preamble_dir, "intermediate_models", "assign_stage_partition_ids_8way.onnx")
+    print(f"Preamble dir: {preamble_dir}")
+    print(f"Flat 8-way-tagged checkpoint: {flat_ckpt}")
+    print(f"Conv order file: {CONV_ORDER_FILE}")
+    print(f"Folding block file: {FOLDING_BLOCK_FILE}")
+
+    with open(FOLDING_BLOCK_FILE) as f:
+        per_layer = json.load(f)["per_layer"]
+
+    if len(sys.argv) >= 3:
+        OUTPUT_DIR = sys.argv[2]
+    else:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        OUTPUT_DIR = os.path.join(
+            base.ENET_DIR, "finn_deployment_outputs",
+            f"12_dense_relu_warmstart150ep_alpha025_trained_rtl_mvau_8way_full_v3_{timestamp}",
+        )
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    print(f"OUTPUT_DIR= {OUTPUT_DIR}", flush=True)
+
+    cfg = dataclasses.replace(base.cfg_stitched_ip_partitioned_8way, output_dir=OUTPUT_DIR)
+    flat_model = ModelWrapper(flat_ckpt)
+    parent_model = step_create_dataflow_partition_multi(flat_model, cfg)
+    sdp_nodes = parent_model.get_nodes_by_op_type("StreamingDataflowPartition")
+    print(f"Got {len(sdp_nodes)} partitions: {[n.name for n in sdp_nodes]}")
+    assert len(sdp_nodes) == 8, f"expected 8 partitions, got {len(sdp_nodes)}"
+    validate_partition_single_output(parent_model)
+
+    logical_by_partition = load_all_partition_logical_names(preamble_dir)
+    folding_config_map = {}
+    total_unmatched = 0
+    for i, sdp_node in enumerate(sdp_nodes):
+        conv_names, pool_names = logical_by_partition[i]
+        partition_model_fn = getCustomOp(sdp_node).get_nodeattr("model")
+        folding_config, n_unmatched = build_partition_folding_config(
+            preamble_dir, i, sdp_node.name, partition_model_fn, conv_names, pool_names, per_layer, OUTPUT_DIR,
+        )
+        total_unmatched += n_unmatched
+        out_path = os.path.join(OUTPUT_DIR, f"hawq_folding_config_partition{i}.json")
+        with open(out_path, "w") as f:
+            json.dump(folding_config, f, indent=2)
+        folding_config_map[i] = out_path
+        print(f"[partition {i}] saved bridged folding config ({len(folding_config) - 1} entries): {out_path}")
+
+    print(f"\n=== Bridge summary: {total_unmatched} total unmatched logical names across all 8 partitions "
+          "(expected: 0 for this architecture -- every real MVAU/VVAU-producing module has a per_layer "
+          "entry; inspect the per-partition prints above if this is nonzero) ===\n")
+
+    def _step_build_all(model, cfg):
+        return step_build_all_partitions_with_folding_and_dsp(model, cfg, folding_config_map, parallel=True, max_workers=4)
+    _step_build_all.__name__ = "step_build_all_partitions_with_folding_and_dsp"
+
+    # Deliberately STOPS at step_measure_rtlsim_performance_multi -- NO
+    # step_out_of_context_synthesis_multi here (see module docstring): OOC
+    # synthesis for this build is done exclusively by the dedicated
+    # per-partition script, one Vivado run at a time (sequential), never via
+    # this combined-design path. That script is chained via `&&` right
+    # after this one in the Run block above, so it starts automatically.
+    cfg = dataclasses.replace(
+        cfg,
+        steps=[
+            step_combine_partitions,
+            step_generate_estimate_reports_multi,
+            step_measure_rtlsim_performance_multi,
+        ],
+    )
+    parent_model = step_build_all_partitions_with_folding_and_dsp(
+        parent_model, cfg, folding_config_map, parallel=True, max_workers=4,
+    )
+    parent_ckpt = os.path.join(OUTPUT_DIR, "intermediate_models", "dataflow_parent_built.onnx")
+    os.makedirs(os.path.dirname(parent_ckpt), exist_ok=True)
+    parent_model.save(parent_ckpt)
+
+    print("Proceeding to step_combine_partitions -> estimate reports -> rtlsim...", flush=True)
+    build.build_dataflow_cfg(parent_ckpt, cfg)
+    print("Done. Reports in:", os.path.join(OUTPUT_DIR, "report"))
+    print("OUTPUT_DIR=", OUTPUT_DIR)
+    print("Next: finn_ooc_12_dense_relu_warmstart150ep_alpha025_8way_per_partition_synth.py will run "
+          "automatically via the `&&` chain (or run it manually with this OUTPUT_DIR as its "
+          "1st CLI arg if it wasn't chained).")
+
+
+if __name__ == "__main__":
+    main()

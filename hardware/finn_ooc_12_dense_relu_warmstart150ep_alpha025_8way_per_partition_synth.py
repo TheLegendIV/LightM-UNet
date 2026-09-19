@@ -19,6 +19,7 @@ import dataclasses
 import json
 import os
 import sys
+import time
 
 sys.path.insert(0, "/home/thelegendiv/finn/notebooks/enet")
 
@@ -51,8 +52,31 @@ def main():
     report_dir = os.path.join(OUTPUT_DIR, "report")
     os.makedirs(report_dir, exist_ok=True)
 
+    # If a separate early/out-of-band OOC synth run (e.g. a manual head start
+    # on already-stitched partitions) is still in flight, wait for it to
+    # finish before starting our own sequential loop -- avoids launching a
+    # DUPLICATE concurrent SynthOutOfContext on the same partition and avoids
+    # ending up with all 8 partitions' OOC synth running at once.
+    in_progress_marker = os.path.join(report_dir, ".early_ooc_synth_in_progress")
+    waited = False
+    while os.path.exists(in_progress_marker):
+        if not waited:
+            print(f"[per_partition_synth] waiting for early OOC synth run to finish "
+                  f"({in_progress_marker} present)...", flush=True)
+            waited = True
+        time.sleep(30)
+    if waited:
+        print("[per_partition_synth] early OOC synth run finished, proceeding", flush=True)
+
     all_results = {}
     for i, sdp_node in enumerate(sdp_nodes):
+        cached_report_path = os.path.join(report_dir, f"ooc_synth_partition_{i}.json")
+        if os.path.exists(cached_report_path):
+            with open(cached_report_path) as f:
+                res = json.load(f)
+            all_results[f"partition_{i}"] = res
+            print(f"[per_partition_synth] partition {i}: reusing pre-existing report {cached_report_path}", flush=True)
+            continue
         model_path = getCustomOp(sdp_node).get_nodeattr("model")
         print(f"[per_partition_synth] partition {i}: synthesizing {model_path}", flush=True)
         part_model = ModelWrapper(model_path)
@@ -60,7 +84,7 @@ def main():
         res = eval(part_model.get_metadata_prop("res_total_ooc_synth"))
         all_results[f"partition_{i}"] = res
         print(f"[per_partition_synth] partition {i} result: {res}", flush=True)
-        with open(os.path.join(report_dir, f"ooc_synth_partition_{i}.json"), "w") as f:
+        with open(cached_report_path, "w") as f:
             json.dump(res, f, indent=2)
 
     # aggregate: sum additive resource counts, report min Fmax as the

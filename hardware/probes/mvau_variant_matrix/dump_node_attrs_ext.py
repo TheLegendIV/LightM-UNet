@@ -31,6 +31,7 @@ ATTR_KEYS = (
     "NumChannels", "ConvKernelDim", "IFMChannels", "IFMDim", "OFMDim",
     "Stride", "Dilation", "SIMD1", "numSteps", "numInputVectors",
     "depthwise", "parallel_window", "distributed_state",
+    "depth_trigger_bram", "depth_trigger_uram",
 )
 
 rows = []

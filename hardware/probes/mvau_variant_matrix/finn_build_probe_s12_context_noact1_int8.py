@@ -163,11 +163,25 @@ ap.add_argument("--fold", choices=["pemh_simd1", "balanced", "pe1_simdmw"], requ
                  help="Folding point: pemh_simd1 (PE=MH,SIMD=1, degenerate high-PE), "
                       "pe1_simdmw (PE=1,SIMD=MW, degenerate high-SIMD), or "
                       "balanced (PE=SIMD=gcd(MH,MW) per node).")
+ap.add_argument("--thresh-mem", choices=["auto", "distributed"], default="auto",
+                 help="auto: leave Thresholding_rtl's depth_trigger_bram/uram at their default 0 (Vivado's "
+                      "own 'auto' inference picks BRAM for deep threshold tables -- this is the pre-existing "
+                      "behavior). distributed: force depth_trigger_bram to a large sentinel (no real table "
+                      "in this probe is ever that deep) on every Thresholding_rtl node, which -- per "
+                      "finn-rtllib/thresholding/hdl/thresholding.sv's own RAM_STYLE ternary (DEPTH_TRIGGER_URAM "
+                      "&& DEPTH>=that ? ultra : DEPTH_TRIGGER_BRAM && DEPTH>=that ? block : DEPTH_TRIGGER_BRAM "
+                      "&& DEPTH>=64 ? distributed : auto) -- resolves every DEPTH>=64 memory to explicit "
+                      "'distributed' (LUTRAM) instead of leaving it to Vivado's auto heuristic. "
+                      "depth_trigger_uram is left at 0 always (nonzero URAM triggers are what crashed Vivado "
+                      "2022.2 in the depth_trigger_uram=1 regression documented in hardware/results.csv / "
+                      "hardware/temp/revert_thresh_uram*.sh -- that bug is unrelated to this BRAM-trigger path).")
 args = ap.parse_args()
 
 IMPL_STYLE = args.impl_style
 RES_TYPE = args.res_type if IMPL_STYLE == "hls" else "dsp"
 FOLD = args.fold
+THRESH_MEM = args.thresh_mem
+THRESH_MEM_BRAM_TRIGGER_SENTINEL = 999999  # any real DEPTH is far smaller; only gates the >=64 distributed branch
 
 ENET_DIR = "/home/thelegendiv/finn/notebooks/enet"
 MODEL_NAME = "probe_noact1_single_d16_int8"  # finn_export_probe_noact1_single_int8.py -- single bottleneck, matches the noAct=0 sibling's geometry exactly
@@ -175,7 +189,8 @@ MODEL_FILE = os.path.join(ENET_DIR, f"{MODEL_NAME}.onnx")
 
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 OUTPUT_DIR = os.path.join(
-    ENET_DIR, "finn_deployment_outputs", f"probe_noact1_{IMPL_STYLE}_{RES_TYPE}_{FOLD}_int8_{timestamp}",
+    ENET_DIR, "finn_deployment_outputs",
+    f"probe_noact1_{IMPL_STYLE}_{RES_TYPE}_{FOLD}_thresh{THRESH_MEM}_int8_{timestamp}",
 )
 
 FPGA_PART = "xczu7ev-ffvc1156-2-e"
@@ -226,6 +241,37 @@ def step_force_res_type(model: ModelWrapper, cfg: DataflowBuildConfig):
             getCustomOp(node).set_nodeattr("resType", RES_TYPE)
             n += 1
     print(f"[step_force_res_type] forced resType={RES_TYPE} on {n} MVAU/VVAU node(s), ram_style left at default (auto)")
+    return model
+
+
+def step_force_thresh_ram_style(model: ModelWrapper, cfg: DataflowBuildConfig):
+    """No-op unless --thresh-mem=distributed. Forces depth_trigger_bram to a
+    large sentinel on every Thresholding_rtl node -- per finn-rtllib/
+    thresholding/hdl/thresholding.sv's RAM_STYLE ternary (read directly from
+    the container's source, see conversation for the exact line numbers),
+    this makes every per-stage threshold memory of DEPTH>=64 resolve to
+    explicit "distributed" (LUTRAM) instead of Vivado's "auto" heuristic
+    (which tends to pick BRAM for deeper tables -- the pre-existing
+    behavior, confirmed by "ram_style_chosen": "block" entries in this
+    matrix's own analytical-estimate JSONs). depth_trigger_uram is left
+    untouched at its default 0 -- forcing that one to a small nonzero value
+    (depth_trigger_uram=1) is what crashed Vivado 2022.2 in an earlier,
+    unrelated regression (see hardware/results.csv /
+    hardware/temp/revert_thresh_uram*.sh); this step never touches it.
+    MUST run after step_specialize_layers (node op_type must already be
+    Thresholding_rtl, not the pre-specialization generic Thresholding) and
+    before step_hw_ipgen (so the forced attr is baked into the generated
+    Verilog's DEPTH_TRIGGER_BRAM parameter)."""
+    if THRESH_MEM != "distributed":
+        print("[step_force_thresh_ram_style] --thresh-mem=auto, no-op (depth_trigger_bram left at default 0)")
+        return model
+    n = 0
+    for node in model.graph.node:
+        if node.op_type == "Thresholding_rtl":
+            getCustomOp(node).set_nodeattr("depth_trigger_bram", THRESH_MEM_BRAM_TRIGGER_SENTINEL)
+            n += 1
+    print(f"[step_force_thresh_ram_style] forced depth_trigger_bram={THRESH_MEM_BRAM_TRIGGER_SENTINEL} "
+          f"(-> RAM_STYLE=distributed for DEPTH>=64) on {n} Thresholding_rtl node(s), depth_trigger_uram left at 0")
     return model
 
 
@@ -431,6 +477,7 @@ probe_steps += [
     step_reapply_unique_names,
     step_print_noactivation_diagnostic,
     step_force_res_type,
+    step_force_thresh_ram_style,
     "step_target_fps_parallelization",
     "step_apply_folding_config",
     _FOLD_STEPS[FOLD],
