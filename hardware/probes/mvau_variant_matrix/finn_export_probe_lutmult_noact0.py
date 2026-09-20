@@ -1,5 +1,5 @@
 """Probe network for settling the hls_lut_noact0/hls_dsp_noact0 ILP-variant
-argument (see compression/MILP/finn_milp.py's VARIANT_HLS_LUT_NOACT0/
+argument (see MILP/finn_milp.py's VARIANT_HLS_LUT_NOACT0/
 VARIANT_HLS_DSP_NOACT0 and the plan this was built from,
 C:\\Users\\win32\\.claude\\plans\\the-current-ilp-inherited-lynx.md): a real
 Vivado OOC-synthesis probe isolating (a) the fused-activation (noActivation=0)

@@ -48,7 +48,7 @@ from pathlib import Path
 
 import torch
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 PACKAGE_ROOT = REPO_ROOT / "enet"
 sys.path.insert(0, str(PACKAGE_ROOT))
 from nnunetv2.nets.ENet import ENet  # noqa: E402

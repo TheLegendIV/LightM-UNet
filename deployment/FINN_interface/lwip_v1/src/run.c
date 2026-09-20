@@ -111,26 +111,43 @@ static int g_log_level = 3;
 #define MONITOR_LWIP_RX 1
 #endif
 
-/* FINN accelerator I/O contract (from deployment/finn/driver.py io_shape_dict
- * for this bitstream: idt=UINT8 ishape_packed=(1,64,64,1,1), odt=INT24
- * oshape_packed=(1,64,64,2,3)). Fixed at build time -- the accelerator is a
- * dataflow core with a fixed input/output tensor shape, it cannot accept an
- * arbitrarily-sized image like the old HLS pipeline could.
+/* FINN accelerator I/O contract (deployment/drivers/S12_dense: input
+ * partition's driver.py -- idt=UINT8 ishape_packed=(1,64,64,1,1); output
+ * partition's driver.py -- odt=INT20 oshape_packed=(1,64,64,5,3). The two
+ * partitions are merged into one bitstream with a single idma0/odma0 pair;
+ * the intermediate (1,32,32,4) INT9 tensor stays on-chip, never DMA'd.
+ * Fixed at build time -- the accelerator only ever sees one 64x64 tile at a
+ * time; the network's real 512x512 input is tiled/re-assembled in software
+ * (see run_accel_all_tiles()), the accelerator has no notion of this.
  */
-#ifndef ACCEL_INPUT_BYTES
-#define ACCEL_INPUT_BYTES  (64U * 64U * 1U * 1U)   /* 4096 */
-#endif
+#define TILE_H (64U)
+#define TILE_W (64U)
+#define IMAGE_H (512U)
+#define IMAGE_W (512U)
+#define TILES_PER_ROW (IMAGE_W / TILE_W)                  /* 8 */
+#define TILES_PER_COL (IMAGE_H / TILE_H)                  /* 8 */
+#define NUM_TILES (TILES_PER_ROW * TILES_PER_COL)         /* 64 */
 
-#ifndef ACCEL_OUTPUT_BYTES
-#define ACCEL_OUTPUT_BYTES (64U * 64U * 2U * 3U)   /* 24576 (6x input) */
-#endif
+#define ACCEL_TILE_INPUT_BYTES  (TILE_H * TILE_W * 1U)    /* 4096 */
+#define ACCEL_TILE_OUT_CHANNELS (5U)
+#define ACCEL_TILE_OUT_BYTES_PER_ELEM (3U)                /* INT20, padded to 3 bytes */
+#define ACCEL_TILE_OUT_BITWIDTH (20U)
+#define ACCEL_TILE_OUTPUT_BYTES (TILE_H * TILE_W * ACCEL_TILE_OUT_CHANNELS * ACCEL_TILE_OUT_BYTES_PER_ELEM) /* 61440 */
 
-#define MAX_IMAGE_SIZE ((ACCEL_INPUT_BYTES > ACCEL_OUTPUT_BYTES) ? ACCEL_INPUT_BYTES : ACCEL_OUTPUT_BYTES)
+/* Wire contract with the PC: one full image in, one combined per-pixel
+ * argmax class-id map out (1 byte/pixel, nnU-Net convention: class index
+ * 0..NUM_CLASSES-1) -- picking the winning class on-device makes the
+ * accelerator's raw per-channel logits unnecessary to transmit. */
+#define NETWORK_INPUT_BYTES  (IMAGE_H * IMAGE_W * 1U)     /* 262144 */
+#define NETWORK_OUTPUT_BYTES (IMAGE_H * IMAGE_W * 1U)     /* 262144 */
+
+#define MAX_IMAGE_SIZE ((NETWORK_INPUT_BYTES > NETWORK_OUTPUT_BYTES) ? NETWORK_INPUT_BYTES : NETWORK_OUTPUT_BYTES)
 
 /* Set to 1 for smoke/echo testing with no bitstream loaded (no idma0/odma0
  * IODMA cores present, so XPAR_IDMA0/ODMA0_BASEADDR aren't even defined) --
- * RUN_ACCEL then just copies pixel_buf_src into pixel_buf_dst, zero-padded
- * out to ACCEL_OUTPUT_BYTES, instead of driving the DMA registers. */
+ * RUN_ACCEL then just copies pixel_buf_src into pixel_buf_dst, truncated/
+ * zero-padded to NETWORK_OUTPUT_BYTES, instead of driving the DMA registers
+ * and tiling/argmax'ing. */
 #ifndef ACCEL_LOOPBACK
 #define ACCEL_LOOPBACK 0
 #endif
@@ -195,7 +212,7 @@ typedef struct {
     uint32_t expected_header_len;
     uint32_t header_received;
 
-    /* Fixed for the whole session (validated == ACCEL_INPUT_BYTES/OUTPUT_BYTES). */
+    /* Fixed for the whole session (validated == NETWORK_INPUT_BYTES/OUTPUT_BYTES). */
     uint32_t expected_input_bytes;
     uint32_t expected_output_bytes;
 
@@ -223,6 +240,12 @@ typedef struct {
 
 __attribute__((aligned(64))) static u8 pixel_buf_src[MAX_IMAGE_SIZE];
 __attribute__((aligned(64))) static u8 pixel_buf_dst[MAX_IMAGE_SIZE];
+
+/* Double-buffered per-tile DMA staging: while tile N's odma0 transfer is in
+ * flight (writing into slot N%2), tile N-1's result (in the OTHER slot) is
+ * being argmax'd on the CPU -- this is the "pipelining" between tiles. */
+__attribute__((aligned(64))) static u8 tile_src_buf[2][ACCEL_TILE_INPUT_BYTES];
+__attribute__((aligned(64))) static u8 tile_dst_buf[2][ACCEL_TILE_OUTPUT_BYTES];
 
 static u32 g_tx_chunk_bytes = (u32)TX_CHUNK_BYTES;
 static u32 g_rx_chunk_max_bytes = (u32)RX_CHUNK_MAX_BYTES;
@@ -256,6 +279,104 @@ static inline void accel_dma_start(UINTPTR base, UINTPTR buf_addr)
     accel_dma_write(base, ACCEL_DMA_REG_POINTER, (u32)buf_addr);
     accel_dma_write(base, ACCEL_DMA_REG_NUMREPS, 1U);
     accel_dma_write(base, ACCEL_DMA_REG_CTRL, ACCEL_DMA_CTRL_AP_START);
+}
+#endif /* !ACCEL_LOOPBACK */
+
+/* Decode one INT20 (little-endian, 3 packed bytes) accelerator output
+ * element into a signed value -- see finn/util/data_packing.py's
+ * reverse_endian=True convention (physical wire order is little-endian). */
+static inline int32_t decode_int20_le(const u8 *p)
+{
+    u32 raw = (u32)p[0] | ((u32)p[1] << 8) | ((u32)p[2] << 16);
+    raw &= (1U << ACCEL_TILE_OUT_BITWIDTH) - 1U;
+    if (raw & (1U << (ACCEL_TILE_OUT_BITWIDTH - 1U))) {
+        return (int32_t)raw - (int32_t)(1U << ACCEL_TILE_OUT_BITWIDTH);
+    }
+    return (int32_t)raw;
+}
+
+/* argmax(sigmoid(x)) == argmax(x) (sigmoid is monotonic), so the winning
+ * class per pixel is found directly from the raw logits -- no float sigmoid
+ * needed. Writes one class-id byte (0..ACCEL_TILE_OUT_CHANNELS-1) per pixel
+ * into this tile's place in the full 512x512 output image. */
+static void argmax_tile_into_output(conn_ctx_t *ctx, uint32_t tile_idx, const u8 *tile_raw)
+{
+    uint32_t tile_row = tile_idx / TILES_PER_ROW;
+    uint32_t tile_col = tile_idx % TILES_PER_ROW;
+    uint32_t row_off = tile_row * TILE_H;
+    uint32_t col_off = tile_col * TILE_W;
+    u8 class_row[TILE_W];
+
+    for (uint32_t r = 0; r < TILE_H; r++) {
+        for (uint32_t c = 0; c < TILE_W; c++) {
+            uint32_t pix = r * TILE_W + c;
+            const u8 *pix_base = tile_raw + (size_t)pix * ACCEL_TILE_OUT_CHANNELS * ACCEL_TILE_OUT_BYTES_PER_ELEM;
+            int32_t best_val = decode_int20_le(pix_base);
+            u8 best_ch = 0;
+            for (uint32_t ch = 1; ch < ACCEL_TILE_OUT_CHANNELS; ch++) {
+                int32_t v = decode_int20_le(pix_base + ch * ACCEL_TILE_OUT_BYTES_PER_ELEM);
+                if (v > best_val) {
+                    best_val = v;
+                    best_ch = (u8)ch;
+                }
+            }
+            class_row[c] = best_ch;
+        }
+        memcpy(&ctx->pixel_buf_dst[(row_off + r) * IMAGE_W + col_off], class_row, TILE_W);
+    }
+}
+
+#if !ACCEL_LOOPBACK
+/* Drive the accelerator over all NUM_TILES 64x64 tiles of the current
+ * 512x512 image, row-major left-to-right/top-to-bottom, double-buffered so
+ * tile N's CPU-side argmax overlaps tile N+1's hardware DMA time instead of
+ * running strictly one tile at a time. */
+static void run_accel_all_tiles(conn_ctx_t *ctx)
+{
+    int have_prev = 0;
+    uint32_t prev_tile_idx = 0;
+    int prev_slot = 0;
+
+    for (uint32_t t = 0; t < NUM_TILES; t++) {
+        int slot = (int)(t % 2U);
+        uint32_t tile_row = t / TILES_PER_ROW;
+        uint32_t tile_col = t % TILES_PER_ROW;
+        uint32_t row_off = tile_row * TILE_H;
+        uint32_t col_off = tile_col * TILE_W;
+
+        for (uint32_t r = 0; r < TILE_H; r++) {
+            memcpy(&tile_src_buf[slot][r * TILE_W],
+                   &ctx->pixel_buf_src[(row_off + r) * IMAGE_W + col_off],
+                   TILE_W);
+        }
+
+        Xil_DCacheFlushRange((UINTPTR)tile_src_buf[slot], ACCEL_TILE_INPUT_BYTES);
+        Xil_DCacheInvalidateRange((UINTPTR)tile_dst_buf[slot], ACCEL_TILE_OUTPUT_BYTES);
+
+        while (!accel_dma_is_idle((UINTPTR)ODMA0_BASEADDR)) { }
+
+        /* Launch odma0 (drain) first, then idma0 (feed), matching the
+         * reference PYNQ driver's ordering. */
+        accel_dma_start((UINTPTR)ODMA0_BASEADDR, (UINTPTR)tile_dst_buf[slot]);
+        accel_dma_start((UINTPTR)IDMA0_BASEADDR, (UINTPTR)tile_src_buf[slot]);
+
+        /* Overlap: argmax the PREVIOUS tile's already-completed result while
+         * THIS tile's DMA is in flight. */
+        if (have_prev) {
+            argmax_tile_into_output(ctx, prev_tile_idx, tile_dst_buf[prev_slot]);
+        }
+
+        while (!accel_dma_is_done((UINTPTR)ODMA0_BASEADDR)) { }
+        Xil_DCacheInvalidateRange((UINTPTR)tile_dst_buf[slot], ACCEL_TILE_OUTPUT_BYTES);
+
+        have_prev = 1;
+        prev_tile_idx = t;
+        prev_slot = slot;
+    }
+    /* Last tile has no successor to overlap with -- argmax it now. */
+    if (have_prev) {
+        argmax_tile_into_output(ctx, prev_tile_idx, tile_dst_buf[prev_slot]);
+    }
 }
 #endif /* !ACCEL_LOOPBACK */
 
@@ -408,14 +529,14 @@ static err_t recv_callback(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_
                             LOG_ERR("ERROR: not a batch IMG3 header (bad magic/size)\r\n");
                             return ERR_OK;
                         }
-                        if (hdr.payload_length != ACCEL_INPUT_BYTES) {
-                            LOG_ERR("ERROR: payload_length=%u, accelerator requires exactly %u bytes\r\n",
-                                    (unsigned)hdr.payload_length, (unsigned)ACCEL_INPUT_BYTES);
+                        if (hdr.payload_length != NETWORK_INPUT_BYTES) {
+                            LOG_ERR("ERROR: payload_length=%u, server requires exactly %u bytes (512x512 image)\r\n",
+                                    (unsigned)hdr.payload_length, (unsigned)NETWORK_INPUT_BYTES);
                             return ERR_OK;
                         }
 
-                        ctx->expected_input_bytes = ACCEL_INPUT_BYTES;
-                        ctx->expected_output_bytes = ACCEL_OUTPUT_BYTES;
+                        ctx->expected_input_bytes = NETWORK_INPUT_BYTES;
+                        ctx->expected_output_bytes = NETWORK_OUTPUT_BYTES;
 
                         LOG_L3("Received IMG3 header: %luB in / %luB out per image (w=%lu h=%lu)\r\n",
                                (unsigned long)ctx->expected_input_bytes,
@@ -582,9 +703,9 @@ static err_t poll_callback(void *arg, struct tcp_pcb *tpcb)
         }
 
 #if ACCEL_LOOPBACK
-        /* No bitstream loaded -- echo the input straight back, zero-padded
-         * out to the accelerator's fixed 6x output size, instead of driving
-         * idma0/odma0. */
+        /* No bitstream loaded -- echo the input straight back (truncated to
+         * the class-map's 1 byte/pixel size) instead of driving idma0/odma0
+         * and tiling/argmax'ing. Structural smoke test only. */
         {
             uint32_t copy_len = MIN(ctx->expected_input_bytes, ctx->expected_output_bytes);
             memcpy(ctx->pixel_buf_dst, ctx->pixel_buf_src, copy_len);
@@ -601,64 +722,29 @@ static err_t poll_callback(void *arg, struct tcp_pcb *tpcb)
         send_next_output_chunk(tpcb, ctx);
         return ERR_OK;
 #else
-        if (!ctx->dma_started) {
-            ctx->dma_started = true;
-            ctx->dma_done = false;
-
-            Xil_DCacheFlushRange((UINTPTR)ctx->pixel_buf_src, ctx->expected_input_bytes);
-            Xil_DCacheInvalidateRange((UINTPTR)ctx->pixel_buf_dst, ctx->expected_output_bytes);
-
-            /* Both engines wait for idle before (re)launch, per driver_base.py. */
-            if (!accel_dma_is_idle((UINTPTR)ODMA0_BASEADDR)) {
-                DEBUG_PRINT("RUN_ACCEL: odma0 not idle yet\r\n");
-                ctx->dma_started = false;
-                return ERR_OK;
-            }
-
-            /* Launch odma0 (drain) first, then idma0 (feed), matching the
-             * reference PYNQ driver's ordering. */
-            accel_dma_start((UINTPTR)ODMA0_BASEADDR, (UINTPTR)ctx->pixel_buf_dst);
-            accel_dma_start((UINTPTR)IDMA0_BASEADDR, (UINTPTR)ctx->pixel_buf_src);
-
-            LOG_L3("RUN_ACCEL: idma0 in=%u bytes, odma0 out=%u bytes\r\n",
-                   (unsigned)ctx->expected_input_bytes,
-                   (unsigned)ctx->expected_output_bytes);
+        /* Whole image processed synchronously in one shot: NUM_TILES 64x64
+         * tiles, each fed through idma0/odma0 and argmax'd into the combined
+         * 512x512 class-id map, with tile N's argmax overlapping tile N+1's
+         * DMA (see run_accel_all_tiles()). */
+        ctx->dma_started = true;
+        ctx->dma_done = false;
 
 #if MONITOR_DMA
-            {
-                uint64_t t_start = timer_get_count();
-                while (!accel_dma_is_done((UINTPTR)ODMA0_BASEADDR)) { }
-                uint64_t elapsed_ticks = timer_get_count() - t_start;
-                uint64_t elapsed_us = elapsed_ticks * 1000000ULL / timer_get_freq_hz();
-                LOG_L3("RUN_ACCEL done: bytes=%u time=%llu us\r\n",
-                       (unsigned)ctx->expected_output_bytes,
-                       (unsigned long long)elapsed_us);
-            }
-
-            /* ap_done is read-to-clear (ap_ctrl_hs); the loop above already
-             * consumed it, so re-reading it below would always see 0. */
-            ctx->dma_started = false;
-            ctx->dma_done = true;
-
-            Xil_DCacheInvalidateRange((UINTPTR)ctx->pixel_buf_dst, ctx->expected_output_bytes);
-
-            ctx->tx_offset = 0;
-            ctx->state = SEND_PIXELS;
-            send_next_output_chunk(tpcb, ctx);
-            return ERR_OK;
+        {
+            uint64_t t_start = timer_get_count();
+            run_accel_all_tiles(ctx);
+            uint64_t elapsed_ticks = timer_get_count() - t_start;
+            uint64_t elapsed_us = elapsed_ticks * 1000000ULL / timer_get_freq_hz();
+            LOG_L3("RUN_ACCEL done: %u tiles, image=%ux%u, time=%llu us\r\n",
+                   (unsigned)NUM_TILES, (unsigned)IMAGE_W, (unsigned)IMAGE_H,
+                   (unsigned long long)elapsed_us);
+        }
 #else
-            return ERR_OK;
+        run_accel_all_tiles(ctx);
 #endif
-        }
-
-        if (!accel_dma_is_done((UINTPTR)ODMA0_BASEADDR)) {
-            return ERR_OK;
-        }
 
         ctx->dma_started = false;
         ctx->dma_done = true;
-
-        Xil_DCacheInvalidateRange((UINTPTR)ctx->pixel_buf_dst, ctx->expected_output_bytes);
 
         ctx->tx_offset = 0;
         ctx->state = SEND_PIXELS;

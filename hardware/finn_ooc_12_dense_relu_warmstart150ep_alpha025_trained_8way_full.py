@@ -276,7 +276,14 @@ def build_partition_folding_config(preamble_dir, partition_idx, sdp_node_name, p
     kernel_model = kernel_model.transform(GiveUniqueNodeNames(sdp_node_name + "_"))
     kernel_model = kernel_model.transform(GiveReadableTensorNames())
     kernel_model = step_target_fps_parallelization(kernel_model, dummy_cfg)
-    kernel_model = kernel_model.transform(GiveUniqueNodeNames())
+    # Re-apply the SAME partition prefix (not a blank one) so this dict's keys
+    # match the real build's node names. _build_one_partition_with_folding_and_dsp
+    # names its HLS/catalog IPs with this same "<sdp_node_name>_" prefix so that
+    # combining all 8 partitions into one top.bd never hits a cross-partition
+    # VLNV collision (see finn_gotchas.md, 2026-09-20 MULTI-PARTITION COMBINE
+    # entry) -- if this were left unprefixed, step_apply_folding_config would
+    # silently fail to match any node against the prefixed real-build names.
+    kernel_model = kernel_model.transform(GiveUniqueNodeNames(sdp_node_name + "_"))
 
     all_nodes = list(kernel_model.graph.node)
     name_to_idx = {n.name: i for i, n in enumerate(all_nodes)}

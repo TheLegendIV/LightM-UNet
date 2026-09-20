@@ -6,7 +6,7 @@ noActivation=1, standalone Thresholding_hls/_rtl nodes) exactly like its v2
 sibling -- the preamble output is folding-source-independent and is REUSED
 as-is, do not re-run it.
 
-Folding source is now compression/MILP/artifacts/
+Folding source is now MILP/artifacts/
 12_dense_relu_warmstart150ep_ILP_outputs_v3/layer_bits_folding_
 12_dense_relu_warmstart150ep_joint_alpha0.25_candidatebits468_forcedsp_
 lut50_bram70_dsp90.json (the v3 solve: hard LUT/BRAM/DSP fractions

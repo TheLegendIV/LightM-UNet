@@ -1,0 +1,232 @@
+﻿
+****** Vivado v2022.2 (64-bit)
+  **** SW Build 3671981 on Fri Oct 14 04:59:54 MDT 2022
+  **** IP Build 3669848 on Fri Oct 14 08:30:02 MDT 2022
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+
+source /tmp/_diag_smartconnect_clock.tcl
+# set proj_path /home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.xpr
+# open_project $proj_path
+Scanning sources...
+Finished scanning sources
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/finn-rtllib/memstream'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_0_3lt_icyd/project_AddStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_0_4llx0wyo/project_AddStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_0__3t_lfzs/project_AddStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_0_glh3mxkp/project_AddStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_0_h_q_8gr0/project_AddStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_0_mznoiytd/project_AddStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_0_x3eth4v1/project_AddStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_1_6hbepe7m/project_AddStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_1_9zrli8ws/project_AddStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_1_hcypcrkr/project_AddStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_1_jfv125ec/project_AddStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_1_lx_qu4cm/project_AddStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_1_mbxzzzr9/project_AddStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_2_5r7vgnya/project_AddStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_2_7zc613th/project_AddStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_2_geon6414/project_AddStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_2_jzy0g87y/project_AddStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_2_mhg3f4wu/project_AddStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_2_qtistq98/project_AddStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_3__8kr2f7o/project_AddStreams_hls_3/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_3__vm60b1d/project_AddStreams_hls_3/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_3_ahl_1cf_/project_AddStreams_hls_3/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_3_f6fxopgl/project_AddStreams_hls_3/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_3_rafzg47x/project_AddStreams_hls_3/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_4_jrmrl48h/project_AddStreams_hls_4/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_4_k4txmxlc/project_AddStreams_hls_4/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_5_vn67pqi7/project_AddStreams_hls_5/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_ChannelwiseOp_hls_0_0qhtaa_a/project_ChannelwiseOp_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_0_24192b48/project_DuplicateStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_0_6nri0z12/project_DuplicateStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_0_d8r0i4k0/project_DuplicateStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_0_deplrdll/project_DuplicateStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_0_ewv9vhff/project_DuplicateStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_0_ijy5fbdy/project_DuplicateStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_0_vin142pa/project_DuplicateStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_0_zeq1owju/project_DuplicateStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_1_774cu9cr/project_DuplicateStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_1_cqrdthi1/project_DuplicateStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_1_kflltl93/project_DuplicateStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_1_lobosl9e/project_DuplicateStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_1_mdkki6t1/project_DuplicateStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_1_sqaifzkj/project_DuplicateStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_2_2zlzu7vf/project_DuplicateStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_2_8n3_4is0/project_DuplicateStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_2_9104c4mx/project_DuplicateStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_2_hrgdzabo/project_DuplicateStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_2_jfss0_5_/project_DuplicateStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_2_zi3l0l6o/project_DuplicateStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_3_f6wqgdw4/project_DuplicateStreams_hls_3/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_3_no3sxe19/project_DuplicateStreams_hls_3/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_3_oyt7hae5/project_DuplicateStreams_hls_3/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_3_r9t74f3a/project_DuplicateStreams_hls_3/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_3_trfrk8w6/project_DuplicateStreams_hls_3/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_4_507zdf_c/project_DuplicateStreams_hls_4/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_4_zyel7m2x/project_DuplicateStreams_hls_4/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_5_zi4ev3vl/project_DuplicateStreams_hls_5/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_FMPadding_Pixel_hls_0_4fm5nuk4/project_FMPadding_Pixel_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_FMPadding_Pixel_hls_0_yi7hh_2u/project_FMPadding_Pixel_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_FMPadding_Pixel_hls_0_zhztzs2m/project_FMPadding_Pixel_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_StreamingConcat_hls_0_a0ej9srf/project_StreamingConcat_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_StreamingDataflowPartition_0_IODMA_hls_0_66qk80st/project_StreamingDataflowPartition_0_IODMA_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_StreamingDataflowPartition_2_IODMA_hls_0_38xhtd5o/project_StreamingDataflowPartition_2_IODMA_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_StreamingMaxPool_hls_0_0pvopf1y/project_StreamingMaxPool_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_StreamingMaxPool_hls_0_f12rd6bt/project_StreamingMaxPool_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_StreamingMaxPool_hls_1_0ary3wri/project_StreamingMaxPool_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_UpsampleNearestNeighbour_hls_0_h9_niu46/project_UpsampleNearestNeighbour_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_UpsampleNearestNeighbour_hls_0_zlym0_rx/project_UpsampleNearestNeighbour_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_VVAU_hls_0_oc_zsveh/project_VVAU_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_VVAU_hls_0_q_x60dxt/project_VVAU_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_VVAU_hls_0_x176wtzm/project_VVAU_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_4ti661rj/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_5kxs5a6b/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_6_75nd4k/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_9qynp0ng/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_anxxap8z/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_btoactkv/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_e_z5561z/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_equ121xj/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_ohvum343/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_ydzflm07'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/zynqbuild_partition7/code_gen_ipgen_StreamingDataflowPartition_0_IODMA_hls_0_lyeac82f/project_StreamingDataflowPartition_0_IODMA_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/zynqbuild_partition7/vivado_stitch_proj_bv2ugwy2/ip'.
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository '/tools/Xilinx/Vivado/2022.2/data/ip'.
+WARNING: [IP_Flow 19-3664] IP 'top_xbar_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_xbar_0/top_xbar_0.dcp'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_xbar_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_xbar_0/top_xbar_0_stub.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_xbar_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_xbar_0/top_xbar_0_stub.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_xbar_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_xbar_0/top_xbar_0_sim_netlist.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_xbar_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_xbar_0/top_xbar_0_sim_netlist.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_auto_ds_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_auto_ds_0/top_auto_ds_0.dcp'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_auto_ds_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_auto_ds_0/top_auto_ds_0_stub.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_auto_ds_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_auto_ds_0/top_auto_ds_0_stub.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_auto_ds_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_auto_ds_0/top_auto_ds_0_sim_netlist.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_auto_ds_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_auto_ds_0/top_auto_ds_0_sim_netlist.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_auto_pc_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_auto_pc_0/top_auto_pc_0.dcp'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_auto_pc_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_auto_pc_0/top_auto_pc_0_stub.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_auto_pc_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_auto_pc_0/top_auto_pc_0_stub.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_auto_pc_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_auto_pc_0/top_auto_pc_0_sim_netlist.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_auto_pc_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_auto_pc_0/top_auto_pc_0_sim_netlist.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_rst_zynq_ps_100M_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_rst_zynq_ps_100M_0/top_rst_zynq_ps_100M_0.dcp'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_rst_zynq_ps_100M_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_rst_zynq_ps_100M_0/top_rst_zynq_ps_100M_0_stub.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_rst_zynq_ps_100M_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_rst_zynq_ps_100M_0/top_rst_zynq_ps_100M_0_stub.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_rst_zynq_ps_100M_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_rst_zynq_ps_100M_0/top_rst_zynq_ps_100M_0_sim_netlist.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_rst_zynq_ps_100M_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_rst_zynq_ps_100M_0/top_rst_zynq_ps_100M_0_sim_netlist.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_smartconnect_0_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_smartconnect_0_0/top_smartconnect_0_0.dcp'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_smartconnect_0_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_smartconnect_0_0/top_smartconnect_0_0_stub.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_smartconnect_0_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_smartconnect_0_0/top_smartconnect_0_0_stub.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_smartconnect_0_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_smartconnect_0_0/top_smartconnect_0_0_sim_netlist.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_smartconnect_0_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_smartconnect_0_0/top_smartconnect_0_0_sim_netlist.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_zynq_ultra_ps_e_0_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_zynq_ultra_ps_e_0_0/top_zynq_ultra_ps_e_0_0.dcp'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_zynq_ultra_ps_e_0_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_zynq_ultra_ps_e_0_0/top_zynq_ultra_ps_e_0_0_stub.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_zynq_ultra_ps_e_0_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_zynq_ultra_ps_e_0_0/top_zynq_ultra_ps_e_0_0_stub.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_zynq_ultra_ps_e_0_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_zynq_ultra_ps_e_0_0/top_zynq_ultra_ps_e_0_0_sim_netlist.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_zynq_ultra_ps_e_0_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_zynq_ultra_ps_e_0_0/top_zynq_ultra_ps_e_0_0_sim_netlist.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_8_5' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_8_5/top_StreamingDataflowPar_8_5.dcp'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_8_5' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_8_5/top_StreamingDataflowPar_8_5_stub.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_8_5' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_8_5/top_StreamingDataflowPar_8_5_stub.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_8_5' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_8_5/top_StreamingDataflowPar_8_5_sim_netlist.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_8_5' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_8_5/top_StreamingDataflowPar_8_5_sim_netlist.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_0_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_0_0/top_StreamingDataflowPar_0_0.dcp'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_0_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_0_0/top_StreamingDataflowPar_0_0_stub.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_0_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_0_0/top_StreamingDataflowPar_0_0_stub.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_0_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_0_0/top_StreamingDataflowPar_0_0_sim_netlist.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_0_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_0_0/top_StreamingDataflowPar_0_0_sim_netlist.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_10_1' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_10_1/top_StreamingDataflowPar_10_1.dcp'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_10_1' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_10_1/top_StreamingDataflowPar_10_1_stub.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_10_1' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_10_1/top_StreamingDataflowPar_10_1_stub.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_10_1' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_10_1/top_StreamingDataflowPar_10_1_sim_netlist.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_10_1' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_10_1/top_StreamingDataflowPar_10_1_sim_netlist.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_1_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_1_0/top_StreamingDataflowPar_1_0.dcp'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_1_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_1_0/top_StreamingDataflowPar_1_0_stub.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_1_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_1_0/top_StreamingDataflowPar_1_0_stub.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_1_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_1_0/top_StreamingDataflowPar_1_0_sim_netlist.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_1_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_1_0/top_StreamingDataflowPar_1_0_sim_netlist.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_3_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_3_0/top_StreamingDataflowPar_3_0.dcp'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_3_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_3_0/top_StreamingDataflowPar_3_0_stub.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_3_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_3_0/top_StreamingDataflowPar_3_0_stub.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_3_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_3_0/top_StreamingDataflowPar_3_0_sim_netlist.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_3_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_3_0/top_StreamingDataflowPar_3_0_sim_netlist.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_4_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_4_0/top_StreamingDataflowPar_4_0.dcp'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_4_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_4_0/top_StreamingDataflowPar_4_0_stub.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_4_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_4_0/top_StreamingDataflowPar_4_0_stub.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_4_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_4_0/top_StreamingDataflowPar_4_0_sim_netlist.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_4_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_4_0/top_StreamingDataflowPar_4_0_sim_netlist.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_5_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_5_0/top_StreamingDataflowPar_5_0.dcp'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_5_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_5_0/top_StreamingDataflowPar_5_0_stub.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_5_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_5_0/top_StreamingDataflowPar_5_0_stub.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_5_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_5_0/top_StreamingDataflowPar_5_0_sim_netlist.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_5_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_5_0/top_StreamingDataflowPar_5_0_sim_netlist.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_6_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_6_0/top_StreamingDataflowPar_6_0.dcp'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_6_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_6_0/top_StreamingDataflowPar_6_0_stub.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_6_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_6_0/top_StreamingDataflowPar_6_0_stub.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_6_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_6_0/top_StreamingDataflowPar_6_0_sim_netlist.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_6_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_6_0/top_StreamingDataflowPar_6_0_sim_netlist.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_7_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_7_0/top_StreamingDataflowPar_7_0.dcp'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_7_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_7_0/top_StreamingDataflowPar_7_0_stub.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_7_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_7_0/top_StreamingDataflowPar_7_0_stub.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_7_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_7_0/top_StreamingDataflowPar_7_0_sim_netlist.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_7_0' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_7_0/top_StreamingDataflowPar_7_0_sim_netlist.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_8_3' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_8_3/top_StreamingDataflowPar_8_3.dcp'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_8_3' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_8_3/top_StreamingDataflowPar_8_3_stub.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_8_3' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_8_3/top_StreamingDataflowPar_8_3_stub.vhdl'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_8_3' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_8_3/top_StreamingDataflowPar_8_3_sim_netlist.v'. Please regenerate to continue.
+WARNING: [IP_Flow 19-3664] IP 'top_StreamingDataflowPar_8_3' generated file not found '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.gen/sources_1/bd/top/ip/top_StreamingDataflowPar_8_3/top_StreamingDataflowPar_8_3_sim_netlist.vhdl'. Please regenerate to continue.
+open_project: Time (s): cpu = 00:00:24 ; elapsed = 00:00:26 . Memory (MB): peak = 1389.059 ; gain = 136.250 ; free physical = 32772 ; free virtual = 63389
+# open_bd_design [get_files top.bd]
+Reading block design file </home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.srcs/sources_1/bd/top/top.bd>...
+Adding component instance block -- xilinx.com:ip:axi_interconnect:2.1 - axi_interconnect_0
+Adding component instance block -- xilinx.com:ip:axi_crossbar:2.1 - xbar
+Adding component instance block -- xilinx.com:ip:axi_dwidth_converter:2.1 - auto_ds
+Adding component instance block -- xilinx.com:ip:axi_protocol_converter:2.1 - auto_pc
+Adding component instance block -- xilinx.com:ip:proc_sys_reset:5.0 - rst_zynq_ps_100M
+Adding component instance block -- xilinx.com:ip:smartconnect:1.0 - smartconnect_0
+Adding component instance block -- xilinx.com:ip:zynq_ultra_ps_e:3.4 - zynq_ultra_ps_e_0
+Adding component instance block -- xilinx_finn:finn:StreamingDataflowPartition_2_zynqp7_odma:1.0 - StreamingDataflowPar_8
+Adding component instance block -- xilinx_finn:finn:StreamingDataflowPartition_0:1.0 - StreamingDataflowPar_0
+Adding component instance block -- xilinx_finn:finn:StreamingDataflowPartition_2:1.0 - StreamingDataflowPar_2
+Adding component instance block -- xilinx_finn:finn:StreamingDataflowPartition_1:1.0 - StreamingDataflowPar_1
+Adding component instance block -- xilinx_finn:finn:StreamingDataflowPartition_3:1.0 - StreamingDataflowPar_3
+Adding component instance block -- xilinx_finn:finn:StreamingDataflowPartition_4:1.0 - StreamingDataflowPar_4
+Adding component instance block -- xilinx_finn:finn:StreamingDataflowPartition_5:1.0 - StreamingDataflowPar_5
+Adding component instance block -- xilinx_finn:finn:StreamingDataflowPartition_6:1.0 - StreamingDataflowPar_6
+Adding component instance block -- xilinx_finn:finn:StreamingDataflowPartition_7:1.0 - StreamingDataflowPar_7
+Adding component instance block -- xilinx_finn:finn:StreamingDataflowPartition_0_zynqp0_idma:1.0 - StreamingDataflowPar_9
+Successfully read diagram <top> from block design file </home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.srcs/sources_1/bd/top/top.bd>
+# puts "=== smartconnect_0 pins ==="
+=== smartconnect_0 pins ===
+# foreach pin [get_bd_intf_pins -of_objects [get_bd_cells /smartconnect_0]] {
+#     puts "  $pin"
+# }
+  /smartconnect_0/M00_AXI
+  /smartconnect_0/S00_AXI
+  /smartconnect_0/S01_AXI
+# puts "=== what's connected to /smartconnect_0/S01_AXI ==="
+=== what's connected to /smartconnect_0/S01_AXI ===
+# set net [get_bd_intf_nets -of_objects [get_bd_intf_pins /smartconnect_0/S01_AXI]]
+# puts "net: $net"
+net: /odma0_m_axi_gmem0
+# set pins [get_bd_intf_pins -of_objects $net]
+# puts "pins on net: $pins"
+pins on net: /StreamingDataflowPar_9/m_axi_gmem0 /smartconnect_0/S01_AXI
+# puts "=== FREQ_HZ on all clk pins of interest ==="
+=== FREQ_HZ on all clk pins of interest ===
+# foreach cellname {StreamingDataflowPar_8 StreamingDataflowPar_9 smartconnect_0 zynq_ultra_ps_e_0} {
+#     set clkpins [get_bd_pins -of_objects [get_bd_cells /$cellname] -filter {TYPE==clk}]
+#     foreach cp $clkpins {
+#         if {[catch {set f [get_property CONFIG.FREQ_HZ $cp]} err]} {
+#             puts "  $cp  FREQ_HZ=<none/err: $err>"
+#         } else {
+#             puts "  $cp  FREQ_HZ=$f"
+#         }
+#     }
+# }
+  /StreamingDataflowPar_8/ap_clk  FREQ_HZ=99990005
+  /StreamingDataflowPar_9/ap_clk  FREQ_HZ=100000000
+  /smartconnect_0/aclk  FREQ_HZ=99990005
+  /zynq_ultra_ps_e_0/maxihpm0_fpd_aclk  FREQ_HZ=99990005
+  /zynq_ultra_ps_e_0/pl_clk0  FREQ_HZ=99990005
+  /zynq_ultra_ps_e_0/saxihp0_fpd_aclk  FREQ_HZ=99990005
+INFO: [Common 17-206] Exiting Vivado at Sun Sep 20 04:01:09 2026...

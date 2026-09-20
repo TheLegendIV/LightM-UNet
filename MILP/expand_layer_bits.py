@@ -43,7 +43,7 @@ join, contributes to) that exact wire:
         is the block's own raw INPUT -- i.e. whatever fed its OWN first
         conv (reduce.0 / conv.0) from OUTSIDE the block. That IS a real
         cross-block relationship, resolved via
-        compression/MILP/layer_topology.compute_predecessor_map on a plain
+        MILP/layer_topology.compute_predecessor_map on a plain
         FP32 mirror (dataflow topology is identical between the FP32 and
         Brevitas-quantized architectures -- an already-established,
         verified property of this codebase).
@@ -57,10 +57,10 @@ aggregation rule for the same reason: a wire is only as safe to compress as
 its most sensitive/demanding real contributor.
 
 Usage:
-    python compression/MILP/expand_layer_bits.py \\
+    python MILP/expand_layer_bits.py \\
         --config config_12_separable_dense_relu \\
-        --ilp-result compression/MILP/artifacts/S12_ILP_outputs_perlayer/layer_bits_folding_12_separable_dense_relu_joint_alpha0.5_candidatebits468_maxlat1000ms.json \\
-        --out-file compression/MILP/artifacts/S12_ILP_outputs_perlayer/layer_bits_SITES_12_separable_dense_relu_joint_alpha0.5_candidatebits468_maxlat1000ms.json
+        --ilp-result MILP/artifacts/S12_ILP_outputs_perlayer/layer_bits_folding_12_separable_dense_relu_joint_alpha0.5_candidatebits468_maxlat1000ms.json \\
+        --out-file MILP/artifacts/S12_ILP_outputs_perlayer/layer_bits_SITES_12_separable_dense_relu_joint_alpha0.5_candidatebits468_maxlat1000ms.json
 """
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from layer_topology import compute_predecessor_map  # noqa: E402
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 PACKAGE_ROOT = REPO_ROOT / "enet"
 sys.path.insert(0, str(PACKAGE_ROOT))
 from nnunetv2.nets.ENet import ENet  # noqa: E402
@@ -192,7 +192,7 @@ def expand_layer_bits_to_site_bits(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", default="config_12_separable_dense_relu",
-                         help="Which compression/MILP/config_*.py to load -- defines the architecture shape "
+                         help="Which MILP/config_*.py to load -- defines the architecture shape "
                               "layer_names_for/compute_predecessor_map need (must match the ILP result's own).")
     parser.add_argument("--ilp-result", type=Path, required=True,
                          help="A layer_bits_folding_*.json from joint_bits_folding_ilp_perlayer.py.")

@@ -13,7 +13,7 @@ Two figures:
   2. <prefix>_forcedsp_lut70_dice_vs_latency.png -- the actual accuracy/
      latency Pareto tradeoff this alpha sweep exists to explore: epoch-15
      dice vs. each alpha's own ILP-predicted latency (from
-     compression/MILP/artifacts/<Prefix>_ILP_outputs_perlayer_forcedsp_lut70/
+     MILP/artifacts/<Prefix>_ILP_outputs_perlayer_forcedsp_lut70/
      summary.csv -- see finn_milp.py's own _update_sweep_summary), all 5
      points sharing the SAME real hard 70% LUT budget.
 

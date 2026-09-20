@@ -21,11 +21,11 @@ favorably) rather than the one asked (at the SAME hardware structure, does
 smarter bit allocation beat uniform).
 
 Usage:
-    python compression/MILP/uniform_bits_same_folding.py \\
+    python MILP/uniform_bits_same_folding.py \\
         --config config_12_dense_relu_warmstart150ep \\
-        --reference-ilp-result compression/MILP/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.25_candidatebits468_forcedsp_lut70.json \\
+        --reference-ilp-result MILP/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.25_candidatebits468_forcedsp_lut70.json \\
         --uniform-bits 4,6,8 \\
-        --out-dir compression/MILP/artifacts/12_dense_relu_warmstart150ep_uniform_samefolding_alpha0.25
+        --out-dir MILP/artifacts/12_dense_relu_warmstart150ep_uniform_samefolding_alpha0.25
 """
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ import json
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 PACKAGE_ROOT = REPO_ROOT / "enet"
 sys.path.insert(0, str(PACKAGE_ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))

@@ -76,13 +76,14 @@ sys.argv = _real_argv
 # Reuse the already-proven, already-validated bridge/folding logic for this
 # exact architecture (S12/12_dense_relu_warmstart150ep_alpha025, per-layer
 # HAWQ) -- module import only, does not trigger that script's own main().
-# NOTE: build_partition_folding_config's folding_config dict keys come from
-# the FINAL (unprefixed) GiveUniqueNodeNames() call inside that function
-# (the earlier prefixed one gets overwritten before node.name is ever read)
-# -- so its output keys already match the plain, unprefixed node names this
-# script's own step_reapply_unique_names produces below. Verified by reading
-# that function's body before reuse; do not "fix" the prefix without
-# re-checking this invariant still holds.
+# NOTE: build_partition_folding_config's folding_config dict keys now carry
+# the SAME partition prefix ("<sdp_node0.name>_") as the real HLS/catalog IP
+# names produced below by make_step_reapply_unique_names -- both MUST use the
+# identical prefix string or step_apply_folding_config silently fails to
+# match any node. The prefix also keeps this partition's HLS child-IP VLNVs
+# from colliding with the other 7 partitions' identically op-typed IPs if/when
+# all 8 are combined into one top.bd later (see finn_gotchas.md, 2026-09-20
+# MULTI-PARTITION COMBINE entry).
 from finn_ooc_12_dense_relu_warmstart150ep_alpha025_trained_8way_full import (  # noqa: E402
     load_all_partition_logical_names,
     build_partition_folding_config,
@@ -98,11 +99,16 @@ BOARD = "ZCU104"  # real FINN board-file name for this chip family (xczu7ev);
 PARTITION_IDX = 0
 
 
-def step_reapply_unique_names(model, cfg):
-    # step_specialize_layers leaves every new HLS/RTL node's .name == "",
-    # which crashes HLSSynthIP's set_top with an empty top-level function
-    # name -- same fix as finn_zynqbuild_minimal_1bneck_int8.py.
-    return model.transform(GiveUniqueNodeNames())
+def make_step_reapply_unique_names(node_prefix):
+    def step_reapply_unique_names(model, cfg):
+        # step_specialize_layers leaves every new HLS/RTL node's .name == "",
+        # which crashes HLSSynthIP's set_top with an empty top-level function
+        # name -- same fix as finn_zynqbuild_minimal_1bneck_int8.py. The
+        # partition-unique prefix additionally keeps this partition's HLS
+        # catalog IPs from colliding with sibling partitions' identically
+        # op-typed IPs once combined into one top.bd.
+        return model.transform(GiveUniqueNodeNames(node_prefix))
+    return step_reapply_unique_names
 
 
 def main():
@@ -138,6 +144,7 @@ def main():
     sdp_node0 = sdp_nodes[PARTITION_IDX]
     partition0_raw_fn = getCustomOp(sdp_node0).get_nodeattr("model")
     print(f"Partition {PARTITION_IDX} raw model: {partition0_raw_fn}")
+    node_prefix = sdp_node0.name + "_"  # must match build_partition_folding_config's own prefix exactly
 
     # ── Step B: derive partition 0's bridged HAWQ folding config (identical
     # logic to the 8-way build, just for partition 0 alone) ────────────────
@@ -162,7 +169,7 @@ def main():
     partition0_zynq_steps = [
         "step_create_dataflow_partition",
         "step_specialize_layers",
-        step_reapply_unique_names,
+        make_step_reapply_unique_names(node_prefix),
         "step_target_fps_parallelization",
         "step_apply_folding_config",
         "step_minimize_bit_width",

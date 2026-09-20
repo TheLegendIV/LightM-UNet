@@ -162,12 +162,12 @@ stream. expand_layer_bits.py is the separate, later bridge that expands
 this file's output into that full per-site schema for actual deployment.
 
 Usage:
-    python compression/MILP/finn_milp.py \\
+    python MILP/finn_milp.py \\
         --config config_12_dense_relu_warmstart150ep \\
-        --sensitivity-file compression/MILP/artifacts/layer_sensitivity_12_dense_relu_warmstart150ep.json \\
+        --sensitivity-file MILP/artifacts/layer_sensitivity_12_dense_relu_warmstart150ep.json \\
         --candidate-bits 4,6,8 --alpha 0.25 \\
         --hard-lut-fraction 0.7 --force-dsp \\
-        --out-file compression/MILP/artifacts/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.25.json
+        --out-file MILP/artifacts/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.25.json
 """
 from __future__ import annotations
 
@@ -189,7 +189,7 @@ from finn_cost_model import (  # noqa: E402
 )
 from layer_topology import compute_predecessor_map  # noqa: E402 -- the predecessor-correction fix
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 PACKAGE_ROOT = REPO_ROOT / "enet"
 sys.path.insert(0, str(PACKAGE_ROOT))
 from nnunetv2.nets.ENet import ENet  # noqa: E402
@@ -842,10 +842,10 @@ def _update_sweep_summary(out_dir: Path, args: argparse.Namespace, result: dict)
                   f"now be inconsistent across alphas (mixed hard caps/config/etc).")
     run_args = {
         "pipeline": [
-            "compression/MILP/layer_sensitivity.py --candidate-bits ...",
-            "compression/MILP/finn_milp.py --candidate-bits ... --hard-lut-fraction ... --hard-bram-fraction ... "
+            "MILP/layer_sensitivity.py --candidate-bits ...",
+            "MILP/finn_milp.py --candidate-bits ... --hard-lut-fraction ... --hard-bram-fraction ... "
             "--hard-dsp-fraction ... --force-dsp",
-            "compression/MILP/expand_layer_bits.py",
+            "MILP/expand_layer_bits.py",
         ],
         "shared_args": shared_args,
         "alphas": sorted(set(existing_alphas) | {args.alpha}),
@@ -861,7 +861,7 @@ def _update_sweep_summary(out_dir: Path, args: argparse.Namespace, result: dict)
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", required=True,
-                         help="Which compression/MILP/config_*.py to load -- e.g. config_12_dense_relu_warmstart150ep.")
+                         help="Which MILP/config_*.py to load -- e.g. config_12_dense_relu_warmstart150ep.")
     parser.add_argument("--sensitivity-file", type=Path, required=True,
                          help="layer_sensitivity_*.json (layer_sensitivity.py output) -- one entry per "
                               "individual Conv2d/ConvTranspose2d layer name.")

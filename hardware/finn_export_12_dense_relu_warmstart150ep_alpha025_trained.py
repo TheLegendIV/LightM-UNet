@@ -66,7 +66,7 @@ sys.path.insert(0, str(REPO_ROOT / "enet"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from nnunetv2.nets.LayerQuantENet import layer_names_for  # noqa: E402
 from nnunetv2.nets.LayerQuantEnetFINN import LayerQuantEnetFINN  # noqa: E402
-from finn_export_s13_leaky_frozen import export_model  # noqa: E402
+from finn_enet_prod_export import export_model  # noqa: E402 -- archived finn_export_s13_leaky_frozen's dynamo=False breaks on torch<2.5
 from finn_export_12_dense_relu_warmstart150ep_alpha025_dummy import (  # noqa: E402
     load_layer_bits, CHANNELS, BOTTLENECKS_PER_STAGE, CONTEXT_PATTERN,
     DEFAULT_BITS_FILE,
@@ -250,6 +250,8 @@ def main() -> None:
     print(f"  forward OK: output shape {tuple(out.shape)}")
 
     name = "quantEnet_12_dense_relu_warmstart150ep_alpha025_trained_int8"
+    if (h, w) != (64, 64):
+        name += f"_{h}x{w}"  # distinct filename -- never overwrite the reference 64x64 export
     export_model(model, name, dummy)
 
     print("\nDone. Copy to FINN container with:")

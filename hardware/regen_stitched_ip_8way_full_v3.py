@@ -21,11 +21,22 @@ Vivado BD integration.
 Usage (inside container, with the new persistent-build-dir env vars):
     docker exec -e HOME=/tmp/home_dir \\
         -e FINN_BUILD_DIR=/home/thelegendiv/finn/notebooks/enet/finn_build_tmp \\
-        <container> python3 regen_stitched_ip_8way_full_v3.py
+        <container> python3 regen_stitched_ip_8way_full_v3.py [--parallel [--workers N]] [partition_idx ...]
+
+With no args, does all 8 partitions sequentially in this one process. With
+partition indices only, builds just those (sequentially, in this process).
+With --parallel, builds the given partitions (default: all 8) using
+concurrent.futures.ProcessPoolExecutor(max_workers=N, default 4) -- waves
+advance automatically as workers free up, no manual re-launching needed.
+Mirrors the original build's own step_build_all_partitions_with_folding_and_
+dsp, which used the same ProcessPoolExecutor(max_workers=4) pattern for this
+exact same per-partition work, proven safe on this host for this network.
 """
+import argparse
 import dataclasses
 import os
 import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 sys.path.insert(0, "/home/thelegendiv/finn/notebooks/enet")
 
@@ -52,7 +63,8 @@ assert os.environ.get("FINN_BUILD_DIR", "").startswith("/home/"), (
 
 cfg = dataclasses.replace(base.cfg_stitched_ip_partitioned_8way, output_dir=OUTPUT_DIR)
 
-for i in range(8):
+
+def build_one_partition(i):
     part_path = os.path.join(PART_DIR, f"partition_{i}.onnx")
     print(f"[partition {i}] loading {part_path}", flush=True)
     model = ModelWrapper(part_path)
@@ -71,5 +83,30 @@ for i in range(8):
     model.save(part_path)
     stitch_proj = model.get_metadata_prop("vivado_stitch_proj")
     print(f"[partition {i}] done, vivado_stitch_proj={stitch_proj}", flush=True)
+    return i, stitch_proj
 
-print("All 8 partitions: stitched IP regenerated.", flush=True)
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--parallel", action="store_true")
+    parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("partitions", type=int, nargs="*")
+    args = parser.parse_args()
+    partitions = args.partitions or list(range(8))
+
+    if args.parallel:
+        print(f"Building partitions {partitions} in parallel, max_workers={args.workers}", flush=True)
+        with ProcessPoolExecutor(max_workers=args.workers) as ex:
+            futures = {ex.submit(build_one_partition, i): i for i in partitions}
+            for fut in as_completed(futures):
+                i, stitch_proj = fut.result()
+                print(f"[orchestrator] partition {i} complete: {stitch_proj}", flush=True)
+    else:
+        for i in partitions:
+            build_one_partition(i)
+
+    print(f"Partitions {partitions}: stitched IP regenerated.", flush=True)
+
+
+if __name__ == "__main__":
+    main()

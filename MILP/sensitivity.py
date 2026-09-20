@@ -63,7 +63,7 @@ import numpy as np
 import torch
 from torch import nn
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 PACKAGE_ROOT = REPO_ROOT / "enet"
 sys.path.insert(0, str(PACKAGE_ROOT))
 from nnunetv2.nets.ENet import ENet  # noqa: E402

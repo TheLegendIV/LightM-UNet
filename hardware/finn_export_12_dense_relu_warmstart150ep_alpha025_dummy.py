@@ -60,14 +60,14 @@ sys.path.insert(0, str(REPO_ROOT / "enet"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from nnunetv2.nets.LayerQuantENet import layer_names_for  # noqa: E402
 from nnunetv2.nets.LayerQuantEnetFINN import LayerQuantEnetFINN  # noqa: E402
-from finn_export_s13_leaky_frozen import export_model  # noqa: E402
+from finn_enet_prod_export import export_model  # noqa: E402 -- archived finn_export_s13_leaky_frozen's dynamo=False breaks on torch<2.5
 
 OUT_DIR = Path(__file__).resolve().parent / "outputs" / "finn_exports"
 CHANNELS = (4, 16, 32, 16, 4)          # initial, s1, s23 (shared), s4, s5
 BOTTLENECKS_PER_STAGE = (4, 8, 8, 2, 1)
 CONTEXT_PATTERN = "dense_dilation"
 DEFAULT_BITS_FILE = (
-    REPO_ROOT / "compression" / "hawq" / "artifacts"
+    REPO_ROOT / "compression" / "MILP" / "artifacts"  # moved from compression/hawq/artifacts
     / "12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70"
     / "layer_bits_SITES_12_dense_relu_warmstart150ep_joint_alpha0.25_candidatebits468_forcedsp_lut70.json"
 )

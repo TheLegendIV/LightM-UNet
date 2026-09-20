@@ -1,0 +1,170 @@
+﻿
+****** Vivado v2022.2 (64-bit)
+  **** SW Build 3671981 on Fri Oct 14 04:59:54 MDT 2022
+  **** IP Build 3669848 on Fri Oct 14 08:30:02 MDT 2022
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+
+source /tmp/_fix_ip_repo_paths.tcl
+# set proj_path /home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.xpr
+# open_project $proj_path
+Scanning sources...
+Finished scanning sources
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_StreamingDataflowPartition_0_IODMA_hls_0_66qk80st/project_StreamingDataflowPartition_0_IODMA_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/zynqbuild_partition7/vivado_stitch_proj_bv2ugwy2/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_ydzflm07'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/finn-rtllib/memstream'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_StreamingDataflowPartition_2_IODMA_hls_0_38xhtd5o/project_StreamingDataflowPartition_2_IODMA_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_equ121xj/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_6_75nd4k/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_4ti661rj/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_e_z5561z/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_9qynp0ng/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_ohvum343/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_anxxap8z/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_5kxs5a6b/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_btoactkv/ip'.
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository '/tools/Xilinx/Vivado/2022.2/data/ip'.
+WARNING: [BD 41-1661] One or more IPs have been locked in the design 'top.bd'. Please run report_ip_status for more details and recommendations on how to fix this issue.
+List of locked IPs:
+top_StreamingDataflowPar_7_0
+top_StreamingDataflowPar_8_3
+top_StreamingDataflowPar_5_0
+top_StreamingDataflowPar_4_0
+top_StreamingDataflowPar_0_0
+top_StreamingDataflowPar_1_0
+top_StreamingDataflowPar_3_0
+top_StreamingDataflowPar_6_0
+top_StreamingDataflowPar_10_1
+
+open_project: Time (s): cpu = 00:00:09 ; elapsed = 00:00:10 . Memory (MB): peak = 1375.312 ; gain = 115.562 ; free physical = 67912 ; free virtual = 98479
+# set fp [open /tmp/_resolved_repo_dirs.txt r]
+# set new_dirs [split [string trim [read $fp]] "\n"]
+# close $fp
+# puts "Adding [llength $new_dirs] repo dirs"
+Adding 70 repo dirs
+# set cur [get_property ip_repo_paths [current_project]]
+# set combined [concat $cur $new_dirs]
+# set combined [lsort -unique $combined]
+# set_property ip_repo_paths $combined [current_project]
+# update_ip_catalog -rebuild
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/finn-rtllib/memstream'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_0_3lt_icyd/project_AddStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_0_4llx0wyo/project_AddStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_0__3t_lfzs/project_AddStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_0_glh3mxkp/project_AddStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_0_h_q_8gr0/project_AddStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_0_mznoiytd/project_AddStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_0_x3eth4v1/project_AddStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_1_6hbepe7m/project_AddStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_1_9zrli8ws/project_AddStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_1_hcypcrkr/project_AddStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_1_jfv125ec/project_AddStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_1_lx_qu4cm/project_AddStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_1_mbxzzzr9/project_AddStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_2_5r7vgnya/project_AddStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_2_7zc613th/project_AddStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_2_geon6414/project_AddStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_2_jzy0g87y/project_AddStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_2_mhg3f4wu/project_AddStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_2_qtistq98/project_AddStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_3__8kr2f7o/project_AddStreams_hls_3/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_3__vm60b1d/project_AddStreams_hls_3/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_3_ahl_1cf_/project_AddStreams_hls_3/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_3_f6fxopgl/project_AddStreams_hls_3/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_3_rafzg47x/project_AddStreams_hls_3/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_4_jrmrl48h/project_AddStreams_hls_4/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_4_k4txmxlc/project_AddStreams_hls_4/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_AddStreams_hls_5_vn67pqi7/project_AddStreams_hls_5/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_ChannelwiseOp_hls_0_0qhtaa_a/project_ChannelwiseOp_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_0_24192b48/project_DuplicateStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_0_6nri0z12/project_DuplicateStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_0_d8r0i4k0/project_DuplicateStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_0_deplrdll/project_DuplicateStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_0_ewv9vhff/project_DuplicateStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_0_ijy5fbdy/project_DuplicateStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_0_vin142pa/project_DuplicateStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_0_zeq1owju/project_DuplicateStreams_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_1_774cu9cr/project_DuplicateStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_1_cqrdthi1/project_DuplicateStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_1_kflltl93/project_DuplicateStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_1_lobosl9e/project_DuplicateStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_1_mdkki6t1/project_DuplicateStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_1_sqaifzkj/project_DuplicateStreams_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_2_2zlzu7vf/project_DuplicateStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_2_8n3_4is0/project_DuplicateStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_2_9104c4mx/project_DuplicateStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_2_hrgdzabo/project_DuplicateStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_2_jfss0_5_/project_DuplicateStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_2_zi3l0l6o/project_DuplicateStreams_hls_2/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_3_f6wqgdw4/project_DuplicateStreams_hls_3/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_3_no3sxe19/project_DuplicateStreams_hls_3/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_3_oyt7hae5/project_DuplicateStreams_hls_3/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_3_r9t74f3a/project_DuplicateStreams_hls_3/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_3_trfrk8w6/project_DuplicateStreams_hls_3/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_4_507zdf_c/project_DuplicateStreams_hls_4/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_4_zyel7m2x/project_DuplicateStreams_hls_4/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_DuplicateStreams_hls_5_zi4ev3vl/project_DuplicateStreams_hls_5/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_FMPadding_Pixel_hls_0_4fm5nuk4/project_FMPadding_Pixel_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_FMPadding_Pixel_hls_0_yi7hh_2u/project_FMPadding_Pixel_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_FMPadding_Pixel_hls_0_zhztzs2m/project_FMPadding_Pixel_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_StreamingConcat_hls_0_a0ej9srf/project_StreamingConcat_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_StreamingDataflowPartition_0_IODMA_hls_0_66qk80st/project_StreamingDataflowPartition_0_IODMA_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_StreamingDataflowPartition_2_IODMA_hls_0_38xhtd5o/project_StreamingDataflowPartition_2_IODMA_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_StreamingMaxPool_hls_0_0pvopf1y/project_StreamingMaxPool_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_StreamingMaxPool_hls_0_f12rd6bt/project_StreamingMaxPool_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_StreamingMaxPool_hls_1_0ary3wri/project_StreamingMaxPool_hls_1/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_UpsampleNearestNeighbour_hls_0_h9_niu46/project_UpsampleNearestNeighbour_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_UpsampleNearestNeighbour_hls_0_zlym0_rx/project_UpsampleNearestNeighbour_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_VVAU_hls_0_oc_zsveh/project_VVAU_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_VVAU_hls_0_q_x60dxt/project_VVAU_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/code_gen_ipgen_VVAU_hls_0_x176wtzm/project_VVAU_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_4ti661rj/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_5kxs5a6b/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_6_75nd4k/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_9qynp0ng/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_anxxap8z/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_btoactkv/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_e_z5561z/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_equ121xj/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_ohvum343/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_stitch_proj_ydzflm07'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/zynqbuild_partition7/code_gen_ipgen_StreamingDataflowPartition_0_IODMA_hls_0_lyeac82f/project_StreamingDataflowPartition_0_IODMA_hls_0/sol1/impl/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/zynqbuild_partition7/vivado_stitch_proj_bv2ugwy2/ip'.
+# open_bd_design [get_files top.bd]
+Reading block design file </home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.srcs/sources_1/bd/top/top.bd>...
+Adding component instance block -- xilinx.com:ip:axi_interconnect:2.1 - axi_interconnect_0
+Adding component instance block -- xilinx.com:ip:axi_crossbar:2.1 - xbar
+Adding component instance block -- xilinx.com:ip:axi_dwidth_converter:2.1 - auto_ds
+Adding component instance block -- xilinx.com:ip:axi_protocol_converter:2.1 - auto_pc
+Adding component instance block -- xilinx.com:ip:proc_sys_reset:5.0 - rst_zynq_ps_100M
+Adding component instance block -- xilinx.com:ip:smartconnect:1.0 - smartconnect_0
+Adding component instance block -- xilinx.com:ip:zynq_ultra_ps_e:3.4 - zynq_ultra_ps_e_0
+Adding component instance block -- xilinx_finn:finn:StreamingDataflowPartition_2_zynqp7_odma:1.0 - StreamingDataflowPar_8
+Adding component instance block -- xilinx_finn:finn:StreamingDataflowPartition_0:1.0 - StreamingDataflowPar_0
+Adding component instance block -- xilinx_finn:finn:StreamingDataflowPartition_2:1.0 - StreamingDataflowPar_2
+Adding component instance block -- xilinx_finn:finn:StreamingDataflowPartition_1:1.0 - StreamingDataflowPar_1
+Adding component instance block -- xilinx_finn:finn:StreamingDataflowPartition_3:1.0 - StreamingDataflowPar_3
+Adding component instance block -- xilinx_finn:finn:StreamingDataflowPartition_4:1.0 - StreamingDataflowPar_4
+Adding component instance block -- xilinx_finn:finn:StreamingDataflowPartition_5:1.0 - StreamingDataflowPar_5
+Adding component instance block -- xilinx_finn:finn:StreamingDataflowPartition_6:1.0 - StreamingDataflowPar_6
+Adding component instance block -- xilinx_finn:finn:StreamingDataflowPartition_7:1.0 - StreamingDataflowPar_7
+Adding component instance block -- xilinx_finn:finn:StreamingDataflowPartition_0_zynqp0_idma:1.0 - StreamingDataflowPar_9
+Successfully read diagram <top> from block design file </home/thelegendiv/finn/notebooks/enet/finn_build_tmp/vivado_zynq_proj_ivzy_6_z/finn_zynq_link.srcs/sources_1/bd/top/top.bd>
+# puts "=== report_ip_status (after repo-path fix) ==="
+=== report_ip_status (after repo-path fix) ===
+# report_ip_status -file /tmp/ip_status_after_fix.rpt
+# set fp2 [open /tmp/ip_status_after_fix.rpt r]
+# set content [read $fp2]
+# close $fp2
+# foreach line [split $content "\n"] {
+#     if {[string match "*not found*" $line] || [string match "*locked*" $line] || [string match "*Instance Name*" $line]} {
+#         puts $line
+#     }
+# }
+| Instance Name                                                           | Status                     | Recommendation                    | Change    | IP Name            | IP      | New Version           | New        | Original Part        |
+| top_StreamingDataflowPar_8_3                                            | IP contains locked subcore | Upgrade IP or repackage component | Change    | StreamingDataflowP | 1.0     | 1.0 (Rev. 2)          | Included   | xczu7ev-ffvc1156-2-e |
+# puts "=== end report ==="
+=== end report ===
+INFO: [Common 17-206] Exiting Vivado at Sun Sep 20 03:55:13 2026...
