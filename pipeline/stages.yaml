@@ -1,0 +1,276 @@
+# Machine-readable twin of the per-stage interface table in PIPELINE.md.
+#
+# This is a design artifact, not yet consumed by any runner. `current_script`
+# points at where the process lives today; `target_dir` is the not-yet-created
+# home under pipeline/<NN>_<stage-name>/ per PIPELINE.md's "Target repo layout
+# (proposed)" section. Do not assume target_dir exists on disk.
+#
+# status: existing | placeholder_new | placeholder_rework
+
+schema_version: "1.0"
+scope_note: >
+  This registry targets the S12 dense ENet build specifically. It is not a
+  generalized multi-architecture pipeline schema.
+
+stages:
+  - id: arch_config_selection
+    name: Arch/Config Selection
+    status: existing_manual
+    current_script: null  # manual today: ENET_* env vars chosen by hand
+    target_dir: pipeline/00_arch_config/
+    inputs:
+      - path: compression/configs/best_model.env
+        optional: true
+    outputs:
+      - description: ENET_* env var set (no persisted artifact today)
+    environment: none
+    compute: none
+
+  - id: generate_training_job
+    name: Generate Training Job
+    status: placeholder_new
+    current_script: null  # today: hand-authored compression/slurm/*.job
+    target_dir: pipeline/01_generate_training_job/
+    inputs:
+      - from_stage: arch_config_selection
+    outputs:
+      - pattern: "compression/slurm/{config_name}.job"
+    environment: none
+    compute: none
+
+  - id: preprocess_dataset
+    name: Preprocess Dataset
+    status: existing
+    current_script: nnUNetv2_plan_and_preprocess (installed CLI, enet/nnunetv2/experiment_planning/)
+    target_dir: pipeline/02_preprocess/
+    inputs:
+      - pattern: "data/nnUNet_raw/{dataset}/"
+    outputs:
+      - pattern: "data/nnUNet_preprocessed/{dataset}/plans.json"
+      - pattern: "data/nnUNet_preprocessed/{dataset}/*.npz"
+    environment: conda (enet env)
+    compute: cpu
+
+  - id: train_fp32
+    name: Train Model FP32
+    status: existing
+    current_script: nnUNetv2_train (installed CLI) -tr nnUNetTrainerENet*
+    target_dir: pipeline/03_train_fp32/
+    inputs:
+      - from_stage: preprocess_dataset
+      - from_stage: generate_training_job
+    outputs:
+      - pattern: "$nnUNet_results/{dataset}/{trainer}__{plans}__{config}/fold_{fold}/checkpoint_best.pth"
+      - pattern: "$nnUNet_results/{dataset}/{trainer}__{plans}__{config}/fold_{fold}/checkpoint_final.pth"
+    environment: conda (enet env), SLURM
+    compute: gpu
+
+  - id: archive_and_log
+    name: Archive + Log
+    status: existing
+    current_script: scripts/archive_checkpoint.sh, compression/collect_results.py
+    target_dir: pipeline/04_archive_log/
+    inputs:
+      - from_stage: train_fp32
+    outputs:
+      - pattern: "$MODELS_ARCHIVE_DIR/{trainer}_{dataset}_{timestamp}/"
+      - pattern: "compression/results.csv"
+    environment: bash
+    compute: cpu
+
+  - id: layer_sensitivity_analysis
+    name: Layer Sensitivity Analysis
+    status: existing
+    current_script: compression/MILP/layer_sensitivity.py
+    target_dir: pipeline/05_sensitivity/
+    inputs:
+      - from_stage: archive_and_log
+      - from_stage: preprocess_dataset
+    outputs:
+      - pattern: "compression/MILP/artifacts/**/layer_sensitivity_{config}.json"
+    environment: conda (enet env)
+    compute: gpu
+
+  - id: bitwidth_search_folding_ilp
+    name: Bit-width Search + Folding ILP
+    status: existing
+    current_script: compression/MILP/finn_milp.py
+    target_dir: pipeline/06_bitwidth_folding_ilp/
+    inputs:
+      - from_stage: layer_sensitivity_analysis
+      - path: "compression/MILP/config_{config}.py"
+    outputs:
+      - pattern: "compression/MILP/artifacts/**/layer_bits_folding_{config}_alpha{alpha}.json"
+      - pattern: "compression/MILP/artifacts/**/run_args.json"
+      - pattern: "compression/MILP/artifacts/**/summary.csv"
+    environment: conda (pulp/CBC)
+    compute: cpu
+
+  - id: naive_uniform_baseline
+    name: Naive Uniform-Bit Baseline
+    status: existing
+    current_script: compression/MILP/uniform_bits_same_folding.py
+    target_dir: pipeline/06_bitwidth_folding_ilp/
+    inputs:
+      - from_stage: bitwidth_search_folding_ilp
+    outputs:
+      - pattern: "compression/MILP/artifacts/**/layer_bits_folding_{config}_uniform_int{n}_samefolding.json"
+    environment: conda
+    compute: cpu
+
+  - id: expand_layer_bits
+    name: Expand to Quantizer Sites
+    status: existing
+    current_script: compression/MILP/expand_layer_bits.py
+    target_dir: pipeline/07_expand_bits/
+    inputs:
+      - from_stage: bitwidth_search_folding_ilp
+    outputs:
+      - pattern: "compression/MILP/artifacts/**/layer_bits_SITES_{config}.json"
+    environment: conda
+    compute: cpu
+
+  - id: qat_finetune
+    name: QAT Fine-tune (INT)
+    status: existing
+    current_script: nnUNetv2_train (installed CLI) -tr nnUNetTrainerLayerQuantENet_*_perlayer
+    target_dir: pipeline/08_qat_finetune/
+    inputs:
+      - from_stage: expand_layer_bits
+      - from_stage: train_fp32
+    outputs:
+      - pattern: "$nnUNet_results/{dataset}/{quant_trainer}__{plans}__{config}/fold_{fold}/checkpoint_best.pth"
+    environment: conda (enet env), SLURM
+    compute: gpu
+
+  - id: export_qonnx
+    name: Export to QONNX
+    status: existing
+    current_script: "hardware/finn_export_{config}_..._trained.py"
+    target_dir: pipeline/09_export_qonnx/
+    inputs:
+      - from_stage: qat_finetune
+      - from_stage: expand_layer_bits
+    outputs:
+      - pattern: "hardware/outputs/finn_exports/quantEnet_{config}_..._int8.onnx"
+    environment: conda (enet env)
+    compute: cpu
+
+  - id: conv_order_mapping
+    name: Conv-Order Mapping
+    status: existing
+    current_script: "hardware/finn_hawq_dump_conv_order_{config}.py"
+    target_dir: pipeline/10_conv_order_map/
+    inputs:
+      - from_stage: export_qonnx
+    outputs:
+      - description: conv-order mapping file (json/csv)
+    environment: conda (enet env)
+    compute: cpu
+
+  - id: finn_preamble
+    name: Streamline / Convert-to-HW / Partition
+    status: existing
+    current_script: "hardware/finn_hawq_preamble_{config}_trained.py"
+    target_dir: pipeline/11_finn_preamble/
+    inputs:
+      - from_stage: conv_order_mapping
+    outputs:
+      - pattern: "hardware/outputs/finn_deployment_outputs/{name}_preamble_{timestamp}/"
+    environment: finn_docker
+    compute: cpu
+
+  - id: partition_ip_stitch
+    name: Per-Partition IP-Gen / Stitch
+    status: existing
+    current_script: "hardware/finn_ooc_{config}_8way_full.py"
+    target_dir: pipeline/12_partition_stitch/
+    inputs:
+      - from_stage: finn_preamble
+    outputs:
+      - description: stitched IP per partition
+    environment: finn_docker + vivado
+    compute: cpu
+
+  - id: ooc_synth
+    name: OOC Synthesis + RTL Sim
+    status: existing
+    current_script: "hardware/finn_ooc_{config}_8way_per_partition_synth.py"
+    target_dir: pipeline/13_ooc_synth/
+    inputs:
+      - from_stage: partition_ip_stitch
+    outputs:
+      - pattern: "hardware/outputs/**/report/*.json"
+      - pattern: "hardware/mvau_lut_calibration_dataset.csv"
+    feedback_into: bitwidth_search_folding_ilp  # calibration loop, not a forward dependency
+    environment: finn_docker + vivado
+    compute: cpu
+
+  - id: zynq_bitstream_build
+    name: Full Bitstream Build (Zynq)
+    status: existing
+    current_script: "hardware/finn_zynqbuild_{config}_partition0.py"
+    target_dir: pipeline/14_zynq_bitstream/
+    inputs:
+      - from_stage: partition_ip_stitch
+    outputs:
+      - pattern: "hardware/outputs/**/deploy/*.bit"
+      - pattern: "hardware/outputs/**/deploy/*.xsa"
+      - pattern: "hardware/outputs/**/deploy/driver.py"
+      - pattern: "hardware/outputs/**/deploy/driver_base.py"
+    environment: finn_docker + vivado
+    compute: cpu
+
+  - id: deploy_to_soc
+    name: Deploy Package to SoC
+    status: placeholder_new
+    current_script: null
+    target_dir: pipeline/15_deploy_to_soc/
+    inputs:
+      - from_stage: zynq_bitstream_build
+    outputs:
+      - description: bitfile loaded onto Zynq PL, IP live on the SoC
+    environment: unknown
+    compute: none
+
+  - id: lwip_server
+    name: Bare-metal lwIP TCP Server
+    status: placeholder_rework
+    current_script: deployment/baremetal/lwip/run.c
+    target_dir: pipeline/16_lwip_server/
+    inputs:
+      - from_stage: deploy_to_soc
+      - from_stage: fpga_client
+    outputs:
+      - description: framed result bytes back to host client (FXD/FDXD protocol, TCP port 7)
+    rework_needed: >
+      Currently drives an unrelated accelerator (XGrid_filter/XScatter/XMedian_filter/XCorrect),
+      not the segmentation FINN IP. Must be rewired before this stage is functionally real.
+    environment: baremetal (Zynq PS, no OS)
+    compute: none
+
+  - id: fpga_client
+    name: FPGA Client (host side)
+    status: placeholder_new
+    current_script: null
+    target_dir: pipeline/17_fpga_client/
+    target_location_today: deployment/image_transfer_interface/  # currently empty
+    inputs:
+      - description: host-side image/tensor to send
+    outputs:
+      - description: received result tensor/image + latency log on host
+    protocol: FXD/FDXD framed protocol over TCP port 7, matching lwip_server
+    environment: unknown (host-side)
+    compute: none
+
+  - id: evaluation
+    name: Accuracy/Topology Evaluation
+    status: existing
+    current_script: analysis/501_ARCADE/*.py
+    target_dir: eval/  # cross-cutting, deliberately outside the linear pipeline/ stage chain
+    cross_cutting: true
+    consumes_from_stages: [train_fp32, qat_finetune, fpga_client]
+    outputs:
+      - description: metrics report (csv/json)
+    environment: conda (enet env)
+    compute: cpu

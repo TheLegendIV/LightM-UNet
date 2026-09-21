@@ -1,5 +1,9 @@
 # hardware/ — FINN hardware build pipeline
 
+> See [`../PIPELINE.md`](../PIPELINE.md) for how this subsystem fits into the
+> full pipeline (diagram, artifact interfaces, target repo layout); this file
+> covers implementation detail for the hardware-build stages only.
+
 This folder takes the Brevitas-quantized ENet-family segmentation network,
 makes it FINN-compatible, exports it to QONNX, and runs it through FINN
 (Xilinx/AMD's dataflow-accelerator build framework) targeting a Zynq
