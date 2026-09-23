@@ -1,0 +1,1470 @@
+﻿22:[_shrink_boundary_past_dangling_fork_output] shrinking boundary 12 -> 11: last node DuplicateStreams_1 (DuplicateStreams) has 2 outputs escaping the partition (would collide during FIFO-insertion tensor renaming).
+24:[partition 0] loaded raw model: 10 nodes
+25:[partition 0] 1 weight nodes vs 1 logical names (+1 pool-type, skipped: ['initial.pool'])
+26:[partition 0]  MVAU_rtl_0                     MVAU_rtl     <- initial.conv              (initial.conv             ) PE=1 SIMD=9
+27:[partition 0]  Thresholding_rtl_2             Thresholding_rtl <- initial.conv              (initial.conv             , thr_pe) PE=1
+28:[partition 0] bridged 1 standalone Thresholding node(s) via pe_thr
+29:[partition 0] saved bridged folding config (2 entries): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/12_dense_relu_warmstart150ep_alpha025_trained_rtl_mvau_8way_full_v3_nouram_512x512_20260922_102900/hawq_folding_config_partition0.json
+30:[partition 1] loaded raw model: 82 nodes
+31:[partition 1] 20 weight nodes vs 20 logical names (+2 pool-type, skipped: ['down1.shortcut_pool', 'down2.shortcut_pool'])
+32:[partition 1]  MVAU_rtl_0                     MVAU_rtl     <- down1.shortcut_proj       (derived from down1.{reduce,expand}.0) PE=2 SIMD=16
+33:[partition 1]  MVAU_rtl_1                     MVAU_rtl     <- down1.reduce.0            (down1.reduce.0           ) CLAMPED PE 1->1 (MH=16), SIMD 16->4 (MW=4)
+34:[partition 1]  MVAU_rtl_1                     MVAU_rtl     <- down1.reduce.0            (down1.reduce.0           ) PE=1 SIMD=4
+35:[partition 1]  Thresholding_rtl_0             Thresholding_rtl <- down1.reduce.0            (down1.reduce.0           , thr_pe) PE=1
+36:[partition 1]  MVAU_rtl_2                     MVAU_rtl     <- down1.conv.0              (down1.conv.0             ) PE=1 SIMD=18
+37:[partition 1]  Thresholding_rtl_2             Thresholding_rtl <- down1.conv.0              (down1.conv.0             , thr_pe) PE=1 depth_trigger_bram=999999
+38:[partition 1]  MVAU_rtl_3                     MVAU_rtl     <- down1.expand.0            (down1.expand.0           ) PE=2 SIMD=4
+39:[partition 1]  Thresholding_rtl_3             Thresholding_rtl <- down1.expand.0            (down1.expand.0           , thr_pe) PE=2 depth_trigger_bram=999999
+40:[partition 1]  MVAU_rtl_4                     MVAU_rtl     <- regular1.0.reduce.0       (regular1.0.reduce.0      ) PE=1 SIMD=16
+41:[partition 1]  Thresholding_rtl_7             Thresholding_rtl <- regular1.0.reduce.0       (regular1.0.reduce.0      , thr_pe) PE=1
+42:[partition 1]  MVAU_rtl_5                     MVAU_rtl     <- regular1.0.conv           (regular1.0.conv          ) PE=1 SIMD=18
+43:[partition 1]  Thresholding_rtl_8             Thresholding_rtl <- regular1.0.conv           (regular1.0.conv          , thr_pe) PE=1
+44:[partition 1]  MVAU_rtl_6                     MVAU_rtl     <- regular1.0.expand.0       (regular1.0.expand.0      ) PE=2 SIMD=4
+45:[partition 1]  Thresholding_rtl_9             Thresholding_rtl <- regular1.0.expand.0       (regular1.0.expand.0      , thr_pe) PE=2 depth_trigger_bram=999999
+46:[partition 1]  MVAU_rtl_7                     MVAU_rtl     <- regular1.1.reduce.0       (regular1.1.reduce.0      ) PE=1 SIMD=16
+47:[partition 1]  Thresholding_rtl_13            Thresholding_rtl <- regular1.1.reduce.0       (regular1.1.reduce.0      , thr_pe) PE=1
+48:[partition 1]  MVAU_rtl_8                     MVAU_rtl     <- regular1.1.conv           (regular1.1.conv          ) PE=1 SIMD=36
+49:[partition 1]  Thresholding_rtl_14            Thresholding_rtl <- regular1.1.conv           (regular1.1.conv          , thr_pe) PE=1
+50:[partition 1]  MVAU_rtl_9                     MVAU_rtl     <- regular1.1.expand.0       (regular1.1.expand.0      ) PE=2 SIMD=4
+51:[partition 1]  Thresholding_rtl_15            Thresholding_rtl <- regular1.1.expand.0       (regular1.1.expand.0      , thr_pe) PE=2 depth_trigger_bram=999999
+52:[partition 1]  MVAU_rtl_10                    MVAU_rtl     <- regular1.2.reduce.0       (regular1.2.reduce.0      ) PE=1 SIMD=16
+53:[partition 1]  Thresholding_rtl_19            Thresholding_rtl <- regular1.2.reduce.0       (regular1.2.reduce.0      , thr_pe) PE=1
+54:[partition 1]  MVAU_rtl_11                    MVAU_rtl     <- regular1.2.conv           (regular1.2.conv          ) PE=1 SIMD=18
+55:[partition 1]  Thresholding_rtl_20            Thresholding_rtl <- regular1.2.conv           (regular1.2.conv          , thr_pe) PE=1 depth_trigger_bram=999999
+56:[partition 1]  MVAU_rtl_12                    MVAU_rtl     <- regular1.2.expand.0       (regular1.2.expand.0      ) PE=2 SIMD=4
+57:[partition 1]  Thresholding_rtl_21            Thresholding_rtl <- regular1.2.expand.0       (regular1.2.expand.0      , thr_pe) PE=2 depth_trigger_bram=999999
+58:[partition 1]  MVAU_rtl_13                    MVAU_rtl     <- regular1.3.reduce.0       (regular1.3.reduce.0      ) PE=1 SIMD=16
+59:[partition 1]  Thresholding_rtl_25            Thresholding_rtl <- regular1.3.reduce.0       (regular1.3.reduce.0      , thr_pe) PE=1
+60:[partition 1]  MVAU_rtl_14                    MVAU_rtl     <- regular1.3.conv           (regular1.3.conv          ) PE=2 SIMD=12
+61:[partition 1]  Thresholding_rtl_26            Thresholding_rtl <- regular1.3.conv           (regular1.3.conv          , thr_pe) PE=1
+62:[partition 1]  MVAU_rtl_15                    MVAU_rtl     <- regular1.3.expand.0       (regular1.3.expand.0      ) PE=2 SIMD=4
+63:[partition 1]  Thresholding_rtl_27            Thresholding_rtl <- regular1.3.expand.0       (regular1.3.expand.0      , thr_pe) PE=2 depth_trigger_bram=999999
+64:[partition 1]  MVAU_rtl_16                    MVAU_rtl     <- down2.shortcut_proj       (derived from down2.{reduce,expand}.0) PE=1 SIMD=32
+65:[partition 1]  MVAU_rtl_17                    MVAU_rtl     <- down2.reduce.0            (down2.reduce.0           ) CLAMPED PE 1->1 (MH=32), SIMD 32->16 (MW=16)
+66:[partition 1]  MVAU_rtl_17                    MVAU_rtl     <- down2.reduce.0            (down2.reduce.0           ) PE=1 SIMD=16
+67:[partition 1]  Thresholding_rtl_31            Thresholding_rtl <- down2.reduce.0            (down2.reduce.0           , thr_pe) PE=1 depth_trigger_bram=999999
+68:[partition 1]  MVAU_rtl_18                    MVAU_rtl     <- down2.conv.0              (down2.conv.0             ) PE=1 SIMD=24
+69:[partition 1]  Thresholding_rtl_32            Thresholding_rtl <- down2.conv.0              (down2.conv.0             , thr_pe) PE=1 depth_trigger_bram=999999
+70:[partition 1]  MVAU_rtl_19                    MVAU_rtl     <- down2.expand.0            (down2.expand.0           ) PE=1 SIMD=8
+71:[partition 1]  Thresholding_rtl_33            Thresholding_rtl <- down2.expand.0            (down2.expand.0           , thr_pe) PE=1
+72:[partition 1] WARNING: 2 unmatched logical names (derived fallback PE/SIMD applied): ['down1.shortcut_proj', 'down2.shortcut_proj']
+73:[partition 1] bridged 18 standalone Thresholding node(s) via pe_thr
+74:[partition 1] saved bridged folding config (38 entries): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/12_dense_relu_warmstart150ep_alpha025_trained_rtl_mvau_8way_full_v3_nouram_512x512_20260922_102900/hawq_folding_config_partition1.json
+75:[partition 2] loaded raw model: 65 nodes
+76:[partition 2] 15 weight nodes vs 15 logical names (+0 pool-type, skipped: [])
+77:[partition 2]  MVAU_rtl_0                     MVAU_rtl     <- stage2.0.reduce.0         (stage2.0.reduce.0        ) PE=1 SIMD=16
+78:[partition 2]  Thresholding_rtl_3             Thresholding_rtl <- stage2.0.reduce.0         (stage2.0.reduce.0        , thr_pe) PE=1 depth_trigger_bram=999999
+79:[partition 2]  MVAU_rtl_1                     MVAU_rtl     <- stage2.0.conv             (stage2.0.conv            ) PE=1 SIMD=24
+80:[partition 2]  Thresholding_rtl_4             Thresholding_rtl <- stage2.0.conv             (stage2.0.conv            , thr_pe) PE=1 depth_trigger_bram=999999
+81:[partition 2]  MVAU_rtl_2                     MVAU_rtl     <- stage2.0.expand.0         (stage2.0.expand.0        ) PE=1 SIMD=8
+82:[partition 2]  Thresholding_rtl_5             Thresholding_rtl <- stage2.0.expand.0         (stage2.0.expand.0        , thr_pe) PE=1
+83:[partition 2]  MVAU_rtl_3                     MVAU_rtl     <- stage2.1.reduce.0         (stage2.1.reduce.0        ) PE=1 SIMD=16
+84:[partition 2]  Thresholding_rtl_9             Thresholding_rtl <- stage2.1.reduce.0         (stage2.1.reduce.0        , thr_pe) PE=1 depth_trigger_bram=999999
+85:[partition 2]  MVAU_rtl_4                     MVAU_rtl     <- stage2.1.conv             (stage2.1.conv            ) PE=1 SIMD=36
+86:[partition 2]  Thresholding_rtl_10            Thresholding_rtl <- stage2.1.conv             (stage2.1.conv            , thr_pe) PE=1
+87:[partition 2]  MVAU_rtl_5                     MVAU_rtl     <- stage2.1.expand.0         (stage2.1.expand.0        ) PE=1 SIMD=8
+88:[partition 2]  Thresholding_rtl_11            Thresholding_rtl <- stage2.1.expand.0         (stage2.1.expand.0        , thr_pe) PE=1 depth_trigger_bram=999999
+89:[partition 2]  MVAU_rtl_6                     MVAU_rtl     <- stage2.2.reduce.0         (stage2.2.reduce.0        ) PE=1 SIMD=16
+90:[partition 2]  Thresholding_rtl_15            Thresholding_rtl <- stage2.2.reduce.0         (stage2.2.reduce.0        , thr_pe) PE=1
+91:[partition 2]  MVAU_rtl_7                     MVAU_rtl     <- stage2.2.conv             (stage2.2.conv            ) PE=1 SIMD=36
+92:[partition 2]  Thresholding_rtl_16            Thresholding_rtl <- stage2.2.conv             (stage2.2.conv            , thr_pe) PE=1
+93:[partition 2]  MVAU_rtl_8                     MVAU_rtl     <- stage2.2.expand.0         (stage2.2.expand.0        ) PE=2 SIMD=8
+94:[partition 2]  Thresholding_rtl_17            Thresholding_rtl <- stage2.2.expand.0         (stage2.2.expand.0        , thr_pe) PE=2 depth_trigger_bram=999999
+95:[partition 2]  MVAU_rtl_9                     MVAU_rtl     <- stage2.3.reduce.0         (stage2.3.reduce.0        ) PE=1 SIMD=16
+96:[partition 2]  Thresholding_rtl_21            Thresholding_rtl <- stage2.3.reduce.0         (stage2.3.reduce.0        , thr_pe) PE=1 depth_trigger_bram=999999
+97:[partition 2]  MVAU_rtl_10                    MVAU_rtl     <- stage2.3.conv             (stage2.3.conv            ) PE=1 SIMD=24
+98:[partition 2]  Thresholding_rtl_22            Thresholding_rtl <- stage2.3.conv             (stage2.3.conv            , thr_pe) PE=1
+99:[partition 2]  MVAU_rtl_11                    MVAU_rtl     <- stage2.3.expand.0         (stage2.3.expand.0        ) PE=2 SIMD=8
+100:[partition 2]  Thresholding_rtl_23            Thresholding_rtl <- stage2.3.expand.0         (stage2.3.expand.0        , thr_pe) PE=2 depth_trigger_bram=999999
+101:[partition 2]  MVAU_rtl_12                    MVAU_rtl     <- stage2.4.reduce.0         (stage2.4.reduce.0        ) PE=1 SIMD=16
+102:[partition 2]  Thresholding_rtl_27            Thresholding_rtl <- stage2.4.reduce.0         (stage2.4.reduce.0        , thr_pe) PE=1 depth_trigger_bram=999999
+103:[partition 2]  MVAU_rtl_13                    MVAU_rtl     <- stage2.4.conv             (stage2.4.conv            ) PE=1 SIMD=24
+104:[partition 2]  Thresholding_rtl_28            Thresholding_rtl <- stage2.4.conv             (stage2.4.conv            , thr_pe) PE=1 depth_trigger_bram=999999
+105:[partition 2]  MVAU_rtl_14                    MVAU_rtl     <- stage2.4.expand.0         (stage2.4.expand.0        ) PE=2 SIMD=8
+106:[partition 2]  Thresholding_rtl_29            Thresholding_rtl <- stage2.4.expand.0         (stage2.4.expand.0        , thr_pe) PE=2
+107:[partition 2] bridged 15 standalone Thresholding node(s) via pe_thr
+108:[partition 2] saved bridged folding config (30 entries): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/12_dense_relu_warmstart150ep_alpha025_trained_rtl_mvau_8way_full_v3_nouram_512x512_20260922_102900/hawq_folding_config_partition2.json
+109:[partition 3] loaded raw model: 52 nodes
+110:[partition 3] 12 weight nodes vs 12 logical names (+0 pool-type, skipped: [])
+111:[partition 3]  MVAU_rtl_0                     MVAU_rtl     <- stage2.5.reduce.0         (stage2.5.reduce.0        ) PE=1 SIMD=16
+112:[partition 3]  Thresholding_rtl_3             Thresholding_rtl <- stage2.5.reduce.0         (stage2.5.reduce.0        , thr_pe) PE=1 depth_trigger_bram=999999
+113:[partition 3]  MVAU_rtl_1                     MVAU_rtl     <- stage2.5.conv             (stage2.5.conv            ) PE=1 SIMD=36
+114:[partition 3]  Thresholding_rtl_4             Thresholding_rtl <- stage2.5.conv             (stage2.5.conv            , thr_pe) PE=1 depth_trigger_bram=999999
+115:[partition 3]  MVAU_rtl_2                     MVAU_rtl     <- stage2.5.expand.0         (stage2.5.expand.0        ) PE=2 SIMD=8
+116:[partition 3]  Thresholding_rtl_5             Thresholding_rtl <- stage2.5.expand.0         (stage2.5.expand.0        , thr_pe) PE=2 depth_trigger_bram=999999
+117:[partition 3]  MVAU_rtl_3                     MVAU_rtl     <- stage2.6.reduce.0         (stage2.6.reduce.0        ) PE=1 SIMD=16
+118:[partition 3]  Thresholding_rtl_9             Thresholding_rtl <- stage2.6.reduce.0         (stage2.6.reduce.0        , thr_pe) PE=1
+119:[partition 3]  MVAU_rtl_4                     MVAU_rtl     <- stage2.6.conv             (stage2.6.conv            ) PE=1 SIMD=24
+120:[partition 3]  Thresholding_rtl_10            Thresholding_rtl <- stage2.6.conv             (stage2.6.conv            , thr_pe) PE=1
+121:[partition 3]  MVAU_rtl_5                     MVAU_rtl     <- stage2.6.expand.0         (stage2.6.expand.0        ) PE=1 SIMD=8
+122:[partition 3]  Thresholding_rtl_11            Thresholding_rtl <- stage2.6.expand.0         (stage2.6.expand.0        , thr_pe) PE=1
+123:[partition 3]  MVAU_rtl_6                     MVAU_rtl     <- stage2.7.reduce.0         (stage2.7.reduce.0        ) PE=1 SIMD=16
+124:[partition 3]  Thresholding_rtl_15            Thresholding_rtl <- stage2.7.reduce.0         (stage2.7.reduce.0        , thr_pe) PE=1 depth_trigger_bram=999999
+125:[partition 3]  MVAU_rtl_7                     MVAU_rtl     <- stage2.7.conv             (stage2.7.conv            ) PE=1 SIMD=24
+126:[partition 3]  Thresholding_rtl_16            Thresholding_rtl <- stage2.7.conv             (stage2.7.conv            , thr_pe) PE=1
+127:[partition 3]  MVAU_rtl_8                     MVAU_rtl     <- stage2.7.expand.0         (stage2.7.expand.0        ) PE=2 SIMD=8
+128:[partition 3]  Thresholding_rtl_17            Thresholding_rtl <- stage2.7.expand.0         (stage2.7.expand.0        , thr_pe) PE=2
+129:[partition 3]  MVAU_rtl_9                     MVAU_rtl     <- stage3.0.reduce.0         (stage3.0.reduce.0        ) PE=1 SIMD=16
+130:[partition 3]  Thresholding_rtl_21            Thresholding_rtl <- stage3.0.reduce.0         (stage3.0.reduce.0        , thr_pe) PE=1 depth_trigger_bram=999999
+131:[partition 3]  MVAU_rtl_10                    MVAU_rtl     <- stage3.0.conv             (stage3.0.conv            ) PE=1 SIMD=24
+132:[partition 3]  Thresholding_rtl_22            Thresholding_rtl <- stage3.0.conv             (stage3.0.conv            , thr_pe) PE=1
+133:[partition 3]  MVAU_rtl_11                    MVAU_rtl     <- stage3.0.expand.0         (stage3.0.expand.0        ) PE=1 SIMD=8
+134:[partition 3]  Thresholding_rtl_23            Thresholding_rtl <- stage3.0.expand.0         (stage3.0.expand.0        , thr_pe) PE=1 depth_trigger_bram=999999
+135:[partition 3] bridged 12 standalone Thresholding node(s) via pe_thr
+136:[partition 3] saved bridged folding config (24 entries): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/12_dense_relu_warmstart150ep_alpha025_trained_rtl_mvau_8way_full_v3_nouram_512x512_20260922_102900/hawq_folding_config_partition3.json
+137:[partition 4] loaded raw model: 54 nodes
+140:[partition 4] 12 weight nodes vs 12 logical names (+0 pool-type, skipped: [])
+141:[partition 4]  MVAU_rtl_0                     MVAU_rtl     <- stage3.1.reduce.0         (stage3.1.reduce.0        ) PE=1 SIMD=16
+142:[partition 4]  Thresholding_rtl_3             Thresholding_rtl <- stage3.1.reduce.0         (stage3.1.reduce.0        , thr_pe) PE=1 depth_trigger_bram=999999
+143:[partition 4]  MVAU_rtl_1                     MVAU_rtl     <- stage3.1.conv             (stage3.1.conv            ) PE=1 SIMD=36
+144:[partition 4]  Thresholding_rtl_4             Thresholding_rtl <- stage3.1.conv             (stage3.1.conv            , thr_pe) PE=1
+145:[partition 4]  MVAU_rtl_2                     MVAU_rtl     <- stage3.1.expand.0         (stage3.1.expand.0        ) PE=1 SIMD=8
+146:[partition 4]  Thresholding_rtl_5             Thresholding_rtl <- stage3.1.expand.0         (stage3.1.expand.0        , thr_pe) PE=1 depth_trigger_bram=999999
+147:[partition 4]  MVAU_rtl_3                     MVAU_rtl     <- stage3.2.reduce.0         (stage3.2.reduce.0        ) PE=1 SIMD=16
+148:[partition 4]  Thresholding_rtl_9             Thresholding_rtl <- stage3.2.reduce.0         (stage3.2.reduce.0        , thr_pe) PE=1
+149:[partition 4]  MVAU_rtl_4                     MVAU_rtl     <- stage3.2.conv             (stage3.2.conv            ) PE=1 SIMD=24
+150:[partition 4]  Thresholding_rtl_10            Thresholding_rtl <- stage3.2.conv             (stage3.2.conv            , thr_pe) PE=1 depth_trigger_bram=999999
+151:[partition 4]  MVAU_rtl_5                     MVAU_rtl     <- stage3.2.expand.0         (stage3.2.expand.0        ) PE=2 SIMD=8
+152:[partition 4]  Thresholding_rtl_11            Thresholding_rtl <- stage3.2.expand.0         (stage3.2.expand.0        , thr_pe) PE=2 depth_trigger_bram=999999
+153:[partition 4]  MVAU_rtl_6                     MVAU_rtl     <- stage3.3.reduce.0         (stage3.3.reduce.0        ) PE=1 SIMD=16
+154:[partition 4]  Thresholding_rtl_15            Thresholding_rtl <- stage3.3.reduce.0         (stage3.3.reduce.0        , thr_pe) PE=1 depth_trigger_bram=999999
+155:[partition 4]  MVAU_rtl_7                     MVAU_rtl     <- stage3.3.conv             (stage3.3.conv            ) PE=1 SIMD=24
+156:[partition 4]  Thresholding_rtl_16            Thresholding_rtl <- stage3.3.conv             (stage3.3.conv            , thr_pe) PE=1 depth_trigger_bram=999999
+157:[partition 4]  MVAU_rtl_8                     MVAU_rtl     <- stage3.3.expand.0         (stage3.3.expand.0        ) PE=1 SIMD=8
+158:[partition 4]  Thresholding_rtl_17            Thresholding_rtl <- stage3.3.expand.0         (stage3.3.expand.0        , thr_pe) PE=1
+159:[partition 4]  MVAU_rtl_9                     MVAU_rtl     <- stage3.4.reduce.0         (stage3.4.reduce.0        ) PE=1 SIMD=16
+160:[partition 4]  Thresholding_rtl_21            Thresholding_rtl <- stage3.4.reduce.0         (stage3.4.reduce.0        , thr_pe) PE=1 depth_trigger_bram=999999
+161:[partition 4]  MVAU_rtl_10                    MVAU_rtl     <- stage3.4.conv             (stage3.4.conv            ) PE=1 SIMD=24
+162:[partition 4]  Thresholding_rtl_22            Thresholding_rtl <- stage3.4.conv             (stage3.4.conv            , thr_pe) PE=1 depth_trigger_bram=999999
+163:[partition 4]  MVAU_rtl_11                    MVAU_rtl     <- stage3.4.expand.0         (stage3.4.expand.0        ) PE=2 SIMD=8
+164:[partition 4]  Thresholding_rtl_23            Thresholding_rtl <- stage3.4.expand.0         (stage3.4.expand.0        , thr_pe) PE=2 depth_trigger_bram=999999
+165:[partition 4] bridged 12 standalone Thresholding node(s) via pe_thr
+166:[partition 4] saved bridged folding config (24 entries): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/12_dense_relu_warmstart150ep_alpha025_trained_rtl_mvau_8way_full_v3_nouram_512x512_20260922_102900/hawq_folding_config_partition4.json
+167:[partition 5] loaded raw model: 57 nodes
+168:[partition 5] 14 weight nodes vs 14 logical names (+0 pool-type, skipped: [])
+169:[partition 5]  MVAU_rtl_0                     MVAU_rtl     <- stage3.5.reduce.0         (stage3.5.reduce.0        ) PE=1 SIMD=16
+170:[partition 5]  Thresholding_rtl_1             Thresholding_rtl <- stage3.5.reduce.0         (stage3.5.reduce.0        , thr_pe) PE=1
+171:[partition 5]  MVAU_rtl_1                     MVAU_rtl     <- stage3.5.conv             (stage3.5.conv            ) PE=1 SIMD=36
+172:[partition 5]  Thresholding_rtl_2             Thresholding_rtl <- stage3.5.conv             (stage3.5.conv            , thr_pe) PE=1 depth_trigger_bram=999999
+173:[partition 5]  MVAU_rtl_2                     MVAU_rtl     <- stage3.5.expand.0         (stage3.5.expand.0        ) PE=1 SIMD=8
+174:[partition 5]  Thresholding_rtl_3             Thresholding_rtl <- stage3.5.expand.0         (stage3.5.expand.0        , thr_pe) PE=1
+175:[partition 5]  MVAU_rtl_3                     MVAU_rtl     <- stage3.6.reduce.0         (stage3.6.reduce.0        ) PE=1 SIMD=16
+176:[partition 5]  Thresholding_rtl_7             Thresholding_rtl <- stage3.6.reduce.0         (stage3.6.reduce.0        , thr_pe) PE=1 depth_trigger_bram=999999
+177:[partition 5]  MVAU_rtl_4                     MVAU_rtl     <- stage3.6.conv             (stage3.6.conv            ) PE=1 SIMD=36
+178:[partition 5]  Thresholding_rtl_8             Thresholding_rtl <- stage3.6.conv             (stage3.6.conv            , thr_pe) PE=1
+179:[partition 5]  MVAU_rtl_5                     MVAU_rtl     <- stage3.6.expand.0         (stage3.6.expand.0        ) PE=2 SIMD=8
+180:[partition 5]  Thresholding_rtl_9             Thresholding_rtl <- stage3.6.expand.0         (stage3.6.expand.0        , thr_pe) PE=2 depth_trigger_bram=999999
+181:[partition 5]  MVAU_rtl_6                     MVAU_rtl     <- stage3.7.reduce.0         (stage3.7.reduce.0        ) PE=1 SIMD=16
+182:[partition 5]  Thresholding_rtl_13            Thresholding_rtl <- stage3.7.reduce.0         (stage3.7.reduce.0        , thr_pe) PE=1
+183:[partition 5]  MVAU_rtl_7                     MVAU_rtl     <- stage3.7.conv             (stage3.7.conv            ) PE=1 SIMD=24
+184:[partition 5]  Thresholding_rtl_14            Thresholding_rtl <- stage3.7.conv             (stage3.7.conv            , thr_pe) PE=1
+185:[partition 5]  MVAU_rtl_8                     MVAU_rtl     <- stage3.7.expand.0         (stage3.7.expand.0        ) PE=1 SIMD=8
+186:[partition 5]  Thresholding_rtl_15            Thresholding_rtl <- stage3.7.expand.0         (stage3.7.expand.0        , thr_pe) PE=1 depth_trigger_bram=999999
+187:[partition 5]  MVAU_rtl_9                     MVAU_rtl     <- up4.main_proj.0           (up4.main_proj.0          ) PE=1 SIMD=32
+188:[partition 5]  Thresholding_rtl_19            Thresholding_rtl <- up4.main_proj.0           (up4.main_proj.0          , thr_pe) PE=1
+189:[partition 5]  MVAU_rtl_10                    MVAU_rtl     <- up4.main_up.1             (derived from up4.{reduce,expand}.0) PE=2 SIMD=16
+190:[partition 5]  VVAU_hls_0                     VVAU_hls     <- up4.reduce.0              (up4.reduce.0             ) CLAMPED PE 1->1 (MH=16), SIMD 16->9 (MW=9)
+191:[partition 5]  VVAU_hls_0                     VVAU_hls     <- up4.reduce.0              (up4.reduce.0             ) PE=1 SIMD=9
+192:[partition 5]  Thresholding_rtl_20            Thresholding_rtl <- up4.reduce.0              (up4.reduce.0             , thr_pe) PE=1 depth_trigger_bram=999999
+193:[partition 5]  MVAU_rtl_11                    MVAU_rtl     <- up4.up.0                  (up4.up.0                 ) PE=1 SIMD=32
+194:[partition 5]  Thresholding_rtl_21            Thresholding_rtl <- up4.up.0                  (up4.up.0                 , thr_pe) PE=1
+195:[partition 5]  MVAU_rtl_12                    MVAU_rtl     <- up4.expand.0              (up4.expand.0             ) PE=2 SIMD=8
+196:[partition 5]  Thresholding_rtl_22            Thresholding_rtl <- up4.expand.0              (up4.expand.0             , thr_pe) PE=2 depth_trigger_bram=999999
+197:[partition 5] WARNING: 1 unmatched logical names (derived fallback PE/SIMD applied): ['up4.main_up.1']
+198:[partition 5] bridged 13 standalone Thresholding node(s) via pe_thr
+199:[partition 5] saved bridged folding config (27 entries): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/12_dense_relu_warmstart150ep_alpha025_trained_rtl_mvau_8way_full_v3_nouram_512x512_20260922_102900/hawq_folding_config_partition5.json
+202:[partition 6] loaded raw model: 46 nodes
+203:[partition 6] 11 weight nodes vs 11 logical names (+0 pool-type, skipped: [])
+204:[partition 6]  MVAU_rtl_0                     MVAU_rtl     <- regular4.0.reduce.0       (regular4.0.reduce.0      ) PE=1 SIMD=16
+205:[partition 6]  Thresholding_rtl_3             Thresholding_rtl <- regular4.0.reduce.0       (regular4.0.reduce.0      , thr_pe) PE=1
+206:[partition 6]  MVAU_rtl_1                     MVAU_rtl     <- regular4.0.conv           (regular4.0.conv          ) PE=1 SIMD=18
+207:[partition 6]  Thresholding_rtl_4             Thresholding_rtl <- regular4.0.conv           (regular4.0.conv          , thr_pe) PE=1
+208:[partition 6]  MVAU_rtl_2                     MVAU_rtl     <- regular4.0.expand.0       (regular4.0.expand.0      ) PE=4 SIMD=4
+209:[partition 6]  Thresholding_rtl_5             Thresholding_rtl <- regular4.0.expand.0       (regular4.0.expand.0      , thr_pe) PE=4 depth_trigger_bram=999999
+210:[partition 6]  MVAU_rtl_3                     MVAU_rtl     <- regular4.1.reduce.0       (regular4.1.reduce.0      ) PE=1 SIMD=16
+211:[partition 6]  Thresholding_rtl_9             Thresholding_rtl <- regular4.1.reduce.0       (regular4.1.reduce.0      , thr_pe) PE=1 depth_trigger_bram=999999
+212:[partition 6]  MVAU_rtl_4                     MVAU_rtl     <- regular4.1.conv           (regular4.1.conv          ) PE=2 SIMD=12
+213:[partition 6]  Thresholding_rtl_10            Thresholding_rtl <- regular4.1.conv           (regular4.1.conv          , thr_pe) PE=1 depth_trigger_bram=999999
+214:[partition 6]  MVAU_rtl_5                     MVAU_rtl     <- regular4.1.expand.0       (regular4.1.expand.0      ) PE=4 SIMD=4
+215:[partition 6]  Thresholding_rtl_11            Thresholding_rtl <- regular4.1.expand.0       (regular4.1.expand.0      , thr_pe) PE=4
+216:[partition 6]  MVAU_rtl_6                     MVAU_rtl     <- up5.main_proj.0           (up5.main_proj.0          ) PE=1 SIMD=16
+217:[partition 6]  Thresholding_rtl_15            Thresholding_rtl <- up5.main_proj.0           (up5.main_proj.0          , thr_pe) PE=1
+218:[partition 6]  MVAU_rtl_7                     MVAU_rtl     <- up5.main_up.1             (derived from up5.{reduce,expand}.0) PE=2 SIMD=16
+219:[partition 6]  VVAU_hls_0                     VVAU_hls     <- up5.reduce.0              (up5.reduce.0             ) CLAMPED PE 1->1 (MH=4), SIMD 16->9 (MW=9)
+220:[partition 6]  VVAU_hls_0                     VVAU_hls     <- up5.reduce.0              (up5.reduce.0             ) PE=1 SIMD=9
+221:[partition 6]  Thresholding_rtl_16            Thresholding_rtl <- up5.reduce.0              (up5.reduce.0             , thr_pe) PE=1 depth_trigger_bram=999999
+222:[partition 6]  MVAU_rtl_8                     MVAU_rtl     <- up5.up.0                  (up5.up.0                 ) PE=2 SIMD=16
+223:[partition 6]  Thresholding_rtl_17            Thresholding_rtl <- up5.up.0                  (up5.up.0                 , thr_pe) PE=2
+224:[partition 6]  MVAU_rtl_9                     MVAU_rtl     <- up5.expand.0              (up5.expand.0             ) PE=2 SIMD=4
+225:[partition 6]  Thresholding_rtl_18            Thresholding_rtl <- up5.expand.0              (up5.expand.0             , thr_pe) PE=2 depth_trigger_bram=999999
+226:[partition 6] WARNING: 1 unmatched logical names (derived fallback PE/SIMD applied): ['up5.main_up.1']
+227:[partition 6] bridged 10 standalone Thresholding node(s) via pe_thr
+228:[partition 6] saved bridged folding config (21 entries): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/12_dense_relu_warmstart150ep_alpha025_trained_rtl_mvau_8way_full_v3_nouram_512x512_20260922_102900/hawq_folding_config_partition6.json
+229:[partition 7] loaded raw model: 20 nodes
+230:[partition 7] 4 weight nodes vs 4 logical names (+0 pool-type, skipped: [])
+231:[partition 7]  MVAU_rtl_0                     MVAU_rtl     <- regular5.0.reduce.0       (regular5.0.reduce.0      ) PE=1 SIMD=4
+232:[partition 7]  Thresholding_rtl_3             Thresholding_rtl <- regular5.0.reduce.0       (regular5.0.reduce.0      , thr_pe) PE=1 depth_trigger_bram=999999
+233:[partition 7]  VVAU_hls_0                     VVAU_hls     <- regular5.0.conv           (regular5.0.conv          ) PE=1 SIMD=9
+234:[partition 7]  Thresholding_rtl_4             Thresholding_rtl <- regular5.0.conv           (regular5.0.conv          , thr_pe) PE=1
+235:[partition 7]  MVAU_rtl_1                     MVAU_rtl     <- regular5.0.expand.0       (regular5.0.expand.0      ) PE=2 SIMD=1
+236:[partition 7]  Thresholding_rtl_5             Thresholding_rtl <- regular5.0.expand.0       (regular5.0.expand.0      , thr_pe) PE=2
+237:[partition 7]  MVAU_rtl_2                     MVAU_rtl     <- final                     (final                    ) PE=5 SIMD=16
+238:[partition 7] bridged 3 standalone Thresholding node(s) via pe_thr
+239:[partition 7] saved bridged folding config (7 entries): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/12_dense_relu_warmstart150ep_alpha025_trained_rtl_mvau_8way_full_v3_nouram_512x512_20260922_102900/hawq_folding_config_partition7.json
+797: 4804 |   finn_design_StreamingFIFO_rtl_0_0 StreamingFIFO_rtl_0
+800: 4814 |   finn_design_StreamingFIFO_rtl_1_0 StreamingFIFO_rtl_1
+803: 4824 |   finn_design_StreamingFIFO_rtl_10_0 StreamingFIFO_rtl_10
+806: 4834 |   finn_design_StreamingFIFO_rtl_11_0 StreamingFIFO_rtl_11
+809: 4844 |   finn_design_StreamingFIFO_rtl_12_0 StreamingFIFO_rtl_12
+812: 4854 |   finn_design_StreamingFIFO_rtl_13_0 StreamingFIFO_rtl_13
+815: 4864 |   finn_design_StreamingFIFO_rtl_2_0 StreamingFIFO_rtl_2
+818: 4874 |   finn_design_StreamingFIFO_rtl_3_0 StreamingFIFO_rtl_3
+821: 4884 |   finn_design_StreamingFIFO_rtl_4_0 StreamingFIFO_rtl_4
+824: 4894 |   finn_design_StreamingFIFO_rtl_5_0 StreamingFIFO_rtl_5
+827: 4904 |   finn_design_StreamingFIFO_rtl_6_0 StreamingFIFO_rtl_6
+830: 4914 |   finn_design_StreamingFIFO_rtl_7_0 StreamingFIFO_rtl_7
+833: 4924 |   finn_design_StreamingFIFO_rtl_8_0 StreamingFIFO_rtl_8
+836: 4934 |   finn_design_StreamingFIFO_rtl_9_0 StreamingFIFO_rtl_9
+974:%Warning-WIDTH: /tmp/finn_dev_thelegendiv/vivado_stitch_proj_wenjmxjc/finn_design_wrapper.v:3183:25: Logical operator LOGAND expects 1 bit on the LHS, but LHS's VARREF 'DEPTH_TRIGGER_URAM' generates 32 bits.
+976: 3183 |      DEPTH_TRIGGER_URAM && (DEPTH >= DEPTH_TRIGGER_URAM)? "ultra" :
+978:%Warning-WIDTH: /tmp/finn_dev_thelegendiv/vivado_stitch_proj_wenjmxjc/finn_design_wrapper.v:3184:25: Logical operator LOGAND expects 1 bit on the LHS, but LHS's VARREF 'DEPTH_TRIGGER_BRAM' generates 32 bits.
+980: 3184 |      DEPTH_TRIGGER_BRAM && (DEPTH >= DEPTH_TRIGGER_BRAM)? "block" :
+982:%Warning-WIDTH: /tmp/finn_dev_thelegendiv/vivado_stitch_proj_wenjmxjc/finn_design_wrapper.v:3186:25: Logical operator LOGAND expects 1 bit on the LHS, but LHS's VARREF 'DEPTH_TRIGGER_BRAM' generates 32 bits.
+984: 3186 |      DEPTH_TRIGGER_BRAM && (DEPTH >= 64)? "distributed" : "auto";
+1000:13925 |        ptr_eff.val == DEPTH-2;
+1100: 2948 |             if (Addr_w == DEPTH-1)
+1104: 2953 |             if (Addr_r == DEPTH-1)
+1132: 3307 |     assert(APtr < $signed(A_DEPTH-1)) else begin
+1355:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_9.inst.impl
+1359:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_9.inst.impl
+1363:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_9.inst.impl
+1367:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_9.inst.impl
+1371:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_9.inst.impl
+1375:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_9.inst.impl
+1379:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_9.inst.impl
+1383:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_9.inst.impl
+1387:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_9.inst.impl
+1391:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_9.inst.impl
+1395:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_9.inst.impl
+1399:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_8.inst.impl
+1403:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_8.inst.impl
+1407:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_8.inst.impl
+1411:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_8.inst.impl
+1415:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_8.inst.impl
+1419:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_8.inst.impl
+1423:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_8.inst.impl
+1427:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_8.inst.impl
+1431:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_8.inst.impl
+1435:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_7.inst.impl
+1436: 1060 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+1439:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_7.inst.impl
+1440: 1117 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+1443:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_7.inst.impl
+1447:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_7.inst.impl
+1451:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_6.inst.impl
+1455:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_6.inst.impl
+1459:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_6.inst.impl
+1463:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_6.inst.impl
+1467:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_6.inst.impl
+1471:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_6.inst.impl
+1475:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_6.inst.impl
+1479:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_6.inst.impl
+1483:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_6.inst.impl
+1487:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_5.inst.impl
+1491:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_5.inst.impl
+1495:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_10.inst.impl
+1499:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_10.inst.impl
+1503:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_10.inst.impl
+1507:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_10.inst.impl
+1511:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_10.inst.impl
+1515:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_10.inst.impl
+1519:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_10.inst.impl
+1523:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_10.inst.impl
+1527:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_10.inst.impl
+1531:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_0.inst.impl
+1532: 1060 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+1535:                                                                                                   : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_0.inst.impl
+1536: 1117 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+3420:26594 |   finn_design_StreamingFIFO_rtl_0_0 StreamingFIFO_rtl_0
+3423:26604 |   finn_design_StreamingFIFO_rtl_1_0 StreamingFIFO_rtl_1
+3426:26614 |   finn_design_StreamingFIFO_rtl_10_0 StreamingFIFO_rtl_10
+3429:26624 |   finn_design_StreamingFIFO_rtl_11_0 StreamingFIFO_rtl_11
+3432:26634 |   finn_design_StreamingFIFO_rtl_12_0 StreamingFIFO_rtl_12
+3435:26644 |   finn_design_StreamingFIFO_rtl_13_0 StreamingFIFO_rtl_13
+3438:26654 |   finn_design_StreamingFIFO_rtl_14_0 StreamingFIFO_rtl_14
+3441:26664 |   finn_design_StreamingFIFO_rtl_15_0 StreamingFIFO_rtl_15
+3444:26674 |   finn_design_StreamingFIFO_rtl_16_0 StreamingFIFO_rtl_16
+3447:26684 |   finn_design_StreamingFIFO_rtl_17_0 StreamingFIFO_rtl_17
+3450:26694 |   finn_design_StreamingFIFO_rtl_18_0 StreamingFIFO_rtl_18
+3453:26704 |   finn_design_StreamingFIFO_rtl_19_0 StreamingFIFO_rtl_19
+3456:26714 |   finn_design_StreamingFIFO_rtl_2_0 StreamingFIFO_rtl_2
+3459:26724 |   finn_design_StreamingFIFO_rtl_20_0 StreamingFIFO_rtl_20
+3462:26734 |   finn_design_StreamingFIFO_rtl_21_0 StreamingFIFO_rtl_21
+3465:26744 |   finn_design_StreamingFIFO_rtl_22_0 StreamingFIFO_rtl_22
+3468:26754 |   finn_design_StreamingFIFO_rtl_23_0 StreamingFIFO_rtl_23
+3471:26764 |   finn_design_StreamingFIFO_rtl_24_0 StreamingFIFO_rtl_24
+3474:26774 |   finn_design_StreamingFIFO_rtl_25_0 StreamingFIFO_rtl_25
+3477:26784 |   finn_design_StreamingFIFO_rtl_26_0 StreamingFIFO_rtl_26
+3480:26794 |   finn_design_StreamingFIFO_rtl_27_0 StreamingFIFO_rtl_27
+3483:26804 |   finn_design_StreamingFIFO_rtl_28_0 StreamingFIFO_rtl_28
+3486:26814 |   finn_design_StreamingFIFO_rtl_29_0 StreamingFIFO_rtl_29
+3489:26824 |   finn_design_StreamingFIFO_rtl_3_0 StreamingFIFO_rtl_3
+3492:26834 |   finn_design_StreamingFIFO_rtl_30_0 StreamingFIFO_rtl_30
+3495:26844 |   finn_design_StreamingFIFO_rtl_31_0 StreamingFIFO_rtl_31
+3498:26854 |   finn_design_StreamingFIFO_rtl_32_0 StreamingFIFO_rtl_32
+3501:26864 |   finn_design_StreamingFIFO_rtl_33_0 StreamingFIFO_rtl_33
+3504:26874 |   finn_design_StreamingFIFO_rtl_34_0 StreamingFIFO_rtl_34
+3507:26884 |   finn_design_StreamingFIFO_rtl_35_0 StreamingFIFO_rtl_35
+3510:26894 |   finn_design_StreamingFIFO_rtl_36_0 StreamingFIFO_rtl_36
+3513:26904 |   finn_design_StreamingFIFO_rtl_37_0 StreamingFIFO_rtl_37
+3516:26914 |   finn_design_StreamingFIFO_rtl_38_0 StreamingFIFO_rtl_38
+3519:26924 |   finn_design_StreamingFIFO_rtl_39_0 StreamingFIFO_rtl_39
+3522:26934 |   finn_design_StreamingFIFO_rtl_4_0 StreamingFIFO_rtl_4
+3525:26944 |   finn_design_StreamingFIFO_rtl_40_0 StreamingFIFO_rtl_40
+3528:26954 |   finn_design_StreamingFIFO_rtl_41_0 StreamingFIFO_rtl_41
+3531:26964 |   finn_design_StreamingFIFO_rtl_42_0 StreamingFIFO_rtl_42
+3534:26974 |   finn_design_StreamingFIFO_rtl_43_0 StreamingFIFO_rtl_43
+3537:26984 |   finn_design_StreamingFIFO_rtl_44_0 StreamingFIFO_rtl_44
+3540:26994 |   finn_design_StreamingFIFO_rtl_45_0 StreamingFIFO_rtl_45
+3543:27004 |   finn_design_StreamingFIFO_rtl_46_0 StreamingFIFO_rtl_46
+3546:27014 |   finn_design_StreamingFIFO_rtl_47_0 StreamingFIFO_rtl_47
+3549:27024 |   finn_design_StreamingFIFO_rtl_48_0 StreamingFIFO_rtl_48
+3552:27034 |   finn_design_StreamingFIFO_rtl_49_0 StreamingFIFO_rtl_49
+3555:27044 |   finn_design_StreamingFIFO_rtl_5_0 StreamingFIFO_rtl_5
+3558:27054 |   finn_design_StreamingFIFO_rtl_50_0 StreamingFIFO_rtl_50
+3561:27064 |   finn_design_StreamingFIFO_rtl_51_0 StreamingFIFO_rtl_51
+3564:27074 |   finn_design_StreamingFIFO_rtl_52_0 StreamingFIFO_rtl_52
+3567:27084 |   finn_design_StreamingFIFO_rtl_53_0 StreamingFIFO_rtl_53
+3570:27094 |   finn_design_StreamingFIFO_rtl_54_0 StreamingFIFO_rtl_54
+3573:27104 |   finn_design_StreamingFIFO_rtl_55_0 StreamingFIFO_rtl_55
+3576:27114 |   finn_design_StreamingFIFO_rtl_56_0 StreamingFIFO_rtl_56
+3579:27124 |   finn_design_StreamingFIFO_rtl_57_0 StreamingFIFO_rtl_57
+3582:27134 |   finn_design_StreamingFIFO_rtl_58_0 StreamingFIFO_rtl_58
+3585:27144 |   finn_design_StreamingFIFO_rtl_59_0 StreamingFIFO_rtl_59
+3588:27154 |   finn_design_StreamingFIFO_rtl_6_0 StreamingFIFO_rtl_6
+3591:27164 |   finn_design_StreamingFIFO_rtl_60_0 StreamingFIFO_rtl_60
+3594:27174 |   finn_design_StreamingFIFO_rtl_61_0 StreamingFIFO_rtl_61
+3597:27184 |   finn_design_StreamingFIFO_rtl_62_0 StreamingFIFO_rtl_62
+3600:27194 |   finn_design_StreamingFIFO_rtl_63_0 StreamingFIFO_rtl_63
+3603:27204 |   finn_design_StreamingFIFO_rtl_64_0 StreamingFIFO_rtl_64
+3606:27214 |   finn_design_StreamingFIFO_rtl_65_0 StreamingFIFO_rtl_65
+3609:27224 |   finn_design_StreamingFIFO_rtl_66_0 StreamingFIFO_rtl_66
+3612:27234 |   finn_design_StreamingFIFO_rtl_67_0 StreamingFIFO_rtl_67
+3615:27244 |   finn_design_StreamingFIFO_rtl_68_0 StreamingFIFO_rtl_68
+3618:27254 |   finn_design_StreamingFIFO_rtl_69_0 StreamingFIFO_rtl_69
+3621:27264 |   finn_design_StreamingFIFO_rtl_7_0 StreamingFIFO_rtl_7
+3624:27274 |   finn_design_StreamingFIFO_rtl_70_0 StreamingFIFO_rtl_70
+3627:27284 |   finn_design_StreamingFIFO_rtl_71_0 StreamingFIFO_rtl_71
+3630:27294 |   finn_design_StreamingFIFO_rtl_72_0 StreamingFIFO_rtl_72
+3633:27304 |   finn_design_StreamingFIFO_rtl_73_0 StreamingFIFO_rtl_73
+3636:27314 |   finn_design_StreamingFIFO_rtl_74_0 StreamingFIFO_rtl_74
+3639:27324 |   finn_design_StreamingFIFO_rtl_75_0 StreamingFIFO_rtl_75
+3642:27334 |   finn_design_StreamingFIFO_rtl_76_0 StreamingFIFO_rtl_76
+3645:27344 |   finn_design_StreamingFIFO_rtl_77_0 StreamingFIFO_rtl_77
+3648:27354 |   finn_design_StreamingFIFO_rtl_78_0 StreamingFIFO_rtl_78
+3651:27364 |   finn_design_StreamingFIFO_rtl_8_0 StreamingFIFO_rtl_8
+3654:27374 |   finn_design_StreamingFIFO_rtl_9_0 StreamingFIFO_rtl_9
+4269: 1572 | module finn_design_StreamingFIFO_rtl_42_0 (
+4281: 2870 | module finn_design_StreamingFIFO_rtl_27_0 (
+4293: 3219 | module finn_design_StreamingFIFO_rtl_78_0 (
+4305: 3453 | module finn_design_StreamingFIFO_rtl_18_0 (
+4326:%Warning-WIDTH: /tmp/finn_dev_thelegendiv/vivado_stitch_proj_wtb19qzn/finn_design_wrapper.v:456:25: Logical operator LOGAND expects 1 bit on the LHS, but LHS's VARREF 'DEPTH_TRIGGER_URAM' generates 32 bits.
+4328:  456 |      DEPTH_TRIGGER_URAM && (DEPTH >= DEPTH_TRIGGER_URAM)? "ultra" :
+4330:%Warning-WIDTH: /tmp/finn_dev_thelegendiv/vivado_stitch_proj_wtb19qzn/finn_design_wrapper.v:457:25: Logical operator LOGAND expects 1 bit on the LHS, but LHS's VARREF 'DEPTH_TRIGGER_BRAM' generates 32 bits.
+4332:  457 |      DEPTH_TRIGGER_BRAM && (DEPTH >= DEPTH_TRIGGER_BRAM)? "block" :
+4334:%Warning-WIDTH: /tmp/finn_dev_thelegendiv/vivado_stitch_proj_wtb19qzn/finn_design_wrapper.v:459:25: Logical operator LOGAND expects 1 bit on the LHS, but LHS's VARREF 'DEPTH_TRIGGER_BRAM' generates 32 bits.
+4336:  459 |      DEPTH_TRIGGER_BRAM && (DEPTH >= 64)? "distributed" : "auto";
+4352:91711 |        ptr_eff.val == DEPTH-2;
+4544:91711 |        ptr_eff.val == DEPTH-2;
+4888:  580 |     assert(APtr < $signed(A_DEPTH-1)) else begin
+4956:  580 |     assert(APtr < $signed(A_DEPTH-1)) else begin
+5307:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_70.inst.impl
+5311:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_70.inst.impl
+5315:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_70.inst.impl
+5319:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_70.inst.impl
+5323:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_70.inst.impl
+5327:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_70.inst.impl
+5331:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_70.inst.impl
+5335:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_70.inst.impl
+5339:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_70.inst.impl
+5343:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_70.inst.impl
+5347:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_70.inst.impl
+5351:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+5355:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+5359:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+5363:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+5367:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+5371:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+5375:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+5379:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+5383:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+5387:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+5391:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+5395:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_55.inst.impl
+5396:  734 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+5399:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_55.inst.impl
+5400:  791 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+5403:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_55.inst.impl
+5407:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_55.inst.impl
+5411:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_50.inst.impl
+5415:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_50.inst.impl
+5419:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_49.inst.impl
+5423:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_49.inst.impl
+5427:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_37.inst.impl
+5428:  734 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+5431:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_37.inst.impl
+5432:  791 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+5435:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_37.inst.impl
+5439:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_37.inst.impl
+5443:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_37.inst.impl
+5447:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_37.inst.impl
+5451:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_37.inst.impl
+5455:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_37.inst.impl
+5459:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_37.inst.impl
+5463:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_37.inst.impl
+5467:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_37.inst.impl
+5471:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_34.inst.impl
+5472:  734 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+5475:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_34.inst.impl
+5476:  791 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+5479:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_34.inst.impl
+5483:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_34.inst.impl
+5487:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_33.inst.impl
+5491:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_33.inst.impl
+5495:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_33.inst.impl
+5499:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_33.inst.impl
+5503:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_33.inst.impl
+5507:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_33.inst.impl
+5511:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_33.inst.impl
+5515:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_33.inst.impl
+5519:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_33.inst.impl
+5523:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_25.inst.impl
+5524:  734 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+5527:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_25.inst.impl
+5528:  791 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+5531:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_25.inst.impl
+5535:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_25.inst.impl
+5539:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_25.inst.impl
+5543:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_25.inst.impl
+5547:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_25.inst.impl
+5551:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_25.inst.impl
+5555:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_25.inst.impl
+5559:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_25.inst.impl
+5563:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_25.inst.impl
+5567:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_18.inst.impl
+5568:  734 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+5571:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_18.inst.impl
+5572:  791 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+5575:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_18.inst.impl
+5579:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_18.inst.impl
+5583:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_18.inst.impl
+5587:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_18.inst.impl
+5591:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_18.inst.impl
+5595:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_18.inst.impl
+5599:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_18.inst.impl
+5603:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_18.inst.impl
+5607:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_18.inst.impl
+5611:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+5615:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+5619:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+5623:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+5627:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+5631:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+5635:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+5639:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+5643:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+5647:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_12.inst.impl
+5651:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_12.inst.impl
+6563:make: Entering directory '/tmp/finn_dev_thelegendiv/verilator_fifosim_pl4vp24_'
+6564:ccache g++  -I.  -MMD -I/usr/local/share/verilator/include -I/usr/local/share/verilator/include/vltstd -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -faligned-new -fcf-protection=none -Wno-bool-operation -Wno-sign-compare -Wno-uninitialized -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-shadow     --std=c++11  -DVL_THREADED -std=gnu++17 -Os -c -o verilator_fifosim.o verilator_fifosim.cpp
+6586:g++    verilator_fifosim.o verilated.o verilated_threads.o Vfinn_design_wrapper__ALL.a    -pthread -lpthread -latomic   -o Vfinn_design_wrapper
+6588:make: Leaving directory '/tmp/finn_dev_thelegendiv/verilator_fifosim_pl4vp24_'
+8092:116687 |   finn_design_StreamingFIFO_rtl_0_0 StreamingFIFO_rtl_0
+8095:116697 |   finn_design_StreamingFIFO_rtl_1_0 StreamingFIFO_rtl_1
+8098:116707 |   finn_design_StreamingFIFO_rtl_10_0 StreamingFIFO_rtl_10
+8101:116717 |   finn_design_StreamingFIFO_rtl_11_0 StreamingFIFO_rtl_11
+8104:116727 |   finn_design_StreamingFIFO_rtl_12_0 StreamingFIFO_rtl_12
+8107:116737 |   finn_design_StreamingFIFO_rtl_13_0 StreamingFIFO_rtl_13
+8110:116747 |   finn_design_StreamingFIFO_rtl_14_0 StreamingFIFO_rtl_14
+8113:116757 |   finn_design_StreamingFIFO_rtl_15_0 StreamingFIFO_rtl_15
+8116:116767 |   finn_design_StreamingFIFO_rtl_16_0 StreamingFIFO_rtl_16
+8119:116777 |   finn_design_StreamingFIFO_rtl_17_0 StreamingFIFO_rtl_17
+8122:116787 |   finn_design_StreamingFIFO_rtl_18_0 StreamingFIFO_rtl_18
+8125:116797 |   finn_design_StreamingFIFO_rtl_19_0 StreamingFIFO_rtl_19
+8128:116807 |   finn_design_StreamingFIFO_rtl_2_0 StreamingFIFO_rtl_2
+8131:116817 |   finn_design_StreamingFIFO_rtl_20_0 StreamingFIFO_rtl_20
+8134:116827 |   finn_design_StreamingFIFO_rtl_21_0 StreamingFIFO_rtl_21
+8137:116837 |   finn_design_StreamingFIFO_rtl_22_0 StreamingFIFO_rtl_22
+8140:116847 |   finn_design_StreamingFIFO_rtl_23_0 StreamingFIFO_rtl_23
+8143:116857 |   finn_design_StreamingFIFO_rtl_24_0 StreamingFIFO_rtl_24
+8146:116867 |   finn_design_StreamingFIFO_rtl_25_0 StreamingFIFO_rtl_25
+8149:116877 |   finn_design_StreamingFIFO_rtl_26_0 StreamingFIFO_rtl_26
+8152:116887 |   finn_design_StreamingFIFO_rtl_27_0 StreamingFIFO_rtl_27
+8155:116897 |   finn_design_StreamingFIFO_rtl_28_0 StreamingFIFO_rtl_28
+8158:116907 |   finn_design_StreamingFIFO_rtl_29_0 StreamingFIFO_rtl_29
+8161:116917 |   finn_design_StreamingFIFO_rtl_3_0 StreamingFIFO_rtl_3
+8164:116927 |   finn_design_StreamingFIFO_rtl_30_0 StreamingFIFO_rtl_30
+8167:116937 |   finn_design_StreamingFIFO_rtl_31_0 StreamingFIFO_rtl_31
+8170:116947 |   finn_design_StreamingFIFO_rtl_32_0 StreamingFIFO_rtl_32
+8173:116957 |   finn_design_StreamingFIFO_rtl_33_0 StreamingFIFO_rtl_33
+8176:116967 |   finn_design_StreamingFIFO_rtl_34_0 StreamingFIFO_rtl_34
+8179:116977 |   finn_design_StreamingFIFO_rtl_35_0 StreamingFIFO_rtl_35
+8182:116987 |   finn_design_StreamingFIFO_rtl_36_0 StreamingFIFO_rtl_36
+8185:116997 |   finn_design_StreamingFIFO_rtl_37_0 StreamingFIFO_rtl_37
+8188:117007 |   finn_design_StreamingFIFO_rtl_38_0 StreamingFIFO_rtl_38
+8191:117017 |   finn_design_StreamingFIFO_rtl_39_0 StreamingFIFO_rtl_39
+8194:117027 |   finn_design_StreamingFIFO_rtl_4_0 StreamingFIFO_rtl_4
+8197:117037 |   finn_design_StreamingFIFO_rtl_40_0 StreamingFIFO_rtl_40
+8200:117047 |   finn_design_StreamingFIFO_rtl_41_0 StreamingFIFO_rtl_41
+8203:117057 |   finn_design_StreamingFIFO_rtl_42_0 StreamingFIFO_rtl_42
+8206:117067 |   finn_design_StreamingFIFO_rtl_43_0 StreamingFIFO_rtl_43
+8209:117077 |   finn_design_StreamingFIFO_rtl_44_0 StreamingFIFO_rtl_44
+8212:117087 |   finn_design_StreamingFIFO_rtl_45_0 StreamingFIFO_rtl_45
+8215:117097 |   finn_design_StreamingFIFO_rtl_46_0 StreamingFIFO_rtl_46
+8218:117107 |   finn_design_StreamingFIFO_rtl_47_0 StreamingFIFO_rtl_47
+8221:117117 |   finn_design_StreamingFIFO_rtl_48_0 StreamingFIFO_rtl_48
+8224:117127 |   finn_design_StreamingFIFO_rtl_49_0 StreamingFIFO_rtl_49
+8227:117137 |   finn_design_StreamingFIFO_rtl_5_0 StreamingFIFO_rtl_5
+8230:117147 |   finn_design_StreamingFIFO_rtl_50_0 StreamingFIFO_rtl_50
+8233:117157 |   finn_design_StreamingFIFO_rtl_51_0 StreamingFIFO_rtl_51
+8236:117167 |   finn_design_StreamingFIFO_rtl_52_0 StreamingFIFO_rtl_52
+8239:117177 |   finn_design_StreamingFIFO_rtl_53_0 StreamingFIFO_rtl_53
+8242:117187 |   finn_design_StreamingFIFO_rtl_54_0 StreamingFIFO_rtl_54
+8245:117197 |   finn_design_StreamingFIFO_rtl_55_0 StreamingFIFO_rtl_55
+8248:117207 |   finn_design_StreamingFIFO_rtl_56_0 StreamingFIFO_rtl_56
+8251:117217 |   finn_design_StreamingFIFO_rtl_57_0 StreamingFIFO_rtl_57
+8254:117227 |   finn_design_StreamingFIFO_rtl_58_0 StreamingFIFO_rtl_58
+8257:117237 |   finn_design_StreamingFIFO_rtl_59_0 StreamingFIFO_rtl_59
+8260:117247 |   finn_design_StreamingFIFO_rtl_6_0 StreamingFIFO_rtl_6
+8263:117257 |   finn_design_StreamingFIFO_rtl_60_0 StreamingFIFO_rtl_60
+8266:117267 |   finn_design_StreamingFIFO_rtl_61_0 StreamingFIFO_rtl_61
+8269:117277 |   finn_design_StreamingFIFO_rtl_62_0 StreamingFIFO_rtl_62
+8272:117287 |   finn_design_StreamingFIFO_rtl_63_0 StreamingFIFO_rtl_63
+8275:117297 |   finn_design_StreamingFIFO_rtl_64_0 StreamingFIFO_rtl_64
+8278:117307 |   finn_design_StreamingFIFO_rtl_65_0 StreamingFIFO_rtl_65
+8281:117317 |   finn_design_StreamingFIFO_rtl_66_0 StreamingFIFO_rtl_66
+8284:117327 |   finn_design_StreamingFIFO_rtl_67_0 StreamingFIFO_rtl_67
+8287:117337 |   finn_design_StreamingFIFO_rtl_68_0 StreamingFIFO_rtl_68
+8290:117347 |   finn_design_StreamingFIFO_rtl_69_0 StreamingFIFO_rtl_69
+8293:117357 |   finn_design_StreamingFIFO_rtl_7_0 StreamingFIFO_rtl_7
+8296:117367 |   finn_design_StreamingFIFO_rtl_70_0 StreamingFIFO_rtl_70
+8299:117377 |   finn_design_StreamingFIFO_rtl_71_0 StreamingFIFO_rtl_71
+8302:117387 |   finn_design_StreamingFIFO_rtl_72_0 StreamingFIFO_rtl_72
+8305:117397 |   finn_design_StreamingFIFO_rtl_73_0 StreamingFIFO_rtl_73
+8308:117407 |   finn_design_StreamingFIFO_rtl_74_0 StreamingFIFO_rtl_74
+8311:117417 |   finn_design_StreamingFIFO_rtl_75_0 StreamingFIFO_rtl_75
+8314:117427 |   finn_design_StreamingFIFO_rtl_76_0 StreamingFIFO_rtl_76
+8317:117437 |   finn_design_StreamingFIFO_rtl_77_0 StreamingFIFO_rtl_77
+8320:117447 |   finn_design_StreamingFIFO_rtl_78_0 StreamingFIFO_rtl_78
+8323:117457 |   finn_design_StreamingFIFO_rtl_79_0 StreamingFIFO_rtl_79
+8326:117467 |   finn_design_StreamingFIFO_rtl_8_0 StreamingFIFO_rtl_8
+8329:117477 |   finn_design_StreamingFIFO_rtl_80_0 StreamingFIFO_rtl_80
+8332:117487 |   finn_design_StreamingFIFO_rtl_81_0 StreamingFIFO_rtl_81
+8335:117497 |   finn_design_StreamingFIFO_rtl_82_0 StreamingFIFO_rtl_82
+8338:117507 |   finn_design_StreamingFIFO_rtl_83_0 StreamingFIFO_rtl_83
+8341:117517 |   finn_design_StreamingFIFO_rtl_84_0 StreamingFIFO_rtl_84
+8344:117527 |   finn_design_StreamingFIFO_rtl_85_0 StreamingFIFO_rtl_85
+8347:117537 |   finn_design_StreamingFIFO_rtl_86_0 StreamingFIFO_rtl_86
+8350:117547 |   finn_design_StreamingFIFO_rtl_87_0 StreamingFIFO_rtl_87
+8353:117557 |   finn_design_StreamingFIFO_rtl_88_0 StreamingFIFO_rtl_88
+8356:117567 |   finn_design_StreamingFIFO_rtl_89_0 StreamingFIFO_rtl_89
+8359:117577 |   finn_design_StreamingFIFO_rtl_9_0 StreamingFIFO_rtl_9
+8362:117587 |   finn_design_StreamingFIFO_rtl_90_0 StreamingFIFO_rtl_90
+8365:117597 |   finn_design_StreamingFIFO_rtl_91_0 StreamingFIFO_rtl_91
+8368:117607 |   finn_design_StreamingFIFO_rtl_92_0 StreamingFIFO_rtl_92
+8371:117617 |   finn_design_StreamingFIFO_rtl_93_0 StreamingFIFO_rtl_93
+8374:117627 |   finn_design_StreamingFIFO_rtl_94_0 StreamingFIFO_rtl_94
+8377:117637 |   finn_design_StreamingFIFO_rtl_95_0 StreamingFIFO_rtl_95
+8380:117647 |   finn_design_StreamingFIFO_rtl_96_0 StreamingFIFO_rtl_96
+8383:117657 |   finn_design_StreamingFIFO_rtl_97_0 StreamingFIFO_rtl_97
+8386:117667 |   finn_design_StreamingFIFO_rtl_98_0 StreamingFIFO_rtl_98
+9115:   35 | module StreamingFIFO_rtl_74(
+9133: 1174 | module StreamingFIFO_rtl_26(
+9145: 1825 | module StreamingFIFO_rtl_15(
+9151: 2212 | module StreamingFIFO_rtl_28(
+9188:%Warning-WIDTH: /tmp/finn_dev_thelegendiv/vivado_stitch_proj_bz5n9i06/finn_design_wrapper.v:298:25: Logical operator LOGAND expects 1 bit on the LHS, but LHS's VARREF 'DEPTH_TRIGGER_URAM' generates 32 bits.
+9190:  298 |      DEPTH_TRIGGER_URAM && (DEPTH >= DEPTH_TRIGGER_URAM)? "ultra" :
+9192:%Warning-WIDTH: /tmp/finn_dev_thelegendiv/vivado_stitch_proj_bz5n9i06/finn_design_wrapper.v:299:25: Logical operator LOGAND expects 1 bit on the LHS, but LHS's VARREF 'DEPTH_TRIGGER_BRAM' generates 32 bits.
+9194:  299 |      DEPTH_TRIGGER_BRAM && (DEPTH >= DEPTH_TRIGGER_BRAM)? "block" :
+9196:%Warning-WIDTH: /tmp/finn_dev_thelegendiv/vivado_stitch_proj_bz5n9i06/finn_design_wrapper.v:301:25: Logical operator LOGAND expects 1 bit on the LHS, but LHS's VARREF 'DEPTH_TRIGGER_BRAM' generates 32 bits.
+9198:  301 |      DEPTH_TRIGGER_BRAM && (DEPTH >= 64)? "distributed" : "auto";
+9214:69386 |        ptr_eff.val == DEPTH-2;
+9474:69386 |        ptr_eff.val == DEPTH-2;
+9974:  422 |     assert(APtr < $signed(A_DEPTH-1)) else begin
+10042:  422 |     assert(APtr < $signed(A_DEPTH-1)) else begin
+10405:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_95.inst.impl
+10406:  576 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+10409:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_95.inst.impl
+10410:  633 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+10413:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_95.inst.impl
+10417:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_95.inst.impl
+10421:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_95.inst.impl
+10425:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_95.inst.impl
+10429:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_95.inst.impl
+10433:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_95.inst.impl
+10437:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_95.inst.impl
+10441:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_95.inst.impl
+10445:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_95.inst.impl
+10449:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_95.inst.impl
+10453:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_95.inst.impl
+10457:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_91.inst.impl
+10461:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_91.inst.impl
+10465:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_91.inst.impl
+10469:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_91.inst.impl
+10473:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_91.inst.impl
+10477:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_91.inst.impl
+10481:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_91.inst.impl
+10485:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_91.inst.impl
+10489:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_91.inst.impl
+10493:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_91.inst.impl
+10497:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_91.inst.impl
+10501:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_88.inst.impl
+10505:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_88.inst.impl
+10509:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+10513:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+10517:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+10521:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+10525:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+10529:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+10533:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+10537:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+10541:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+10545:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+10549:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+10553:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+10557:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+10561:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+10565:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+10569:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+10573:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+10577:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+10581:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+10585:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+10589:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_56.inst.impl
+10593:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_56.inst.impl
+10597:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_56.inst.impl
+10601:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_56.inst.impl
+10605:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_56.inst.impl
+10609:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_56.inst.impl
+10613:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_56.inst.impl
+10617:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_56.inst.impl
+10621:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_56.inst.impl
+10625:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_51.inst.impl
+10626:  576 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+10629:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_51.inst.impl
+10630:  633 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+10633:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_51.inst.impl
+10637:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_51.inst.impl
+10641:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_51.inst.impl
+10645:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_51.inst.impl
+10649:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_51.inst.impl
+10653:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_51.inst.impl
+10657:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_51.inst.impl
+10661:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_51.inst.impl
+10665:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_51.inst.impl
+10669:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_35.inst.impl
+10670:  576 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+10673:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_35.inst.impl
+10674:  633 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+10677:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_35.inst.impl
+10681:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_35.inst.impl
+10685:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_33.inst.impl
+10686:  576 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+10689:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_33.inst.impl
+10690:  633 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+10693:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_33.inst.impl
+10697:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_33.inst.impl
+10701:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_32.inst.impl
+10705:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_32.inst.impl
+10709:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_32.inst.impl
+10713:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_32.inst.impl
+10717:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_32.inst.impl
+10721:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_32.inst.impl
+10725:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_32.inst.impl
+10729:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_32.inst.impl
+10733:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_32.inst.impl
+10737:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_24.inst.impl
+10741:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_24.inst.impl
+10745:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_24.inst.impl
+10749:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_24.inst.impl
+10753:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_24.inst.impl
+10757:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_24.inst.impl
+10761:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_24.inst.impl
+10765:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_24.inst.impl
+10769:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_24.inst.impl
+10773:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_17.inst.impl
+10774:  576 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+10777:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_17.inst.impl
+10778:  633 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+10781:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+10785:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+10789:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+10793:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+10797:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+10801:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+10805:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+10809:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+10813:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+10817:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_12.inst.impl
+10821:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_12.inst.impl
+11901:make: Entering directory '/tmp/finn_dev_thelegendiv/verilator_fifosim_9b3042m0'
+11902:ccache g++  -I.  -MMD -I/usr/local/share/verilator/include -I/usr/local/share/verilator/include/vltstd -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -faligned-new -fcf-protection=none -Wno-bool-operation -Wno-sign-compare -Wno-uninitialized -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-shadow     --std=c++11  -DVL_THREADED -std=gnu++17 -Os -c -o verilator_fifosim.o verilator_fifosim.cpp
+11929:g++    verilator_fifosim.o verilated.o verilated_threads.o Vfinn_design_wrapper__ALL.a    -pthread -lpthread -latomic   -o Vfinn_design_wrapper
+11931:make: Leaving directory '/tmp/finn_dev_thelegendiv/verilator_fifosim_9b3042m0'
+11932:make: Entering directory '/tmp/finn_dev_thelegendiv/verilator_fifosim_q8t5w6ld'
+11933:ccache g++  -I.  -MMD -I/usr/local/share/verilator/include -I/usr/local/share/verilator/include/vltstd -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -faligned-new -fcf-protection=none -Wno-bool-operation -Wno-sign-compare -Wno-uninitialized -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-shadow     --std=c++11  -DVL_THREADED -std=gnu++17 -Os -c -o verilator_fifosim.o verilator_fifosim.cpp
+11946:g++    verilator_fifosim.o verilated.o verilated_threads.o Vfinn_design_wrapper__ALL.a    -pthread -lpthread -latomic   -o Vfinn_design_wrapper
+11948:make: Leaving directory '/tmp/finn_dev_thelegendiv/verilator_fifosim_q8t5w6ld'
+15402:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_2: rounding-up FIFO depth from 3553 to 4096 for impl_style=vivado
+15404:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_3: rounding-up FIFO depth from 101047 to 131072 for impl_style=vivado
+15406:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_9: rounding-up FIFO depth from 75254 to 131072 for impl_style=vivado
+17492:14209 |   finn_design_StreamingFIFO_rtl_0_0 StreamingFIFO_rtl_0
+17495:14219 |   finn_design_StreamingFIFO_rtl_1_0 StreamingFIFO_rtl_1
+17498:14229 |   finn_design_StreamingFIFO_rtl_10_0 StreamingFIFO_rtl_10
+17501:14239 |   finn_design_StreamingFIFO_rtl_100_0 StreamingFIFO_rtl_100
+17504:14249 |   finn_design_StreamingFIFO_rtl_101_0 StreamingFIFO_rtl_101
+17507:14259 |   finn_design_StreamingFIFO_rtl_102_0 StreamingFIFO_rtl_102
+17510:14269 |   finn_design_StreamingFIFO_rtl_103_0 StreamingFIFO_rtl_103
+17513:14279 |   finn_design_StreamingFIFO_rtl_104_0 StreamingFIFO_rtl_104
+17516:14289 |   finn_design_StreamingFIFO_rtl_105_0 StreamingFIFO_rtl_105
+17519:14299 |   finn_design_StreamingFIFO_rtl_106_0 StreamingFIFO_rtl_106
+17522:14309 |   finn_design_StreamingFIFO_rtl_107_0 StreamingFIFO_rtl_107
+17525:14319 |   finn_design_StreamingFIFO_rtl_108_0 StreamingFIFO_rtl_108
+17528:14329 |   finn_design_StreamingFIFO_rtl_109_0 StreamingFIFO_rtl_109
+17531:14339 |   finn_design_StreamingFIFO_rtl_11_0 StreamingFIFO_rtl_11
+17534:14349 |   finn_design_StreamingFIFO_rtl_110_0 StreamingFIFO_rtl_110
+17537:14359 |   finn_design_StreamingFIFO_rtl_111_0 StreamingFIFO_rtl_111
+17540:14369 |   finn_design_StreamingFIFO_rtl_112_0 StreamingFIFO_rtl_112
+17543:14379 |   finn_design_StreamingFIFO_rtl_113_0 StreamingFIFO_rtl_113
+17546:14389 |   finn_design_StreamingFIFO_rtl_114_0 StreamingFIFO_rtl_114
+17549:14399 |   finn_design_StreamingFIFO_rtl_115_0 StreamingFIFO_rtl_115
+17552:14409 |   finn_design_StreamingFIFO_rtl_116_0 StreamingFIFO_rtl_116
+17555:14419 |   finn_design_StreamingFIFO_rtl_117_0 StreamingFIFO_rtl_117
+17558:14429 |   finn_design_StreamingFIFO_rtl_118_0 StreamingFIFO_rtl_118
+17561:14439 |   finn_design_StreamingFIFO_rtl_119_0 StreamingFIFO_rtl_119
+17564:14449 |   finn_design_StreamingFIFO_rtl_12_0 StreamingFIFO_rtl_12
+17567:14459 |   finn_design_StreamingFIFO_rtl_120_0 StreamingFIFO_rtl_120
+17570:14469 |   finn_design_StreamingFIFO_rtl_121_0 StreamingFIFO_rtl_121
+17573:14479 |   finn_design_StreamingFIFO_rtl_122_0 StreamingFIFO_rtl_122
+17576:14489 |   finn_design_StreamingFIFO_rtl_123_0 StreamingFIFO_rtl_123
+17579:14499 |   finn_design_StreamingFIFO_rtl_124_0 StreamingFIFO_rtl_124
+17582:14509 |   finn_design_StreamingFIFO_rtl_125_0 StreamingFIFO_rtl_125
+17585:14519 |   finn_design_StreamingFIFO_rtl_126_0 StreamingFIFO_rtl_126
+17588:14529 |   finn_design_StreamingFIFO_rtl_127_0 StreamingFIFO_rtl_127
+17591:14539 |   finn_design_StreamingFIFO_rtl_13_0 StreamingFIFO_rtl_13
+17594:14549 |   finn_design_StreamingFIFO_rtl_14_0 StreamingFIFO_rtl_14
+17597:14559 |   finn_design_StreamingFIFO_rtl_15_0 StreamingFIFO_rtl_15
+17600:14569 |   finn_design_StreamingFIFO_rtl_16_0 StreamingFIFO_rtl_16
+17603:14579 |   finn_design_StreamingFIFO_rtl_17_0 StreamingFIFO_rtl_17
+17606:14589 |   finn_design_StreamingFIFO_rtl_18_0 StreamingFIFO_rtl_18
+17609:14599 |   finn_design_StreamingFIFO_rtl_19_0 StreamingFIFO_rtl_19
+17612:14609 |   finn_design_StreamingFIFO_rtl_2_0 StreamingFIFO_rtl_2
+17615:14619 |   finn_design_StreamingFIFO_rtl_20_0 StreamingFIFO_rtl_20
+17618:14629 |   finn_design_StreamingFIFO_rtl_21_0 StreamingFIFO_rtl_21
+17621:14639 |   finn_design_StreamingFIFO_rtl_22_0 StreamingFIFO_rtl_22
+17624:14649 |   finn_design_StreamingFIFO_rtl_23_0 StreamingFIFO_rtl_23
+17627:14659 |   finn_design_StreamingFIFO_rtl_24_0 StreamingFIFO_rtl_24
+17630:14669 |   finn_design_StreamingFIFO_rtl_25_0 StreamingFIFO_rtl_25
+17633:14679 |   finn_design_StreamingFIFO_rtl_26_0 StreamingFIFO_rtl_26
+17636:14689 |   finn_design_StreamingFIFO_rtl_27_0 StreamingFIFO_rtl_27
+17639:14699 |   finn_design_StreamingFIFO_rtl_28_0 StreamingFIFO_rtl_28
+17642:14709 |   finn_design_StreamingFIFO_rtl_29_0 StreamingFIFO_rtl_29
+17645:14719 |   finn_design_StreamingFIFO_rtl_3_0 StreamingFIFO_rtl_3
+17648:14729 |   finn_design_StreamingFIFO_rtl_30_0 StreamingFIFO_rtl_30
+17651:14739 |   finn_design_StreamingFIFO_rtl_31_0 StreamingFIFO_rtl_31
+17654:14749 |   finn_design_StreamingFIFO_rtl_32_0 StreamingFIFO_rtl_32
+17657:14759 |   finn_design_StreamingFIFO_rtl_33_0 StreamingFIFO_rtl_33
+17660:14769 |   finn_design_StreamingFIFO_rtl_34_0 StreamingFIFO_rtl_34
+17663:14779 |   finn_design_StreamingFIFO_rtl_35_0 StreamingFIFO_rtl_35
+17666:14789 |   finn_design_StreamingFIFO_rtl_36_0 StreamingFIFO_rtl_36
+17669:14799 |   finn_design_StreamingFIFO_rtl_37_0 StreamingFIFO_rtl_37
+17672:14809 |   finn_design_StreamingFIFO_rtl_38_0 StreamingFIFO_rtl_38
+17675:14819 |   finn_design_StreamingFIFO_rtl_39_0 StreamingFIFO_rtl_39
+17678:14829 |   finn_design_StreamingFIFO_rtl_4_0 StreamingFIFO_rtl_4
+17681:14839 |   finn_design_StreamingFIFO_rtl_40_0 StreamingFIFO_rtl_40
+17684:14849 |   finn_design_StreamingFIFO_rtl_41_0 StreamingFIFO_rtl_41
+17687:14859 |   finn_design_StreamingFIFO_rtl_42_0 StreamingFIFO_rtl_42
+17690:14869 |   finn_design_StreamingFIFO_rtl_43_0 StreamingFIFO_rtl_43
+17693:14879 |   finn_design_StreamingFIFO_rtl_44_0 StreamingFIFO_rtl_44
+17696:14889 |   finn_design_StreamingFIFO_rtl_45_0 StreamingFIFO_rtl_45
+17699:14899 |   finn_design_StreamingFIFO_rtl_46_0 StreamingFIFO_rtl_46
+17702:14909 |   finn_design_StreamingFIFO_rtl_47_0 StreamingFIFO_rtl_47
+17705:14919 |   finn_design_StreamingFIFO_rtl_48_0 StreamingFIFO_rtl_48
+17708:14929 |   finn_design_StreamingFIFO_rtl_49_0 StreamingFIFO_rtl_49
+17711:14939 |   finn_design_StreamingFIFO_rtl_5_0 StreamingFIFO_rtl_5
+17714:14949 |   finn_design_StreamingFIFO_rtl_50_0 StreamingFIFO_rtl_50
+17717:14959 |   finn_design_StreamingFIFO_rtl_51_0 StreamingFIFO_rtl_51
+17720:14969 |   finn_design_StreamingFIFO_rtl_52_0 StreamingFIFO_rtl_52
+17723:14979 |   finn_design_StreamingFIFO_rtl_53_0 StreamingFIFO_rtl_53
+17726:14989 |   finn_design_StreamingFIFO_rtl_54_0 StreamingFIFO_rtl_54
+17729:14999 |   finn_design_StreamingFIFO_rtl_55_0 StreamingFIFO_rtl_55
+17732:15009 |   finn_design_StreamingFIFO_rtl_56_0 StreamingFIFO_rtl_56
+17735:15019 |   finn_design_StreamingFIFO_rtl_57_0 StreamingFIFO_rtl_57
+17738:15029 |   finn_design_StreamingFIFO_rtl_58_0 StreamingFIFO_rtl_58
+17741:15039 |   finn_design_StreamingFIFO_rtl_59_0 StreamingFIFO_rtl_59
+17744:15049 |   finn_design_StreamingFIFO_rtl_6_0 StreamingFIFO_rtl_6
+17747:15059 |   finn_design_StreamingFIFO_rtl_60_0 StreamingFIFO_rtl_60
+17750:15069 |   finn_design_StreamingFIFO_rtl_61_0 StreamingFIFO_rtl_61
+17753:15079 |   finn_design_StreamingFIFO_rtl_62_0 StreamingFIFO_rtl_62
+17756:15089 |   finn_design_StreamingFIFO_rtl_63_0 StreamingFIFO_rtl_63
+17759:15099 |   finn_design_StreamingFIFO_rtl_64_0 StreamingFIFO_rtl_64
+17762:15109 |   finn_design_StreamingFIFO_rtl_65_0 StreamingFIFO_rtl_65
+17765:15119 |   finn_design_StreamingFIFO_rtl_66_0 StreamingFIFO_rtl_66
+17768:15129 |   finn_design_StreamingFIFO_rtl_67_0 StreamingFIFO_rtl_67
+17771:15139 |   finn_design_StreamingFIFO_rtl_68_0 StreamingFIFO_rtl_68
+17774:15149 |   finn_design_StreamingFIFO_rtl_69_0 StreamingFIFO_rtl_69
+17777:15159 |   finn_design_StreamingFIFO_rtl_7_0 StreamingFIFO_rtl_7
+17780:15169 |   finn_design_StreamingFIFO_rtl_70_0 StreamingFIFO_rtl_70
+17783:15179 |   finn_design_StreamingFIFO_rtl_71_0 StreamingFIFO_rtl_71
+17786:15189 |   finn_design_StreamingFIFO_rtl_72_0 StreamingFIFO_rtl_72
+17789:15199 |   finn_design_StreamingFIFO_rtl_73_0 StreamingFIFO_rtl_73
+17792:15209 |   finn_design_StreamingFIFO_rtl_74_0 StreamingFIFO_rtl_74
+17795:15219 |   finn_design_StreamingFIFO_rtl_75_0 StreamingFIFO_rtl_75
+17798:15229 |   finn_design_StreamingFIFO_rtl_76_0 StreamingFIFO_rtl_76
+17801:15239 |   finn_design_StreamingFIFO_rtl_77_0 StreamingFIFO_rtl_77
+17804:15249 |   finn_design_StreamingFIFO_rtl_78_0 StreamingFIFO_rtl_78
+17807:15259 |   finn_design_StreamingFIFO_rtl_79_0 StreamingFIFO_rtl_79
+17810:15269 |   finn_design_StreamingFIFO_rtl_8_0 StreamingFIFO_rtl_8
+17813:15279 |   finn_design_StreamingFIFO_rtl_80_0 StreamingFIFO_rtl_80
+17816:15289 |   finn_design_StreamingFIFO_rtl_81_0 StreamingFIFO_rtl_81
+17819:15299 |   finn_design_StreamingFIFO_rtl_82_0 StreamingFIFO_rtl_82
+17822:15309 |   finn_design_StreamingFIFO_rtl_83_0 StreamingFIFO_rtl_83
+17825:15319 |   finn_design_StreamingFIFO_rtl_84_0 StreamingFIFO_rtl_84
+17828:15329 |   finn_design_StreamingFIFO_rtl_85_0 StreamingFIFO_rtl_85
+17831:15339 |   finn_design_StreamingFIFO_rtl_86_0 StreamingFIFO_rtl_86
+17834:15349 |   finn_design_StreamingFIFO_rtl_87_0 StreamingFIFO_rtl_87
+17837:15359 |   finn_design_StreamingFIFO_rtl_88_0 StreamingFIFO_rtl_88
+17840:15369 |   finn_design_StreamingFIFO_rtl_89_0 StreamingFIFO_rtl_89
+17843:15379 |   finn_design_StreamingFIFO_rtl_9_0 StreamingFIFO_rtl_9
+17846:15389 |   finn_design_StreamingFIFO_rtl_90_0 StreamingFIFO_rtl_90
+17849:15399 |   finn_design_StreamingFIFO_rtl_91_0 StreamingFIFO_rtl_91
+17852:15409 |   finn_design_StreamingFIFO_rtl_92_0 StreamingFIFO_rtl_92
+17855:15419 |   finn_design_StreamingFIFO_rtl_93_0 StreamingFIFO_rtl_93
+17858:15429 |   finn_design_StreamingFIFO_rtl_94_0 StreamingFIFO_rtl_94
+17861:15439 |   finn_design_StreamingFIFO_rtl_95_0 StreamingFIFO_rtl_95
+17864:15449 |   finn_design_StreamingFIFO_rtl_96_0 StreamingFIFO_rtl_96
+17867:15459 |   finn_design_StreamingFIFO_rtl_97_0 StreamingFIFO_rtl_97
+17870:15469 |   finn_design_StreamingFIFO_rtl_98_0 StreamingFIFO_rtl_98
+17873:15479 |   finn_design_StreamingFIFO_rtl_99_0 StreamingFIFO_rtl_99
+18716:  585 | module StreamingFIFO_rtl_53(
+18728:  998 | module finn_design_StreamingFIFO_rtl_29_0 (
+18740: 1457 | module StreamingFIFO_rtl_121(
+18767:%Warning-WIDTH: /tmp/finn_dev_thelegendiv/vivado_stitch_proj_u1gs8yz5/finn_design_wrapper.v:1269:25: Logical operator LOGAND expects 1 bit on the LHS, but LHS's VARREF 'DEPTH_TRIGGER_URAM' generates 32 bits.
+18769: 1269 |      DEPTH_TRIGGER_URAM && (DEPTH >= DEPTH_TRIGGER_URAM)? "ultra" :
+18771:%Warning-WIDTH: /tmp/finn_dev_thelegendiv/vivado_stitch_proj_u1gs8yz5/finn_design_wrapper.v:1270:25: Logical operator LOGAND expects 1 bit on the LHS, but LHS's VARREF 'DEPTH_TRIGGER_BRAM' generates 32 bits.
+18773: 1270 |      DEPTH_TRIGGER_BRAM && (DEPTH >= DEPTH_TRIGGER_BRAM)? "block" :
+18775:%Warning-WIDTH: /tmp/finn_dev_thelegendiv/vivado_stitch_proj_u1gs8yz5/finn_design_wrapper.v:1272:25: Logical operator LOGAND expects 1 bit on the LHS, but LHS's VARREF 'DEPTH_TRIGGER_BRAM' generates 32 bits.
+18777: 1272 |      DEPTH_TRIGGER_BRAM && (DEPTH >= 64)? "distributed" : "auto";
+18793:111952 |        ptr_eff.val == DEPTH-2;
+18809:111952 |        ptr_eff.val == DEPTH-2;
+19077:111952 |        ptr_eff.val == DEPTH-2;
+19277:111952 |        ptr_eff.val == DEPTH-2;
+19541:111952 |        ptr_eff.val == DEPTH-2;
+19681: 1393 |     assert(APtr < $signed(A_DEPTH-1)) else begin
+20452:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_97.inst.impl
+20453:  750 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+20456:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_97.inst.impl
+20457:  807 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+20460:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_97.inst.impl
+20464:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_97.inst.impl
+20468:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_97.inst.impl
+20472:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_97.inst.impl
+20476:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_97.inst.impl
+20480:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_97.inst.impl
+20484:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_97.inst.impl
+20488:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_97.inst.impl
+20492:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_97.inst.impl
+20496:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_97.inst.impl
+20500:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_97.inst.impl
+20504:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_96.inst.impl
+20508:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_96.inst.impl
+20512:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_96.inst.impl
+20516:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_96.inst.impl
+20520:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_96.inst.impl
+20524:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_96.inst.impl
+20528:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_96.inst.impl
+20532:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_96.inst.impl
+20536:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_96.inst.impl
+20540:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_96.inst.impl
+20544:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_96.inst.impl
+20548:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_57.inst.impl
+20549:  750 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+20552:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_57.inst.impl
+20553:  807 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+20556:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_57.inst.impl
+20560:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_57.inst.impl
+20564:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_57.inst.impl
+20568:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_57.inst.impl
+20572:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_57.inst.impl
+20576:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_57.inst.impl
+20580:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_57.inst.impl
+20584:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_57.inst.impl
+20588:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_57.inst.impl
+20592:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_56.inst.impl
+20593:  750 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+20596:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_56.inst.impl
+20597:  807 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+20600:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_56.inst.impl
+20604:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_56.inst.impl
+20608:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_56.inst.impl
+20612:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_56.inst.impl
+20616:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_56.inst.impl
+20620:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_56.inst.impl
+20624:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_56.inst.impl
+20628:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_56.inst.impl
+20632:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_56.inst.impl
+20636:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_56.inst.impl
+20640:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_56.inst.impl
+20644:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_20.inst.impl
+20645:  750 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+20648:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_20.inst.impl
+20649:  807 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+20652:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_20.inst.impl
+20656:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_20.inst.impl
+20660:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_17.inst.impl
+20664:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_17.inst.impl
+20668:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_17.inst.impl
+20672:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_17.inst.impl
+20676:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_17.inst.impl
+20680:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_17.inst.impl
+20684:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_17.inst.impl
+20688:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_17.inst.impl
+20692:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_17.inst.impl
+20696:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_16.inst.impl
+20700:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_16.inst.impl
+20704:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_16.inst.impl
+20708:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_16.inst.impl
+20712:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_16.inst.impl
+20716:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_16.inst.impl
+20720:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_16.inst.impl
+20724:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_16.inst.impl
+20728:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_16.inst.impl
+20732:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_15.inst.impl
+20736:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_15.inst.impl
+20740:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_121.inst.impl
+20744:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_121.inst.impl
+20748:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_121.inst.impl
+20752:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_121.inst.impl
+20756:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_121.inst.impl
+20760:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_121.inst.impl
+20764:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_121.inst.impl
+20768:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_121.inst.impl
+20772:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_121.inst.impl
+20776:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_120.inst.impl
+20780:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_120.inst.impl
+20784:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_120.inst.impl
+20788:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_120.inst.impl
+20792:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_120.inst.impl
+20796:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_120.inst.impl
+20800:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_120.inst.impl
+20804:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_120.inst.impl
+20808:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_120.inst.impl
+20812:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_118.inst.impl
+20816:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_118.inst.impl
+20820:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_118.inst.impl
+20824:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_118.inst.impl
+20828:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_118.inst.impl
+20832:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_118.inst.impl
+20836:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_118.inst.impl
+20840:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_118.inst.impl
+20844:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_118.inst.impl
+20848:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_118.inst.impl
+20852:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_118.inst.impl
+20856:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_117.inst.impl
+20857:  750 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+20860:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_117.inst.impl
+20861:  807 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+20864:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_117.inst.impl
+20868:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_117.inst.impl
+20872:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_112.inst.impl
+20873:  750 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+20876:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_112.inst.impl
+20877:  807 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+20880:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_112.inst.impl
+20884:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_112.inst.impl
+20888:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_112.inst.impl
+20892:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_112.inst.impl
+20896:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_112.inst.impl
+20900:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_112.inst.impl
+20904:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_112.inst.impl
+20908:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_112.inst.impl
+20912:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_112.inst.impl
+20916:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_111.inst.impl
+20920:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_111.inst.impl
+20924:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_111.inst.impl
+20928:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_111.inst.impl
+20932:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_111.inst.impl
+20936:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_111.inst.impl
+20940:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_111.inst.impl
+20944:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_111.inst.impl
+20948:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_111.inst.impl
+20952:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_104.inst.impl
+20953:  750 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+20956:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_104.inst.impl
+20957:  807 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+20960:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_104.inst.impl
+20964:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_104.inst.impl
+22720:make: Entering directory '/tmp/finn_dev_thelegendiv/verilator_fifosim_ss9ye64r'
+22721:ccache g++  -I.  -MMD -I/usr/local/share/verilator/include -I/usr/local/share/verilator/include/vltstd -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -faligned-new -fcf-protection=none -Wno-bool-operation -Wno-sign-compare -Wno-uninitialized -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-shadow     --std=c++11  -DVL_THREADED -std=gnu++17 -Os -c -o verilator_fifosim.o verilator_fifosim.cpp
+22750:g++    verilator_fifosim.o verilated.o verilated_threads.o Vfinn_design_wrapper__ALL.a    -pthread -lpthread -latomic   -o Vfinn_design_wrapper
+22752:make: Leaving directory '/tmp/finn_dev_thelegendiv/verilator_fifosim_ss9ye64r'
+23974:57306 |   finn_design_StreamingFIFO_rtl_0_0 StreamingFIFO_rtl_0
+23977:57316 |   finn_design_StreamingFIFO_rtl_1_0 StreamingFIFO_rtl_1
+23980:57326 |   finn_design_StreamingFIFO_rtl_10_0 StreamingFIFO_rtl_10
+23983:57336 |   finn_design_StreamingFIFO_rtl_11_0 StreamingFIFO_rtl_11
+23986:57346 |   finn_design_StreamingFIFO_rtl_12_0 StreamingFIFO_rtl_12
+23989:57356 |   finn_design_StreamingFIFO_rtl_13_0 StreamingFIFO_rtl_13
+23992:57366 |   finn_design_StreamingFIFO_rtl_14_0 StreamingFIFO_rtl_14
+23995:57376 |   finn_design_StreamingFIFO_rtl_15_0 StreamingFIFO_rtl_15
+23998:57386 |   finn_design_StreamingFIFO_rtl_16_0 StreamingFIFO_rtl_16
+24001:57396 |   finn_design_StreamingFIFO_rtl_17_0 StreamingFIFO_rtl_17
+24004:57406 |   finn_design_StreamingFIFO_rtl_18_0 StreamingFIFO_rtl_18
+24007:57416 |   finn_design_StreamingFIFO_rtl_19_0 StreamingFIFO_rtl_19
+24010:57426 |   finn_design_StreamingFIFO_rtl_2_0 StreamingFIFO_rtl_2
+24013:57436 |   finn_design_StreamingFIFO_rtl_20_0 StreamingFIFO_rtl_20
+24016:57446 |   finn_design_StreamingFIFO_rtl_21_0 StreamingFIFO_rtl_21
+24019:57456 |   finn_design_StreamingFIFO_rtl_22_0 StreamingFIFO_rtl_22
+24022:57466 |   finn_design_StreamingFIFO_rtl_23_0 StreamingFIFO_rtl_23
+24025:57476 |   finn_design_StreamingFIFO_rtl_24_0 StreamingFIFO_rtl_24
+24028:57486 |   finn_design_StreamingFIFO_rtl_25_0 StreamingFIFO_rtl_25
+24031:57496 |   finn_design_StreamingFIFO_rtl_26_0 StreamingFIFO_rtl_26
+24034:57506 |   finn_design_StreamingFIFO_rtl_27_0 StreamingFIFO_rtl_27
+24037:57516 |   finn_design_StreamingFIFO_rtl_28_0 StreamingFIFO_rtl_28
+24040:57526 |   finn_design_StreamingFIFO_rtl_29_0 StreamingFIFO_rtl_29
+24043:57536 |   finn_design_StreamingFIFO_rtl_3_0 StreamingFIFO_rtl_3
+24046:57546 |   finn_design_StreamingFIFO_rtl_30_0 StreamingFIFO_rtl_30
+24049:57556 |   finn_design_StreamingFIFO_rtl_31_0 StreamingFIFO_rtl_31
+24052:57566 |   finn_design_StreamingFIFO_rtl_32_0 StreamingFIFO_rtl_32
+24055:57576 |   finn_design_StreamingFIFO_rtl_33_0 StreamingFIFO_rtl_33
+24058:57586 |   finn_design_StreamingFIFO_rtl_34_0 StreamingFIFO_rtl_34
+24061:57596 |   finn_design_StreamingFIFO_rtl_35_0 StreamingFIFO_rtl_35
+24064:57606 |   finn_design_StreamingFIFO_rtl_36_0 StreamingFIFO_rtl_36
+24067:57616 |   finn_design_StreamingFIFO_rtl_37_0 StreamingFIFO_rtl_37
+24070:57626 |   finn_design_StreamingFIFO_rtl_38_0 StreamingFIFO_rtl_38
+24073:57636 |   finn_design_StreamingFIFO_rtl_39_0 StreamingFIFO_rtl_39
+24076:57646 |   finn_design_StreamingFIFO_rtl_4_0 StreamingFIFO_rtl_4
+24079:57656 |   finn_design_StreamingFIFO_rtl_40_0 StreamingFIFO_rtl_40
+24082:57666 |   finn_design_StreamingFIFO_rtl_41_0 StreamingFIFO_rtl_41
+24085:57676 |   finn_design_StreamingFIFO_rtl_42_0 StreamingFIFO_rtl_42
+24088:57686 |   finn_design_StreamingFIFO_rtl_43_0 StreamingFIFO_rtl_43
+24091:57696 |   finn_design_StreamingFIFO_rtl_44_0 StreamingFIFO_rtl_44
+24094:57706 |   finn_design_StreamingFIFO_rtl_45_0 StreamingFIFO_rtl_45
+24097:57716 |   finn_design_StreamingFIFO_rtl_46_0 StreamingFIFO_rtl_46
+24100:57726 |   finn_design_StreamingFIFO_rtl_47_0 StreamingFIFO_rtl_47
+24103:57736 |   finn_design_StreamingFIFO_rtl_48_0 StreamingFIFO_rtl_48
+24106:57746 |   finn_design_StreamingFIFO_rtl_49_0 StreamingFIFO_rtl_49
+24109:57756 |   finn_design_StreamingFIFO_rtl_5_0 StreamingFIFO_rtl_5
+24112:57766 |   finn_design_StreamingFIFO_rtl_50_0 StreamingFIFO_rtl_50
+24115:57776 |   finn_design_StreamingFIFO_rtl_51_0 StreamingFIFO_rtl_51
+24118:57786 |   finn_design_StreamingFIFO_rtl_52_0 StreamingFIFO_rtl_52
+24121:57796 |   finn_design_StreamingFIFO_rtl_53_0 StreamingFIFO_rtl_53
+24124:57806 |   finn_design_StreamingFIFO_rtl_54_0 StreamingFIFO_rtl_54
+24127:57816 |   finn_design_StreamingFIFO_rtl_55_0 StreamingFIFO_rtl_55
+24130:57826 |   finn_design_StreamingFIFO_rtl_56_0 StreamingFIFO_rtl_56
+24133:57836 |   finn_design_StreamingFIFO_rtl_57_0 StreamingFIFO_rtl_57
+24136:57846 |   finn_design_StreamingFIFO_rtl_58_0 StreamingFIFO_rtl_58
+24139:57856 |   finn_design_StreamingFIFO_rtl_59_0 StreamingFIFO_rtl_59
+24142:57866 |   finn_design_StreamingFIFO_rtl_6_0 StreamingFIFO_rtl_6
+24145:57876 |   finn_design_StreamingFIFO_rtl_60_0 StreamingFIFO_rtl_60
+24148:57886 |   finn_design_StreamingFIFO_rtl_61_0 StreamingFIFO_rtl_61
+24151:57896 |   finn_design_StreamingFIFO_rtl_62_0 StreamingFIFO_rtl_62
+24154:57906 |   finn_design_StreamingFIFO_rtl_63_0 StreamingFIFO_rtl_63
+24157:57916 |   finn_design_StreamingFIFO_rtl_64_0 StreamingFIFO_rtl_64
+24160:57926 |   finn_design_StreamingFIFO_rtl_65_0 StreamingFIFO_rtl_65
+24163:57936 |   finn_design_StreamingFIFO_rtl_66_0 StreamingFIFO_rtl_66
+24166:57946 |   finn_design_StreamingFIFO_rtl_67_0 StreamingFIFO_rtl_67
+24169:57956 |   finn_design_StreamingFIFO_rtl_68_0 StreamingFIFO_rtl_68
+24172:57966 |   finn_design_StreamingFIFO_rtl_69_0 StreamingFIFO_rtl_69
+24175:57976 |   finn_design_StreamingFIFO_rtl_7_0 StreamingFIFO_rtl_7
+24178:57986 |   finn_design_StreamingFIFO_rtl_70_0 StreamingFIFO_rtl_70
+24181:57996 |   finn_design_StreamingFIFO_rtl_71_0 StreamingFIFO_rtl_71
+24184:58006 |   finn_design_StreamingFIFO_rtl_72_0 StreamingFIFO_rtl_72
+24187:58016 |   finn_design_StreamingFIFO_rtl_73_0 StreamingFIFO_rtl_73
+24190:58026 |   finn_design_StreamingFIFO_rtl_74_0 StreamingFIFO_rtl_74
+24193:58036 |   finn_design_StreamingFIFO_rtl_75_0 StreamingFIFO_rtl_75
+24196:58046 |   finn_design_StreamingFIFO_rtl_76_0 StreamingFIFO_rtl_76
+24199:58056 |   finn_design_StreamingFIFO_rtl_77_0 StreamingFIFO_rtl_77
+24202:58066 |   finn_design_StreamingFIFO_rtl_78_0 StreamingFIFO_rtl_78
+24205:58076 |   finn_design_StreamingFIFO_rtl_79_0 StreamingFIFO_rtl_79
+24208:58086 |   finn_design_StreamingFIFO_rtl_8_0 StreamingFIFO_rtl_8
+24211:58096 |   finn_design_StreamingFIFO_rtl_80_0 StreamingFIFO_rtl_80
+24214:58106 |   finn_design_StreamingFIFO_rtl_9_0 StreamingFIFO_rtl_9
+24847:   35 | module StreamingFIFO_rtl_56(
+24920:%Warning-WIDTH: /tmp/finn_dev_thelegendiv/vivado_stitch_proj_0rkqfr9z/finn_design_wrapper.v:1438:25: Logical operator LOGAND expects 1 bit on the LHS, but LHS's VARREF 'DEPTH_TRIGGER_URAM' generates 32 bits.
+24922: 1438 |      DEPTH_TRIGGER_URAM && (DEPTH >= DEPTH_TRIGGER_URAM)? "ultra" :
+24924:%Warning-WIDTH: /tmp/finn_dev_thelegendiv/vivado_stitch_proj_0rkqfr9z/finn_design_wrapper.v:1439:25: Logical operator LOGAND expects 1 bit on the LHS, but LHS's VARREF 'DEPTH_TRIGGER_BRAM' generates 32 bits.
+24926: 1439 |      DEPTH_TRIGGER_BRAM && (DEPTH >= DEPTH_TRIGGER_BRAM)? "block" :
+24928:%Warning-WIDTH: /tmp/finn_dev_thelegendiv/vivado_stitch_proj_0rkqfr9z/finn_design_wrapper.v:1441:25: Logical operator LOGAND expects 1 bit on the LHS, but LHS's VARREF 'DEPTH_TRIGGER_BRAM' generates 32 bits.
+24930: 1441 |      DEPTH_TRIGGER_BRAM && (DEPTH >= 64)? "distributed" : "auto";
+24946:33923 |        ptr_eff.val == DEPTH-2;
+24962:33923 |        ptr_eff.val == DEPTH-2;
+25570: 1562 |     assert(APtr < $signed(A_DEPTH-1)) else begin
+25638: 1562 |     assert(APtr < $signed(A_DEPTH-1)) else begin
+26001:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_75.inst.impl
+26002:  716 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+26005:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_75.inst.impl
+26006:  773 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+26009:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_75.inst.impl
+26013:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_75.inst.impl
+26017:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+26021:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+26025:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+26029:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+26033:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+26037:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+26041:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+26045:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+26049:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_69.inst.impl
+26053:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+26057:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+26061:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+26065:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+26069:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+26073:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+26077:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+26081:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+26085:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+26089:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+26093:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+26097:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_50.inst.impl
+26101:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_50.inst.impl
+26105:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_49.inst.impl
+26109:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_49.inst.impl
+26113:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_37.inst.impl
+26117:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_37.inst.impl
+26121:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_37.inst.impl
+26125:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_37.inst.impl
+26129:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_37.inst.impl
+26133:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_37.inst.impl
+26137:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_37.inst.impl
+26141:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_37.inst.impl
+26145:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_37.inst.impl
+26149:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_36.inst.impl
+26153:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_36.inst.impl
+26157:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_36.inst.impl
+26161:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_36.inst.impl
+26165:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_36.inst.impl
+26169:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_36.inst.impl
+26173:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_36.inst.impl
+26177:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_36.inst.impl
+26181:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_36.inst.impl
+26185:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_35.inst.impl
+26186:  716 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+26189:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_35.inst.impl
+26190:  773 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+26193:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_35.inst.impl
+26197:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_35.inst.impl
+26201:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_32.inst.impl
+26205:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_32.inst.impl
+26209:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_32.inst.impl
+26213:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_32.inst.impl
+26217:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_32.inst.impl
+26221:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_32.inst.impl
+26225:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_32.inst.impl
+26229:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_32.inst.impl
+26233:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_32.inst.impl
+26237:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_26.inst.impl
+26238:  716 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+26241:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_26.inst.impl
+26242:  773 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+26245:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_26.inst.impl
+26249:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_26.inst.impl
+26253:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_24.inst.impl
+26254:  716 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+26257:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_24.inst.impl
+26258:  773 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+26261:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_24.inst.impl
+26265:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_24.inst.impl
+26269:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_24.inst.impl
+26273:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_24.inst.impl
+26277:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_24.inst.impl
+26281:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_24.inst.impl
+26285:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_24.inst.impl
+26289:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_24.inst.impl
+26293:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_24.inst.impl
+26297:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_17.inst.impl
+26298:  716 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+26301:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_17.inst.impl
+26302:  773 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+26305:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+26309:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+26313:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+26317:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+26321:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+26325:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+26329:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+26333:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+26337:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_13.inst.impl
+26341:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_12.inst.impl
+26345:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_12.inst.impl
+27273:make: Entering directory '/tmp/finn_dev_thelegendiv/verilator_fifosim_tmjbw_hd'
+27274:ccache g++  -I.  -MMD -I/usr/local/share/verilator/include -I/usr/local/share/verilator/include/vltstd -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -faligned-new -fcf-protection=none -Wno-bool-operation -Wno-sign-compare -Wno-uninitialized -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-shadow     --std=c++11  -DVL_THREADED -std=gnu++17 -Os -c -o verilator_fifosim.o verilator_fifosim.cpp
+27297:g++    verilator_fifosim.o verilated.o verilated_threads.o Vfinn_design_wrapper__ALL.a    -pthread -lpthread -latomic   -o Vfinn_design_wrapper
+27299:make: Leaving directory '/tmp/finn_dev_thelegendiv/verilator_fifosim_tmjbw_hd'
+28993:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_3: rounding-up FIFO depth from 18315 to 32768 for impl_style=vivado
+28995:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_10: rounding-up FIFO depth from 916 to 1024 for impl_style=vivado
+28997:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_11: rounding-up FIFO depth from 41472 to 65536 for impl_style=vivado
+28999:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_26: rounding-up FIFO depth from 19251 to 32768 for impl_style=vivado
+29001:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_30: rounding-up FIFO depth from 1135 to 2048 for impl_style=vivado
+29003:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_31: rounding-up FIFO depth from 9728 to 16384 for impl_style=vivado
+29005:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_45: rounding-up FIFO depth from 45422 to 65536 for impl_style=vivado
+29007:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_49: rounding-up FIFO depth from 2717 to 4096 for impl_style=vivado
+29009:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_50: rounding-up FIFO depth from 25160 to 32768 for impl_style=vivado
+29011:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_65: rounding-up FIFO depth from 4227 to 8192 for impl_style=vivado
+29013:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_70: rounding-up FIFO depth from 1920 to 2048 for impl_style=vivado
+30855:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_3: rounding-up FIFO depth from 16459 to 32768 for impl_style=vivado
+30857:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_10: rounding-up FIFO depth from 672 to 1024 for impl_style=vivado
+30859:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_11: rounding-up FIFO depth from 36992 to 65536 for impl_style=vivado
+30861:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_25: rounding-up FIFO depth from 9484 to 16384 for impl_style=vivado
+30863:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_30: rounding-up FIFO depth from 4368 to 8192 for impl_style=vivado
+30865:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_44: rounding-up FIFO depth from 19231 to 32768 for impl_style=vivado
+30867:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_48: rounding-up FIFO depth from 1135 to 2048 for impl_style=vivado
+30869:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_49: rounding-up FIFO depth from 9728 to 16384 for impl_style=vivado
+30871:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_64: rounding-up FIFO depth from 45430 to 65536 for impl_style=vivado
+30873:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_68: rounding-up FIFO depth from 2717 to 4096 for impl_style=vivado
+30875:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_69: rounding-up FIFO depth from 25160 to 32768 for impl_style=vivado
+30877:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_84: rounding-up FIFO depth from 4222 to 8192 for impl_style=vivado
+30879:/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/rtl/streamingfifo_rtl.py:70: UserWarning: StreamingFIFO_rtl_89: rounding-up FIFO depth from 1920 to 2048 for impl_style=vivado
+32269:111186 |   finn_design_StreamingFIFO_rtl_0_0 StreamingFIFO_rtl_0
+32272:111196 |   finn_design_StreamingFIFO_rtl_1_0 StreamingFIFO_rtl_1
+32275:111206 |   finn_design_StreamingFIFO_rtl_10_0 StreamingFIFO_rtl_10
+32278:111216 |   finn_design_StreamingFIFO_rtl_11_0 StreamingFIFO_rtl_11
+32281:111226 |   finn_design_StreamingFIFO_rtl_12_0 StreamingFIFO_rtl_12
+32284:111236 |   finn_design_StreamingFIFO_rtl_13_0 StreamingFIFO_rtl_13
+32287:111246 |   finn_design_StreamingFIFO_rtl_14_0 StreamingFIFO_rtl_14
+32290:111256 |   finn_design_StreamingFIFO_rtl_15_0 StreamingFIFO_rtl_15
+32293:111266 |   finn_design_StreamingFIFO_rtl_16_0 StreamingFIFO_rtl_16
+32296:111276 |   finn_design_StreamingFIFO_rtl_17_0 StreamingFIFO_rtl_17
+32299:111286 |   finn_design_StreamingFIFO_rtl_18_0 StreamingFIFO_rtl_18
+32302:111296 |   finn_design_StreamingFIFO_rtl_19_0 StreamingFIFO_rtl_19
+32305:111306 |   finn_design_StreamingFIFO_rtl_2_0 StreamingFIFO_rtl_2
+32308:111316 |   finn_design_StreamingFIFO_rtl_20_0 StreamingFIFO_rtl_20
+32311:111326 |   finn_design_StreamingFIFO_rtl_21_0 StreamingFIFO_rtl_21
+32314:111336 |   finn_design_StreamingFIFO_rtl_22_0 StreamingFIFO_rtl_22
+32317:111346 |   finn_design_StreamingFIFO_rtl_23_0 StreamingFIFO_rtl_23
+32320:111356 |   finn_design_StreamingFIFO_rtl_24_0 StreamingFIFO_rtl_24
+32323:111366 |   finn_design_StreamingFIFO_rtl_25_0 StreamingFIFO_rtl_25
+32326:111376 |   finn_design_StreamingFIFO_rtl_26_0 StreamingFIFO_rtl_26
+32329:111386 |   finn_design_StreamingFIFO_rtl_27_0 StreamingFIFO_rtl_27
+32332:111396 |   finn_design_StreamingFIFO_rtl_28_0 StreamingFIFO_rtl_28
+32335:111406 |   finn_design_StreamingFIFO_rtl_29_0 StreamingFIFO_rtl_29
+32338:111416 |   finn_design_StreamingFIFO_rtl_3_0 StreamingFIFO_rtl_3
+32341:111426 |   finn_design_StreamingFIFO_rtl_30_0 StreamingFIFO_rtl_30
+32344:111436 |   finn_design_StreamingFIFO_rtl_31_0 StreamingFIFO_rtl_31
+32347:111446 |   finn_design_StreamingFIFO_rtl_32_0 StreamingFIFO_rtl_32
+32350:111456 |   finn_design_StreamingFIFO_rtl_33_0 StreamingFIFO_rtl_33
+32353:111466 |   finn_design_StreamingFIFO_rtl_34_0 StreamingFIFO_rtl_34
+32356:111476 |   finn_design_StreamingFIFO_rtl_35_0 StreamingFIFO_rtl_35
+32359:111486 |   finn_design_StreamingFIFO_rtl_36_0 StreamingFIFO_rtl_36
+32362:111496 |   finn_design_StreamingFIFO_rtl_37_0 StreamingFIFO_rtl_37
+32365:111506 |   finn_design_StreamingFIFO_rtl_38_0 StreamingFIFO_rtl_38
+32368:111516 |   finn_design_StreamingFIFO_rtl_39_0 StreamingFIFO_rtl_39
+32371:111526 |   finn_design_StreamingFIFO_rtl_4_0 StreamingFIFO_rtl_4
+32374:111536 |   finn_design_StreamingFIFO_rtl_40_0 StreamingFIFO_rtl_40
+32377:111546 |   finn_design_StreamingFIFO_rtl_41_0 StreamingFIFO_rtl_41
+32380:111556 |   finn_design_StreamingFIFO_rtl_42_0 StreamingFIFO_rtl_42
+32383:111566 |   finn_design_StreamingFIFO_rtl_43_0 StreamingFIFO_rtl_43
+32386:111576 |   finn_design_StreamingFIFO_rtl_44_0 StreamingFIFO_rtl_44
+32389:111586 |   finn_design_StreamingFIFO_rtl_45_0 StreamingFIFO_rtl_45
+32392:111596 |   finn_design_StreamingFIFO_rtl_46_0 StreamingFIFO_rtl_46
+32395:111606 |   finn_design_StreamingFIFO_rtl_47_0 StreamingFIFO_rtl_47
+32398:111616 |   finn_design_StreamingFIFO_rtl_48_0 StreamingFIFO_rtl_48
+32401:111626 |   finn_design_StreamingFIFO_rtl_49_0 StreamingFIFO_rtl_49
+32404:111636 |   finn_design_StreamingFIFO_rtl_5_0 StreamingFIFO_rtl_5
+32407:111646 |   finn_design_StreamingFIFO_rtl_50_0 StreamingFIFO_rtl_50
+32410:111656 |   finn_design_StreamingFIFO_rtl_51_0 StreamingFIFO_rtl_51
+32413:111666 |   finn_design_StreamingFIFO_rtl_52_0 StreamingFIFO_rtl_52
+32416:111676 |   finn_design_StreamingFIFO_rtl_53_0 StreamingFIFO_rtl_53
+32419:111686 |   finn_design_StreamingFIFO_rtl_54_0 StreamingFIFO_rtl_54
+32422:111696 |   finn_design_StreamingFIFO_rtl_55_0 StreamingFIFO_rtl_55
+32425:111706 |   finn_design_StreamingFIFO_rtl_56_0 StreamingFIFO_rtl_56
+32428:111716 |   finn_design_StreamingFIFO_rtl_57_0 StreamingFIFO_rtl_57
+32431:111726 |   finn_design_StreamingFIFO_rtl_58_0 StreamingFIFO_rtl_58
+32434:111736 |   finn_design_StreamingFIFO_rtl_59_0 StreamingFIFO_rtl_59
+32437:111746 |   finn_design_StreamingFIFO_rtl_6_0 StreamingFIFO_rtl_6
+32440:111756 |   finn_design_StreamingFIFO_rtl_60_0 StreamingFIFO_rtl_60
+32443:111766 |   finn_design_StreamingFIFO_rtl_61_0 StreamingFIFO_rtl_61
+32446:111776 |   finn_design_StreamingFIFO_rtl_62_0 StreamingFIFO_rtl_62
+32449:111786 |   finn_design_StreamingFIFO_rtl_63_0 StreamingFIFO_rtl_63
+32452:111796 |   finn_design_StreamingFIFO_rtl_64_0 StreamingFIFO_rtl_64
+32455:111806 |   finn_design_StreamingFIFO_rtl_65_0 StreamingFIFO_rtl_65
+32458:111816 |   finn_design_StreamingFIFO_rtl_66_0 StreamingFIFO_rtl_66
+32461:111826 |   finn_design_StreamingFIFO_rtl_67_0 StreamingFIFO_rtl_67
+32464:111836 |   finn_design_StreamingFIFO_rtl_68_0 StreamingFIFO_rtl_68
+32467:111846 |   finn_design_StreamingFIFO_rtl_69_0 StreamingFIFO_rtl_69
+32470:111856 |   finn_design_StreamingFIFO_rtl_7_0 StreamingFIFO_rtl_7
+32473:111866 |   finn_design_StreamingFIFO_rtl_70_0 StreamingFIFO_rtl_70
+32476:111876 |   finn_design_StreamingFIFO_rtl_71_0 StreamingFIFO_rtl_71
+32479:111886 |   finn_design_StreamingFIFO_rtl_72_0 StreamingFIFO_rtl_72
+32482:111896 |   finn_design_StreamingFIFO_rtl_73_0 StreamingFIFO_rtl_73
+32485:111906 |   finn_design_StreamingFIFO_rtl_74_0 StreamingFIFO_rtl_74
+32488:111916 |   finn_design_StreamingFIFO_rtl_75_0 StreamingFIFO_rtl_75
+32491:111926 |   finn_design_StreamingFIFO_rtl_76_0 StreamingFIFO_rtl_76
+32494:111936 |   finn_design_StreamingFIFO_rtl_77_0 StreamingFIFO_rtl_77
+32497:111946 |   finn_design_StreamingFIFO_rtl_78_0 StreamingFIFO_rtl_78
+32500:111956 |   finn_design_StreamingFIFO_rtl_79_0 StreamingFIFO_rtl_79
+32503:111966 |   finn_design_StreamingFIFO_rtl_8_0 StreamingFIFO_rtl_8
+32506:111976 |   finn_design_StreamingFIFO_rtl_80_0 StreamingFIFO_rtl_80
+32509:111986 |   finn_design_StreamingFIFO_rtl_81_0 StreamingFIFO_rtl_81
+32512:111996 |   finn_design_StreamingFIFO_rtl_82_0 StreamingFIFO_rtl_82
+32515:112006 |   finn_design_StreamingFIFO_rtl_83_0 StreamingFIFO_rtl_83
+32518:112016 |   finn_design_StreamingFIFO_rtl_84_0 StreamingFIFO_rtl_84
+32521:112026 |   finn_design_StreamingFIFO_rtl_85_0 StreamingFIFO_rtl_85
+32524:112036 |   finn_design_StreamingFIFO_rtl_86_0 StreamingFIFO_rtl_86
+32527:112046 |   finn_design_StreamingFIFO_rtl_87_0 StreamingFIFO_rtl_87
+32530:112056 |   finn_design_StreamingFIFO_rtl_88_0 StreamingFIFO_rtl_88
+32533:112066 |   finn_design_StreamingFIFO_rtl_9_0 StreamingFIFO_rtl_9
+33100:  196 | module StreamingFIFO_rtl_73(
+33125:%Warning-WIDTH: /tmp/finn_dev_thelegendiv/vivado_stitch_proj_vzzo9wfb/finn_design_wrapper.v:2396:25: Logical operator LOGAND expects 1 bit on the LHS, but LHS's VARREF 'DEPTH_TRIGGER_URAM' generates 32 bits.
+33127: 2396 |      DEPTH_TRIGGER_URAM && (DEPTH >= DEPTH_TRIGGER_URAM)? "ultra" :
+33129:%Warning-WIDTH: /tmp/finn_dev_thelegendiv/vivado_stitch_proj_vzzo9wfb/finn_design_wrapper.v:2397:25: Logical operator LOGAND expects 1 bit on the LHS, but LHS's VARREF 'DEPTH_TRIGGER_BRAM' generates 32 bits.
+33131: 2397 |      DEPTH_TRIGGER_BRAM && (DEPTH >= DEPTH_TRIGGER_BRAM)? "block" :
+33133:%Warning-WIDTH: /tmp/finn_dev_thelegendiv/vivado_stitch_proj_vzzo9wfb/finn_design_wrapper.v:2399:25: Logical operator LOGAND expects 1 bit on the LHS, but LHS's VARREF 'DEPTH_TRIGGER_BRAM' generates 32 bits.
+33135: 2399 |      DEPTH_TRIGGER_BRAM && (DEPTH >= 64)? "distributed" : "auto";
+33191:78015 |        ptr_eff.val == DEPTH-2;
+33303:78015 |        ptr_eff.val == DEPTH-2;
+33703:78015 |        ptr_eff.val == DEPTH-2;
+34019: 2520 |     assert(APtr < $signed(A_DEPTH-1)) else begin
+34059: 2520 |     assert(APtr < $signed(A_DEPTH-1)) else begin
+34710:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_9.inst.impl
+34714:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_9.inst.impl
+34718:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_9.inst.impl
+34722:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_9.inst.impl
+34726:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_9.inst.impl
+34730:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_9.inst.impl
+34734:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_9.inst.impl
+34738:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_9.inst.impl
+34742:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_9.inst.impl
+34746:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_9.inst.impl
+34750:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_9.inst.impl
+34754:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_85.inst.impl
+34755:  673 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+34758:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_85.inst.impl
+34759:  730 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+34762:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_85.inst.impl
+34766:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_85.inst.impl
+34770:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_85.inst.impl
+34774:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_85.inst.impl
+34778:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_85.inst.impl
+34782:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_85.inst.impl
+34786:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_85.inst.impl
+34790:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_85.inst.impl
+34794:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_85.inst.impl
+34798:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_85.inst.impl
+34802:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_85.inst.impl
+34806:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_84.inst.impl
+34807:  673 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+34810:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_84.inst.impl
+34811:  730 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+34814:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_84.inst.impl
+34818:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_84.inst.impl
+34822:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_84.inst.impl
+34826:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_84.inst.impl
+34830:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_84.inst.impl
+34834:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_84.inst.impl
+34838:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_84.inst.impl
+34842:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_84.inst.impl
+34846:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_84.inst.impl
+34850:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_84.inst.impl
+34854:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_84.inst.impl
+34858:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_82.inst.impl
+34859:  673 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+34862:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_82.inst.impl
+34863:  730 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+34866:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_82.inst.impl
+34870:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_82.inst.impl
+34874:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_80.inst.impl
+34878:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_80.inst.impl
+34882:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_80.inst.impl
+34886:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_80.inst.impl
+34890:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_80.inst.impl
+34894:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_80.inst.impl
+34898:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_80.inst.impl
+34902:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_80.inst.impl
+34906:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_80.inst.impl
+34910:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_8.inst.impl
+34914:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_8.inst.impl
+34918:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_79.inst.impl
+34922:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_79.inst.impl
+34926:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_79.inst.impl
+34930:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_79.inst.impl
+34934:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_79.inst.impl
+34938:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_79.inst.impl
+34942:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_79.inst.impl
+34946:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_79.inst.impl
+34950:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_79.inst.impl
+34954:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_78.inst.impl
+34958:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_78.inst.impl
+34962:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_78.inst.impl
+34966:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_78.inst.impl
+34970:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_78.inst.impl
+34974:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_78.inst.impl
+34978:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_78.inst.impl
+34982:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_78.inst.impl
+34986:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_78.inst.impl
+34990:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_77.inst.impl
+34994:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_77.inst.impl
+34998:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_77.inst.impl
+35002:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_77.inst.impl
+35006:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_77.inst.impl
+35010:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_77.inst.impl
+35014:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_77.inst.impl
+35018:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_77.inst.impl
+35022:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_77.inst.impl
+35026:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_76.inst.impl
+35030:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_76.inst.impl
+35034:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_73.inst.impl
+35038:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_73.inst.impl
+35042:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_72.inst.impl
+35046:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_72.inst.impl
+35050:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_72.inst.impl
+35054:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_72.inst.impl
+35058:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_72.inst.impl
+35062:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_72.inst.impl
+35066:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_72.inst.impl
+35070:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_72.inst.impl
+35074:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_72.inst.impl
+35078:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+35079:  673 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+35082:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+35083:  730 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+35086:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+35090:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_68.inst.impl
+35094:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_66.inst.impl
+35095:  673 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+35098:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_66.inst.impl
+35099:  730 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+35102:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_50.inst.impl
+35106:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_50.inst.impl
+35110:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_50.inst.impl
+35114:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_50.inst.impl
+35118:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_50.inst.impl
+35122:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_50.inst.impl
+35126:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_50.inst.impl
+35130:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_50.inst.impl
+35134:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_50.inst.impl
+35138:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_24.inst.impl
+35139:  673 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+35142:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_24.inst.impl
+35143:  730 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+35146:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_22.inst.impl
+35147:  673 |    assign addr_full_ = (state_==state_more) && (addr_==depth-2);
+35150:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_22.inst.impl
+35151:  730 |   for (a_=depth-2; a_>0; a_=a_-1) begin
+35154:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_11.inst.impl
+35158:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_11.inst.impl
+35162:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_11.inst.impl
+35166:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_11.inst.impl
+35170:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_11.inst.impl
+35174:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_11.inst.impl
+35178:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_11.inst.impl
+35182:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_11.inst.impl
+35186:                                                                                                  : ... In instance finn_design_wrapper.finn_design_i.StreamingFIFO_rtl_11.inst.impl
+36350:make: Entering directory '/tmp/finn_dev_thelegendiv/verilator_fifosim_aj36rvwx'
+36351:ccache g++  -I.  -MMD -I/usr/local/share/verilator/include -I/usr/local/share/verilator/include/vltstd -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -faligned-new -fcf-protection=none -Wno-bool-operation -Wno-sign-compare -Wno-uninitialized -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-shadow     --std=c++11  -DVL_THREADED -std=gnu++17 -Os -c -o verilator_fifosim.o verilator_fifosim.cpp
+36376:g++    verilator_fifosim.o verilated.o verilated_threads.o Vfinn_design_wrapper__ALL.a    -pthread -lpthread -latomic   -o Vfinn_design_wrapper
+36378:make: Leaving directory '/tmp/finn_dev_thelegendiv/verilator_fifosim_aj36rvwx'
+36586:make: Entering directory '/tmp/finn_dev_thelegendiv/verilator_fifosim_uvycfeho'
+36587:ccache g++  -I.  -MMD -I/usr/local/share/verilator/include -I/usr/local/share/verilator/include/vltstd -DVM_COVERAGE=0 -DVM_SC=0 -DVM_TRACE=0 -DVM_TRACE_FST=0 -DVM_TRACE_VCD=0 -faligned-new -fcf-protection=none -Wno-bool-operation -Wno-sign-compare -Wno-uninitialized -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-unused-variable -Wno-shadow     --std=c++11  -DVL_THREADED -std=gnu++17 -Os -c -o verilator_fifosim.o verilator_fifosim.cpp
+36612:g++    verilator_fifosim.o verilated.o verilated_threads.o Vfinn_design_wrapper__ALL.a    -pthread -lpthread -latomic   -o Vfinn_design_wrapper
+36614:make: Leaving directory '/tmp/finn_dev_thelegendiv/verilator_fifosim_uvycfeho'

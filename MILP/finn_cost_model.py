@@ -1224,7 +1224,16 @@ def maxpool_cost(layer: LayerGeometry, act_bits: int) -> dict:
     """MaxPool2d: SWU + comparator array, no MVAU/weights -- act_bits only
     (no weight_bits, there's nothing to quantize). No P/Q/folding at all --
     pooling was never a folded MVAU to begin with, identical in every
-    convention. cycles ~= H_out*W_out (one comparison pass per pixel, M=1)."""
+    convention.
+
+    cycles: real FINN's StreamingMaxPool.get_exp_cycles() (hls/
+    streamingmaxpool_hls.py) is int(ifm_dim**2 * (1 + 1/k**2)) --
+    INPUT-pixel-driven, NOT hout*wout. A pooling window still has to read
+    every input pixel once regardless of how many output pixels the stride
+    produces, so cycles scale with hin*win -- ~k^2x MORE than the
+    output-pixel count this formula previously (wrongly) used, which
+    silently assumed downsampling also cuts cycle cost by the same factor
+    (confirmed a real ~4x undercount for this repo's 2x2/stride-2 pools)."""
     A = act_bits
     M = 1
     k_eff = _k_eff(layer.kh, layer.dh)
@@ -1232,7 +1241,7 @@ def maxpool_cost(layer: LayerGeometry, act_bits: int) -> dict:
     swu_lut = M * 426
     mp_lut = M * A * layer.cin
     total_lut = swu_lut + mp_lut
-    cycles = math.ceil(layer.hout * layer.wout / M)
+    cycles = math.ceil(M * layer.hin * layer.win * (1 + 1 / (layer.kh * layer.kw)))
     return {
         "total_pe": 0, "total_simd_lanes": 0,
         "swu_bram18": swu_bram18, "wm_bram18": 0, "wm_uram18": 0,
