@@ -370,17 +370,46 @@ class LayerQuantDownsamplingBottleneck(nn.Module):
 class LayerQuantUpsamplingBottleneck(nn.Module):
     """Per-site clone of QuantENet.QuantUpsamplingBottleneck (no
     negative_slope support at all in the original class -- kept that way).
-    Weight sites: "main_proj.0", "reduce.0", "up.0", "expand.0" (always 4).
-    Act sites: "reduce.2", "up.2", "residual_add", "out_act" (always 4)."""
+    Weight sites: "main_proj.0", "reduce.0", "up.0", "expand.0" (always 4),
+    plus "skip_resize_conv.0" when decoder_type="nearest_conv_upsample".
+    Act sites: "reduce.2", "up.2", "residual_add", "out_act" (always 4),
+    plus "skip_resize_conv.2" when decoder_type="nearest_conv_upsample".
 
-    def __init__(self, in_channels: int, out_channels: int, weight_bits: dict[str, int], act_bits: dict[str, int], internal_ratio: int = 4):
+    decoder_type="nearest_conv_upsample" mirrors ENet.py's own
+    UpsamplingBottleneck addition: the skip/main branch's F.interpolate
+    switches from mode="bilinear" to mode="nearest", followed by a learned
+    3x3 QuantConv2d + BatchNorm2d + quantized activation (the "resize-
+    convolution" anti-checkerboard pattern) -- same shape/placement as
+    ENet.py's own skip_resize_conv, just with per-site (weight_bits,
+    act_bits) instead of a single scalar pair. "upsample_conv" (the
+    default) is unaffected -- bare bilinear resize, no conv after it,
+    byte-identical to before this addition."""
+
+    def __init__(
+        self, in_channels: int, out_channels: int, weight_bits: dict[str, int], act_bits: dict[str, int],
+        internal_ratio: int = 4, decoder_type: str = "upsample_conv",
+    ):
         super().__init__()
+        if decoder_type not in ("upsample_conv", "nearest_conv_upsample"):
+            raise NotImplementedError(
+                "LayerQuantUpsamplingBottleneck only implements 'upsample_conv' (bilinear, no conv after) "
+                f"and 'nearest_conv_upsample' (nearest + 3x3 conv+BN+act) -- got {decoder_type!r}."
+            )
+        self.decoder_type = decoder_type
         internal_channels = max(1, in_channels // internal_ratio)
         self.main_proj = nn.Sequential(
             _quant_conv2d(in_channels, out_channels, weight_bits["main_proj.0"], kernel_size=1),
             nn.BatchNorm2d(out_channels),
         )
         self.unpool = nn.MaxUnpool2d(kernel_size=2, stride=2)
+        self.skip_resize_conv = (
+            nn.Sequential(
+                _quant_conv2d(out_channels, out_channels, weight_bits["skip_resize_conv.0"], kernel_size=3, padding=1),
+                nn.BatchNorm2d(out_channels), _quant_act(act_bits["skip_resize_conv.2"]),
+            )
+            if decoder_type == "nearest_conv_upsample"
+            else None
+        )
         self.reduce = nn.Sequential(
             _quant_conv2d(in_channels, internal_channels, weight_bits["reduce.0"], kernel_size=1),
             nn.BatchNorm2d(internal_channels), _quant_act(act_bits["reduce.2"]),
@@ -401,7 +430,10 @@ class LayerQuantUpsamplingBottleneck(nn.Module):
     def forward(self, x: torch.Tensor, output_size: torch.Size, indices: torch.Tensor | None = None) -> torch.Tensor:
         main = self.main_proj(x)
         if indices is None:
-            main = F.interpolate(main, size=output_size[2:], mode="bilinear", align_corners=False)
+            mode = "nearest" if self.decoder_type == "nearest_conv_upsample" else "bilinear"
+            main = F.interpolate(main, size=output_size[2:], mode=mode, align_corners=False if mode == "bilinear" else None)
+            if self.skip_resize_conv is not None:
+                main = self.skip_resize_conv(main)
         else:
             main = self.unpool(main, indices, output_size=output_size)
         out = self.reduce(x)
@@ -524,7 +556,7 @@ def _build_layer_enet_modules(
     context_pattern: str, use_dilated: bool, use_asymmetric: bool, use_strided: bool, use_dsc: bool,
     dsc_no_projection: bool, dsc_no_projection_context_only: bool, separable_dilated: bool,
     leaky_slope_map: dict[str, float] | None, trainable_slope: bool,
-    discovery_placeholder: int | None = None,
+    decoder_type: str = "upsample_conv", discovery_placeholder: int | None = None,
 ) -> dict[str, nn.Module]:
     """Single source of truth for block assembly -- verbatim port of
     CombinedQuantENet.__init__'s body (11 top-level submodule constructions),
@@ -589,7 +621,7 @@ def _build_layer_enet_modules(
     # trainable_slope either -- irrelevant with no negative_slope to use it).
     modules["up4"] = LayerQuantUpsamplingBottleneck(
         stage23_ch, stage4_ch, _local_single(layer_weight_bits, "up4", discovery_placeholder),
-        _local_single(layer_act_bits, "up4", discovery_placeholder),
+        _local_single(layer_act_bits, "up4", discovery_placeholder), decoder_type=decoder_type,
     )
     modules["regular4"] = _make_layer_shallow_stage(
         stage4_ch, n_regular4, layer_weight_bits, layer_act_bits, 0.1, "regular4", {},
@@ -600,7 +632,7 @@ def _build_layer_enet_modules(
 
     modules["up5"] = LayerQuantUpsamplingBottleneck(
         stage4_ch, stage5_ch, _local_single(layer_weight_bits, "up5", discovery_placeholder),
-        _local_single(layer_act_bits, "up5", discovery_placeholder),
+        _local_single(layer_act_bits, "up5", discovery_placeholder), decoder_type=decoder_type,
     )
     modules["regular5"] = _make_layer_shallow_stage(
         stage5_ch, n_regular5, layer_weight_bits, layer_act_bits, 0.1, "regular5", {},
@@ -617,7 +649,7 @@ def layer_names_for(
     bottlenecks_per_stage: tuple[int, int, int, int, int], context_pattern: str,
     use_dilated: bool = True, use_asymmetric: bool = False, use_strided: bool = True,
     use_dsc: bool = False, dsc_no_projection: bool = False, dsc_no_projection_context_only: bool = False,
-    separable_dilated: bool = True,
+    separable_dilated: bool = True, decoder_type: str = "upsample_conv",
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """Returns (layer_weight_names, layer_act_names) -- the exact set of
     per-site dict keys a LayerQuantENet built with this architecture shape
@@ -626,8 +658,10 @@ def layer_names_for(
     pure function of shape/pattern flags, never of the bit-width chosen at a
     site, so this can never drift out of sync with the real assembly code).
     Signature is LayerQuantENet.__init__'s architecture-shape subset only --
-    excludes decoder_type/prelu_variant/leaky_slope_map/trainable_slope, none
-    of which affect which sites exist."""
+    excludes prelu_variant/leaky_slope_map/trainable_slope (none of which
+    affect which sites exist) but DOES include decoder_type, since
+    "nearest_conv_upsample" adds a real extra site (skip_resize_conv) that
+    "upsample_conv" doesn't have."""
     modules = _build_layer_enet_modules(
         {}, {}, in_channels=in_channels, out_channels=out_channels, channels=channels,
         bottlenecks_per_stage=bottlenecks_per_stage, context_pattern=context_pattern,
@@ -635,7 +669,7 @@ def layer_names_for(
         use_dsc=use_dsc, dsc_no_projection=dsc_no_projection,
         dsc_no_projection_context_only=dsc_no_projection_context_only,
         separable_dilated=separable_dilated, leaky_slope_map=None, trainable_slope=False,
-        discovery_placeholder=8,
+        decoder_type=decoder_type, discovery_placeholder=8,
     )
     dummy = nn.Module()
     for name, module in modules.items():
@@ -709,10 +743,12 @@ class LayerQuantENet(nn.Module):
         trainable_slope: bool = True,
     ):
         super().__init__()
-        if decoder_type != "upsample_conv":
+        if decoder_type not in ("upsample_conv", "nearest_conv_upsample"):
             raise NotImplementedError(
-                "LayerQuantENet's forward() only implements the upsample_conv decoder path "
-                "(no pooling-indices plumbing) -- same scope CombinedQuantENet already has."
+                "LayerQuantENet's forward() only implements the upsample_conv (bilinear, no pooling-"
+                "indices plumbing -- same scope CombinedQuantENet already has) and nearest_conv_upsample "
+                f"(nearest + 3x3 conv+BN+act, see LayerQuantUpsamplingBottleneck) decoder paths -- got "
+                f"{decoder_type!r}."
             )
         if dsc_no_projection_context_only and not dsc_no_projection:
             raise ValueError("dsc_no_projection_context_only narrows dsc_no_projection's scope -- meaningless without dsc_no_projection=True itself.")
@@ -727,6 +763,7 @@ class LayerQuantENet(nn.Module):
             use_dilated=use_dilated, use_asymmetric=use_asymmetric, use_strided=use_strided,
             use_dsc=use_dsc, dsc_no_projection=dsc_no_projection,
             dsc_no_projection_context_only=dsc_no_projection_context_only, separable_dilated=separable_dilated,
+            decoder_type=decoder_type,
         )
         expected_weight_names, expected_act_names = layer_names_for(**shape_kwargs)
 

@@ -27,6 +27,8 @@ join, contributes to) that exact wire:
   - Sites strictly INSIDE one block, downstream of one specific local conv
     (reduce.2 <- reduce.0, conv.2 <- conv.0, conv_bn_act.2 <- whichever of
     conv/conv.1/conv.3 that block actually has, up.2 <- up.0,
+    skip_resize_conv.2 <- skip_resize_conv.0 -- decoder_type=
+    "nearest_conv_upsample" only, see LayerQuantUpsamplingBottleneck --
     input_quant <- conv) -- a static, hand-known mapping (these local
     structures are fixed by LayerQuantENet.py's own construction code, not
     architecture-search-dependent, so no graph tracing is needed for them).
@@ -85,7 +87,7 @@ from nnunetv2.nets.LayerQuantENet import layer_names_for  # noqa: E402
 # matter, but reduce.2/reduce.3 and conv.2/conv_bn_act.2 must each be
 # matched as a whole two-segment tail, never truncated to just ".2".
 ACT_SUFFIXES_ORDERED = (
-    "reduce.2", "reduce.3", "conv_bn_act.2", "conv.2", "up.2",
+    "reduce.2", "reduce.3", "conv_bn_act.2", "conv.2", "up.2", "skip_resize_conv.2",
     "input_quant", "residual_add", "out_act", "act",
 )
 
@@ -157,6 +159,13 @@ def resolve_act_sources(
         return [f"{block_prefix}.conv.0"]
     if suffix == "up.2":
         return [f"{block_prefix}.up.0"]
+    if suffix == "skip_resize_conv.2":
+        # decoder_type="nearest_conv_upsample" only -- LOCAL, downstream of
+        # this same UpsamplingBottleneck's own skip_resize_conv.0 (the 3x3
+        # resize-conv on the skip/main branch, see LayerQuantENet.py's
+        # LayerQuantUpsamplingBottleneck), same pattern as reduce.2<-reduce.0/
+        # up.2<-up.0 -- no cross-block tracing needed.
+        return [f"{block_prefix}.skip_resize_conv.0"]
     if suffix == "conv_bn_act.2":
         return _conv_bn_act_local_source(block_prefix, layer_weight_bits)
     if suffix == "input_quant":
@@ -218,7 +227,7 @@ def main() -> None:
         context_pattern=CONTEXT_PATTERN, use_dilated=True, use_asymmetric=USE_ASYMMETRIC, use_strided=True,
         use_dsc=globals().get("USE_DSC", False), dsc_no_projection=globals().get("DSC_NO_PROJECTION", False),
         dsc_no_projection_context_only=globals().get("DSC_NO_PROJECTION_CONTEXT_ONLY", False),
-        separable_dilated=SEPARABLE_DILATED,
+        separable_dilated=SEPARABLE_DILATED, decoder_type=DECODER_TYPE,
     )
 
     with open(args.ilp_result) as f:
