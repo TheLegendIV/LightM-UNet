@@ -7,7 +7,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-DecoderType = Literal["max_unpool", "upsample_conv", "learned_upsample"]
+DecoderType = Literal["max_unpool", "upsample_conv", "learned_upsample", "nearest_upsample", "nearest_conv_upsample"]
 ContextPattern = Literal[
     "default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_lead1",
     "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing",
@@ -797,6 +797,8 @@ class UpsamplingBottleneck(nn.Module):
         double_projections: bool = False,
         prelu_variant: PReluVariant = "standard",
         learned_skip_upsample: bool = False,
+        skip_interp_mode: Literal["bilinear", "nearest"] = "bilinear",
+        skip_resize_conv: bool = False,
     ):
         super().__init__()
         internal_channels = max(1, in_channels // internal_ratio)
@@ -823,10 +825,38 @@ class UpsamplingBottleneck(nn.Module):
         # this makes ALL three upsampling sites learned instead of just two
         # of three. No BN/activation added after it, to isolate the resize
         # op itself as the only change vs. upsample_conv's bilinear resize.
+        #
+        # decoder_type="nearest_upsample": same indices-free skip/main branch
+        # as upsample_conv (parameter-free, no learned deconv), but the
+        # F.interpolate call itself switches from mode="bilinear" to
+        # mode="nearest" -- isolates the resize KERNEL as the only change
+        # (no learned params added anywhere, unlike learned_upsample).
+        #
+        # decoder_type="nearest_conv_upsample": the classic "resize-
+        # convolution" anti-checkerboard pattern (nearest resize -> regular
+        # conv), applied to the skip/main branch on top of nearest_upsample's
+        # own nearest resize. A learned 3x3 Conv2d + BN + activation follows
+        # the resize -- unlike learned_upsample's bare ConvTranspose2d (no
+        # BN/activation, isolating the resize op itself), this one mirrors
+        # the residual branch's own `up` module below (ConvTranspose2d -> BN
+        # -> activation) so both branches' upsampling gets the same
+        # normalize+activate treatment. 3x3 (not 1x1) so the conv has a real
+        # receptive field to smooth the nearest-duplicated pixels, not just
+        # re-mix channels at each output position independently.
         self.learned_skip_upsample = learned_skip_upsample
+        self.skip_interp_mode = skip_interp_mode
         self.main_upsample = (
             nn.ConvTranspose2d(out_channels, out_channels, kernel_size=2, stride=2, bias=False)
             if learned_skip_upsample
+            else None
+        )
+        self.skip_resize_conv = (
+            nn.Sequential(
+                nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=False),
+                nn.BatchNorm2d(out_channels),
+                _activation(out_channels, relu, prelu_variant, shared_act),
+            )
+            if skip_resize_conv
             else None
         )
         self.reduce = _reduce_proj(in_channels, internal_channels, relu, double_projections, prelu_variant, shared_act)
@@ -849,8 +879,12 @@ class UpsamplingBottleneck(nn.Module):
         if indices is None:
             if self.learned_skip_upsample:
                 main = self.main_upsample(main)
+            elif self.skip_interp_mode == "nearest":
+                main = F.interpolate(main, size=output_size[2:], mode="nearest")
             else:
                 main = F.interpolate(main, size=output_size[2:], mode="bilinear", align_corners=False)
+            if self.skip_resize_conv is not None:
+                main = self.skip_resize_conv(main)
         else:
             if main.shape[1] != indices.shape[1]:
                 raise RuntimeError(
@@ -1207,9 +1241,12 @@ class ENet(nn.Module):
             raise ValueError("ENet stage channels must all be positive.")
         if initial_channels <= in_channels:
             raise ValueError("ENet initial channels must exceed input channels.")
-        if decoder_type not in ("max_unpool", "upsample_conv", "learned_upsample"):
+        if decoder_type not in (
+            "max_unpool", "upsample_conv", "learned_upsample", "nearest_upsample", "nearest_conv_upsample",
+        ):
             raise ValueError(
-                f"decoder_type must be 'max_unpool', 'upsample_conv', or 'learned_upsample', got {decoder_type!r}."
+                "decoder_type must be 'max_unpool', 'upsample_conv', 'learned_upsample', "
+                f"'nearest_upsample', or 'nearest_conv_upsample', got {decoder_type!r}."
             )
 
         self.in_channels = in_channels
@@ -1328,13 +1365,19 @@ class ENet(nn.Module):
         self.stage3 = self._make_context_stage(stage3_channels, n_stage3, skip_leading_reg=self.merge_reg_boundary)
 
         learned_skip_upsample = decoder_type == "learned_upsample"
+        skip_interp_mode = "nearest" if decoder_type in ("nearest_upsample", "nearest_conv_upsample") else "bilinear"
+        skip_resize_conv = decoder_type == "nearest_conv_upsample"
         self.up4 = UpsamplingBottleneck(stage3_channels, stage4_channels, double_projections=double_projections,
                                          prelu_variant=self.prelu_variant,
-                                         learned_skip_upsample=learned_skip_upsample)
+                                         learned_skip_upsample=learned_skip_upsample,
+                                         skip_interp_mode=skip_interp_mode,
+                                         skip_resize_conv=skip_resize_conv)
         self.regular4 = self._make_shallow_stage(stage4_channels, n_regular4, dropout_p=0.1, relu=True)
         self.up5 = UpsamplingBottleneck(stage4_channels, stage5_channels, double_projections=double_projections,
                                          prelu_variant=self.prelu_variant,
-                                         learned_skip_upsample=learned_skip_upsample)
+                                         learned_skip_upsample=learned_skip_upsample,
+                                         skip_interp_mode=skip_interp_mode,
+                                         skip_resize_conv=skip_resize_conv)
         if dsc_no_projection and not dsc_no_projection_context_only:
             self.regular5 = nn.Sequential(
                 *[DSCNoProjectionBottleneck(stage5_channels, dropout_p=0.1, relu=True,
