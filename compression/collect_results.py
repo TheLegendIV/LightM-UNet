@@ -420,7 +420,7 @@ def main() -> None:
     parser.add_argument("--stage", required=True, help="e.g. stage1, stage1b, stage2, early_probe.")
     parser.add_argument("--channels", required=True, type=parse_channels)
     parser.add_argument("--bottlenecks", default="4,8,8,2,1", type=lambda v: parse_tuple5(v, "bottlenecks"))
-    parser.add_argument("--decoder-type", default="max_unpool", choices=["max_unpool", "upsample_conv", "learned_upsample"])
+    parser.add_argument("--decoder-type", default="max_unpool", choices=["max_unpool", "upsample_conv", "learned_upsample", "nearest_upsample", "nearest_conv_upsample"])
     parser.add_argument("--use-dilated", type=int, default=1, choices=[0, 1])
     parser.add_argument("--use-asymmetric", type=int, default=1, choices=[0, 1])
     parser.add_argument("--use-strided", type=int, default=1, choices=[0, 1])
