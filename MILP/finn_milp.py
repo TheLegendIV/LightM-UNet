@@ -470,6 +470,7 @@ def solve_joint_perlayer(
     require_simd_ge_pe: bool = False,
     hard_dsp_fraction: float = 1.0,
     hard_uram_fraction: float = 1.0,
+    max_join_imbalance_ratio: float | None = None,
 ) -> dict:
     """The per-layer combined MILP -- see module docstring for the full
     formulation.
@@ -478,7 +479,26 @@ def solve_joint_perlayer(
     skip the correction entirely, falling back to self-indexed act
     sensitivity for every layer) -- see module docstring's PREDECESSOR-
     CORRECTED ACT SENSITIVITY section for what this fixes and
-    _act_sensitivity_sources for the exact fallback rules."""
+    _act_sensitivity_sources for the exact fallback rules.
+
+    max_join_imbalance_ratio: hard per-join balance constraint (None =
+    disabled, prior behavior exactly). A "join" is any layer with 2+ real
+    predecessors in `predecessor_map` -- two (or more) PARALLEL branches
+    that execute CONCURRENTLY in real FINN dataflow hardware, reconverging
+    at a residual add/concat. Nothing else in this ILP is aware layers can
+    be siblings this way -- each layer's own (PE,SIMD,bits) is chosen with
+    zero visibility into its join partner, and a large skew is exactly what
+    forces a real, UNMODELED FIFO in actual hardware (see finn_cost_model.py's
+    own "still not covered: FIFOs" note and MILP/scan_fork_join_mismatch.py's
+    `predicted_depth`). For every real join (deduplicated by its own
+    predecessor set), every ordered pair of branches (i, j) gets
+    `cycles[i] <= max_join_imbalance_ratio * cycles[j]`. MaxPool2d branches
+    are EXEMPT (candidate_folds gives them a single fixed (1,1) fold -- no
+    real folding choice to trade off, so balancing a conv branch against one
+    always forces over-folding regardless of ratio; only pairs where BOTH
+    branches have a real folding decision get balanced). Does NOT add or
+    price any FIFO resource itself -- it only prevents the solver from
+    choosing a badly skewed pair in the first place."""
     candidate_pairs = tuple((w, a) for w in CANDIDATE_BITS for a in CANDIDATE_BITS)
     layer_names = tuple(g.name for g in geometries)
     n_layers = len(geometries)
@@ -523,6 +543,13 @@ def solve_joint_perlayer(
     raw_dsp: dict[tuple, float] = {}
     raw_uram: dict[tuple, float] = {}
     layer_folds: dict[str, list[tuple[int, int, str, str]]] = {}
+    # Per-layer RAW (un-normalized) cycle expression -- sum over that
+    # layer's own chosen (fold,variant,bits) z-variable weighted by its own
+    # raw_cycles -- built alongside z/raw_cycles below and reused by the
+    # join-balance constraints (max_join_imbalance_ratio) since it needs
+    # each layer's cycles as one linear pulp expression, the exact same
+    # quantity latency_term/max_cycles already sum across every layer.
+    layer_cycle_terms: dict[str, list[tuple[pulp.LpVariable, float]]] = {g.name: [] for g in geometries}
 
     for layer in geometries:
         folds = candidate_folds(layer)  # respects module-level FORCE_SERIAL/ALLOW_LUT_MULT if set
@@ -577,8 +604,12 @@ def solve_joint_perlayer(
                 # own real, free ILP choice) -- see candidate_folds' docstring.
                 raw_uram[key] = cost.get("wm_uram18", 0) + cost.get("swu_uram18", 0) + cost.get("thr_uram18", 0)
                 z[key] = pulp.LpVariable(f"z_{layer.name}_{pe}_{simd}_{ram_style}_{variant}_{w}_{a}", cat=pulp.LpBinary)
+                layer_cycle_terms[layer.name].append((z[key], raw_cycles[key]))
 
     cycles_norm = _normalize(raw_cycles)
+    layer_cycles_expr: dict[str, pulp.LpAffineExpression] = {
+        name: pulp.lpSum(zvar * cyc for zvar, cyc in terms) for name, terms in layer_cycle_terms.items()
+    }
 
     prob = pulp.LpProblem("FINN_MILP_perlayer", pulp.LpMinimize)
 
@@ -603,6 +634,37 @@ def solve_joint_perlayer(
                 pulp.lpSum(z[(layer.name, pe, simd, ram_style, variant, w, a)] for pe, simd, ram_style, variant in folds)
                 == y[(layer.name, w, a)]
             ), f"link_{layer.name}_{w}_{a}"
+
+    # Join-balance constraints (max_join_imbalance_ratio). Dedupe joins by
+    # their own predecessor SET first: predecessor_map is keyed by CONSUMER
+    # layer, so multiple consumers of the same join (e.g. both of down1's
+    # own two downstream layers) independently map to the SAME branch pair
+    # -- that is one real join, not two. MaxPool2d branches are EXEMPT (see
+    # this function's own docstring) -- only pairs where BOTH sides have a
+    # real folding decision get balanced.
+    maxpool_names = {g.name for g in geometries if g.op_type == "MaxPool2d"}
+    n_join_constraints = 0
+    if max_join_imbalance_ratio is not None:
+        if predecessor_map is None:
+            raise ValueError(
+                "max_join_imbalance_ratio requires a predecessor_map (pass predecessor_map=... -- "
+                "see layer_topology.compute_predecessor_map) -- without it there is no join information "
+                "to balance."
+            )
+        unique_joins = {
+            tuple(sorted(preds)) for preds in predecessor_map.values()
+            if len(preds) >= 2 and all(p in layer_cycles_expr for p in preds)
+        }
+        for branches in unique_joins:
+            foldable_branches = [b for b in branches if b not in maxpool_names]
+            for branch_i in foldable_branches:
+                for branch_j in foldable_branches:
+                    if branch_i == branch_j:
+                        continue
+                    prob += (
+                        layer_cycles_expr[branch_i] <= max_join_imbalance_ratio * layer_cycles_expr[branch_j]
+                    ), f"join_balance_{branch_i}_vs_{branch_j}"
+                    n_join_constraints += 1
 
     # Hard resource constraints.
     prob += pulp.lpSum(z[k] * raw_lut[k] for k in z) <= hard_lut_fraction * XCZU7EV["LUT"], "hard_lut_budget"
@@ -637,7 +699,10 @@ def solve_joint_perlayer(
         raise RuntimeError(f"per-layer ILP hit an unexpected solver status: {status_name!r}.")
 
     n_binary_vars = len(y) + len(z)
-    n_constraints = n_layers + sum(len(candidate_pairs) for _ in geometries) + 4 + (1 if max_cycles is not None else 0)
+    n_constraints = (
+        n_layers + sum(len(candidate_pairs) for _ in geometries) + 4
+        + (1 if max_cycles is not None else 0) + n_join_constraints
+    )
 
     if status_name != "Optimal":
         return {
@@ -650,13 +715,16 @@ def solve_joint_perlayer(
                 "hard_lut_fraction": hard_lut_fraction, "hard_bram_fraction": hard_bram_fraction,
                 "hard_dsp_fraction": hard_dsp_fraction, "hard_uram_fraction": hard_uram_fraction,
                 "max_cycles": max_cycles,
+                "max_join_imbalance_ratio": max_join_imbalance_ratio, "n_join_constraints": n_join_constraints,
                 "solver_time_limit_s": time_limit, "solver_gap_rel": gap_rel, "force_serial": FORCE_SERIAL,
                 "force_dsp": force_dsp, "require_simd_ge_pe": require_simd_ge_pe, "allow_lut_mult": ALLOW_LUT_MULT,
                 "note": f"Solver status {status_name!r} -- no joint per-layer (bits, folding) assignment "
                         f"satisfies the requested hard LUT/BRAM/DSP/URAM budget(s) (hard_lut_fraction={hard_lut_fraction}, "
                         f"hard_bram_fraction={hard_bram_fraction}, hard_dsp_fraction={hard_dsp_fraction}, "
                         f"hard_uram_fraction={hard_uram_fraction})"
-                        + (f" and max_cycles={max_cycles:.0f}" if max_cycles is not None else "") + " at all.",
+                        + (f" and max_cycles={max_cycles:.0f}" if max_cycles is not None else "")
+                        + (f" and max_join_imbalance_ratio={max_join_imbalance_ratio}" if max_join_imbalance_ratio is not None else "")
+                        + " at all.",
             },
         }
 
@@ -745,6 +813,7 @@ def solve_joint_perlayer(
             "hard_lut_fraction": hard_lut_fraction, "hard_bram_fraction": hard_bram_fraction,
             "hard_dsp_fraction": hard_dsp_fraction, "hard_uram_fraction": hard_uram_fraction,
             "max_cycles": max_cycles,
+            "max_join_imbalance_ratio": max_join_imbalance_ratio, "n_join_constraints": n_join_constraints,
             "solver_time_limit_s": time_limit, "solver_gap_rel": gap_rel, "force_serial": FORCE_SERIAL,
             "force_dsp": force_dsp, "require_simd_ge_pe": require_simd_ge_pe, "allow_lut_mult": ALLOW_LUT_MULT,
             "note": "Joint per-LAYER MILP: y[layer,w,a] (sensitivity) linked to z[layer,pe,simd,ram_style,w,a] "
@@ -826,6 +895,7 @@ def _update_sweep_summary(out_dir: Path, args: argparse.Namespace, result: dict)
         "hard-lut-fraction": args.hard_lut_fraction, "hard-bram-fraction": args.hard_bram_fraction,
         "hard-dsp-fraction": args.hard_dsp_fraction, "hard-uram-fraction": args.hard_uram_fraction, "force-dsp": args.force_dsp,
         "max-latency-ms": args.max_latency_ms, "clock-mhz": args.clock_mhz,
+        "max-join-imbalance-ratio": args.max_join_imbalance_ratio,
         "force-serial": FORCE_SERIAL, "require-simd-ge-pe": args.require_simd_ge_pe,
         "allow-lut-mult": ALLOW_LUT_MULT,
         "time-limit": args.time_limit, "gap-rel": args.gap_rel,
@@ -901,6 +971,20 @@ def main() -> None:
                               "added as a real <= constraint.")
     parser.add_argument("--clock-mhz", type=float, default=100.0,
                          help="Clock frequency --max-latency-ms is expressed against (default 100.0).")
+    parser.add_argument("--max-join-imbalance-ratio", type=float, default=None,
+                         help="Hard per-join balance constraint (default None = no constraint, prior behavior "
+                              "exactly). A 'join' is any point with 2+ real predecessors (layer_topology."
+                              "compute_predecessor_map) -- i.e. branches that run CONCURRENTLY in real FINN "
+                              "dataflow hardware. Without this, each branch's own (PE,SIMD,bits) is chosen with "
+                              "zero awareness of its join partner, so the solver can leave a large cycle-count "
+                              "skew behind -- exactly what forces a real, UNMODELED FIFO in actual hardware "
+                              "(the faster branch has to buffer while waiting on the slower one; see "
+                              "MILP/scan_fork_join_mismatch.py's own `predicted_depth`, which estimates this "
+                              "post-hoc). Setting this to e.g. 1.5 requires every join's own branches to stay "
+                              "within a 1.5x cycle-count ratio of each other. MaxPool2d branches are EXEMPT "
+                              "(fixed (1,1) fold, no real folding choice to trade off -- only conv-vs-conv join "
+                              "pairs get balanced). Does not price the FIFO itself -- only prevents picking a "
+                              "badly skewed pair.")
     parser.add_argument("--force-serial", action="store_true",
                          help="Force FOLDING_SERIAL (PE=SIMD=1) on every layer before solving.")
     parser.add_argument("--allow-lut-mult", action="store_true",
@@ -1026,6 +1110,7 @@ def main() -> None:
         args.time_limit, args.gap_rel, max_cycles=max_cycles, pinned_bits=pinned_bits,
         predecessor_map=predecessor_map, force_dsp=args.force_dsp, require_simd_ge_pe=args.require_simd_ge_pe,
         hard_dsp_fraction=args.hard_dsp_fraction, hard_uram_fraction=args.hard_uram_fraction,
+        max_join_imbalance_ratio=args.max_join_imbalance_ratio,
     )
 
     args.out_file.parent.mkdir(parents=True, exist_ok=True)
