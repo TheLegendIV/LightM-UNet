@@ -15,7 +15,7 @@ current folding choice leaves any real fork/join imbalance behind.
 Usage (host Python, same env finn_milp.py itself runs in):
     python MILP/scan_fork_join_mismatch.py \\
         --config config_12_dense_relu_warmstart150ep \\
-        --folding-file MILP/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_v3/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.25_candidatebits468_forcedsp_lut50_bram70_dsp90.json
+        --folding-file MILP/artifacts/archive/12_dense_relu_warmstart150ep_ILP_outputs_v3/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.25_candidatebits468_forcedsp_lut50_bram70_dsp90.json
 """
 from __future__ import annotations
 
@@ -26,11 +26,11 @@ from pathlib import Path
 
 import torch  # noqa: F401 -- side-effect parity with finn_milp.py's own import order
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from finn_milp import INPUT_HW, load_config, trace_layer_geometry  # noqa: E402
 from layer_topology import compute_predecessor_map  # noqa: E402
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 PACKAGE_ROOT = REPO_ROOT / "enet"
 sys.path.insert(0, str(PACKAGE_ROOT))
 from nnunetv2.nets.ENet import ENet  # noqa: E402
@@ -38,7 +38,7 @@ from nnunetv2.nets.ENet import ENet  # noqa: E402
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--config", required=True, help="MILP/config_*.py module name (no .py).")
+    parser.add_argument("--config", required=True, help="MILP/configs/config_*.py module name (no .py).")
     parser.add_argument("--folding-file", type=Path, required=True,
                          help="finn_milp.py --out-file JSON (has a top-level 'per_layer' dict with a "
                               "'cycles' entry per layer name).")

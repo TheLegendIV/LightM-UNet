@@ -74,7 +74,7 @@ TRAINER_CLASS="nnUNetTrainerCombinedQuantENet_27_2_reg_trailing_perblock"
 FP32_SOURCE_NET_NAME="nnUNetTrainerENet_27_2_reg_trailing"
 CALIBRATED_NET_NAME="nnUNetTrainerCombinedQuantENet_27_2_reg_trailing_min4_calibrated"
 RUN_NAME="27_2_reg_trailing_min4_150ep_run50"
-BLOCK_BITS_FILE="compression/hawq/artifacts/block_bits_27_2_reg_trailing_min4.json"
+BLOCK_BITS_FILE="compression/hawq/artifacts/archive/block_bits_27_2_reg_trailing_min4.json"
 RUN_EPOCHS=50
 
 mkdir -p logs

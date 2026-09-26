@@ -1,10 +1,11 @@
 """Analytical FINN dataflow resource-cost formulas: LUT/BRAM_18K/URAM/DSP/
 cycles as functions of (weight_bits, act_bits, PE, SIMD) per layer.
 
-See finn_cost_model.md for full rationale, calibration provenance (every
-constant below is fit or derived from real hardware/synthesis data), and the
-regime history (auto-resType vs forced-DSP, HLS vs RTL, fused vs standalone
-activation)."""
+AGENTS: read MILP/finn_cost_model.md before changing this file, and update it
+with any change -- every constant below is fit or derived from real
+hardware/synthesis data, and the .md holds that provenance, the regime history
+(auto-resType vs forced-DSP, HLS vs RTL, fused vs standalone activation) and
+what is still not modeled."""
 from __future__ import annotations
 
 import math
@@ -118,6 +119,8 @@ class LayerGeometry:
     dh: int = 1
     dw: int = 1
     groups: int = 1  # >1 => depthwise (groups==cin==cout); see finn_cost_model.md
+    ph: int = 0  # zero padding -> an FMPadding node in front of the SWU when > 0
+    pw: int = 0
 
 
 def is_depthwise(layer: LayerGeometry) -> bool:
@@ -126,7 +129,8 @@ def is_depthwise(layer: LayerGeometry) -> bool:
         return False
     assert layer.groups == layer.cin == layer.cout, (
         f"{layer.name}: partial-group conv (groups={layer.groups}, cin={layer.cin}, "
-        f"cout={layer.cout}) is not a supported VVAU shape."
+        f"cout={layer.cout}) is not a supported VVAU shape -- only fully depthwise "
+        f"(groups==cin==cout) convs are modeled here."
     )
     return True
 
@@ -288,6 +292,34 @@ def threshold_node_cost(layer: LayerGeometry, act_bits: int, pe: int, ram_style:
     }
 
 
+# ---- Stream nodes (AddStreams, DuplicateStreams, StreamingConcat, UpsampleNearestNeighbour) ----
+# FINN v0.10.1 prices all four at 0 (no estimator overrides). LUT/PE below is
+# Vitis HLS csynth at PE=1, 8-bit (estimate_layer_resources_hls.json, dense RTL
+# build), assumed linear in PE -- PROVISIONAL, see finn_cost_model.md.
+_ADDSTREAMS_LUT_PER_PE = 131
+_DUPSTREAMS_LUT_PER_PE = 115
+STREAM_NODE_KINDS = ("add", "dup", "concat", "upsample")
+FOLDABLE_STREAM_KINDS = ("add", "dup")  # PE | channels; concat/upsample: all channels per cycle, not foldable
+
+
+def stream_node_cost(kind: str, layer: LayerGeometry, pe: int = 1) -> dict:
+    """Cycles (FINN v0.10.1 get_exp_cycles) and LUT of a stream node. `layer`
+    carries the node's output shape."""
+    if kind in FOLDABLE_STREAM_KINDS:
+        cycles = layer.hout * layer.wout * math.ceil(layer.cout / pe)
+        lut = pe * (_ADDSTREAMS_LUT_PER_PE if kind == "add" else _DUPSTREAMS_LUT_PER_PE)
+    elif kind in ("concat", "upsample"):
+        cycles, lut = layer.hout * layer.wout, 0
+    else:
+        raise ValueError(f"unknown stream node kind {kind!r}")
+    return {
+        "total_pe": pe, "total_simd_lanes": 0,
+        "swu_bram18": 0, "wm_bram18": 0, "wm_uram18": 0, "thr_bram18": 0, "thr_uram18": 0,
+        "swu_lut": 0, "mvu_lut": 0, "thr_lut": 0, "mp_lut": 0,
+        "total_lut": lut, "mvu_dsp": 0, "total_dsp": 0, "cycles": cycles,
+    }
+
+
 # ---- Per-layer cost (general PE/SIMD) ----
 
 def conv_cost_pe_simd(
@@ -376,14 +408,19 @@ def conv_cost_pe_simd(
     total_pe = P * M
     total_simd_lanes = P * Q * M
     mvu_cycles = math.ceil(layer.hout * layer.wout / M) * math.ceil(max_pe(layer) / P) * math.ceil(max_simd(layer) / Q)
-    cycles = max(mvu_cycles, swu_cycles)
+    # FMPadding (FINN v0.10.1 fmpadding.get_exp_cycles), SIMD tied to the SWU's so no DWC sits between them.
+    fmpad_cycles = (
+        (layer.hin + 2 * layer.ph) * (layer.win + 2 * layer.pw) * math.ceil(layer.cin / simd_swu)
+        if layer.ph or layer.pw else 0
+    )
+    cycles = max(mvu_cycles, swu_cycles, fmpad_cycles)
     return {
         "total_pe": total_pe, "total_simd_lanes": total_simd_lanes,
         "swu_bram18": swu_bram18, "swu_uram18": swu_uram18, "wm_bram18": wm_bram18, "wm_uram18": wm_uram18,
         "thr_bram18": thr_bram18, "thr_uram18": thr_uram18,
         "swu_lut": swu_lut, "mvu_lut": mvu_lut, "thr_lut": thr_lut, "mp_lut": 0,
         "total_lut": total_lut, "mvu_dsp": mvu_dsp, "total_dsp": mvu_dsp,
-        "cycles": cycles, "mvu_cycles": mvu_cycles, "swu_cycles": swu_cycles,
+        "cycles": cycles, "mvu_cycles": mvu_cycles, "swu_cycles": swu_cycles, "fmpad_cycles": fmpad_cycles,
         "impl_style": impl_style, "simd_swu": simd_swu, "thr_pe": thr_pe, "acc_bits": acc_bits,
     }
 
@@ -405,7 +442,8 @@ def conv_transpose_cost(
     """ConvTranspose2d modeled as zero-insertion + ordinary stride-1 conv (Dumoulin & Visin).
     Only K=S, p=0 transposed convs are used anywhere in this architecture."""
     assert layer.kh == layer.sh and layer.kw == layer.sw, (
-        f"{layer.name}: conv_transpose_cost only implements the K=S,p=0 case (got kh={layer.kh},sh={layer.sh})."
+        f"{layer.name}: conv_transpose_cost only implements the K=S,p=0 case this "
+        f"architecture actually uses (got kh={layer.kh},sh={layer.sh})."
     )
     n_eff_h = (layer.hin - 1) * layer.sh + 1 + 2 * (layer.kh - 1)
     n_eff_w = (layer.win - 1) * layer.sw + 1 + 2 * (layer.kw - 1)
@@ -470,7 +508,11 @@ def layer_cost_pe_simd(
             cin=layer.cin, hin=n_eff_h, win=n_eff_w, cout=layer.cout, hout=layer.hout, wout=layer.wout,
             kh=layer.kh, kw=layer.kw, sh=1, sw=1, dh=1, dw=1,
         )
-        return conv_cost_pe_simd(equivalent, weight_bits, act_bits, pe, simd, ram_style, force_dsp=force_dsp, **kw)
+        cost = conv_cost_pe_simd(equivalent, weight_bits, act_bits, pe, simd, ram_style, force_dsp=force_dsp, **kw)
+        # FMPadding_Pixel (zero insertion) + border FMPadding over the zero-inserted image, SIMD tied to the SWU's.
+        cost["fmpad_cycles"] = n_eff_h * n_eff_w * math.ceil(layer.cin / cost["simd_swu"])
+        cost["cycles"] = max(cost["cycles"], cost["fmpad_cycles"])
+        return cost
     if layer.op_type == "MaxPool2d":
         return maxpool_cost(layer, act_bits)
     if layer.op_type == "Thresholding":

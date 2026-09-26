@@ -31,7 +31,7 @@ on its own -- see compression/slurm/qat_27_2_reg_trailing_min4_ft15ep.job.
 
 Usage:
     python compression/post-quantization/calibrate_27_2_reg_trailing_perblock.py \\
-        --block-bits-file compression/hawq/artifacts/block_bits_27_2_reg_trailing_min4.json \\
+        --block-bits-file compression/hawq/artifacts/archive/block_bits_27_2_reg_trailing_min4.json \\
         --out-net-name nnUNetTrainerCombinedQuantENet_27_2_reg_trailing_min4_calibrated
 """
 from __future__ import annotations

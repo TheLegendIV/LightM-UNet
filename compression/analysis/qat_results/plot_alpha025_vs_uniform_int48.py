@@ -53,7 +53,7 @@ def load_uniform_dice_epoch15(csv_path: Path) -> dict[int, float]:
 def main() -> int:
     import matplotlib.pyplot as plt
 
-    ilp_summary = REPO_ROOT / "compression" / "hawq" / "artifacts" / f"{ILP_DIR_PREFIX}_ILP_outputs_perlayer_forcedsp_lut70" / "summary.csv"
+    ilp_summary = REPO_ROOT / "MILP" / "artifacts" / "archive" / f"{ILP_DIR_PREFIX}_ILP_outputs_perlayer_forcedsp_lut70" / "summary.csv"
     ilp_epoch_trend = load_epoch_trend(DEFAULT_CSV, CONFIG_PREFIX, "dice")
     ilp_lut_pct = load_ilp_lut_pct(ilp_summary)
     uniform_dice = load_uniform_dice_epoch15(DEFAULT_CSV)

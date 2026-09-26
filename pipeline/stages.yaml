@@ -81,52 +81,52 @@ stages:
   - id: layer_sensitivity_analysis
     name: Layer Sensitivity Analysis
     status: existing
-    current_script: compression/MILP/layer_sensitivity.py
+    current_script: MILP/layer_sensitivity.py
     target_dir: pipeline/05_sensitivity/
     inputs:
       - from_stage: archive_and_log
       - from_stage: preprocess_dataset
     outputs:
-      - pattern: "compression/MILP/artifacts/**/layer_sensitivity_{config}.json"
+      - pattern: "MILP/artifacts/**/layer_sensitivity_{config}.json"
     environment: conda (enet env)
     compute: gpu
 
   - id: bitwidth_search_folding_ilp
     name: Bit-width Search + Folding ILP
     status: existing
-    current_script: compression/MILP/finn_milp.py
+    current_script: MILP/finn_milp.py
     target_dir: pipeline/06_bitwidth_folding_ilp/
     inputs:
       - from_stage: layer_sensitivity_analysis
-      - path: "compression/MILP/config_{config}.py"
+      - path: "MILP/configs/config_{config}.py"
     outputs:
-      - pattern: "compression/MILP/artifacts/**/layer_bits_folding_{config}_alpha{alpha}.json"
-      - pattern: "compression/MILP/artifacts/**/run_args.json"
-      - pattern: "compression/MILP/artifacts/**/summary.csv"
+      - pattern: "MILP/artifacts/**/layer_bits_folding_{config}_alpha{alpha}.json"
+      - pattern: "MILP/artifacts/**/run_args.json"
+      - pattern: "MILP/artifacts/**/summary.csv"
     environment: conda (pulp/CBC)
     compute: cpu
 
   - id: naive_uniform_baseline
     name: Naive Uniform-Bit Baseline
     status: existing
-    current_script: compression/MILP/uniform_bits_same_folding.py
+    current_script: MILP/utils/uniform_bits_same_folding.py
     target_dir: pipeline/06_bitwidth_folding_ilp/
     inputs:
       - from_stage: bitwidth_search_folding_ilp
     outputs:
-      - pattern: "compression/MILP/artifacts/**/layer_bits_folding_{config}_uniform_int{n}_samefolding.json"
+      - pattern: "MILP/artifacts/**/layer_bits_folding_{config}_uniform_int{n}_samefolding.json"
     environment: conda
     compute: cpu
 
   - id: expand_layer_bits
     name: Expand to Quantizer Sites
     status: existing
-    current_script: compression/MILP/expand_layer_bits.py
+    current_script: MILP/expand_layer_bits.py
     target_dir: pipeline/07_expand_bits/
     inputs:
       - from_stage: bitwidth_search_folding_ilp
     outputs:
-      - pattern: "compression/MILP/artifacts/**/layer_bits_SITES_{config}.json"
+      - pattern: "MILP/artifacts/**/layer_bits_SITES_{config}.json"
     environment: conda
     compute: cpu
 

@@ -77,7 +77,7 @@ NNUNET_RESULTS = REPO_ROOT / "data" / "nnUNet_results"
 
 
 def load_config(config_module: str) -> None:
-    """Dynamically imports one of compression/hawq/config_*.py (one per
+    """Dynamically imports one of MILP/configs/config_*.py (one per
     architecture -- e.g. config_23_1 for the S19/23_1 recipe at native
     width, config_21_2 for the same recipe's U8 width) and injects its
     constants (CHANNELS, BOTTLENECKS_PER_STAGE, STAGE_NAMES, NET_NAME, ...)
@@ -87,7 +87,7 @@ def load_config(config_module: str) -> None:
     rewrite of every call site to a cfg.XXX-prefixed lookup. Repeat this
     pattern (config_<name>.py + this loader) for each new architecture the
     HAWQ search gets pointed at, rather than duplicating this whole file."""
-    cfg = importlib.import_module(config_module)
+    cfg = importlib.import_module(f"configs.{config_module}")
     globals().update({k: v for k, v in vars(cfg).items() if not k.startswith("_")})
 
 
@@ -319,7 +319,7 @@ def run_sensitivity(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", default="config_23_1",
-                         help="Which compression/hawq/config_*.py to load (one per architecture) -- "
+                         help="Which MILP/configs/config_*.py to load (one per architecture) -- "
                               "e.g. config_23_1 (S19/23_1 native width) or config_21_2 (same recipe, U8 width).")
     parser.add_argument("--net-name", default=None, help="Defaults to the loaded config's own NET_NAME.")
     parser.add_argument("--dataset-name", default="Dataset509_ARCADE_1x1_4c")

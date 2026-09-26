@@ -23,9 +23,9 @@ smarter bit allocation beat uniform).
 Usage:
     python MILP/uniform_bits_same_folding.py \\
         --config config_12_dense_relu_warmstart150ep \\
-        --reference-ilp-result MILP/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.25_candidatebits468_forcedsp_lut70.json \\
+        --reference-ilp-result MILP/artifacts/archive/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.25_candidatebits468_forcedsp_lut70.json \\
         --uniform-bits 4,6,8 \\
-        --out-dir MILP/artifacts/12_dense_relu_warmstart150ep_uniform_samefolding_alpha0.25
+        --out-dir MILP/artifacts/archive/12_dense_relu_warmstart150ep_uniform_samefolding_alpha0.25
 """
 from __future__ import annotations
 
@@ -35,10 +35,10 @@ import json
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 PACKAGE_ROOT = REPO_ROOT / "enet"
 sys.path.insert(0, str(PACKAGE_ROOT))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from nnunetv2.nets.ENet import ENet  # noqa: E402
 from finn_cost_model import calibrated_bram18k, calibrated_lut, layer_cost_pe_simd  # noqa: E402
 from finn_milp import INPUT_HW, trace_layer_geometry  # noqa: E402 -- 2026-09-17: finn_block_costs.py/finn_stage_costs.py archived, this is now the one shared geometry tracer
@@ -47,7 +47,7 @@ XCZU7EV = {"LUT": 230_400, "BRAM_18K": 624, "DSP": 1_728}
 
 
 def load_config(config_module: str) -> None:
-    cfg = importlib.import_module(config_module)
+    cfg = importlib.import_module(f"configs.{config_module}")
     globals().update({k: v for k, v in vars(cfg).items() if not k.startswith("_")})
 
 

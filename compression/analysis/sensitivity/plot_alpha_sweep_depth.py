@@ -1,5 +1,5 @@
 """Summarizes and plots an alpha sweep of joint_bits_folding_ilp.py runs
-(e.g. compression/hawq/artifacts/S12_ILP_outputs/'s own
+(e.g. compression/hawq/artifacts/archive/S12_ILP_outputs/'s own
 block_bits_folding_12_separable_dense_relu_joint_alpha<A>_*.json files) --
 one row per alpha in a summary.csv, plus three depth-profile plots (bit-width
 and folding are both real "how does the choice vary across the network's
@@ -23,8 +23,8 @@ alpha, or just shift up/down uniformly."
 
 Usage:
     python compression/analysis/sensitivity/plot_alpha_sweep_depth.py \\
-        --inputs compression/hawq/artifacts/S12_ILP_outputs/block_bits_folding_12_separable_dense_relu_joint_alpha*.json \\
-        --out-dir compression/hawq/artifacts/S12_ILP_outputs
+        --inputs compression/hawq/artifacts/archive/S12_ILP_outputs/block_bits_folding_12_separable_dense_relu_joint_alpha*.json \\
+        --out-dir compression/hawq/artifacts/archive/S12_ILP_outputs
 """
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ import json
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_ORDER_FROM = REPO_ROOT / "compression/hawq/artifacts/block_sensitivity_12_separable_dense_relu.json"
+DEFAULT_ORDER_FROM = REPO_ROOT / "compression/hawq/artifacts/archive/block_sensitivity_12_separable_dense_relu.json"
 XCZU7EV = {"LUT": 230_400, "BRAM_18K": 624}
 
 INK, SECONDARY_INK, MUTED, GRID, SURFACE = (

@@ -27,11 +27,11 @@ from pathlib import Path
 
 import torch  # noqa: F401
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from finn_milp import INPUT_HW, load_config, trace_layer_geometry  # noqa: E402
 from layer_topology import compute_predecessor_map  # noqa: E402
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 PACKAGE_ROOT = REPO_ROOT / "enet"
 sys.path.insert(0, str(PACKAGE_ROOT))
 from nnunetv2.nets.ENet import ENet  # noqa: E402

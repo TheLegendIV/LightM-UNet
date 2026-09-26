@@ -75,7 +75,7 @@ _sensitivity.CANDIDATE_BITS = CANDIDATE_BITS
 def load_config(config_module: str) -> None:
     """Same pattern as block_sensitivity.py/sensitivity.py's own loader --
     injects the named config_*.py's constants into this module's globals."""
-    cfg = importlib.import_module(config_module)
+    cfg = importlib.import_module(f"configs.{config_module}")
     globals().update({k: v for k, v in vars(cfg).items() if not k.startswith("_")})
 
 
@@ -216,7 +216,7 @@ def run_layer_sensitivity(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", default="config_23_1",
-                         help="Which compression/hawq/config_*.py to load -- e.g. config_12_separable_dense_relu.")
+                         help="Which MILP/configs/config_*.py to load -- e.g. config_12_separable_dense_relu.")
     parser.add_argument("--net-name", default=None, help="Defaults to the loaded config's own NET_NAME.")
     parser.add_argument("--dataset-name", default="Dataset509_ARCADE_1x1_4c")
     parser.add_argument("--plans-name", default="nnUNetPlans")

@@ -31,9 +31,9 @@ fraction etc. if you want that checked here too).
 Usage:
     python MILP/rebalance_join_folding.py \\
         --config config_12_dense_relu_nearest_conv_upsample \\
-        --folding-file MILP/artifacts/S12_dense_nn_upsample_v1/layer_bits_folding_12_dense_relu_nearest_conv_upsample_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram30_dsp90_maxlat150ms.json \\
+        --folding-file MILP/artifacts/archive/S12_dense_nn_upsample_v1/layer_bits_folding_12_dense_relu_nearest_conv_upsample_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram30_dsp90_maxlat150ms.json \\
         --target-ratio 1.5 --force-dsp \\
-        --out-file MILP/artifacts/S12_dense_nn_upsample_v1/layer_bits_folding_12_dense_relu_nearest_conv_upsample_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram30_dsp90_maxlat150ms_joinbalanced.json
+        --out-file MILP/artifacts/archive/S12_dense_nn_upsample_v1/layer_bits_folding_12_dense_relu_nearest_conv_upsample_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram30_dsp90_maxlat150ms_joinbalanced.json
 """
 from __future__ import annotations
 
@@ -44,14 +44,14 @@ from pathlib import Path
 
 import torch  # noqa: F401 -- side-effect parity with finn_milp.py's own import order
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from finn_cost_model import RAM_STYLE_BLOCK, calibrated_bram18k, calibrated_lut, layer_cost_pe_simd  # noqa: E402
 from finn_milp import (  # noqa: E402
     INPUT_HW, VARIANT_RTL_DSP_NOACT1, XCZU7EV, _calibration_force_dsp, _variant_cost_kwargs,
     candidate_folds, load_config, trace_layer_geometry,
 )
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 PACKAGE_ROOT = REPO_ROOT / "enet"
 sys.path.insert(0, str(PACKAGE_ROOT))
 from nnunetv2.nets.ENet import ENet  # noqa: E402

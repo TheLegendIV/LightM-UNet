@@ -20,7 +20,7 @@ flowchart TD
         A4["Archive + Log\nscripts/archive_checkpoint.sh\ncompression/collect_results.py"] -->|"$MODELS_ARCHIVE_DIR/<trainer>_<dataset>_<ts>/\n+ row in compression/results.csv"| B1
     end
 
-    subgraph PHASE1["Phase 1 — Compression (compression/MILP/)"]
+    subgraph PHASE1["Phase 1 — Compression (MILP/)"]
         B1["Layer Sensitivity Analysis\nlayer_sensitivity.py (GPU)"] -->|"layer_sensitivity_<config>.json"| B2
         B2["Bit-width Search + Folding ILP\nfinn_milp.py (5-alpha sweep)"] -->|"layer_bits_folding_<config>_alpha<A>.json\n+ run_args.json + summary.csv"| B3
         B2 -.->|"layer_bits_folding_..._alpha0.25.json"| B2b
@@ -64,10 +64,10 @@ Solid arrows = real forward artifact flow. Dotted arrows = feedback loops (calib
 | 2 | Preprocess Dataset | `nnUNetv2_plan_and_preprocess -d <ID> --verify_dataset_integrity` | raw dataset under `nnUNet_raw/<Dataset>` | `nnUNet_preprocessed/<Dataset>/{plans.json, npz/npy}` | Once per dataset, not per config; no GPU needed |
 | 3 | Train Model FP32 | `nnUNetv2_train <Dataset> 2d <fold> -tr nnUNetTrainerENet<Variant> [--c]` (SLURM job) | preprocessed data + `ENET_*` env vars | `checkpoint_{best,final,latest}.pth`, `plans.json`, `dataset.json`, `debug.json` under `$nnUNet_results/<Dataset>/<Trainer>__<Plans>__<config>/fold_<N>/` | GPU + SLURM; self-heal-checkpoint logic; `--c` resumes |
 | 4 | Archive + Log | `scripts/archive_checkpoint.sh <Dataset> <Trainer> [Config] [Fold] [Plans]`, `compression/collect_results.py` | checkpoint (stage 3) | `$MODELS_ARCHIVE_DIR/<trainer>_<dataset>_<timestamp>/`; appended row in `compression/results.csv` | Checkpoints are gitignored; archive dir + CSV are the durable record |
-| 5 | Layer Sensitivity Analysis | `compression/MILP/layer_sensitivity.py --net-name --checkpoint-name checkpoint_best.pth --fold --dataset-name --configuration 2d --plans-name nnUNetPlans --n-batches --n-probes --config --candidate-bits` | FP32 checkpoint + preprocessed data | `layer_sensitivity_<config>.json` (~101 layers for S12) | GPU; runs the plain FP32 model (not Brevitas) to avoid double-backward through fake-quant |
-| 6 | Bit-width Search + Folding ILP | `compression/MILP/finn_milp.py --config --sensitivity-file --candidate-bits --alpha --hard-lut-fraction --hard-bram-fraction --hard-dsp-fraction --hard-uram-fraction --force-dsp --force-serial --allow-lut-mult --require-simd-ge-pe --max-latency-ms --clock-mhz --time-limit --gap-rel [--pin-bits-file]` | `layer_sensitivity_<config>.json`, `config_<name>.py` | `layer_bits_folding_<config>_alpha<A>.json`, `run_args.json`, `summary.csv` | CPU ILP solver (PuLP/CBC); run once per alpha in a 5-point sweep (0.0/0.25/0.5/0.75/1.0) |
-| 6b | Naive Uniform-Bit Baseline | `compression/MILP/uniform_bits_same_folding.py` | one alpha's `layer_bits_folding_*.json` (observed: alpha=0.25) | `layer_bits_folding_<config>_uniform.json` | Keeps folding, forces uniform bits, recomputes cost — comparison baseline only |
-| 7 | Expand to Quantizer Sites | `compression/MILP/expand_layer_bits.py` | `layer_bits_folding_<config>_alpha<A>.json` | `layer_bits_SITES_<config>.json` (~101 weight + ~126 act sites for S12) | Bridges ILP's one-bit-pair-per-conv-layer schema to per-quantizer-site schema the QAT trainer needs |
+| 5 | Layer Sensitivity Analysis | `MILP/layer_sensitivity.py --net-name --checkpoint-name checkpoint_best.pth --fold --dataset-name --configuration 2d --plans-name nnUNetPlans --n-batches --n-probes --config --candidate-bits` | FP32 checkpoint + preprocessed data | `layer_sensitivity_<config>.json` (~101 layers for S12) | GPU; runs the plain FP32 model (not Brevitas) to avoid double-backward through fake-quant |
+| 6 | Bit-width Search + Folding ILP | `MILP/finn_milp.py --config --sensitivity-file --candidate-bits --alpha --hard-lut-fraction --hard-bram-fraction --hard-dsp-fraction --hard-uram-fraction --force-dsp --force-serial --allow-lut-mult --require-simd-ge-pe --max-latency-ms --clock-mhz --optimize-downstream-rate --time-limit --gap-rel [--pin-bits-file]` (see `MILP/finn_milp.md`) | `layer_sensitivity_<config>.json`, `config_<name>.py` | `layer_bits_folding_<config>_alpha<A>.json`, `pruning_*.json`, `dataflow_*.onnx`, `run_args.json`, `summary.csv` | CPU ILP solver (PuLP/CBC); run once per alpha in a 5-point sweep (0.0/0.25/0.5/0.75/1.0) |
+| 6b | Naive Uniform-Bit Baseline | `MILP/utils/uniform_bits_same_folding.py` | one alpha's `layer_bits_folding_*.json` (observed: alpha=0.25) | `layer_bits_folding_<config>_uniform.json` | Keeps folding, forces uniform bits, recomputes cost — comparison baseline only |
+| 7 | Expand to Quantizer Sites | `MILP/expand_layer_bits.py` | `layer_bits_folding_<config>_alpha<A>.json` | `layer_bits_SITES_<config>.json` (~101 weight + ~126 act sites for S12) | Bridges ILP's one-bit-pair-per-conv-layer schema to per-quantizer-site schema the QAT trainer needs |
 | 8 | QAT Fine-tune (INT) | `nnUNetv2_train ... -tr nnUNetTrainerLayerQuantENet_<variant>_perlayer` (SLURM array job) | `layer_bits_SITES_<config>.json` + warm-start FP32 checkpoint | new `checkpoint_best.pth` (INT) under new trainer-named results folder | GPU; `expand_layer_bits.py` invocation deliberately deferred to this job's own step 0 in the observed workflow |
 | 9 | Export to QONNX | `hardware/finn_export_<config>_..._trained.py` (built on `export_quant_checkpoint.py` / `finn_enet_prod_export.py`'s `FINNQuantENet` base) | INT checkpoint (stage 8) + `layer_bits_SITES_*.json` (`--bits-file`, `--checkpoint`) | `hardware/outputs/finn_exports/quantEnet_<config>_..._int8.onnx` | Arch looked up via `compression/results.csv` by `--net-name`; fixes FINN incompatibilities (no asymmetric convs, no MaxUnpool/interpolate) |
 | 10 | Conv-Order Mapping | `hardware/finn_hawq_dump_conv_order_*.py` | ONNX (stage 9) + bits JSON | conv-order mapping file | Maps HAWQ bit assignments to ONNX node order |
@@ -82,7 +82,7 @@ Solid arrows = real forward artifact flow. Dotted arrows = feedback loops (calib
 
 ## Artifact-manifest convention
 
-`compression/MILP/finn_milp.py` already writes a `run_args.json` next to its outputs (e.g. `compression/MILP/artifacts/S12_ILP_outputs_perlayer_forcedsp_lut70/run_args.json`), including a `"pipeline"` field naming upstream/downstream scripts. The convention below generalizes that pattern rather than inventing a new one.
+`MILP/finn_milp.py` already writes a `run_args.json` next to its outputs (e.g. `MILP/artifacts/archive/S12_ILP_outputs_perlayer_forcedsp_lut70/run_args.json`), including a `"pipeline"` field naming upstream/downstream scripts. The convention below generalizes that pattern rather than inventing a new one.
 
 **Convention**: one sidecar manifest per artifact, same basename + `.manifest.json` (e.g. `layer_bits_folding_12_dense_relu_alpha0.5.json` → `...alpha0.5.manifest.json`; also applies to binary artifacts like checkpoints/ONNX/bitfiles: `checkpoint_best.pth.manifest.json`).
 
@@ -92,14 +92,14 @@ Solid arrows = real forward artifact flow. Dotted arrows = feedback loops (calib
   "artifact_id": "layer_bits_folding_12_dense_relu_alpha0.5",
   "stage": "bitwidth_search_folding_ilp",
   "produced_by": {
-    "script": "compression/MILP/finn_milp.py",
+    "script": "MILP/finn_milp.py",
     "git_commit": "<sha>",
     "invocation_args": {"config": "config_12_dense_relu.py", "alpha": 0.5, "candidate_bits": "4,6,8"},
     "environment": {"conda_env": "enet-milp", "container": null, "slurm_job_id": "12345678"},
     "timestamp": "2026-09-21T10:00:00Z"
   },
   "inputs": [
-    {"artifact_id": "layer_sensitivity_12_dense_relu", "path": "compression/MILP/artifacts/.../layer_sensitivity_12_dense_relu.json", "stage": "layer_sensitivity_analysis"}
+    {"artifact_id": "layer_sensitivity_12_dense_relu", "path": "MILP/artifacts/.../layer_sensitivity_12_dense_relu.json", "stage": "layer_sensitivity_analysis"}
   ],
   "outputs": [
     {"path": "layer_bits_folding_12_dense_relu_alpha0.5.json", "kind": "layer_bits_folding"}
@@ -208,7 +208,7 @@ This `configuration.yaml` is static, declarative, per-stage configuration (the t
 
 ## Known issues (flagged, not yet fixed)
 
-1. **Stale `compression/hawq/` path references** — some SLURM job scripts and `run_args.json`/docstrings still reference the old path, since renamed/consolidated into `compression/MILP/`.
+1. **Stale `compression/hawq/` path references** — some SLURM job scripts and `run_args.json`/docstrings still reference the old path, since renamed/consolidated into `MILP/`.
 2. **`run.c` wrong-kernel wiring** — the bare-metal lwIP server currently drives an unrelated image-correction accelerator (`XGrid_filter`/`XScatter`/`XMedian_filter`/`XCorrect`), not the segmentation FINN IP. Must be resolved before stages 16/17 above are functionally real.
 3. **Duplicated helpers** — `collect_results.py`/`results.csv`/`utils.py`-style helpers are duplicated between `compression/` and `hardware/` rather than shared; the manifest convention above is a natural forcing function to consolidate them later.
 4. **`--hard-lut`/`--hard-bram` naming** — actual `finn_milp.py` flags are `--hard-lut-fraction`, `--hard-bram-fraction`, `--hard-dsp-fraction`, `--hard-uram-fraction` (default 1.0), not bare `--hard-lut`/`--hard-bram`.

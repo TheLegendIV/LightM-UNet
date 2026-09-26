@@ -13,12 +13,12 @@
 set -e
 
 # QAT fine-tune for the S12_dense_nn_upsample_v1 per-layer joint bits+folding
-# ILP solve (MILP/artifacts/S12_dense_nn_upsample_v1) on the
+# ILP solve (MILP/artifacts/archive/S12_dense_nn_upsample_v1) on the
 # nearest_conv_upsample FP32 checkpoint (nnUNetTrainerENet_12_dense_relu_
 # nearest_conv_upsample, dice=0.7779, 143/150 epochs -- the decoder-resize
 # ablation that follows nearest-neighbor resize with a learned 3x3 conv+BN+
 # act on the skip/main branch, see enet/nnunetv2/nets/ENet.py's
-# UpsamplingBottleneck and MILP/config_12_dense_relu_nearest_conv_upsample.py).
+# UpsamplingBottleneck and MILP/configs/config_12_dense_relu_nearest_conv_upsample.py).
 #
 # ILP solve used here: candidate bits {4,6,8}, force-dsp, alpha=1.0 (PURE
 # sensitivity objective -- latency_term's own weight is zero) with
@@ -52,9 +52,9 @@ set -e
 # effect (see this artifact's own run history), and dramatically cheaper
 # than a post-hoc single-branch-only patch (which independently verified to
 # breach the original LUT cap by fixing the join without any joint
-# re-optimization -- see MILP/rebalance_join_folding.py).
+# re-optimization -- see MILP/archive/rebalance_join_folding.py).
 #
-# See MILP/artifacts/S12_dense_nn_upsample_v1/run_args.json + summary.csv
+# See MILP/artifacts/archive/S12_dense_nn_upsample_v1/run_args.json + summary.csv
 # for the exact ILP solve commands.
 #
 # THIS ARCHITECTURE NEEDED A REAL CODE EXTENSION FIRST: LayerQuantENet.py
@@ -84,8 +84,8 @@ DATASET_NAME="Dataset509_ARCADE_1x1_4c"
 TRAINER_CLASS="nnUNetTrainerLayerQuantENet_12_dense_relu_nearest_conv_upsample_perlayer"
 FP32_SOURCE_NET_NAME="nnUNetTrainerENet_12_dense_relu_nearest_conv_upsample"
 
-LAYER_BITS_ILP_FILE="MILP/artifacts/S12_dense_nn_upsample_v1/layer_bits_folding_12_dense_relu_nearest_conv_upsample_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram20_dsp90_maxlat200ms_joinbalance1.1.json"
-LAYER_BITS_SITES_FILE="MILP/artifacts/S12_dense_nn_upsample_v1/layer_bits_SITES_12_dense_relu_nearest_conv_upsample_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram20_dsp90_maxlat200ms_joinbalance1.1.json"
+LAYER_BITS_ILP_FILE="MILP/artifacts/archive/S12_dense_nn_upsample_v1/layer_bits_folding_12_dense_relu_nearest_conv_upsample_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram20_dsp90_maxlat200ms_joinbalance1.1.json"
+LAYER_BITS_SITES_FILE="MILP/artifacts/archive/S12_dense_nn_upsample_v1/layer_bits_SITES_12_dense_relu_nearest_conv_upsample_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram20_dsp90_maxlat200ms_joinbalance1.1.json"
 CALIBRATED_NET_NAME="nnUNetTrainerLayerQuantENet_12_dense_relu_nearest_conv_upsample_joint_alpha1.0_candidatebits468_lut50_bram20_dsp90_maxlat200ms_joinbalance1.1_calibrated"
 RUN_NAME="12_dense_relu_nearest_conv_upsample_joint_alpha1.0_perlayer_candidatebits468_forcedsp_lut50_bram20_dsp90_maxlat200ms_joinbalance1.1_ft15ep"
 
@@ -142,7 +142,7 @@ if [ ! -f "$LAYER_BITS_ILP_FILE" ]; then
     echo "ERROR: $LAYER_BITS_ILP_FILE not found -- run the per-layer candidate-bits={4,6,8} alpha=1.0 " \
          "--hard-lut-fraction 0.5 --hard-bram-fraction 0.2 --hard-dsp-fraction 0.9 --max-latency-ms 200 " \
          "--max-join-imbalance-ratio 1.1 --force-dsp joint ILP solve first (see " \
-         "MILP/artifacts/S12_dense_nn_upsample_v1/run_args.json for the exact command)." >&2
+         "MILP/artifacts/archive/S12_dense_nn_upsample_v1/run_args.json for the exact command)." >&2
     exit 1
 fi
 

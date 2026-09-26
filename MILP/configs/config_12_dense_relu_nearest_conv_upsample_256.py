@@ -57,3 +57,4 @@ STAGE_BOUNDARY_ATTR = {
 }
 STAGE_NAMES = tuple(STAGE_MODULE_ATTRS.keys())
 CANDIDATE_BITS = (4, 6, 8)
+INPUT_HW = (256, 256)  # this family trains at 256x256 (Dataset510 plans patch_size); overrides finn_milp.INPUT_HW

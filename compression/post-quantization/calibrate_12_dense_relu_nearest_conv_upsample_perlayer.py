@@ -5,7 +5,7 @@ saving -- byte-for-byte the same mechanism as calibrate_12_dense_relu_
 warmstart150ep_perlayer.py, just for the "nearest_conv_upsample" decoder
 architecture (nearest-neighbor resize + a learned 3x3 conv+BN+act on the
 decoder's skip/main branch, instead of "upsample_conv"'s bare bilinear
-resize -- see MILP/config_12_dense_relu_nearest_conv_upsample.py and
+resize -- see MILP/configs/config_12_dense_relu_nearest_conv_upsample.py and
 enet/nnunetv2/nets/LayerQuantENet.py's own LayerQuantUpsamplingBottleneck).
 
 Output checkpoint is meant as the WARM START for
@@ -15,7 +15,7 @@ deployable artifact on its own.
 
 Usage:
     python compression/post-quantization/calibrate_12_dense_relu_nearest_conv_upsample_perlayer.py \\
-        --layer-bits-file MILP/artifacts/S12_dense_nn_upsample_v1/layer_bits_SITES_12_dense_relu_nearest_conv_upsample_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram30_dsp90_maxlat150ms.json \\
+        --layer-bits-file MILP/artifacts/archive/S12_dense_nn_upsample_v1/layer_bits_SITES_12_dense_relu_nearest_conv_upsample_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram30_dsp90_maxlat150ms.json \\
         --out-net-name nnUNetTrainerLayerQuantENet_12_dense_relu_nearest_conv_upsample_joint_alpha1.0_candidatebits468_maxlat150ms_calibrated
 """
 from __future__ import annotations

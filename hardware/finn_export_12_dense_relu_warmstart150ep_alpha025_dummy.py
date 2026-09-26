@@ -67,8 +67,8 @@ CHANNELS = (4, 16, 32, 16, 4)          # initial, s1, s23 (shared), s4, s5
 BOTTLENECKS_PER_STAGE = (4, 8, 8, 2, 1)
 CONTEXT_PATTERN = "dense_dilation"
 DEFAULT_BITS_FILE = (
-    REPO_ROOT / "compression" / "MILP" / "artifacts"  # moved from compression/hawq/artifacts
-    / "12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70"
+    REPO_ROOT / "MILP" / "artifacts"
+    / "archive" / "12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70"
     / "layer_bits_SITES_12_dense_relu_warmstart150ep_joint_alpha0.25_candidatebits468_forcedsp_lut70.json"
 )
 FALLBACK_BITS = 6  # user decision -- any site missing from the real JSON falls back to 6, not 8

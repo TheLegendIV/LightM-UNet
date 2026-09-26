@@ -243,7 +243,7 @@ lut_factor, 14 partitions both builds, partition 0 excluded, avg_bits in
 ### S12 dense (non-separable) refit, 2026-09-15
 
 See `fit_forced_dsp_derating_s12_dense.py` and its own output
-`compression/hawq/artifacts/forced_dsp_derating_fit_s12_dense.json`. One
+`compression/hawq/artifacts/archive/forced_dsp_derating_fit_s12_dense.json`. One
 real build (`quantEnet_12_dense_relu_warmstart150ep_alpha025_finn_calibrated_
 int8`, 8 partitions, no second build to pool against unlike separable's 16
 points) — weaker statistically than the separable fit. avg_bits range
@@ -463,6 +463,33 @@ with `cycles = hout*wout*ceil(cout/PE)` — a per-channel compare with no
 reduction axis. The fit's BRAM term scales with PE×numSteps and ignores the
 channel count; at the fixed 8-bit (numSteps=255) that is ~2.9 BRAM18 per PE
 lane, so these nodes are a real BRAM consumer, not a rounding error.
+
+## Stream nodes and FMPadding (`stream_node_cost`, conv `fmpad_cycles`, 2026-09-26)
+
+Source: FINN **v0.10.1** code (the build version), not exported graphs.
+
+- **Resources:** none of AddStreams, DuplicateStreams, FMPadding (hls/rtl),
+  FMPadding_Pixel, StreamingConcat or UpsampleNearestNeighbour overrides
+  `lut/bram/uram/dsp_estimation` in v0.10.1 — FINN prices them all at 0 (the
+  dense build's `estimate_layer_resources.json` shows exactly that). The only
+  better numbers available are Vitis HLS csynth estimates after IP generation
+  (`estimate_layer_resources_hls.json`): AddStreams_hls ≈ 131 LUT / 29 FF,
+  DuplicateStreams_hls ≈ 115 LUT / 28 FF, both PE=1, 8-bit, no BRAM/DSP.
+  `_ADDSTREAMS_LUT_PER_PE` / `_DUPSTREAMS_LUT_PER_PE` use those, **assumed
+  linear in PE** — provisional. Concat, Upsample, FMPadding: 0 (no data).
+- **Cycles** (`get_exp_cycles`): AddStreams / DuplicateStreams
+  `H·W·C/PE` (PE | C); FMPadding / FMPadding_Pixel `padded H·W·C/SIMD`
+  (SIMD | C); StreamingConcat `H·W` and UpsampleNearestNeighbour `H_out·W_out`
+  (all channels per cycle, not foldable in v0.10.1 — no SIMD attribute).
+- **FMPadding is folded into the conv's own cost** (`fmpad_cycles`, cycles =
+  `max(MVAU, SWU, FMPadding)`), with SIMD tied to the SWU's so no DWC sits
+  between them. `LayerGeometry.ph/pw` carry the padding. ConvTranspose adds
+  FMPadding_Pixel + border padding over the zero-inserted image.
+- **StreamingMaxPool (2D) is not foldable:** the
+  `StreamingMaxPool_Precision<ImgDim, PoolDim, NumChannels, …>` HLS template
+  takes no PE (only the 1D variant does). `maxpool_cost` is unchanged.
+- Real per-node calibration needs the Vivado hierarchy reports
+  (`hier_partition_N.rpt`) of a build — not present locally.
 
 ## `LayerGeometry.groups` / depthwise fix
 

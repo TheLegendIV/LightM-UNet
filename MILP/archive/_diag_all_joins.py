@@ -4,11 +4,11 @@ RegularBottleneck's `x + out` residual add is being detected at all."""
 from __future__ import annotations
 import sys, json
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from finn_milp import INPUT_HW, load_config, trace_layer_geometry
 from layer_topology import compute_predecessor_map
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
 from nnunetv2.nets.ENet import ENet
 

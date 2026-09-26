@@ -18,7 +18,7 @@ sweep_15ep_perlayer_candidatebits468_array.job.
 
 Usage:
     python compression/post-quantization/calibrate_12_separable_dense_relu_perlayer.py \\
-        --layer-bits-file compression/hawq/artifacts/S12_ILP_outputs_perlayer/layer_bits_SITES_12_separable_dense_relu_joint_alpha0.5_candidatebits468_maxlat1000ms.json \\
+        --layer-bits-file compression/hawq/artifacts/archive/S12_ILP_outputs_perlayer/layer_bits_SITES_12_separable_dense_relu_joint_alpha0.5_candidatebits468_maxlat1000ms.json \\
         --out-net-name nnUNetTrainerLayerQuantENet_12_separable_dense_relu_joint_alpha0.5_candidatebits468_calibrated
 """
 from __future__ import annotations

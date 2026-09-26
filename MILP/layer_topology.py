@@ -178,8 +178,15 @@ def compute_predecessor_map(model: nn.Module) -> dict[str, list[str]]:
 
 
 OUT_ACT_SUFFIX = ".out_act"
+ACT_SUFFIX = ".act"
 RESIDUAL_ADD_SUFFIX = ".residual_add"
 SKIP_QUANT_SUFFIX = ".skip_quant"
+SKIP_PAD_SUFFIX = ".skip_pad"
+INPUT_QUANT_SUFFIX = ".input_quant"
+ADD_SUFFIX = ".add"
+DUP_SUFFIX = ".dup"
+CONCAT_SUFFIX = ".concat"
+UPSAMPLE_SUFFIX = ".upsample"
 _ADD_TARGETS = (operator.add, torch.add)
 
 
@@ -194,51 +201,102 @@ def _is_residual_add(node: fx.Node) -> bool:
     return is_add and len(node.all_input_nodes) == 2
 
 
-def compute_dataflow_graph(model: nn.Module) -> dict[str, list[str]]:
-    """Predecessor map of the real FINN dataflow graph, including the
-    standalone Thresholding_rtl nodes around every residual add that have no
-    PyTorch module of their own. See MILP/finn_cost_model.md
-    ("Residual-join thresholds") for the hardware evidence.
+def _scope(node: fx.Node) -> str | None:
+    stack = node.meta.get("nn_module_stack")
+    return list(stack)[-1] if stack else None
 
-    Per residual block (`out_act(skip + main)`), adds up to three nodes:
-      <block>.skip_quant   -- requant of the skip operand before the add; only
-                              when the skip path has no conv of its own (a conv's
-                              own threshold absorbs the requant otherwise)
-      <block>.residual_add -- the add's own output quant (a join: its
-                              predecessors are the skip side and the main side)
-      <block>.out_act      -- the block-final activation
 
-    Unlike compute_predecessor_map (unchanged, still used for bit resolution
-    and act sensitivity), downstream layers now see the previous block's
-    out_act as their predecessor, so the one-branch-point cap no longer drops
-    the skip edge of ordinary chained residual blocks.
+def _is_shape_query(node: fx.Node) -> bool:
+    """x.shape / x.size() / indexing into one -- metadata, not a data stream."""
+    if node.op == "call_method" and node.target in ("size", "dim"):
+        return True
+    if node.op == "call_function" and node.target is getattr and node.args[1] == "shape":
+        return True
+    if node.op == "call_function" and node.target is operator.getitem and isinstance(node.args[0], fx.Node):
+        return _is_shape_query(node.args[0])
+    return False
 
-    Only blocks whose out_act is a distinct module named `*.out_act` fed
-    directly by a two-input add are recognized (prelu_variant="nonneg_block"
-    shares one activation object across positions and is not supported)."""
+
+def _data_inputs(node: fx.Node) -> list[fx.Node]:
+    name = getattr(node.target, "__name__", "") if node.op == "call_function" else ""
+    if name == "interpolate":
+        return [node.args[0]]
+    if name == "cat":
+        return [n for n in node.args[0] if isinstance(n, fx.Node)]
+    return [n for n in node.all_input_nodes if not _is_shape_query(n)]
+
+
+def compute_dataflow_graph(model: nn.Module) -> tuple[dict[str, list[str]], dict[str, str]]:
+    """The real FINN dataflow graph (FINN v0.10.1 lowering): every hardware
+    node, including those with no PyTorch module of their own. Returns
+    (predecessor map, {virtual node name: kind}). See MILP/finn_milp.md
+    ("Dataflow graph") for what each kind is and the evidence for it.
+
+    Kinds (conv / pool nodes are the traced modules and carry no kind):
+      input_quant   network-input quantizer (placeholder)     <scope>.input_quant
+      concat        StreamingConcat (torch.cat)               <scope>.concat
+      act           InitialBlock activation after the concat  <scope>.act
+      upsample      UpsampleNearestNeighbour (F.interpolate)  <scope>.upsample
+      skip_quant    skip-operand requant, skip path w/o conv  <block>.skip_quant
+      add           AddStreams                                <block>.add
+      residual_add  the add's output quant                    <block>.residual_add
+      out_act       block-final activation                    <block>.out_act
+      dup           DuplicateStreams on every fork            <producer>.dup
+
+    compute_predecessor_map is unchanged and still drives bit resolution and
+    act sensitivity. prelu_variant="nonneg_block" (one activation object shared
+    across positions) is not supported."""
     traced = fx.GraphModule(model, _AlwaysFalseBoolTracer().trace(model))
     named_modules = dict(traced.named_modules())
+    graph_nodes = list(traced.graph.nodes)
 
     conv_names: set[str] = set()
     tracked: dict[fx.Node, str] = {}
-    for node in traced.graph.nodes:
-        if node.op != "call_module":
-            continue
-        module = named_modules.get(node.target)
-        if isinstance(module, TRACKED_MODULE_TYPES):
-            tracked[node] = node.target
-            if isinstance(module, (nn.Conv2d, nn.ConvTranspose2d)):
-                conv_names.add(node.target)
+    kinds: dict[str, str] = {}
+
+    def track(node: fx.Node, name: str, kind: str | None = None) -> str:
+        base, i = name, 1
+        while name in kinds or name in tracked.values():
+            i += 1
+            name = f"{base}_{i}"
+        tracked[node] = name
+        if kind:
+            kinds[name] = kind
+        return name
+
+    for node in graph_nodes:
+        if node.op == "call_module":
+            module = named_modules.get(node.target)
+            if isinstance(module, TRACKED_MODULE_TYPES):
+                track(node, node.target)
+                if isinstance(module, (nn.Conv2d, nn.ConvTranspose2d)):
+                    conv_names.add(node.target)
+
+    for node in graph_nodes:
+        if node.op == "placeholder":
+            first = next((u for u in node.users if u.op == "call_module"), None)
+            if first is not None:
+                track(node, str(first.target).rsplit(".", 1)[0] + INPUT_QUANT_SUFFIX, "input_quant")
+        elif node.op == "call_function" and getattr(node.target, "__name__", "") == "cat":
+            scope = _scope(node)
+            track(node, f"{scope}{CONCAT_SUFFIX}", "concat")
+            act = f"{scope}{ACT_SUFFIX}"
+            for user in list(node.users):
+                for later in [user, *user.users]:
+                    if later.op == "call_module" and later.target == act:
+                        track(later, act, "act")
+        elif node.op == "call_function" and getattr(node.target, "__name__", "") == "interpolate":
+            track(node, f"{_scope(node)}{UPSAMPLE_SUFFIX}", "upsample")
 
     residual_blocks: list[tuple[fx.Node, str]] = []
-    for node in traced.graph.nodes:
+    for node in graph_nodes:
         if node.op != "call_module" or not str(node.target).endswith(OUT_ACT_SUFFIX):
             continue
         if len(node.all_input_nodes) != 1 or not _is_residual_add(node.all_input_nodes[0]):
             continue
         prefix = node.target[: -len(OUT_ACT_SUFFIX)]
-        tracked[node] = node.target
-        tracked[node.all_input_nodes[0]] = prefix + RESIDUAL_ADD_SUFFIX
+        track(node, node.target, "out_act")
+        track(node.all_input_nodes[0], prefix + RESIDUAL_ADD_SUFFIX, "residual_add")
         residual_blocks.append((node.all_input_nodes[0], prefix))
 
     memo: dict[tuple[fx.Node, bool], list[str]] = {}
@@ -251,31 +309,47 @@ def compute_dataflow_graph(model: nn.Module) -> dict[str, list[str]]:
         if node in tracked:
             result = [tracked[node]]
         else:
-            is_branch = len(node.all_input_nodes) > 1
+            inputs = _data_inputs(node)
+            is_branch = len(inputs) > 1
             if is_branch and not allow_branch:
                 result = []
             else:
                 result = _dedupe([
-                    a for inp in node.all_input_nodes for a in nearest(inp, allow_branch and not is_branch)
+                    a for inp in inputs for a in nearest(inp, allow_branch and not is_branch)
                 ])
         memo[key] = result
         return result
 
     add_nodes = {add for add, _ in residual_blocks}
     dataflow: dict[str, list[str]] = {
-        name: _dedupe([a for inp in node.all_input_nodes for a in nearest(inp, True)])
+        name: _dedupe([a for inp in _data_inputs(node) for a in nearest(inp, True)])
         for node, name in tracked.items() if node not in add_nodes
     }
 
     for add, prefix in residual_blocks:
-        skip_operand, main_operand = add.args[0], add.args[1]
-        skip_sources = nearest(skip_operand, True)
+        skip_sources = nearest(add.args[0], True)
         join = []
         if any(s in conv_names for s in skip_sources):
             join.extend(skip_sources)
         else:
             dataflow[prefix + SKIP_QUANT_SUFFIX] = skip_sources
+            kinds[prefix + SKIP_QUANT_SUFFIX] = "skip_quant"
             join.append(prefix + SKIP_QUANT_SUFFIX)
-        join.extend(nearest(main_operand, True))
-        dataflow[prefix + RESIDUAL_ADD_SUFFIX] = _dedupe(join)
-    return dataflow
+        join.extend(nearest(add.args[1], True))
+        dataflow[prefix + ADD_SUFFIX] = _dedupe(join)
+        kinds[prefix + ADD_SUFFIX] = "add"
+        dataflow[prefix + RESIDUAL_ADD_SUFFIX] = [prefix + ADD_SUFFIX]
+
+    consumers: dict[str, list[str]] = {}
+    for name, preds in dataflow.items():
+        for pred in preds:
+            consumers.setdefault(pred, []).append(name)
+    for producer, users in consumers.items():
+        if len(users) < 2:
+            continue
+        dup = producer + DUP_SUFFIX
+        dataflow[dup] = [producer]
+        kinds[dup] = "dup"
+        for user in users:
+            dataflow[user] = [dup if p == producer else p for p in dataflow[user]]
+    return dataflow, kinds

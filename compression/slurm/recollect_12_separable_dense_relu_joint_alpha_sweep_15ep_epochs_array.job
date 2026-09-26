@@ -66,16 +66,16 @@ RUN_NAME_ARR=(
 # inherit it from anywhere (same gotcha this session already hit once
 # before with a bare docker exec collect_results.py call).
 BLOCK_BITS_ARR=(
-    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.0_maxlat1000ms.json"
-    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.25_maxlat1000ms.json"
-    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.5_maxlat1000ms.json"
-    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.75_maxlat1000ms.json"
-    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha1.0_maxlat1000ms.json"
-    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.0_maxlat1000ms.json"
-    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.25_maxlat1000ms.json"
-    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.5_maxlat1000ms.json"
-    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.75_maxlat1000ms.json"
-    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha1.0_maxlat1000ms.json"
+    "compression/hawq/artifacts/archive/block_bits_folding_12_separable_dense_relu_joint_alpha0.0_maxlat1000ms.json"
+    "compression/hawq/artifacts/archive/block_bits_folding_12_separable_dense_relu_joint_alpha0.25_maxlat1000ms.json"
+    "compression/hawq/artifacts/archive/block_bits_folding_12_separable_dense_relu_joint_alpha0.5_maxlat1000ms.json"
+    "compression/hawq/artifacts/archive/block_bits_folding_12_separable_dense_relu_joint_alpha0.75_maxlat1000ms.json"
+    "compression/hawq/artifacts/archive/block_bits_folding_12_separable_dense_relu_joint_alpha1.0_maxlat1000ms.json"
+    "compression/hawq/artifacts/archive/block_bits_folding_12_separable_dense_relu_joint_alpha0.0_maxlat1000ms.json"
+    "compression/hawq/artifacts/archive/block_bits_folding_12_separable_dense_relu_joint_alpha0.25_maxlat1000ms.json"
+    "compression/hawq/artifacts/archive/block_bits_folding_12_separable_dense_relu_joint_alpha0.5_maxlat1000ms.json"
+    "compression/hawq/artifacts/archive/block_bits_folding_12_separable_dense_relu_joint_alpha0.75_maxlat1000ms.json"
+    "compression/hawq/artifacts/archive/block_bits_folding_12_separable_dense_relu_joint_alpha1.0_maxlat1000ms.json"
 )
 
 TASK_ID=${SLURM_ARRAY_TASK_ID}

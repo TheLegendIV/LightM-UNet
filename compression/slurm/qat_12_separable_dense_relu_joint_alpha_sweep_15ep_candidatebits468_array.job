@@ -14,7 +14,7 @@
 set -e
 
 # Real 15-epoch QAT fine-tune for the NEW candidate-bits={4,6,8} joint
-# bits+folding ILP sweep (compression/hawq/artifacts/S12_ILP_outputs/,
+# bits+folding ILP sweep (compression/hawq/artifacts/archive/S12_ILP_outputs/,
 # --candidate-bits 4,6,8, real (non-force-serial) folding search -- see that
 # folder's own run_args.json/summary.csv), same 5 alpha points (0.0/0.25/
 # 0.5/0.75/1.0) and --max-latency-ms 1000 --clock-mhz 100 hard-capped
@@ -45,11 +45,11 @@ TRAINER_CLASS="nnUNetTrainerCombinedQuantENet_12_separable_dense_relu_perblock"
 FP32_SOURCE_NET_NAME="nnUNetTrainerENet_12_separable_dense_relu"
 
 BLOCK_BITS_ARR=(
-    "compression/hawq/artifacts/S12_ILP_outputs/block_bits_folding_12_separable_dense_relu_joint_alpha0.0_candidatebits468_maxlat1000ms.json"
-    "compression/hawq/artifacts/S12_ILP_outputs/block_bits_folding_12_separable_dense_relu_joint_alpha0.25_candidatebits468_maxlat1000ms.json"
-    "compression/hawq/artifacts/S12_ILP_outputs/block_bits_folding_12_separable_dense_relu_joint_alpha0.5_candidatebits468_maxlat1000ms.json"
-    "compression/hawq/artifacts/S12_ILP_outputs/block_bits_folding_12_separable_dense_relu_joint_alpha0.75_candidatebits468_maxlat1000ms.json"
-    "compression/hawq/artifacts/S12_ILP_outputs/block_bits_folding_12_separable_dense_relu_joint_alpha1.0_candidatebits468_maxlat1000ms.json"
+    "compression/hawq/artifacts/archive/S12_ILP_outputs/block_bits_folding_12_separable_dense_relu_joint_alpha0.0_candidatebits468_maxlat1000ms.json"
+    "compression/hawq/artifacts/archive/S12_ILP_outputs/block_bits_folding_12_separable_dense_relu_joint_alpha0.25_candidatebits468_maxlat1000ms.json"
+    "compression/hawq/artifacts/archive/S12_ILP_outputs/block_bits_folding_12_separable_dense_relu_joint_alpha0.5_candidatebits468_maxlat1000ms.json"
+    "compression/hawq/artifacts/archive/S12_ILP_outputs/block_bits_folding_12_separable_dense_relu_joint_alpha0.75_candidatebits468_maxlat1000ms.json"
+    "compression/hawq/artifacts/archive/S12_ILP_outputs/block_bits_folding_12_separable_dense_relu_joint_alpha1.0_candidatebits468_maxlat1000ms.json"
 )
 CALIBRATED_NET_ARR=(
     nnUNetTrainerCombinedQuantENet_12_separable_dense_relu_perblock_joint_alpha0.0_candidatebits468_calibrated
@@ -120,7 +120,7 @@ cd "$HOME/LightM-UNet"
 
 if [ ! -f "$BLOCK_BITS_FILE" ]; then
     echo "ERROR: $BLOCK_BITS_FILE not found -- run the candidate-bits={4,6,8} joint ILP sweep first " \
-         "(see compression/hawq/artifacts/S12_ILP_outputs/run_args.json for the exact command)." >&2
+         "(see compression/hawq/artifacts/archive/S12_ILP_outputs/run_args.json for the exact command)." >&2
     exit 1
 fi
 

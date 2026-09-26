@@ -56,7 +56,7 @@ DATASET_ID=509
 DATASET_NAME="Dataset509_ARCADE_1x1_4c"
 TRAINER_CLASS="nnUNetTrainerLayerQuantENet_12_dense_relu_warmstart150ep_perlayer"
 FP32_SOURCE_NET_NAME="nnUNetTrainerENet_12_dense_relu_warmstart150ep"
-UNIFORM_DIR="compression/hawq/artifacts/12_dense_relu_warmstart150ep_uniform_samefolding_alpha0.25"
+UNIFORM_DIR="compression/hawq/artifacts/archive/12_dense_relu_warmstart150ep_uniform_samefolding_alpha0.25"
 
 BITS_ARR=(4 6 8)
 LAYER_BITS_SITES_ARR=(
@@ -129,7 +129,7 @@ cd "$HOME/LightM-UNet"
 
 if [ ! -f "$LAYER_BITS_SITES_FILE" ]; then
     echo "ERROR: $LAYER_BITS_SITES_FILE not found -- run compression/hawq/uniform_bits_same_folding.py first " \
-         "(see compression/hawq/artifacts/12_dense_relu_warmstart150ep_uniform_samefolding_alpha0.25/ for the " \
+         "(see compression/hawq/artifacts/archive/12_dense_relu_warmstart150ep_uniform_samefolding_alpha0.25/ for the " \
          "expected layer_bits_folding_uniform_int{4,6,8}_samefolding.json inputs, then expand_layer_bits.py on each)." >&2
     exit 1
 fi

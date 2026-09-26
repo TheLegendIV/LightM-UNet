@@ -15,7 +15,7 @@ kernel, dilation) is hardcoded here directly from finn_export_probe_
 s12_context_common.py's ProbeNet architecture, matched 1:1 against the CSV
 rows in real graph order -- so this only needs finn_cost_model.py itself.
 
-Run: python -m unittest MILP/test_finn_cost_model.py -v
+Run (from MILP/): python -m unittest test_finn_cost_model -v
 """
 from __future__ import annotations
 

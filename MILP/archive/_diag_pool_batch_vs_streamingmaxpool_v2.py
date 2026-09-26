@@ -13,18 +13,18 @@ from pathlib import Path
 
 import torch  # noqa: F401
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from finn_milp import INPUT_HW, load_config, trace_layer_geometry  # noqa: E402
 from layer_topology import compute_predecessor_map  # noqa: E402
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
 from nnunetv2.nets.ENet import ENet  # noqa: E402
 
 load_config("config_12_dense_relu_warmstart150ep")
 import finn_milp as fm  # noqa: E402
 
-FOLDING_FILE = Path(__file__).resolve().parent / "artifacts" / "_v4" / (
+FOLDING_FILE = Path(__file__).resolve().parent.parent / "artifacts" / "archive" / "_v4" / (
     "layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.25_candidatebits468_forcedsp_lut50_bram70_dsp90.json"
 )
 with open(FOLDING_FILE) as f:

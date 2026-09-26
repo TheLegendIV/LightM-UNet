@@ -8,7 +8,7 @@ RTL specialization) instead of the standard preamble's
 
 Folding source is now the PLAIN (non "_NOACT_RTL"-suffixed)
 layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.25_
-candidatebits468_forcedsp_lut70.json under MILP/artifacts/
+candidatebits468_forcedsp_lut70.json under MILP/artifacts/archive/
 12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/ -- as of
 the 2026-09-17 cost-model fixes this file IS the no-activation-RTL-MVAU +
 DSP-cap + BRAM-cap + 70%-LUT-cap solve; the old "_NOACT_RTL"/

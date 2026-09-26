@@ -53,11 +53,11 @@ from pathlib import Path
 
 import torch  # noqa: F401 -- side-effect parity with finn_milp.py's own import order
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from finn_milp import INPUT_HW, load_config, trace_layer_geometry  # noqa: E402
 from layer_topology import compute_predecessor_map  # noqa: E402
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 PACKAGE_ROOT = REPO_ROOT / "enet"
 sys.path.insert(0, str(PACKAGE_ROOT))
 from nnunetv2.nets.ENet import ENet  # noqa: E402
@@ -100,7 +100,7 @@ def reconstruct_path(sink: str, best_predecessor: dict[str, str | None]) -> list
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--config", required=True, help="MILP/config_*.py module name (no .py).")
+    parser.add_argument("--config", required=True, help="MILP/configs/config_*.py module name (no .py).")
     parser.add_argument("--folding-file", type=Path, required=True,
                          help="finn_milp.py --out-file JSON (has a top-level 'per_layer' dict with a "
                               "'cycles' entry per layer name).")
