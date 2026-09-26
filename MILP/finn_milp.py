@@ -513,7 +513,17 @@ def solve_joint_perlayer(
                     n_join_constraints += 1
 
         # Chain: rate[L] <= ratio * rate[D] for every descendant D, in O(edges) via
-        # min_downstream_rate bounded ABOVE (so it can't be inflated). rate = cycles / outputs.
+        # max_downstream_rate (the SLOWEST/bottleneck descendant rate) bounded BELOW (so it
+        # can't be deflated). rate = cycles / outputs. Constraining L against the slowest thing
+        # downstream is what actually catches a fast upstream node outrunning a distant slow
+        # bottleneck (the compounding-mismatch case) -- an earlier version tracked the FASTEST
+        # descendant (min, bounded above), which only restricted the opposite, harmless
+        # direction (a slow producer merely starves a FIFO, no depth risk) and left the
+        # documented target case ("producer outruns consumer") completely unconstrained;
+        # confirmed by a toy 3-node chain (see finn_milp.md "Rate coherence"). Same
+        # anti-inflation principle as before, mirrored: a MAX-type auxiliary appearing on the
+        # restricted (left) side of a <= must be bounded from below only, so it can't be pushed
+        # down below the true maximum to cheat the constraint.
         node_shapes = [*geometries, *(node.geom for node in extra_nodes)]
         rate_expr = {
             g.name: layer_cycles_expr[g.name] * (1.0 / (g.hout * g.wout * g.cout))
@@ -526,21 +536,31 @@ def solve_joint_perlayer(
             for pred in preds:
                 if pred in successors:
                     successors[pred].append(consumer)
-        min_downstream_rate = {
-            name: pulp.LpVariable(f"min_downstream_rate_{name}", lowBound=0)
+        max_downstream_rate = {
+            name: pulp.LpVariable(f"max_downstream_rate_{name}", lowBound=0)
             for name, children in successors.items() if children
         }
+        # Fixed-cycle nodes (MaxPool, concat, upsample -- one cycle value whatever the
+        # option, same set the join-balance check exempts) have no folding freedom, so
+        # pairing them against a foldable node forces all the give onto the foldable
+        # side. Excluded from contributing their OWN rate to an ancestor's
+        # max_downstream_rate, and exempted from their own outer constraint -- but still
+        # relayed transparently (their max_downstream_rate[child] link stays), so a real
+        # foldable bottleneck sitting beyond a fixed pass-through node is still caught.
         for name, children in successors.items():
             if not children:
                 continue
             for child in children:
-                prob += min_downstream_rate[name] <= rate_expr[child], f"min_rate_{name}_le_{child}"
-                n_chain_rate_constraints += 1
-                if child in min_downstream_rate:
-                    prob += min_downstream_rate[name] <= min_downstream_rate[child], f"min_rate_{name}_le_min_{child}"
+                if child not in fixed_cycle_names:
+                    prob += max_downstream_rate[name] >= rate_expr[child], f"max_rate_{name}_ge_{child}"
                     n_chain_rate_constraints += 1
+                if child in max_downstream_rate:
+                    prob += max_downstream_rate[name] >= max_downstream_rate[child], f"max_rate_{name}_ge_max_{child}"
+                    n_chain_rate_constraints += 1
+            if name in fixed_cycle_names:
+                continue
             prob += (
-                rate_expr[name] <= optimize_downstream_rate * min_downstream_rate[name]
+                max_downstream_rate[name] <= optimize_downstream_rate * rate_expr[name]
             ), f"downstream_rate_{name}"
             n_chain_rate_constraints += 1
 
