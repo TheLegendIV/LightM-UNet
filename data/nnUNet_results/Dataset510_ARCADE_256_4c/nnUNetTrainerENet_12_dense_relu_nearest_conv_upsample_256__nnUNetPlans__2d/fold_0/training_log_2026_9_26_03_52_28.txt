@@ -1,0 +1,84 @@
+
+This is the configuration used by this training:
+Configuration name: 2d
+ {'data_identifier': 'nnUNetPlans_2d', 'preprocessor_name': 'DefaultPreprocessor', 'batch_size': 49, 'patch_size': [256, 256], 'median_image_size_in_voxels': [256.0, 256.0], 'spacing': [1.0, 1.0], 'normalization_schemes': ['ZScoreNormalization'], 'use_mask_for_norm': [False], 'UNet_class_name': 'PlainConvUNet', 'UNet_base_num_features': 32, 'n_conv_per_stage_encoder': [2, 2, 2, 2, 2, 2, 2], 'n_conv_per_stage_decoder': [2, 2, 2, 2, 2, 2], 'num_pool_per_axis': [6, 6], 'pool_op_kernel_sizes': [[1, 1], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2]], 'conv_kernel_sizes': [[3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3]], 'unet_max_num_features': 512, 'resampling_fn_data': 'resample_data_or_seg_to_shape', 'resampling_fn_seg': 'resample_data_or_seg_to_shape', 'resampling_fn_data_kwargs': {'is_seg': False, 'order': 3, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_seg_kwargs': {'is_seg': True, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_probabilities': 'resample_data_or_seg_to_shape', 'resampling_fn_probabilities_kwargs': {'is_seg': False, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'batch_dice': True} 
+ 
+These are the global plan.json settings:
+ {'dataset_name': 'Dataset510_ARCADE_256_4c', 'plans_name': 'nnUNetPlans', 'original_median_spacing_after_transp': [999.0, 1.0, 1.0], 'original_median_shape_after_transp': [1, 256, 256], 'image_reader_writer': 'NaturalImage2DIO', 'transpose_forward': [0, 1, 2], 'transpose_backward': [0, 1, 2], 'experiment_planner_used': 'ExperimentPlanner', 'label_manager': 'LabelManager', 'foreground_intensity_properties_per_channel': {'0': {'max': 236.0, 'mean': 98.40424346923828, 'median': 96.0, 'min': 0.0, 'percentile_00_5': 32.0, 'percentile_99_5': 186.0, 'std': 31.457448959350586}}} 
+ 
+2026-09-26 03:52:28.565144: unpacking dataset... 
+
+This is the configuration used by this training:
+Configuration name: 2d
+ {'data_identifier': 'nnUNetPlans_2d', 'preprocessor_name': 'DefaultPreprocessor', 'batch_size': 49, 'patch_size': [256, 256], 'median_image_size_in_voxels': [256.0, 256.0], 'spacing': [1.0, 1.0], 'normalization_schemes': ['ZScoreNormalization'], 'use_mask_for_norm': [False], 'UNet_class_name': 'PlainConvUNet', 'UNet_base_num_features': 32, 'n_conv_per_stage_encoder': [2, 2, 2, 2, 2, 2, 2], 'n_conv_per_stage_decoder': [2, 2, 2, 2, 2, 2], 'num_pool_per_axis': [6, 6], 'pool_op_kernel_sizes': [[1, 1], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2]], 'conv_kernel_sizes': [[3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3]], 'unet_max_num_features': 512, 'resampling_fn_data': 'resample_data_or_seg_to_shape', 'resampling_fn_seg': 'resample_data_or_seg_to_shape', 'resampling_fn_data_kwargs': {'is_seg': False, 'order': 3, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_seg_kwargs': {'is_seg': True, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_probabilities': 'resample_data_or_seg_to_shape', 'resampling_fn_probabilities_kwargs': {'is_seg': False, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'batch_dice': True} 
+ 
+These are the global plan.json settings:
+ {'dataset_name': 'Dataset510_ARCADE_256_4c', 'plans_name': 'nnUNetPlans', 'original_median_spacing_after_transp': [999.0, 1.0, 1.0], 'original_median_shape_after_transp': [1, 256, 256], 'image_reader_writer': 'NaturalImage2DIO', 'transpose_forward': [0, 1, 2], 'transpose_backward': [0, 1, 2], 'experiment_planner_used': 'ExperimentPlanner', 'label_manager': 'LabelManager', 'foreground_intensity_properties_per_channel': {'0': {'max': 236.0, 'mean': 98.40424346923828, 'median': 96.0, 'min': 0.0, 'percentile_00_5': 32.0, 'percentile_99_5': 186.0, 'std': 31.457448959350586}}} 
+ 
+2026-09-26 03:52:28.577724: unpacking dataset... 
+2026-09-26 03:52:33.264406: unpacking done... 
+2026-09-26 03:52:33.264937: do_dummy_2d_data_aug: False 
+2026-09-26 03:52:33.272577: Using splits from existing split file: /gpfs/home1/yhussein/LightM-UNet/data/nnUNet_preprocessed/Dataset510_ARCADE_256_4c/splits_final.json 
+2026-09-26 03:52:33.272943: The split file contains 1 splits. 
+2026-09-26 03:52:33.273011: Desired fold for training: 0 
+2026-09-26 03:52:33.273067: This split has 1000 training and 200 validation cases. 
+2026-09-26 03:52:33.304410: unpacking done... 
+2026-09-26 03:52:33.304918: do_dummy_2d_data_aug: False 
+2026-09-26 03:52:33.311830: Using splits from existing split file: /gpfs/home1/yhussein/LightM-UNet/data/nnUNet_preprocessed/Dataset510_ARCADE_256_4c/splits_final.json 
+2026-09-26 03:52:33.312222: The split file contains 1 splits. 
+2026-09-26 03:52:33.312292: Desired fold for training: 0 
+2026-09-26 03:52:33.312346: This split has 1000 training and 200 validation cases. 
+2026-09-26 03:52:33.312529: Unable to plot network architecture: 
+2026-09-26 03:52:33.312642: No module named 'IPython' 
+2026-09-26 03:52:33.324560:  
+2026-09-26 03:52:33.324669: Epoch 0 
+2026-09-26 03:52:33.324863: Current learning rate: 0.001 
+2026-09-26 03:52:33.337315: Unable to plot network architecture: 
+2026-09-26 03:52:33.337430: No module named 'IPython' 
+2026-09-26 03:52:33.347636:  
+2026-09-26 03:52:33.347766: Epoch 0 
+2026-09-26 03:52:33.347905: Current learning rate: 0.001 
+2026-09-26 03:53:03.426188: train_loss 0.6529 
+2026-09-26 03:53:03.426461: val_loss 0.1989 
+2026-09-26 03:53:03.426594: Pseudo dice [0.0, 0.0, 0.0, 0.0] 
+2026-09-26 03:53:03.426768: Epoch time: 30.1 s 
+2026-09-26 03:53:03.426877: Yayy! New best EMA pseudo Dice: 0.0 
+2026-09-26 03:53:03.610258: train_loss 0.7581 
+2026-09-26 03:53:03.610544: val_loss 0.1923 
+2026-09-26 03:53:03.610677: Pseudo dice [0.0, 0.0, 0.0, 0.0] 
+2026-09-26 03:53:03.610792: Epoch time: 30.26 s 
+2026-09-26 03:53:03.610883: Yayy! New best EMA pseudo Dice: 0.0 
+2026-09-26 03:53:04.646630:  
+2026-09-26 03:53:04.646799: Epoch 1 
+2026-09-26 03:53:04.646917: Current learning rate: 0.00099 
+2026-09-26 03:53:04.877928:  
+2026-09-26 03:53:04.878095: Epoch 1 
+2026-09-26 03:53:04.878217: Current learning rate: 0.00099 
+2026-09-26 03:53:31.037764: train_loss 0.1151 
+2026-09-26 03:53:31.038100: val_loss 0.0517 
+2026-09-26 03:53:31.038265: Pseudo dice [0.0, 0.0, 0.0, 0.0] 
+2026-09-26 03:53:31.038535: Epoch time: 26.39 s 
+2026-09-26 03:53:31.194363: train_loss 0.1081 
+2026-09-26 03:53:31.194609: val_loss 0.0378 
+2026-09-26 03:53:31.194733: Pseudo dice [0.0, 0.0, 0.0, 0.0] 
+2026-09-26 03:53:31.194872: Epoch time: 26.32 s 
+2026-09-26 03:53:32.179497:  
+2026-09-26 03:53:32.179650: Epoch 2 
+2026-09-26 03:53:32.179761: Current learning rate: 0.00099 
+2026-09-26 03:53:32.340648:  
+2026-09-26 03:53:32.340814: Epoch 2 
+2026-09-26 03:53:32.340933: Current learning rate: 0.00099 
+2026-09-26 03:53:58.457379: train_loss 0.0395 
+2026-09-26 03:53:58.457605: val_loss 0.0184 
+2026-09-26 03:53:58.457731: Pseudo dice [0.0, 0.0, 0.0, 0.0] 
+2026-09-26 03:53:58.457846: Epoch time: 26.28 s 
+2026-09-26 03:53:58.490149: train_loss 0.025 
+2026-09-26 03:53:58.490355: val_loss 0.0022 
+2026-09-26 03:53:58.490474: Pseudo dice [0.0, 0.0, 0.0, 0.0] 
+2026-09-26 03:53:58.490567: Epoch time: 26.15 s 
+2026-09-26 03:53:59.629143:  
+2026-09-26 03:53:59.629301: Epoch 3 
+2026-09-26 03:53:59.629424: Current learning rate: 0.00098 
+2026-09-26 03:53:59.666592:  
+2026-09-26 03:53:59.666733: Epoch 3 
+2026-09-26 03:53:59.666845: Current learning rate: 0.00098 
