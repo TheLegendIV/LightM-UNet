@@ -1,0 +1,88 @@
+16:02:39 DEBUG : Logs will be stored at 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/IDE.log'.
+16:02:46 INFO  : Launching XSCT server: xsct.bat -n  -interactive C:\DEV\repos\LightM-UNet\deployment\FINN_interface\temp_xsdb_launch_script.tcl
+16:02:46 INFO  : Registering command handlers for Vitis TCF services
+16:02:47 INFO  : Platform repository initialization has completed.
+16:02:52 INFO  : XSCT server has started successfully.
+16:02:57 INFO  : Successfully done setting XSCT server connection channel  
+16:02:57 INFO  : plnx-install-location is set to ''
+16:02:57 INFO  : Successfully done query RDI_DATADIR 
+16:02:57 INFO  : Successfully done setting workspace for the tool. 
+16:03:35 DEBUG : Logs will be stored at 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/IDE.log'.
+16:03:38 INFO  : Launching XSCT server: xsct.bat -n  -interactive C:\DEV\repos\LightM-UNet\deployment\FINN_interface\temp_xsdb_launch_script.tcl
+16:03:39 INFO  : Registering command handlers for Vitis TCF services
+16:03:40 INFO  : Platform repository initialization has completed.
+16:03:41 INFO  : XSCT server has started successfully.
+16:03:41 INFO  : Successfully done setting XSCT server connection channel  
+16:03:41 INFO  : plnx-install-location is set to ''
+16:03:42 INFO  : Successfully done setting workspace for the tool. 
+16:03:42 INFO  : Successfully done query RDI_DATADIR 
+16:04:30 DEBUG : Logs will be stored at 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/IDE.log'.
+16:04:31 INFO  : Launching XSCT server: xsct.bat -n  -interactive C:\DEV\repos\LightM-UNet\deployment\FINN_interface\temp_xsdb_launch_script.tcl
+16:04:32 INFO  : Registering command handlers for Vitis TCF services
+16:04:33 INFO  : Platform repository initialization has completed.
+16:04:34 INFO  : XSCT server has started successfully.
+16:04:34 INFO  : Successfully done setting XSCT server connection channel  
+16:04:34 INFO  : plnx-install-location is set to ''
+16:04:34 INFO  : Successfully done query RDI_DATADIR 
+16:04:34 INFO  : Successfully done setting workspace for the tool. 
+16:06:19 INFO  : Result from executing command 'getProjects': zcu106
+16:06:19 INFO  : Result from executing command 'getPlatforms': xilinx_zcu102_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_202220_1/xilinx_zcu102_base_202220_1.xpfm;xilinx_zcu102_base_dfx_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_dfx_202220_1/xilinx_zcu102_base_dfx_202220_1.xpfm;xilinx_zcu104_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu104_base_202220_1/xilinx_zcu104_base_202220_1.xpfm
+16:10:18 WARN  : Failed to update project references for project test_system
+16:21:40 INFO  : Result from executing command 'removePlatformRepo': 
+16:23:51 INFO  : Result from executing command 'getProjects': zcu106
+16:23:51 INFO  : Result from executing command 'getPlatforms': xilinx_zcu102_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_202220_1/xilinx_zcu102_base_202220_1.xpfm;xilinx_zcu102_base_dfx_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_dfx_202220_1/xilinx_zcu102_base_dfx_202220_1.xpfm;xilinx_zcu104_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu104_base_202220_1/xilinx_zcu104_base_202220_1.xpfm
+16:23:52 INFO  : Checking for BSP changes to sync application flags for project 'test'...
+16:24:41 INFO  : Connected to target on host '127.0.0.1' and port '3121'.
+16:24:42 INFO  : Jtag cable 'Xilinx HW-FTDI-TEST FT232H 84713' is selected.
+16:24:42 INFO  : 'jtag frequency' command is executed.
+16:24:42 INFO  : Sourcing of 'F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl' is done.
+16:24:42 INFO  : Context for 'APU' is selected.
+16:24:43 INFO  : System reset is completed.
+16:24:46 INFO  : 'after 3000' command is executed.
+16:24:46 INFO  : Context for 'APU' is selected.
+16:24:46 INFO  : Hardware design and registers information is loaded from 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106/export/zcu106/hw/zcu106.xsa'.
+16:24:46 INFO  : 'configparams force-mem-access 1' command is executed.
+16:24:46 INFO  : Context for 'APU' is selected.
+16:24:46 INFO  : Boot mode is read from the target.
+16:24:46 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:24:47 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+16:24:47 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106/export/zcu106/sw/zcu106/boot/fsbl.elf' is downloaded to processor 'psu_cortexa53_0'.
+16:24:47 INFO  : 'set bp_24_47_fsbl_bp [bpadd -addr &XFsbl_Exit]' command is executed.
+16:24:48 INFO  : 'con -block -timeout 60' command is executed.
+16:24:49 INFO  : 'bpremove $bp_24_47_fsbl_bp' command is executed.
+16:24:49 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:24:49 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+16:24:49 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/test/Debug/test.elf' is downloaded to processor 'psu_cortexa53_0'.
+16:24:49 INFO  : 'configparams force-mem-access 0' command is executed.
+16:24:49 INFO  : ----------------XSDB Script----------------
+connect -url tcp:127.0.0.1:3121
+source F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl
+targets -set -nocase -filter {name =~"APU*"}
+rst -system
+after 3000
+targets -set -nocase -filter {name =~"APU*"}
+loadhw -hw C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106/export/zcu106/hw/zcu106.xsa -mem-ranges [list {0x80000000 0xbfffffff} {0x400000000 0x5ffffffff} {0x1000000000 0x7fffffffff}] -regs
+configparams force-mem-access 1
+targets -set -nocase -filter {name =~"APU*"}
+set mode [expr [mrd -value 0xFF5E0200] & 0xf]
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106/export/zcu106/sw/zcu106/boot/fsbl.elf
+set bp_24_47_fsbl_bp [bpadd -addr &XFsbl_Exit]
+con -block -timeout 60
+bpremove $bp_24_47_fsbl_bp
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/test/Debug/test.elf
+configparams force-mem-access 0
+----------------End of Script----------------
+
+16:24:49 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:24:49 INFO  : 'con' command is executed.
+16:24:49 INFO  : ----------------XSDB Script (After Launch)----------------
+targets -set -nocase -filter {name =~ "*A53*#0"}
+con
+----------------End of Script----------------
+
+16:24:49 INFO  : Launch script is exported to file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\test_system\_ide\scripts\debugger_test-default.tcl'
+16:25:42 INFO  : Disconnected from the channel tcfchan#3.

@@ -320,8 +320,14 @@ class FINNQuantENet(nn.Module):
 # Export helpers
 # ---------------------------------------------------------------------------
 
-def export_model(model: nn.Module, name: str, dummy: torch.Tensor) -> Path:
-    """Export model to cleaned QONNX, set INT8 datatypes, verify with onnx.checker."""
+def export_model(model: nn.Module, name: str, dummy: torch.Tensor, force_output_dtype: str | None = "INT8") -> Path:
+    """Export model to cleaned QONNX, set INT8 datatypes, verify with onnx.checker.
+
+    force_output_dtype: forced onto the graph's output tensor after cleanup (default
+    "INT8", matching this export family's raw-logit output). Pass None to skip this
+    (e.g. when the model's forward() appends a TopK/argmax -- the output tensor is
+    then int64 class indices, whose real DataType is decided at FINN build time by
+    InferLabelSelectLayer, not here)."""
     from brevitas.export import export_qonnx
     from qonnx.util.cleanup import cleanup as qonnx_cleanup
     from qonnx.core.modelwrapper import ModelWrapper
@@ -337,7 +343,8 @@ def export_model(model: nn.Module, name: str, dummy: torch.Tensor) -> Path:
 
     qm = ModelWrapper(str(out_path))
     qm.set_tensor_datatype(qm.graph.input[0].name,  DataType["INT8"])
-    qm.set_tensor_datatype(qm.graph.output[0].name, DataType["INT8"])
+    if force_output_dtype is not None:
+        qm.set_tensor_datatype(qm.graph.output[0].name, DataType[force_output_dtype])
     qm.save(str(out_path))
 
     # onnx.checker.check_model() rejects QONNX custom ops ('qonnx.custom_op.general'

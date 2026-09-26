@@ -234,16 +234,38 @@ class FINNDownsamplingBottleneck(nn.Module):
 class FINNUpsamplingBottleneck(nn.Module):
     """FINN-safe substitute for LayerQuantUpsamplingBottleneck -- main_proj
     (real, transferred as-is) is unchanged; only the spatial-upsample step
-    after it is substituted (fixed, frozen nearest+depthwise bilinear-
-    equivalent kernel, see module docstring point 2). reduce/up/expand/
-    residual_add/out_act are the real per-site ops (same site names as the
-    real block)."""
+    after it differs by decoder_type. reduce/up/expand/residual_add/out_act
+    are the real per-site ops (same site names as the real block) either way.
+
+    decoder_type="upsample_conv" (default): spatial-upsample step is
+    substituted (fixed, frozen nearest+depthwise bilinear-equivalent kernel,
+    see module docstring point 2), since the real op (F.interpolate
+    bilinear) has no FINN lowering.
+
+    decoder_type="nearest_conv_upsample": the REAL op here already IS a bare
+    nearest resize (LayerQuantUpsamplingBottleneck's own decoder_type
+    branch), which FINN already lowers directly to a real HW
+    UpsampleNearestNeighbour_hls node (mid-graph Resize case, validated in
+    finn_build_probe_upsample_nearest_depthwise_int8.py, see
+    memories/repo/finn_gotchas.md 2026-09-14 entry) -- so NO approximation
+    substitute is needed at all here, unlike "upsample_conv". The learned
+    skip_resize_conv (real per-site QuantConv2d(3x3, groups=1)+BN+act,
+    weight/act sites "skip_resize_conv.0"/"skip_resize_conv.2") that follows
+    it is the REAL op transferred as-is (dense conv, lowers to a normal
+    MVAU via LowerConvsToMatMul, not a VVAU)."""
 
     def __init__(
         self, in_channels: int, out_channels: int, weight_bits: dict[str, int], act_bits: dict[str, int],
-        internal_ratio: int = 4,
+        internal_ratio: int = 4, decoder_type: str = "upsample_conv",
     ):
         super().__init__()
+        if decoder_type not in ("upsample_conv", "nearest_conv_upsample"):
+            raise NotImplementedError(
+                "FINNUpsamplingBottleneck only implements 'upsample_conv' (frozen bilinear-tent "
+                f"substitute) and 'nearest_conv_upsample' (real nearest resize + real learned "
+                f"skip_resize_conv) -- got {decoder_type!r}."
+            )
+        self.decoder_type = decoder_type
         internal_channels = max(1, in_channels // internal_ratio)
 
         self.main_proj = nn.Sequential(
@@ -259,7 +281,15 @@ class FINNUpsamplingBottleneck(nn.Module):
         # to bridge this gap, bit-width matched to residual_add -- the one real
         # "post" consumer this branch's output feeds into after main_up.
         self.main_act = qnn.QuantIdentity(bit_width=act_bits["residual_add"], act_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
-        self.main_up = _nearest_depthwise_bilinear_kernel(out_channels)
+        if decoder_type == "nearest_conv_upsample":
+            self.main_up = nn.Upsample(scale_factor=2, mode="nearest")
+            self.skip_resize_conv = nn.Sequential(
+                _quant_conv2d(out_channels, out_channels, weight_bits["skip_resize_conv.0"], kernel_size=3, padding=1),
+                nn.BatchNorm2d(out_channels), _quant_act(act_bits["skip_resize_conv.2"]),
+            )
+        else:
+            self.main_up = _nearest_depthwise_bilinear_kernel(out_channels)
+            self.skip_resize_conv = None
 
         self.reduce = nn.Sequential(
             _quant_conv2d(in_channels, internal_channels, weight_bits["reduce.0"], kernel_size=1),
@@ -284,6 +314,8 @@ class FINNUpsamplingBottleneck(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         main = self.main_up(self.main_act(self.main_proj(x)))
+        if self.skip_resize_conv is not None:
+            main = self.skip_resize_conv(main)
         out = self.dropout(self.expand(self.up(self.reduce(x))))
         return self.out_act(self.residual_add(main, out))
 
@@ -320,10 +352,16 @@ class LayerQuantEnetFINN(nn.Module):
         in_channels: int = 1, out_channels: int = 5,
         channels: tuple[int, int, int, int, int], bottlenecks_per_stage: tuple[int, int, int, int, int],
         context_pattern: str, final_bias: bool = True, separable_dilated: bool = False,
+        decoder_type: str = "upsample_conv", argmax_output: bool = False,
     ):
         super().__init__()
         c0, c1, c23, c4, c5 = channels
         n1, n2, n3, n4, n5 = bottlenecks_per_stage
+        # If True, forward() appends a channel-wise top-1 (argmax) after `final`,
+        # exported as an ONNX TopK(k=1) node -- FINN's InferLabelSelectLayer
+        # transform then lowers this to a real LabelSelect HW op (in-PL argmax),
+        # see hardware/finn_enet_prod_export.py's export_model(force_output_dtype=...).
+        self.argmax_output = argmax_output
 
         self.initial = FINNInitialBlockConcat(
             in_channels, c0, _local_single(layer_weight_bits, "initial"), _local_single(layer_act_bits, "initial"),
@@ -348,11 +386,13 @@ class LayerQuantEnetFINN(nn.Module):
 
         self.up4 = FINNUpsamplingBottleneck(
             c23, c4, _local_single(layer_weight_bits, "up4"), _local_single(layer_act_bits, "up4"),
+            decoder_type=decoder_type,
         )
         self.regular4 = _make_layer_shallow_stage(c4, n4, layer_weight_bits, layer_act_bits, 0.1, "regular4", {})
 
         self.up5 = FINNUpsamplingBottleneck(
             c4, c5, _local_single(layer_weight_bits, "up5"), _local_single(layer_act_bits, "up5"),
+            decoder_type=decoder_type,
         )
         self.regular5 = _make_layer_shallow_stage(c5, n5, layer_weight_bits, layer_act_bits, 0.1, "regular5", {})
 
@@ -370,7 +410,12 @@ class LayerQuantEnetFINN(nn.Module):
         x = self.regular4(self.up4(x))
         x = self.regular5(self.up5(x))
         out = self.final(x)
-        return out.value if hasattr(out, "value") else out
+        out = out.value if hasattr(out, "value") else out
+        if self.argmax_output:
+            # k=1 top-1 along the channel axis -- ONNX TopK, values output left
+            # unused/unconnected (required by FINN's InferLabelSelectLayer).
+            out = torch.topk(out, k=1, dim=1).indices
+        return out
 
     @classmethod
     def from_pretrained(
