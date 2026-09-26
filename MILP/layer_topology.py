@@ -86,6 +86,9 @@ passes through a second branch point (residual join) -- see problem 2 above.
 """
 from __future__ import annotations
 
+import operator
+
+import torch
 import torch.fx as fx
 from torch import nn
 
@@ -172,3 +175,107 @@ def compute_predecessor_map(model: nn.Module) -> dict[str, list[str]]:
         seen: set[str] = set()
         predecessor_map[name] = [n for n in found if not (n in seen or seen.add(n))]
     return predecessor_map
+
+
+OUT_ACT_SUFFIX = ".out_act"
+RESIDUAL_ADD_SUFFIX = ".residual_add"
+SKIP_QUANT_SUFFIX = ".skip_quant"
+_ADD_TARGETS = (operator.add, torch.add)
+
+
+def _dedupe(names: list[str]) -> list[str]:
+    return list(dict.fromkeys(names))
+
+
+def _is_residual_add(node: fx.Node) -> bool:
+    is_add = (node.op == "call_function" and node.target in _ADD_TARGETS) or (
+        node.op == "call_method" and node.target in ("add", "__add__")
+    )
+    return is_add and len(node.all_input_nodes) == 2
+
+
+def compute_dataflow_graph(model: nn.Module) -> dict[str, list[str]]:
+    """Predecessor map of the real FINN dataflow graph, including the
+    standalone Thresholding_rtl nodes around every residual add that have no
+    PyTorch module of their own. See MILP/finn_cost_model.md
+    ("Residual-join thresholds") for the hardware evidence.
+
+    Per residual block (`out_act(skip + main)`), adds up to three nodes:
+      <block>.skip_quant   -- requant of the skip operand before the add; only
+                              when the skip path has no conv of its own (a conv's
+                              own threshold absorbs the requant otherwise)
+      <block>.residual_add -- the add's own output quant (a join: its
+                              predecessors are the skip side and the main side)
+      <block>.out_act      -- the block-final activation
+
+    Unlike compute_predecessor_map (unchanged, still used for bit resolution
+    and act sensitivity), downstream layers now see the previous block's
+    out_act as their predecessor, so the one-branch-point cap no longer drops
+    the skip edge of ordinary chained residual blocks.
+
+    Only blocks whose out_act is a distinct module named `*.out_act` fed
+    directly by a two-input add are recognized (prelu_variant="nonneg_block"
+    shares one activation object across positions and is not supported)."""
+    traced = fx.GraphModule(model, _AlwaysFalseBoolTracer().trace(model))
+    named_modules = dict(traced.named_modules())
+
+    conv_names: set[str] = set()
+    tracked: dict[fx.Node, str] = {}
+    for node in traced.graph.nodes:
+        if node.op != "call_module":
+            continue
+        module = named_modules.get(node.target)
+        if isinstance(module, TRACKED_MODULE_TYPES):
+            tracked[node] = node.target
+            if isinstance(module, (nn.Conv2d, nn.ConvTranspose2d)):
+                conv_names.add(node.target)
+
+    residual_blocks: list[tuple[fx.Node, str]] = []
+    for node in traced.graph.nodes:
+        if node.op != "call_module" or not str(node.target).endswith(OUT_ACT_SUFFIX):
+            continue
+        if len(node.all_input_nodes) != 1 or not _is_residual_add(node.all_input_nodes[0]):
+            continue
+        prefix = node.target[: -len(OUT_ACT_SUFFIX)]
+        tracked[node] = node.target
+        tracked[node.all_input_nodes[0]] = prefix + RESIDUAL_ADD_SUFFIX
+        residual_blocks.append((node.all_input_nodes[0], prefix))
+
+    memo: dict[tuple[fx.Node, bool], list[str]] = {}
+
+    def nearest(node: fx.Node, allow_branch: bool) -> list[str]:
+        key = (node, allow_branch)
+        if key in memo:
+            return memo[key]
+        memo[key] = []
+        if node in tracked:
+            result = [tracked[node]]
+        else:
+            is_branch = len(node.all_input_nodes) > 1
+            if is_branch and not allow_branch:
+                result = []
+            else:
+                result = _dedupe([
+                    a for inp in node.all_input_nodes for a in nearest(inp, allow_branch and not is_branch)
+                ])
+        memo[key] = result
+        return result
+
+    add_nodes = {add for add, _ in residual_blocks}
+    dataflow: dict[str, list[str]] = {
+        name: _dedupe([a for inp in node.all_input_nodes for a in nearest(inp, True)])
+        for node, name in tracked.items() if node not in add_nodes
+    }
+
+    for add, prefix in residual_blocks:
+        skip_operand, main_operand = add.args[0], add.args[1]
+        skip_sources = nearest(skip_operand, True)
+        join = []
+        if any(s in conv_names for s in skip_sources):
+            join.extend(skip_sources)
+        else:
+            dataflow[prefix + SKIP_QUANT_SUFFIX] = skip_sources
+            join.append(prefix + SKIP_QUANT_SUFFIX)
+        join.extend(nearest(main_operand, True))
+        dataflow[prefix + RESIDUAL_ADD_SUFFIX] = _dedupe(join)
+    return dataflow

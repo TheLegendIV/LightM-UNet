@@ -176,6 +176,7 @@ import csv
 import importlib
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import pulp
@@ -185,14 +186,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from block_utils import enumerate_blocks, path_to_block_map  # noqa: E402
 from finn_cost_model import (  # noqa: E402
     IMPL_STYLE_HLS, IMPL_STYLE_RTL, RAM_STYLE_BLOCK, RAM_STYLE_ULTRA, LayerGeometry, calibrated_bram18k,
-    calibrated_lut, divisors, layer_cost_pe_simd, max_pe, max_simd,
+    calibrated_lut, divisors, layer_cost_pe_simd, max_pe, max_simd, threshold_node_cost,
 )
-from layer_topology import compute_predecessor_map  # noqa: E402 -- the predecessor-correction fix
+from layer_topology import (  # noqa: E402
+    OUT_ACT_SUFFIX, RESIDUAL_ADD_SUFFIX, SKIP_QUANT_SUFFIX, compute_dataflow_graph, compute_predecessor_map,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PACKAGE_ROOT = REPO_ROOT / "enet"
 sys.path.insert(0, str(PACKAGE_ROOT))
 from nnunetv2.nets.ENet import ENet  # noqa: E402
+from expand_layer_bits import resolve_act_sources  # noqa: E402 -- out_act's deployed bits = max over these sources
 
 XCZU7EV = {"LUT": 230_400, "BRAM_18K": 624, "DSP": 1_728, "URAM": 96}  # xczu7ev-ffvc1156-2-e (DSP48E2 count matches hardware/results.csv's DSP_pct column; URAM=96 real URAM288 blocks, 96*288Kib=27Mib, confirmed against the real S12-dense-warmstart hardware build's own URAM=2/96 utilization row)
 CANDIDATE_BITS = (2, 4, 6, 8, 16)
@@ -371,6 +375,66 @@ def trace_layer_geometry(model: torch.nn.Module, input_hw: tuple[int, int], in_c
     return geometries, list(blocks.keys())
 
 
+# QuantEltwiseAdd's input_quant (skip requant) and output quant are fixed Int8 in
+# every real build, regardless of HAWQ -- see finn_cost_model.md.
+RESIDUAL_QUANT_BITS = 8
+
+
+@dataclass(frozen=True)
+class ThresholdNode:
+    """A residual-join Thresholding_rtl node with no conv of its own
+    (skip_quant / residual_add / out_act -- see finn_cost_model.md
+    "Residual-join thresholds"). fixed_bits is None when the node's bits
+    follow deployment's max-over-bit_sources rule (out_act)."""
+    geom: LayerGeometry
+    fixed_bits: int | None
+    bit_sources: tuple[str, ...]
+
+
+def trace_out_act_shapes(model: torch.nn.Module, input_hw: tuple[int, int], in_channels: int) -> dict[str, tuple[int, int, int]]:
+    shapes: dict[str, tuple[int, int, int]] = {}
+    handles = [
+        module.register_forward_hook(lambda _m, _i, out, name=name: shapes.__setitem__(name, tuple(out.shape[1:])))
+        for name, module in model.named_modules() if name.endswith(OUT_ACT_SUFFIX)
+    ]
+    model.eval()
+    with torch.no_grad():
+        model(torch.zeros(1, in_channels, *input_hw))
+    for h in handles:
+        h.remove()
+    return shapes
+
+
+def build_threshold_nodes(
+    dataflow_map: dict[str, list[str]], out_act_shapes: dict[str, tuple[int, int, int]],
+    geometries: list[LayerGeometry], predecessor_map: dict[str, list[str]],
+) -> list[ThresholdNode]:
+    """One ThresholdNode per virtual node in dataflow_map. Every node of a block
+    shares its out_act's (C, H, W) -- the add, both requants and the activation
+    all carry the block's output tensor."""
+    weight_names = {g.name: 0 for g in geometries if g.op_type != "MaxPool2d"}
+    act_names = {g.name: 0 for g in geometries}
+    nodes = []
+    for name in dataflow_map:
+        suffix = next((s for s in (SKIP_QUANT_SUFFIX, RESIDUAL_ADD_SUFFIX, OUT_ACT_SUFFIX) if name.endswith(s)), None)
+        if suffix is None:
+            continue
+        prefix = name[: -len(suffix)]
+        channels, height, width = out_act_shapes[prefix + OUT_ACT_SUFFIX]
+        geom = LayerGeometry(
+            op_type="Thresholding", name=name, stage=prefix,
+            cin=channels, hin=height, win=width, cout=channels, hout=height, wout=width, kh=1, kw=1, sh=1, sw=1,
+        )
+        if suffix != OUT_ACT_SUFFIX:
+            nodes.append(ThresholdNode(geom, RESIDUAL_QUANT_BITS, ()))
+            continue
+        sources = tuple(s for s in resolve_act_sources(name, weight_names, act_names, predecessor_map) if s in act_names)
+        if not sources:
+            raise ValueError(f"{name}: no act-bit source resolvable (expand_layer_bits.resolve_act_sources).")
+        nodes.append(ThresholdNode(geom, None, sources))
+    return nodes
+
+
 def candidate_folds(layer: LayerGeometry) -> list[tuple[int, int, str, str]]:
     """Every valid (PE, SIMD, ram_style, variant) 4-tuple for this layer --
     MaxPool2d has neither PE/SIMD/ram_style/variant (no MVAU, no weights,
@@ -470,10 +534,24 @@ def solve_joint_perlayer(
     require_simd_ge_pe: bool = False,
     hard_dsp_fraction: float = 1.0,
     hard_uram_fraction: float = 1.0,
-    max_join_imbalance_ratio: float | None = None,
+    optimize_downstream_rate: float | None = None,
+    threshold_nodes: list[ThresholdNode] = (),
+    dataflow_map: dict[str, list[str]] | None = None,
 ) -> dict:
     """The per-layer combined MILP -- see module docstring for the full
     formulation.
+
+    threshold_nodes: residual-join Thresholding_rtl nodes (see ThresholdNode)
+    -- each gets its own PE/ram_style choice and is priced in every resource
+    budget, the latency term and max_cycles. Fixed-bit nodes cost 8 bits;
+    out_act's bits are tied exactly to max(bits of its sources) via
+    cumulative indicators ([bits_V >= b] = OR_s [bits_s >= b], linear, no
+    extra binaries), so the ILP prices what expand_layer_bits.py deploys.
+
+    dataflow_map: layer_topology.compute_dataflow_graph -- the graph the
+    optimize_downstream_rate constraints run on (includes the threshold
+    nodes, so ordinary residual joins are visible). predecessor_map is still
+    what drives act-sensitivity sources.
 
     predecessor_map: from layer_topology.compute_predecessor_map (or None to
     skip the correction entirely, falling back to self-indexed act
@@ -481,24 +559,70 @@ def solve_joint_perlayer(
     CORRECTED ACT SENSITIVITY section for what this fixes and
     _act_sensitivity_sources for the exact fallback rules.
 
-    max_join_imbalance_ratio: hard per-join balance constraint (None =
-    disabled, prior behavior exactly). A "join" is any layer with 2+ real
-    predecessors in `predecessor_map` -- two (or more) PARALLEL branches
-    that execute CONCURRENTLY in real FINN dataflow hardware, reconverging
-    at a residual add/concat. Nothing else in this ILP is aware layers can
-    be siblings this way -- each layer's own (PE,SIMD,bits) is chosen with
-    zero visibility into its join partner, and a large skew is exactly what
-    forces a real, UNMODELED FIFO in actual hardware (see finn_cost_model.py's
-    own "still not covered: FIFOs" note and MILP/scan_fork_join_mismatch.py's
-    `predicted_depth`). For every real join (deduplicated by its own
+    optimize_downstream_rate: hard rate-coherence constraint (None =
+    disabled), ONE ratio driving TWO constraint types together -- they cover
+    disjoint topological cases, both built from the same predecessor_map:
+
+    1. JOIN balance: a "join" is any layer with 2+ real predecessors in
+    `predecessor_map` -- two (or more) PARALLEL branches that execute
+    CONCURRENTLY in real FINN dataflow hardware, reconverging at a residual
+    add/concat. No inherent ordering between sibling branches, so this is
+    symmetric both ways: for every real join (deduplicated by its own
     predecessor set), every ordered pair of branches (i, j) gets
-    `cycles[i] <= max_join_imbalance_ratio * cycles[j]`. MaxPool2d branches
+    `cycles[i] <= optimize_downstream_rate * cycles[j]`. MaxPool2d branches
     are EXEMPT (candidate_folds gives them a single fixed (1,1) fold -- no
     real folding choice to trade off, so balancing a conv branch against one
     always forces over-folding regardless of ratio; only pairs where BOTH
-    branches have a real folding decision get balanced). Does NOT add or
-    price any FIFO resource itself -- it only prevents the solver from
-    choosing a badly skewed pair in the first place."""
+    branches have a real folding decision get balanced).
+
+    2. CHAIN coherence: ordinary directed producer/consumer edges. A node
+    that runs much FASTER than something downstream of it forces that
+    downstream node's own pre-FIFO to buffer up the excess for the whole
+    frame (FIFO depth is driven by total-cycles-per-frame mismatch between
+    producer and consumer, not by raw per-node II). A plain adjacent-pair
+    ratio is NOT enough: backpressure from a bottleneck several hops
+    downstream propagates upstream through every intermediate FIFO, so a
+    node can be safely adjacent-matched to its immediate successor yet
+    still get backpressure-starved by something further down the SAME
+    path. Fix: for every layer L and every layer D reachable from L
+    (predecessor_map inverted into a successor graph, then transitively
+    closed -- a one-time Python graph pass, not a solver loop), add
+    `rate[L] <= optimize_downstream_rate * rate[D]`, where `rate[name] =
+    layer_cycles_expr[name] / (hout*wout*cout)` -- dividing by each layer's
+    own output element count converts the raw per-frame cycle total into a
+    true per-element rate, which is what makes L and D comparable even
+    across a resolution-changing edge (a MaxPool2d or an UpsamplingBottleneck's
+    resize), where L and D's raw cycle totals are computed against
+    different output sizes and would not otherwise be apples-to-apples.
+    Only the L-outruns-D direction is constrained -- a slow producer
+    feeding a fast consumer starves the FIFO empty, which is a throughput
+    loss, not a depth risk, and is already handled by the ordinary
+    objective. A parallel fork needs no special-casing: if F has
+    descendants D1 (branch 1) and D2 (branch 2), transitive closure walks
+    both branches, producing both `rate[F]<=ratio*rate[D1]` and
+    `rate[F]<=ratio*rate[D2]` independently -- together these are exactly
+    `rate[F] <= ratio*min(rate[D1],rate[D2])`, the physically correct fork
+    rule, with no min() combinator needed.
+
+    Neither constraint type uses an auxiliary "running max" variable (an
+    earlier design draft for #2 did, and had a real soundness bug: a free
+    variable appearing only as an upper bound on a <= constraint can be
+    inflated by the solver for free to trivially satisfy it) -- every
+    inequality compares two REAL, already-costed cycle/rate expressions
+    directly, so there is no such loophole. Neither prices the FIFO itself
+    -- only prevents the solver from choosing a badly skewed plan.
+
+    KNOWN GAP (inherited from predecessor_map, not new here): an ORDINARY
+    chained RegularBottleneck's residual add has a real, physically
+    meaningful second predecessor -- the identity/skip path, carrying data
+    from several blocks back, which must still arrive at the join in sync
+    with the freshly-computed main branch -- but predecessor_map's own
+    one-branch-point cap (layer_topology.py's module docstring, problem 2)
+    drops that edge once a second branch point is crossed walking backward
+    through a chain of blocks. Both constraint types above are therefore
+    blind to that whole class of ordinary residual joins -- only
+    UpsamplingBottleneck-style joins (a single branch point away from their
+    own nearest tracked ancestors) are actually visible today."""
     candidate_pairs = tuple((w, a) for w in CANDIDATE_BITS for a in CANDIDATE_BITS)
     layer_names = tuple(g.name for g in geometries)
     n_layers = len(geometries)
@@ -546,9 +670,9 @@ def solve_joint_perlayer(
     # Per-layer RAW (un-normalized) cycle expression -- sum over that
     # layer's own chosen (fold,variant,bits) z-variable weighted by its own
     # raw_cycles -- built alongside z/raw_cycles below and reused by the
-    # join-balance constraints (max_join_imbalance_ratio) since it needs
-    # each layer's cycles as one linear pulp expression, the exact same
-    # quantity latency_term/max_cycles already sum across every layer.
+    # optimize_downstream_rate's join/chain constraints since they need each
+    # layer's cycles as one linear pulp expression, the exact same quantity
+    # latency_term/max_cycles already sum across every layer.
     layer_cycle_terms: dict[str, list[tuple[pulp.LpVariable, float]]] = {g.name: [] for g in geometries}
 
     for layer in geometries:
@@ -606,6 +730,31 @@ def solve_joint_perlayer(
                 z[key] = pulp.LpVariable(f"z_{layer.name}_{pe}_{simd}_{ram_style}_{variant}_{w}_{a}", cat=pulp.LpBinary)
                 layer_cycle_terms[layer.name].append((z[key], raw_cycles[key]))
 
+    # Residual-join thresholds: z key (name, pe, 1, ram_style, variant, 0, bits),
+    # weight slot 0 -- they have no weights.
+    thr_keys: dict[str, list[tuple]] = {}
+    rtl_kwargs = _variant_cost_kwargs(VARIANT_RTL_DSP_NOACT1, force_dsp)
+    for node in threshold_nodes:
+        geom = node.geom
+        bit_options = (node.fixed_bits,) if node.fixed_bits is not None else CANDIDATE_BITS
+        pes = [1] if FORCE_SERIAL else divisors(geom.cout)
+        layer_cycle_terms[geom.name] = []
+        thr_keys[geom.name] = []
+        for pe in pes:
+            for ram_style in RAM_STYLES:
+                for bits in bit_options:
+                    cost = threshold_node_cost(geom, bits, pe, ram_style=ram_style)
+                    key = (geom.name, pe, 1, ram_style, VARIANT_RTL_DSP_NOACT1, 0, bits)
+                    layer_costs[key] = cost
+                    raw_cycles[key] = cost["cycles"]
+                    raw_lut[key] = calibrated_lut(cost["total_lut"], bits, bits, force_dsp=_calibration_force_dsp(rtl_kwargs))
+                    raw_bram[key] = calibrated_bram18k(cost["thr_bram18"], bits, bits, force_dsp=rtl_kwargs["force_dsp"])
+                    raw_dsp[key] = 0
+                    raw_uram[key] = cost["thr_uram18"]
+                    z[key] = pulp.LpVariable(f"z_{geom.name}_{pe}_1_{ram_style}_thr_{bits}", cat=pulp.LpBinary)
+                    layer_cycle_terms[geom.name].append((z[key], raw_cycles[key]))
+                    thr_keys[geom.name].append(key)
+
     cycles_norm = _normalize(raw_cycles)
     layer_cycles_expr: dict[str, pulp.LpAffineExpression] = {
         name: pulp.lpSum(zvar * cyc for zvar, cyc in terms) for name, terms in layer_cycle_terms.items()
@@ -635,24 +784,40 @@ def solve_joint_perlayer(
                 == y[(layer.name, w, a)]
             ), f"link_{layer.name}_{w}_{a}"
 
-    # Join-balance constraints (max_join_imbalance_ratio). Dedupe joins by
-    # their own predecessor SET first: predecessor_map is keyed by CONSUMER
-    # layer, so multiple consumers of the same join (e.g. both of down1's
-    # own two downstream layers) independently map to the SAME branch pair
-    # -- that is one real join, not two. MaxPool2d branches are EXEMPT (see
-    # this function's own docstring) -- only pairs where BOTH sides have a
-    # real folding decision get balanced.
+    # Threshold nodes: exactly one (pe, ram_style, bits) each. out_act's bits
+    # equal max(bits of its sources): for every bit level b,
+    # [bits_V >= b] = OR_s [bits_s >= b], linearized as >= each and <= sum.
+    n_threshold_constraints = 0
+    for node in threshold_nodes:
+        name = node.geom.name
+        prob += pulp.lpSum(z[k] for k in thr_keys[name]) == 1, f"one_fold_{name}"
+        n_threshold_constraints += 1
+        if node.fixed_bits is not None:
+            continue
+        for level in sorted(CANDIDATE_BITS)[1:]:
+            node_at_least = pulp.lpSum(z[k] for k in thr_keys[name] if k[-1] >= level)
+            sources_at_least = [
+                pulp.lpSum(y[(s, w, a)] for w, a in candidate_pairs if a >= level) for s in node.bit_sources
+            ]
+            for i, source_expr in enumerate(sources_at_least):
+                prob += node_at_least >= source_expr, f"thr_bits_ge_{name}_{level}_{i}"
+            prob += node_at_least <= pulp.lpSum(sources_at_least), f"thr_bits_le_{name}_{level}"
+            n_threshold_constraints += len(sources_at_least) + 1
+
+    # optimize_downstream_rate -- see this function's docstring. Runs on the
+    # dataflow graph (threshold nodes + ordinary residual joins) when given.
+    topology = dataflow_map if dataflow_map is not None else predecessor_map
     maxpool_names = {g.name for g in geometries if g.op_type == "MaxPool2d"}
     n_join_constraints = 0
-    if max_join_imbalance_ratio is not None:
-        if predecessor_map is None:
-            raise ValueError(
-                "max_join_imbalance_ratio requires a predecessor_map (pass predecessor_map=... -- "
-                "see layer_topology.compute_predecessor_map) -- without it there is no join information "
-                "to balance."
-            )
+    n_chain_rate_constraints = 0
+    if optimize_downstream_rate is not None:
+        if topology is None:
+            raise ValueError("optimize_downstream_rate needs a predecessor_map or dataflow_map.")
+
+        # Join balance: symmetric ratio between sibling branches of every join
+        # (deduped by predecessor set). MaxPool2d branches are exempt (no fold choice).
         unique_joins = {
-            tuple(sorted(preds)) for preds in predecessor_map.values()
+            tuple(sorted(preds)) for preds in topology.values()
             if len(preds) >= 2 and all(p in layer_cycles_expr for p in preds)
         }
         for branches in unique_joins:
@@ -662,9 +827,44 @@ def solve_joint_perlayer(
                     if branch_i == branch_j:
                         continue
                     prob += (
-                        layer_cycles_expr[branch_i] <= max_join_imbalance_ratio * layer_cycles_expr[branch_j]
+                        layer_cycles_expr[branch_i] <= optimize_downstream_rate * layer_cycles_expr[branch_j]
                     ), f"join_balance_{branch_i}_vs_{branch_j}"
                     n_join_constraints += 1
+
+        # Chain coherence: rate[L] <= ratio * rate[D] for every descendant D.
+        # rate = cycles / own output elements (comparable across resolution changes).
+        # Encoded in O(edges) with min_downstream_rate[L] bounded ABOVE by each
+        # child's rate and each child's own min -- so it can never be inflated,
+        # and rate[L] <= ratio * min_downstream_rate[L] is exactly the all-pairs rule.
+        node_shapes = [*geometries, *(node.geom for node in threshold_nodes)]
+        rate_expr = {
+            g.name: layer_cycles_expr[g.name] * (1.0 / (g.hout * g.wout * g.cout))
+            for g in node_shapes if g.name in layer_cycles_expr
+        }
+        successors: dict[str, list[str]] = {name: [] for name in rate_expr}
+        for consumer, preds in topology.items():
+            if consumer not in rate_expr:
+                continue
+            for pred in preds:
+                if pred in successors:
+                    successors[pred].append(consumer)
+        min_downstream_rate = {
+            name: pulp.LpVariable(f"min_downstream_rate_{name}", lowBound=0)
+            for name, children in successors.items() if children
+        }
+        for name, children in successors.items():
+            if not children:
+                continue
+            for child in children:
+                prob += min_downstream_rate[name] <= rate_expr[child], f"min_rate_{name}_le_{child}"
+                n_chain_rate_constraints += 1
+                if child in min_downstream_rate:
+                    prob += min_downstream_rate[name] <= min_downstream_rate[child], f"min_rate_{name}_le_min_{child}"
+                    n_chain_rate_constraints += 1
+            prob += (
+                rate_expr[name] <= optimize_downstream_rate * min_downstream_rate[name]
+            ), f"downstream_rate_{name}"
+            n_chain_rate_constraints += 1
 
     # Hard resource constraints.
     prob += pulp.lpSum(z[k] * raw_lut[k] for k in z) <= hard_lut_fraction * XCZU7EV["LUT"], "hard_lut_budget"
@@ -690,7 +890,8 @@ def solve_joint_perlayer(
     sensitivity_term = (1.0 / n_layers) * pulp.lpSum(
         y[(name, w, a)] * sens_norm[(name, w, a)] for name in layer_names for w, a in candidate_pairs
     )
-    latency_term = (1.0 / n_layers) * pulp.lpSum(z[k] * cycles_norm[k] for k in z)
+    n_hardware_nodes = n_layers + len(threshold_nodes)
+    latency_term = (1.0 / n_hardware_nodes) * pulp.lpSum(z[k] * cycles_norm[k] for k in z)
     prob += alpha * sensitivity_term + (1 - alpha) * latency_term
 
     status = prob.solve(pulp.PULP_CBC_CMD(msg=0, timeLimit=time_limit, gapRel=gap_rel))
@@ -701,21 +902,24 @@ def solve_joint_perlayer(
     n_binary_vars = len(y) + len(z)
     n_constraints = (
         n_layers + sum(len(candidate_pairs) for _ in geometries) + 4
-        + (1 if max_cycles is not None else 0) + n_join_constraints
+        + (1 if max_cycles is not None else 0) + n_join_constraints + n_chain_rate_constraints
+        + n_threshold_constraints
     )
 
     if status_name != "Optimal":
         return {
             "status": status_name,
             "alpha": alpha,
-            "layer_weight_bits": {}, "layer_act_bits": {}, "per_layer": {},
+            "layer_weight_bits": {}, "layer_act_bits": {}, "per_layer": {}, "threshold_nodes": {},
             "_diagnostics": {
                 "alpha": alpha, "candidate_bits": list(CANDIDATE_BITS), "n_layers": n_layers,
+                "n_threshold_nodes": len(threshold_nodes),
                 "n_binary_vars": n_binary_vars, "n_constraints": n_constraints,
                 "hard_lut_fraction": hard_lut_fraction, "hard_bram_fraction": hard_bram_fraction,
                 "hard_dsp_fraction": hard_dsp_fraction, "hard_uram_fraction": hard_uram_fraction,
                 "max_cycles": max_cycles,
-                "max_join_imbalance_ratio": max_join_imbalance_ratio, "n_join_constraints": n_join_constraints,
+                "optimize_downstream_rate": optimize_downstream_rate, "n_join_constraints": n_join_constraints,
+                "n_chain_rate_constraints": n_chain_rate_constraints,
                 "solver_time_limit_s": time_limit, "solver_gap_rel": gap_rel, "force_serial": FORCE_SERIAL,
                 "force_dsp": force_dsp, "require_simd_ge_pe": require_simd_ge_pe, "allow_lut_mult": ALLOW_LUT_MULT,
                 "note": f"Solver status {status_name!r} -- no joint per-layer (bits, folding) assignment "
@@ -723,7 +927,7 @@ def solve_joint_perlayer(
                         f"hard_bram_fraction={hard_bram_fraction}, hard_dsp_fraction={hard_dsp_fraction}, "
                         f"hard_uram_fraction={hard_uram_fraction})"
                         + (f" and max_cycles={max_cycles:.0f}" if max_cycles is not None else "")
-                        + (f" and max_join_imbalance_ratio={max_join_imbalance_ratio}" if max_join_imbalance_ratio is not None else "")
+                        + (f" and optimize_downstream_rate={optimize_downstream_rate}" if optimize_downstream_rate is not None else "")
                         + " at all.",
             },
         }
@@ -793,15 +997,38 @@ def solve_joint_perlayer(
     total_dsp = sum(v["total_dsp"] for v in per_layer.values())
     total_cycles = sum(v["cycles"] for v in per_layer.values())
 
+    threshold_out: dict[str, dict] = {}
+    for node in threshold_nodes:
+        name = node.geom.name
+        chosen = next(k for k in thr_keys[name] if pulp.value(z[k]) > 0.5)
+        _, pe, _, ram_style, _, _, bits = chosen
+        threshold_out[name] = {
+            "stage": node.geom.stage, "pe": pe, "thr_ram_style": ram_style, "act_bits": bits,
+            "bits_rule": "fixed" if node.fixed_bits is not None else "max_of_sources",
+            "bit_sources": list(node.bit_sources), "channels": node.geom.cout,
+            "cycles": raw_cycles[chosen], "lut_calibrated": raw_lut[chosen],
+            "bram18k_calibrated": raw_bram[chosen], "uram18": raw_uram[chosen],
+        }
+    threshold_lut = sum(v["lut_calibrated"] for v in threshold_out.values())
+    threshold_bram = sum(v["bram18k_calibrated"] for v in threshold_out.values())
+    threshold_cycles = sum(v["cycles"] for v in threshold_out.values())
+    total_lut += threshold_lut
+    total_bram += threshold_bram
+    total_uram += sum(v["uram18"] for v in threshold_out.values())
+    total_cycles += threshold_cycles
+
     return {
         "status": status_name,
         "alpha": alpha,
         "layer_weight_bits": layer_weight_bits,
         "layer_act_bits": layer_act_bits,
         "per_layer": per_layer,
+        "threshold_nodes": threshold_out,
         "_diagnostics": {
             "alpha": alpha, "candidate_bits": list(CANDIDATE_BITS), "n_layers": n_layers,
             "n_binary_vars": n_binary_vars, "n_constraints": n_constraints,
+            "n_threshold_nodes": len(threshold_nodes), "threshold_lut_calibrated": threshold_lut,
+            "threshold_bram18k_calibrated": threshold_bram, "threshold_cycles": threshold_cycles,
             "total_lut_calibrated": total_lut, "xczu7ev_lut_budget": XCZU7EV["LUT"],
             "lut_pct_of_budget": 100 * total_lut / XCZU7EV["LUT"],
             "total_bram18k_calibrated": total_bram, "xczu7ev_bram18k_budget": XCZU7EV["BRAM_18K"],
@@ -813,7 +1040,8 @@ def solve_joint_perlayer(
             "hard_lut_fraction": hard_lut_fraction, "hard_bram_fraction": hard_bram_fraction,
             "hard_dsp_fraction": hard_dsp_fraction, "hard_uram_fraction": hard_uram_fraction,
             "max_cycles": max_cycles,
-            "max_join_imbalance_ratio": max_join_imbalance_ratio, "n_join_constraints": n_join_constraints,
+            "optimize_downstream_rate": optimize_downstream_rate, "n_join_constraints": n_join_constraints,
+            "n_chain_rate_constraints": n_chain_rate_constraints,
             "solver_time_limit_s": time_limit, "solver_gap_rel": gap_rel, "force_serial": FORCE_SERIAL,
             "force_dsp": force_dsp, "require_simd_ge_pe": require_simd_ge_pe, "allow_lut_mult": ALLOW_LUT_MULT,
             "note": "Joint per-LAYER MILP: y[layer,w,a] (sensitivity) linked to z[layer,pe,simd,ram_style,w,a] "
@@ -910,7 +1138,7 @@ def _update_sweep_summary(
         "hard-lut-fraction": args.hard_lut_fraction, "hard-bram-fraction": args.hard_bram_fraction,
         "hard-dsp-fraction": args.hard_dsp_fraction, "hard-uram-fraction": args.hard_uram_fraction, "force-dsp": args.force_dsp,
         "max-latency-ms": args.max_latency_ms, "clock-mhz": args.clock_mhz,
-        "max-join-imbalance-ratio": args.max_join_imbalance_ratio,
+        "optimize-downstream-rate": args.optimize_downstream_rate,
         "force-serial": FORCE_SERIAL, "require-simd-ge-pe": args.require_simd_ge_pe,
         "allow-lut-mult": ALLOW_LUT_MULT,
         "time-limit": args.time_limit, "gap-rel": args.gap_rel,
@@ -986,20 +1214,16 @@ def main() -> None:
                               "added as a real <= constraint.")
     parser.add_argument("--clock-mhz", type=float, default=100.0,
                          help="Clock frequency --max-latency-ms is expressed against (default 100.0).")
-    parser.add_argument("--max-join-imbalance-ratio", type=float, default=None,
-                         help="Hard per-join balance constraint (default None = no constraint, prior behavior "
-                              "exactly). A 'join' is any point with 2+ real predecessors (layer_topology."
-                              "compute_predecessor_map) -- i.e. branches that run CONCURRENTLY in real FINN "
-                              "dataflow hardware. Without this, each branch's own (PE,SIMD,bits) is chosen with "
-                              "zero awareness of its join partner, so the solver can leave a large cycle-count "
-                              "skew behind -- exactly what forces a real, UNMODELED FIFO in actual hardware "
-                              "(the faster branch has to buffer while waiting on the slower one; see "
-                              "MILP/scan_fork_join_mismatch.py's own `predicted_depth`, which estimates this "
-                              "post-hoc). Setting this to e.g. 1.5 requires every join's own branches to stay "
-                              "within a 1.5x cycle-count ratio of each other. MaxPool2d branches are EXEMPT "
-                              "(fixed (1,1) fold, no real folding choice to trade off -- only conv-vs-conv join "
-                              "pairs get balanced). Does not price the FIFO itself -- only prevents picking a "
-                              "badly skewed pair.")
+    parser.add_argument("--optimize-downstream-rate", type=float, default=None,
+                         help="Hard rate-coherence constraint (default None = disabled). ONE ratio drives BOTH: "
+                              "(1) join balance -- sibling branches reconverging at a residual add/concat stay "
+                              "within this cycle-count ratio of each other; (2) chain coherence -- every layer's "
+                              "own per-element rate stays within this ratio of every real downstream layer's own "
+                              "rate, preventing a fast producer from backpressure-starving a slower consumer "
+                              "several hops down the same path. See solve_joint_perlayer's own docstring for the "
+                              "full rationale and a known gap shared by both (predecessor_map's one-branch-point "
+                              "cap misses ordinary chained RegularBottleneck residual joins). Neither prices the "
+                              "FIFO itself -- only prevents picking a badly skewed plan.")
     parser.add_argument("--force-serial", action="store_true",
                          help="Force FOLDING_SERIAL (PE=SIMD=1) on every layer before solving.")
     parser.add_argument("--allow-lut-mult", action="store_true",
@@ -1099,6 +1323,16 @@ def main() -> None:
         print(f"WARNING: could not compute a predecessor map ({type(error).__name__}: {error}) -- falling back "
               f"to self-indexed act sensitivity for EVERY layer.")
 
+    # Real FINN dataflow graph incl. the residual-join thresholds -- fatal on
+    # failure: silently dropping them would under-price every solve.
+    dataflow_map = compute_dataflow_graph(model)
+    threshold_nodes = build_threshold_nodes(
+        dataflow_map, trace_out_act_shapes(model, INPUT_HW, IN_CHANNELS), geometries, predecessor_map or {},
+    )
+    n_fixed = sum(node.fixed_bits is not None for node in threshold_nodes)
+    print(f"Residual-join thresholds: {len(threshold_nodes)} nodes ({n_fixed} fixed {RESIDUAL_QUANT_BITS}-bit "
+          f"skip_quant/residual_add, {len(threshold_nodes) - n_fixed} out_act at max-of-sources bits).")
+
     maxpool_names = {g.name for g in geometries if g.op_type == "MaxPool2d"}
     sensitivity_names = set(sensitivity.keys())
     missing_in_sensitivity = set(layer_names) - sensitivity_names
@@ -1146,7 +1380,8 @@ def main() -> None:
         args.time_limit, args.gap_rel, max_cycles=max_cycles, pinned_bits=pinned_bits,
         predecessor_map=predecessor_map, force_dsp=args.force_dsp, require_simd_ge_pe=args.require_simd_ge_pe,
         hard_dsp_fraction=args.hard_dsp_fraction, hard_uram_fraction=args.hard_uram_fraction,
-        max_join_imbalance_ratio=args.max_join_imbalance_ratio,
+        optimize_downstream_rate=args.optimize_downstream_rate,
+        threshold_nodes=threshold_nodes, dataflow_map=dataflow_map,
     )
 
     args.out_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1166,6 +1401,9 @@ def main() -> None:
     print(f"DSP used: {diag['total_dsp']:.0f} ({diag['dsp_pct_of_budget']:.1f}% of {XCZU7EV['DSP']} budget) "
           f"-- GUARANTEED (hard constraint).")
     print(f"Total cycles (sum, ~= per-image latency): {diag['total_cycles']:.0f}")
+    print(f"  of which residual-join thresholds ({diag['n_threshold_nodes']} nodes): "
+          f"LUT {diag['threshold_lut_calibrated']:.0f}, BRAM_18K {diag['threshold_bram18k_calibrated']:.0f}, "
+          f"cycles {diag['threshold_cycles']:.0f}")
 
     _update_sweep_summary(args.out_file.parent, args, result, zero_sensitivity_layers)
 

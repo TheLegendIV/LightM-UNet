@@ -1,14 +1,15 @@
 #!/bin/bash
 #SBATCH --job-name=stage_12_dense_relu_nearest_conv_upsample_256
-#SBATCH --partition=gpu_a100
+#SBATCH --partition=gpu_mig
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=18
+#SBATCH --cpus-per-task=8
 #SBATCH --gpus=1
-#SBATCH --mem=120G
-#SBATCH --time=01:30:00
-#SBATCH --output=logs/%x_%j.out
-#SBATCH --error=logs/%x_%j.err
+#SBATCH --mem=32G
+#SBATCH --time=02:00:00
+#SBATCH --array=0-4
+#SBATCH --output=logs/%x_%a_%j.out
+#SBATCH --error=logs/%x_%a_%j.err
 
 set -e
 
