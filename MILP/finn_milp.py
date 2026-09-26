@@ -834,11 +834,13 @@ _SUMMARY_FIELDS = [
     "alpha", "status", "avg_weight_bits", "avg_act_bits",
     "lut_pct_of_budget", "bram_pct_of_budget", "dsp_pct_of_budget",
     "total_dsp", "total_cycles", "clock_mhz", "latency_ms",
-    "n_binary_vars", "n_layers",
+    "n_binary_vars", "n_layers", "n_zero_sensitivity_layers", "zero_sensitivity_layers",
 ]
 
 
-def _update_sweep_summary(out_dir: Path, args: argparse.Namespace, result: dict) -> None:
+def _update_sweep_summary(
+    out_dir: Path, args: argparse.Namespace, result: dict, zero_sensitivity_layers: list[str],
+) -> None:
     """Maintains summary.csv and run_args.json in out_dir across an ALPHA
     SWEEP -- a 5-alpha sweep normally run as 5 separate `finn_milp.py`
     invocations (see e.g. compression/slurm/sensitivity_ilp_*.job's own
@@ -858,7 +860,18 @@ def _update_sweep_summary(out_dir: Path, args: argparse.Namespace, result: dict)
     real sweep -- if an existing run_args.json's shared_args disagree with
     this invocation's, that's flagged loudly (a real inconsistency, e.g.
     someone changed --hard-lut-fraction between alphas) rather than
-    silently overwritten without comment."""
+    silently overwritten without comment.
+
+    zero_sensitivity_layers: from the sensitivity file's own
+    "_zero_sensitivity_layers" list (layer_sensitivity.py) -- layers whose
+    trace_w AND trace_a both measured ~0, i.e. their bit-width choice
+    cannot affect accuracy at all under this HAWQ measurement (see that
+    file's own detector for why: sensitivity_w[b]/sensitivity_a[b] = trace
+    * delta[b], so a zero trace makes every candidate-bit sensitivity
+    exactly 0 too). Surfaced here (not just printed once at solve time) so
+    it's visible directly in summary.csv across every alpha of a sweep,
+    since it's a property of the CHECKPOINT/architecture, not of any one
+    alpha's own solve."""
     diag = result["_diagnostics"]
     weight_bits, act_bits = result.get("layer_weight_bits", {}), result.get("layer_act_bits", {})
     avg_weight_bits = sum(weight_bits.values()) / len(weight_bits) if weight_bits else float("nan")
@@ -873,6 +886,8 @@ def _update_sweep_summary(out_dir: Path, args: argparse.Namespace, result: dict)
         "dsp_pct_of_budget": diag.get("dsp_pct_of_budget"), "total_dsp": diag.get("total_dsp"),
         "total_cycles": total_cycles, "clock_mhz": args.clock_mhz, "latency_ms": latency_ms,
         "n_binary_vars": diag.get("n_binary_vars"), "n_layers": diag.get("n_layers"),
+        "n_zero_sensitivity_layers": len(zero_sensitivity_layers),
+        "zero_sensitivity_layers": ";".join(zero_sensitivity_layers),
     }
 
     summary_path = out_dir / "summary.csv"
@@ -1034,6 +1049,27 @@ def main() -> None:
 
     with open(args.sensitivity_file) as f:
         sensitivity = json.load(f)
+    # layer_sensitivity.py's own zero-sensitivity detector (pop it out so
+    # every OTHER place in this file that reads `sensitivity` as a plain
+    # {layer_name: {...}} dict never has to know this one extra key
+    # exists). Backward-compatible with an older sensitivity file that
+    # predates this feature: recompute the same check directly instead of
+    # just assuming an empty list.
+    if "_zero_sensitivity_layers" in sensitivity:
+        zero_sensitivity_layers = sensitivity.pop("_zero_sensitivity_layers")
+    else:
+        zero_sensitivity_layers = [
+            name for name, entry in sensitivity.items()
+            if abs(entry.get("trace_w", 1.0)) < 1e-9 and abs(entry.get("trace_a", 1.0)) < 1e-9
+        ]
+    if zero_sensitivity_layers:
+        print(f"WARNING: {len(zero_sensitivity_layers)} layer(s) in {args.sensitivity_file} have ZERO measured "
+              f"sensitivity (see layer_sensitivity.py's own detector) -- their bit-width choice cannot affect "
+              f"accuracy at all, which usually means the layer is dead (e.g. a collapsed BatchNorm permanently "
+              f"off its own ReLU). The ILP will still cheaply-quantize them (correctly, given zero sensitivity), "
+              f"but a dead layer's resulting near-zero calibrated quantizer scale can silently underflow to "
+              f"exactly 0.0 under fp16 deployment -- consider pruning them instead (ENet.py's "
+              f"apply_block_pruning / ENET_PRUNED_BLOCKS): {zero_sensitivity_layers}")
 
     model = ENet(
         in_channels=IN_CHANNELS, out_channels=OUT_CHANNELS, channels=CHANNELS,
@@ -1131,7 +1167,7 @@ def main() -> None:
           f"-- GUARANTEED (hard constraint).")
     print(f"Total cycles (sum, ~= per-image latency): {diag['total_cycles']:.0f}")
 
-    _update_sweep_summary(args.out_file.parent, args, result)
+    _update_sweep_summary(args.out_file.parent, args, result, zero_sensitivity_layers)
 
 
 if __name__ == "__main__":

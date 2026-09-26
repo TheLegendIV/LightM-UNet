@@ -73,6 +73,7 @@ from brevitas.quant import Int8ActPerTensorFloat, Int8WeightPerTensorFloat
 from nnunetv2.nets.ENet import (
     CONTEXT_STAGE_PATTERN,
     DENSE_DILATION_PATTERN,
+    DENSE_DILATION_HALF_PATTERN,
     DENSE_DILATION_REG_INTERLEAVED_PATTERN,
     DENSE_DILATION_REG_INTERLEAVED_DOUBLE_MID_PATTERN,
     DENSE_DILATION_D2_PROJECTED_PATTERN,
@@ -89,7 +90,7 @@ from nnunetv2.nets.QuantENet import (
 )
 
 VALID_CONTEXT_PATTERNS = (
-    "default", "dense_dilation", "dense_dilation_reg_interleaved",
+    "default", "dense_dilation", "dense_dilation_half", "dense_dilation_reg_interleaved",
     "dense_dilation_reg_interleaved_double_mid",
     "dense_dilation_d2_projected", "dense_dilation_d8_d16_projected",
     "dense_dilation_d2_regular", "dense_dilation_reg_trailing",
@@ -487,6 +488,8 @@ def _make_layer_context_stage(
         raise ValueError(f"context_pattern must be one of {VALID_CONTEXT_PATTERNS}, got {context_pattern!r}.")
     if context_pattern == "dense_dilation":
         pattern = DENSE_DILATION_PATTERN
+    elif context_pattern == "dense_dilation_half":
+        pattern = DENSE_DILATION_HALF_PATTERN
     elif context_pattern == "dense_dilation_reg_interleaved":
         pattern = DENSE_DILATION_REG_INTERLEAVED_PATTERN
     elif context_pattern == "dense_dilation_reg_interleaved_double_mid":

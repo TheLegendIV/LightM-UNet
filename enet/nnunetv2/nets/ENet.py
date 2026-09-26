@@ -9,8 +9,8 @@ import torch.nn.functional as F
 
 DecoderType = Literal["max_unpool", "upsample_conv", "learned_upsample", "nearest_upsample", "nearest_conv_upsample"]
 ContextPattern = Literal[
-    "default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_lead1",
-    "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing",
+    "default", "sparse", "dense_dilation", "dense_dilation_half", "dense_dilation_a",
+    "dense_dilation_lead1", "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing",
     "dense_dilation_dsc_trailing", "dense_dilation_regnoproj_trailing",
 ]
 
@@ -65,6 +65,33 @@ DENSE_DILATION_PATTERN: tuple[dict, ...] = (
     {"padding": 4, "dilation": 4},
     {"padding": 8, "dilation": 8},
     {"padding": 16, "dilation": 16},
+)
+
+# DENSE_DILATION_PATTERN with every rate halved (2,4,8,16 -> 1,2,4,8) -- for
+# a 256x256 input (Dataset510_ARCADE_256_4c) instead of DENSE_DILATION_
+# PATTERN's native 512x512 (Dataset509_ARCADE_1x1_4c): stage2/3 sits at 1/8
+# resolution either way (down1+down2, each stride 2), so a 256x256 input
+# puts stage2/3 at 32x32 instead of 64x64 -- half the spatial extent. Same
+# absolute dilation rates there would cover TWICE the fraction of the
+# (now smaller) feature map, i.e. a larger RELATIVE receptive field than the
+# 512x512-tuned schedule intended; halving every rate keeps a 3x3 kernel's
+# reach (2*d+1 px) the same fraction of the feature map at both resolutions.
+# The d=1 slot is a plain (non-dilated) 3x3 conv -- not a special
+# "reg_bottleneck" sentinel (no real reduce/expand projection change), same
+# convention as DENSE_DILATION_D2_REGULAR_PATTERN's own d=1 slots above.
+# Kernel size/channels/bottleneck depth/decoder are all UNCHANGED -- this is
+# a pure re-scaling of the existing dense_dilation schedule, not a new
+# architecture (see nnUNetTrainerENet.py's ENET_CONTEXT_PATTERN=
+# "dense_dilation_half" for how a 256x256 training run selects this).
+DENSE_DILATION_HALF_PATTERN: tuple[dict, ...] = (
+    {"padding": 1, "dilation": 1},
+    {"padding": 2, "dilation": 2},
+    {"padding": 4, "dilation": 4},
+    {"padding": 8, "dilation": 8},
+    {"padding": 1, "dilation": 1},
+    {"padding": 2, "dilation": 2},
+    {"padding": 4, "dilation": 4},
+    {"padding": 8, "dilation": 8},
 )
 
 # DENSE_DILATION_PATTERN, but the d=2 slots are replaced with dilation=1
@@ -1164,8 +1191,8 @@ class ENet(nn.Module):
     ):
         super().__init__()
         valid_context_patterns = (
-            "default", "sparse", "dense_dilation", "dense_dilation_a", "dense_dilation_lead1",
-            "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing",
+            "default", "sparse", "dense_dilation", "dense_dilation_half", "dense_dilation_a",
+            "dense_dilation_lead1", "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing",
             "dense_dilation_reg_trailing_asymmetric", "d16_reg_interleaved",
             "dense_dilation_reg_interleaved_double_mid", "dense_dilation_d2_projected",
             "dense_dilation_d8_d16_projected", "dense_dilation_d2_regular",
@@ -1476,6 +1503,8 @@ class ENet(nn.Module):
             pattern = SPARSE_DILATION_PATTERN
         elif self.context_pattern == "dense_dilation":
             pattern = DENSE_DILATION_PATTERN
+        elif self.context_pattern == "dense_dilation_half":
+            pattern = DENSE_DILATION_HALF_PATTERN
         elif self.context_pattern == "dense_dilation_a":
             pattern = DENSE_DILATION_SCHEDULE_A_PATTERN
         elif self.context_pattern == "dense_dilation_lead1":

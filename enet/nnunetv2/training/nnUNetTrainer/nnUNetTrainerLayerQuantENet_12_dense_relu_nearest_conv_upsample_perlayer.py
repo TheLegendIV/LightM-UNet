@@ -18,7 +18,7 @@ import os
 
 from torch import nn
 
-from nnunetv2.nets.ENet import freeze_batchnorm
+from nnunetv2.nets.ENet import apply_block_pruning, freeze_batchnorm
 from nnunetv2.nets.LayerQuantENet import LayerQuantENet
 from nnunetv2.training.nnUNetTrainer.nnUNetTrainerENet import _parse_bool_env, nnUNetTrainerENet
 from nnunetv2.utilities.plans_handling.plans_handler import ConfigurationManager, PlansManager
@@ -86,6 +86,23 @@ class nnUNetTrainerLayerQuantENet_12_dense_relu_nearest_conv_upsample_perlayer(n
             )
         else:
             model = LayerQuantENet(layer_weight_bits, layer_act_bits, **common_kwargs)
+
+        # ENET_PRUNED_BLOCKS -- same post-hoc structural-ablation mechanism
+        # ENet.py's own apply_block_pruning already provides for the plain
+        # FP32 trainer (nnUNetTrainerENet), reused as-is here: it's pure
+        # nn.Module attribute/index traversal (getattr/Sequential-indexing +
+        # nn.Identity() replacement), architecture-agnostic, so it works
+        # identically on LayerQuantENet with no changes needed. Comma-
+        # separated dotted block names, e.g. "regular5.0" -- see that
+        # function's own docstring for the exact naming convention and for
+        # why this is only sound on residual blocks whose output channel
+        # count matches their input (never down1/down2/up4/up5).
+        pruned_blocks_csv = os.environ.get("ENET_PRUNED_BLOCKS")
+        if pruned_blocks_csv:
+            block_names = [name.strip() for name in pruned_blocks_csv.split(",") if name.strip()]
+            n_pruned = apply_block_pruning(model, block_names)
+            if n_pruned != len(block_names):
+                raise ValueError(f"ENET_PRUNED_BLOCKS={pruned_blocks_csv!r} -- expected {len(block_names)} blocks pruned, got {n_pruned}.")
 
         # ENET_FREEZE_BN (default ON) -- same rationale as every other
         # CombinedQuantENet/LayerQuantENet trainer's identical check: a short

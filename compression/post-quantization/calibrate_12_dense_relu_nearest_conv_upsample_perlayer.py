@@ -54,6 +54,42 @@ def load_calibration_batches(dataset_name: str, n_images: int, seed: int = 0) ->
     return [torch.from_numpy(np.load(p)).float() for p in sampled]
 
 
+# fp16 min-normal is 6.1e-5 -- a calibrated Brevitas activation-quantizer
+# scale below this underflows to exactly 0.0 under CUDA fp16 autocast (the
+# real deployment path nnUNetv2_predict_from_modelfolder uses), turning
+# every quantize-dequantize on that site into x/0 -> inf -> NaN, which then
+# propagates through the whole network. FP32 (training, calibration, and a
+# CPU eval) never hits this: fp32's own underflow floor is ~1e-38, so a
+# tiny-but-nonzero scale is perfectly ordinary there and never triggers
+# division by an exact zero -- this is a real, silent train/deploy
+# precision-regime gap, not something training could ever have caught.
+# 1e-4 gives an order of magnitude of margin above the fp16 floor.
+FP16_SAFE_SCALE_FLOOR = 1e-4
+
+
+def clamp_quantizer_scales(quant_model: torch.nn.Module, floor: float = FP16_SAFE_SCALE_FLOOR) -> int:
+    """Floors every calibrated Brevitas activation-quantizer scale
+    (`...scaling_impl.value`) at `floor`, in place. A near-zero calibrated
+    scale only ever arises from a near-dead activation (e.g. a collapsed
+    BatchNorm feeding a permanently-off ReLU in a too-narrow bottleneck --
+    see regular5.0's own 1-channel internal_channels at this architecture's
+    width) -- on such a site the block's real output is ~0 regardless of
+    the scale used (round(0/scale)*scale == 0 for any nonzero scale), so
+    this floor changes nothing about what the network computes; it only
+    removes a division-by-near-zero landmine that fp32 tolerates and fp16
+    does not. Returns the number of scales actually raised."""
+    n_clamped = 0
+    with torch.no_grad():
+        for name, param in quant_model.named_parameters():
+            if name.endswith("scaling_impl.value"):
+                too_small = param.data.abs() < floor
+                if too_small.any():
+                    print(f"  [clamp] {name}: {param.data[too_small].tolist()} -> {floor}")
+                    param.data[too_small] = floor
+                    n_clamped += int(too_small.sum().item())
+    return n_clamped
+
+
 def calibrate(quant_model: torch.nn.Module, calibration_batches: list[torch.Tensor], device: str, seed: int) -> int:
     """seed reseeds torch's GLOBAL RNG right before calibration starts -- see
     calibrate_12_dense_relu_warmstart150ep_perlayer.py's own calibrate()
@@ -122,6 +158,11 @@ def main() -> None:
     n_used = calibrate(quant_model, calibration_batches, args.device, seed=args.calibration_seed)
     print(f"Calibration used {n_used}/{len(calibration_batches)} images.")
     quant_model.to("cpu")
+
+    n_clamped = clamp_quantizer_scales(quant_model)
+    print(f"Clamped {n_clamped} quantizer scale(s) below the fp16-safe floor ({FP16_SAFE_SCALE_FLOOR:.0e}) "
+          f"-- these sites have ~zero real output either way (see clamp_quantizer_scales' own docstring), "
+          f"so this only prevents a real fp16 x/0->NaN failure at deployment, it doesn't change accuracy.")
 
     out_model_folder = NNUNET_RESULTS / args.dataset_name / f"{args.out_net_name}__{args.plans_name}__{args.configuration}"
     out_fold_dir = out_model_folder / f"fold_{args.fold}"
