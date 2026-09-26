@@ -58,11 +58,11 @@ TRAINER_CLASS="nnUNetTrainerCombinedQuantENet_12_separable_dense_relu_perblock"
 FP32_SOURCE_NET_NAME="nnUNetTrainerENet_12_separable_dense_relu"
 
 BLOCK_BITS_ARR=(
-    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.0_maxlat1000ms.json"
-    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.25_maxlat1000ms.json"
-    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.5_maxlat1000ms.json"
-    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.75_maxlat1000ms.json"
-    "compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha1.0_maxlat1000ms.json"
+    "compression/hawq/artifacts/archive/block_bits_folding_12_separable_dense_relu_joint_alpha0.0_maxlat1000ms.json"
+    "compression/hawq/artifacts/archive/block_bits_folding_12_separable_dense_relu_joint_alpha0.25_maxlat1000ms.json"
+    "compression/hawq/artifacts/archive/block_bits_folding_12_separable_dense_relu_joint_alpha0.5_maxlat1000ms.json"
+    "compression/hawq/artifacts/archive/block_bits_folding_12_separable_dense_relu_joint_alpha0.75_maxlat1000ms.json"
+    "compression/hawq/artifacts/archive/block_bits_folding_12_separable_dense_relu_joint_alpha1.0_maxlat1000ms.json"
 )
 CALIBRATED_NET_ARR=(
     nnUNetTrainerCombinedQuantENet_12_separable_dense_relu_perblock_joint_alpha0.0_maxlat1000ms_calibrated

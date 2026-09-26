@@ -14,7 +14,7 @@ artifact on its own.
 
 Usage:
     python compression/post-quantization/calibrate_12_dense_relu_warmstart150ep_perlayer.py \\
-        --layer-bits-file MILP/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_dense_relu_warmstart150ep_joint_alpha0.5_candidatebits468_forcedsp_lut70.json \\
+        --layer-bits-file MILP/artifacts/archive/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_dense_relu_warmstart150ep_joint_alpha0.5_candidatebits468_forcedsp_lut70.json \\
         --out-net-name nnUNetTrainerLayerQuantENet_12_dense_relu_warmstart150ep_joint_alpha0.5_candidatebits468_calibrated
 """
 from __future__ import annotations

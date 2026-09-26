@@ -73,7 +73,19 @@ for the full derivation/verification of each:
    UpsampleNearestNeighbour_hls, depthwise conv -> VVAU_hls) was already
    independently built and verified end-to-end in finn_build_probe_
    upsample_nearest_depthwise_int8.py (see memories/repo/finn_gotchas.md,
-   2026-09-14 entry) -- not an untested path.
+   2026-09-14 entry) -- not an untested path. All of the above describes
+   decoder_type="upsample_conv" specifically (bilinear real op -> frozen
+   substitute).
+2b. decoder_type="nearest_conv_upsample" (added 2026-09-26): the real op
+   here is ALREADY F.interpolate(mode="nearest") -- exactly what FINN's
+   UpsampleNearestNeighbour_hls implements -- followed by a real, trainable
+   skip_resize_conv (3x3 QuantConv2d+BN+act). Neither piece needs a frozen
+   substitute: main_up is a bare nn.Upsample(scale_factor=2, mode="nearest")
+   (parameter-free, mathematically identical to the real op, not an
+   approximation), and skip_resize_conv is the exact same real per-site op
+   as LayerQuantUpsamplingBottleneck's own (same site names "skip_resize_
+   conv.0"/"skip_resize_conv.2", same shape) -- transfers directly via
+   from_pretrained, unlike main_up's frozen bilinear substitute.
 3. `final` bias: real LayerQuantENet's `final` is bias=True with a plain
    (unquantized) float bias Add -- fine on GPU/CPU but not FINN-HW-
    convertible (MVAU has no bias input at all, and InferChannelwiseLinearLayer
@@ -233,26 +245,31 @@ class FINNDownsamplingBottleneck(nn.Module):
 
 class FINNUpsamplingBottleneck(nn.Module):
     """FINN-safe substitute for LayerQuantUpsamplingBottleneck -- main_proj
-    (real, transferred as-is) is unchanged; only the spatial-upsample step
-    after it differs by decoder_type. reduce/up/expand/residual_add/out_act
-    are the real per-site ops (same site names as the real block) either way.
+    (real, transferred as-is) is unchanged. What happens next depends on
+    decoder_type (default "upsample_conv", matching the original
+    12_dense_relu_warmstart150ep family this class was built for):
 
-    decoder_type="upsample_conv" (default): spatial-upsample step is
-    substituted (fixed, frozen nearest+depthwise bilinear-equivalent kernel,
-    see module docstring point 2), since the real op (F.interpolate
-    bilinear) has no FINN lowering.
+    - "upsample_conv": the spatial-upsample step is substituted with a
+      fixed, frozen nearest+depthwise bilinear-equivalent kernel (see module
+      docstring point 2) -- real F.interpolate(bilinear) has no FINN
+      lowering path at all.
+    - "nearest_conv_upsample": main_up is a bare nn.Upsample(nearest) (real,
+      parameter-free, mathematically IDENTICAL to the real block's own
+      F.interpolate(mode="nearest") -- no substitution needed here, unlike
+      bilinear, since nearest-neighbor resize is already exactly what FINN's
+      UpsampleNearestNeighbour_hls op implements), followed by a REAL,
+      trainable skip_resize_conv (same site names/shapes as
+      LayerQuantUpsamplingBottleneck's own skip_resize_conv -- a genuine
+      QuantConv2d, no frozen-weight trick needed, since a real learned conv
+      is exactly what FINN's Conv->MVAU lowering already handles for every
+      other conv in this network). Transfers directly from a real
+      LayerQuantENet(decoder_type="nearest_conv_upsample") checkpoint via
+      from_pretrained's name+shape matching, same as main_proj/reduce/up/
+      expand -- unlike the frozen upsample_conv substitutes, this is not an
+      approximation at all.
 
-    decoder_type="nearest_conv_upsample": the REAL op here already IS a bare
-    nearest resize (LayerQuantUpsamplingBottleneck's own decoder_type
-    branch), which FINN already lowers directly to a real HW
-    UpsampleNearestNeighbour_hls node (mid-graph Resize case, validated in
-    finn_build_probe_upsample_nearest_depthwise_int8.py, see
-    memories/repo/finn_gotchas.md 2026-09-14 entry) -- so NO approximation
-    substitute is needed at all here, unlike "upsample_conv". The learned
-    skip_resize_conv (real per-site QuantConv2d(3x3, groups=1)+BN+act,
-    weight/act sites "skip_resize_conv.0"/"skip_resize_conv.2") that follows
-    it is the REAL op transferred as-is (dense conv, lowers to a normal
-    MVAU via LowerConvsToMatMul, not a VVAU)."""
+    reduce/up/expand/residual_add/out_act are the real per-site ops (same
+    site names as the real block) regardless of decoder_type."""
 
     def __init__(
         self, in_channels: int, out_channels: int, weight_bits: dict[str, int], act_bits: dict[str, int],
@@ -261,9 +278,9 @@ class FINNUpsamplingBottleneck(nn.Module):
         super().__init__()
         if decoder_type not in ("upsample_conv", "nearest_conv_upsample"):
             raise NotImplementedError(
-                "FINNUpsamplingBottleneck only implements 'upsample_conv' (frozen bilinear-tent "
-                f"substitute) and 'nearest_conv_upsample' (real nearest resize + real learned "
-                f"skip_resize_conv) -- got {decoder_type!r}."
+                "FINNUpsamplingBottleneck only implements 'upsample_conv' (frozen nearest+depthwise "
+                "bilinear-equivalent substitute) and 'nearest_conv_upsample' (real nn.Upsample(nearest) "
+                f"+ real skip_resize_conv) -- got {decoder_type!r}."
             )
         self.decoder_type = decoder_type
         internal_channels = max(1, in_channels // internal_ratio)
@@ -273,13 +290,18 @@ class FINNUpsamplingBottleneck(nn.Module):
             nn.BatchNorm2d(out_channels),
         )
         # real main_proj has no activation quantizer here (BN feeds straight into
-        # F.interpolate) -- but main_up (see below) is now a real Quant-wrapped HW
-        # conv, and FINN's Conv->MVAU/VVAU fusion pass requires a properly-quantized
-        # (integer-datatype) INPUT to fuse, else it leaves a dangling non-HW
-        # Im2Col+MatMul+MultiThreshold triple that breaks partitioning. Add an
-        # explicit signed passthrough quantizer (FINN-export-only, no HAWQ site)
-        # to bridge this gap, bit-width matched to residual_add -- the one real
-        # "post" consumer this branch's output feeds into after main_up.
+        # F.interpolate) -- but main_up/skip_resize_conv (see below) end in a real
+        # Quant-wrapped HW conv either way, and FINN's Conv->MVAU/VVAU fusion pass
+        # requires a properly-quantized (integer-datatype) INPUT to fuse, else it
+        # leaves a dangling non-HW Im2Col+MatMul+MultiThreshold triple that breaks
+        # partitioning. Add an explicit signed passthrough quantizer (FINN-export-
+        # only, no HAWQ site) to bridge this gap, bit-width matched to residual_add
+        # -- for "upsample_conv" that's literally the next real consumer; for
+        # "nearest_conv_upsample" there's no HAWQ-searched bit-width for this
+        # intermediate in the real network at all (skip_resize_conv's own
+        # _quant_conv2d only quantizes its weight, not its input), so reusing
+        # residual_add's width is just a reasonable, generously-precise default,
+        # not a site-matched choice.
         self.main_act = qnn.QuantIdentity(bit_width=act_bits["residual_add"], act_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
         if decoder_type == "nearest_conv_upsample":
             self.main_up = nn.Upsample(scale_factor=2, mode="nearest")
@@ -343,25 +365,27 @@ class LayerQuantEnetFINN(nn.Module):
     dilated conv factored into a (k,1)+(1,k) pair for dilation!=1 blocks,
     site names "conv.0"/"conv.3" instead of a single "conv"; see
     LayerQuantRegularBottleneck's own docstring). No other change needed:
-    initial/down1/down2/up4/up5 and regular1/regular4/regular5 are
-    unaffected (separable_dilated only ever changes stage2/stage3's
-    dilated-block internals)."""
+    initial/down1/down2 and regular1/regular4/regular5 are unaffected
+    (separable_dilated only ever changes stage2/stage3's dilated-block
+    internals).
+
+    `decoder_type` (default "upsample_conv", matching the original
+    12_dense_relu_warmstart150ep family) threads through to up4/up5's
+    FINNUpsamplingBottleneck -- "nearest_conv_upsample" selects the real
+    (non-frozen) nn.Upsample(nearest)+skip_resize_conv path instead of the
+    frozen bilinear-equivalent substitute, for the nearest_conv_upsample
+    decoder family (see FINNUpsamplingBottleneck's own docstring)."""
 
     def __init__(
         self, layer_weight_bits: dict[str, int], layer_act_bits: dict[str, int], *,
         in_channels: int = 1, out_channels: int = 5,
         channels: tuple[int, int, int, int, int], bottlenecks_per_stage: tuple[int, int, int, int, int],
         context_pattern: str, final_bias: bool = True, separable_dilated: bool = False,
-        decoder_type: str = "upsample_conv", argmax_output: bool = False,
+        decoder_type: str = "upsample_conv",
     ):
         super().__init__()
         c0, c1, c23, c4, c5 = channels
         n1, n2, n3, n4, n5 = bottlenecks_per_stage
-        # If True, forward() appends a channel-wise top-1 (argmax) after `final`,
-        # exported as an ONNX TopK(k=1) node -- FINN's InferLabelSelectLayer
-        # transform then lowers this to a real LabelSelect HW op (in-PL argmax),
-        # see hardware/finn_enet_prod_export.py's export_model(force_output_dtype=...).
-        self.argmax_output = argmax_output
 
         self.initial = FINNInitialBlockConcat(
             in_channels, c0, _local_single(layer_weight_bits, "initial"), _local_single(layer_act_bits, "initial"),
@@ -410,12 +434,7 @@ class LayerQuantEnetFINN(nn.Module):
         x = self.regular4(self.up4(x))
         x = self.regular5(self.up5(x))
         out = self.final(x)
-        out = out.value if hasattr(out, "value") else out
-        if self.argmax_output:
-            # k=1 top-1 along the channel axis -- ONNX TopK, values output left
-            # unused/unconnected (required by FINN's InferLabelSelectLayer).
-            out = torch.topk(out, k=1, dim=1).indices
-        return out
+        return out.value if hasattr(out, "value") else out
 
     @classmethod
     def from_pretrained(
@@ -428,13 +447,19 @@ class LayerQuantEnetFINN(nn.Module):
         regular1/regular4/regular5/stage2/stage3 (byte-for-byte the same
         LayerQuantRegularBottleneck) and into initial/down1/down2/up4/up5's real
         sub-modules (main_proj/reduce/conv/up/expand/residual_add/out_act -- same
-        site names as the real block). Left uninitialized (by design, same as
+        site names as the real block), PLUS up4/up5.skip_resize_conv when the
+        source checkpoint used decoder_type="nearest_conv_upsample" (same site
+        names/shapes as LayerQuantUpsamplingBottleneck's own skip_resize_conv --
+        see module docstring point 2b, not a substitute, so it transfers exactly
+        like main_proj does). Left uninitialized (by design, same as
         LayerQuantENet's own from_pretrained): every Brevitas quantizer's own
-        scaling_impl buffer (no FP32 counterpart to transfer), plus the 3
+        scaling_impl buffer (no FP32 counterpart to transfer), plus the
         substitute-block params that are already fixed/frozen at construction
         time and must NOT come from the checkpoint -- down1/down2.shortcut_proj
-        (padded-identity) and up4/up5.main_up's tent-kernel depthwise conv (see
-        module docstring points 1 and 2)."""
+        (padded-identity) always, and up4/up5.main_up's tent-kernel depthwise
+        conv only under decoder_type="upsample_conv" (see module docstring
+        points 1 and 2; under "nearest_conv_upsample" main_up is parameter-free,
+        nothing to transfer or leave uninitialized there)."""
         model = cls(layer_weight_bits, layer_act_bits, **kwargs)
         checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
         source_state_dict = checkpoint["network_weights"]

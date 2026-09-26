@@ -61,8 +61,8 @@ its most sensitive/demanding real contributor.
 Usage:
     python MILP/expand_layer_bits.py \\
         --config config_12_separable_dense_relu \\
-        --ilp-result MILP/artifacts/S12_ILP_outputs_perlayer/layer_bits_folding_12_separable_dense_relu_joint_alpha0.5_candidatebits468_maxlat1000ms.json \\
-        --out-file MILP/artifacts/S12_ILP_outputs_perlayer/layer_bits_SITES_12_separable_dense_relu_joint_alpha0.5_candidatebits468_maxlat1000ms.json
+        --ilp-result MILP/artifacts/archive/S12_ILP_outputs_perlayer/layer_bits_folding_12_separable_dense_relu_joint_alpha0.5_candidatebits468_maxlat1000ms.json \\
+        --out-file MILP/artifacts/archive/S12_ILP_outputs_perlayer/layer_bits_SITES_12_separable_dense_relu_joint_alpha0.5_candidatebits468_maxlat1000ms.json
 """
 from __future__ import annotations
 
@@ -93,7 +93,7 @@ ACT_SUFFIXES_ORDERED = (
 
 
 def load_config(config_module: str) -> None:
-    cfg = importlib.import_module(config_module)
+    cfg = importlib.import_module(f"configs.{config_module}")
     globals().update({k: v for k, v in vars(cfg).items() if not k.startswith("_")})
 
 
@@ -201,7 +201,7 @@ def expand_layer_bits_to_site_bits(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", default="config_12_separable_dense_relu",
-                         help="Which MILP/config_*.py to load -- defines the architecture shape "
+                         help="Which MILP/configs/config_*.py to load -- defines the architecture shape "
                               "layer_names_for/compute_predecessor_map need (must match the ILP result's own).")
     parser.add_argument("--ilp-result", type=Path, required=True,
                          help="A layer_bits_folding_*.json from joint_bits_folding_ilp_perlayer.py.")

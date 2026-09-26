@@ -24,7 +24,7 @@ through nnU-Net's own dice metric on real held-out validation cases.
 
 Usage:
     python compression/post-quantization/verify_layerquant_matches_combined.py \\
-        --block-bits-file compression/hawq/artifacts/block_bits_folding_12_separable_dense_relu_joint_alpha0.5_maxlat1000ms.json \\
+        --block-bits-file compression/hawq/artifacts/archive/block_bits_folding_12_separable_dense_relu_joint_alpha0.5_maxlat1000ms.json \\
         --n-calibration-images 32 --n-val-cases 30
 """
 from __future__ import annotations

@@ -71,7 +71,7 @@ def main() -> int:
     import matplotlib.pyplot as plt
 
     ilp_dice = load_final_dice(DEFAULT_CSV, CONFIG_PREFIX, "dice")
-    ilp_summary = REPO_ROOT / "compression" / "hawq" / "artifacts" / f"{ILP_DIR_PREFIX}_ILP_outputs_perlayer_forcedsp_lut70" / "summary.csv"
+    ilp_summary = REPO_ROOT / "MILP" / "artifacts" / "archive" / f"{ILP_DIR_PREFIX}_ILP_outputs_perlayer_forcedsp_lut70" / "summary.csv"
     ilp_latency = load_ilp_latency(ilp_summary)
     uniform_dice = load_uniform_dice(DEFAULT_CSV)
 

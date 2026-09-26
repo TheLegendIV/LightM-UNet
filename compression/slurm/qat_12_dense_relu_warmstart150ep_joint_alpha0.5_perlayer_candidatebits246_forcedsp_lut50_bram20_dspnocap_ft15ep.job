@@ -13,14 +13,14 @@
 set -e
 
 # QAT fine-tune for the v5 per-layer joint bits+folding ILP solve
-# (MILP/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_v5) on the
+# (MILP/artifacts/archive/12_dense_relu_warmstart150ep_ILP_outputs_v5) on the
 # WARM-STARTED 12_dense_relu checkpoint (nnUNetTrainerENet_12_dense_relu_
 # warmstart150ep, dice=0.7954 -- the MAX-ACCURACY FP32 source for this
 # architecture family). Same regime as v4's own ft15ep job (alpha 0.5, LUT
 # 50%, BRAM 20%, DSP uncapped, force-dsp, real non-force-serial per-layer
 # folding search, predecessor-corrected act sensitivity) except v5's own
 # candidate bit-width set: {2,4,6} instead of v4's {4,6,8} -- a full BIT
-# below v4 across the board, not just a shifted cap. See MILP/artifacts/
+# below v4 across the board, not just a shifted cap. See MILP/artifacts/archive/
 # 12_dense_relu_warmstart150ep_ILP_outputs_v5/run_args.json + summary.csv
 # for the exact ILP solve (LUT 34.6%/BRAM 19.9%(binding)/DSP 39.6% of
 # budget). Required a FRESH HAWQ sensitivity trace
@@ -50,8 +50,8 @@ DATASET_NAME="Dataset509_ARCADE_1x1_4c"
 TRAINER_CLASS="nnUNetTrainerLayerQuantENet_12_dense_relu_warmstart150ep_perlayer"
 FP32_SOURCE_NET_NAME="nnUNetTrainerENet_12_dense_relu_warmstart150ep"
 
-LAYER_BITS_ILP_FILE="MILP/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_v5/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.5_candidatebits246_forcedsp_lut50_bram20_dspnocap.json"
-LAYER_BITS_SITES_FILE="MILP/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_v5/layer_bits_SITES_12_dense_relu_warmstart150ep_joint_alpha0.5_candidatebits246_forcedsp_lut50_bram20_dspnocap.json"
+LAYER_BITS_ILP_FILE="MILP/artifacts/archive/12_dense_relu_warmstart150ep_ILP_outputs_v5/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.5_candidatebits246_forcedsp_lut50_bram20_dspnocap.json"
+LAYER_BITS_SITES_FILE="MILP/artifacts/archive/12_dense_relu_warmstart150ep_ILP_outputs_v5/layer_bits_SITES_12_dense_relu_warmstart150ep_joint_alpha0.5_candidatebits246_forcedsp_lut50_bram20_dspnocap.json"
 CALIBRATED_NET_NAME="nnUNetTrainerLayerQuantENet_12_dense_relu_warmstart150ep_perlayer_joint_alpha0.5_candidatebits246_forcedsp_lut50_bram20_dspnocap_calibrated"
 RUN_NAME="12_dense_relu_warmstart150ep_joint_alpha0.5_perlayer_candidatebits246_forcedsp_lut50_bram20_dspnocap_ft15ep"
 
@@ -107,7 +107,7 @@ cd "$HOME/LightM-UNet"
 if [ ! -f "$LAYER_BITS_ILP_FILE" ]; then
     echo "ERROR: $LAYER_BITS_ILP_FILE not found -- run the v5 per-layer candidate-bits={2,4,6} alpha=0.5 " \
          "--hard-lut-fraction 0.5 --hard-bram-fraction 0.2 --force-dsp joint ILP solve first (see " \
-         "MILP/artifacts/12_dense_relu_warmstart150ep_ILP_outputs_v5/run_args.json for the exact command)." >&2
+         "MILP/artifacts/archive/12_dense_relu_warmstart150ep_ILP_outputs_v5/run_args.json for the exact command)." >&2
     exit 1
 fi
 

@@ -258,7 +258,7 @@ def main() -> int:
               f"{args.run_suffix!r} (neither epoch-trend nor checkpoint_best rows) -- nothing to plot.")
         return 1
 
-    ilp_summary = REPO_ROOT / "compression" / "MILP" / "artifacts" / f"{args.ilp_dir_prefix}_ILP_outputs_perlayer_forcedsp_lut70" / "summary.csv"
+    ilp_summary = REPO_ROOT / "MILP" / "artifacts" / "archive" / f"{args.ilp_dir_prefix}_ILP_outputs_perlayer_forcedsp_lut70" / "summary.csv"
     latency = load_ilp_latency(ilp_summary) if ilp_summary.exists() else {}
     if not latency:
         print(f"Note: no ILP summary found at {ilp_summary} -- skipping the dice-vs-latency plot.")

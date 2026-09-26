@@ -36,10 +36,10 @@ protects both tails at once -- see ilp_search.py's --robust-normalize-pct.
 
 Usage:
     python compression/analysis/sensitivity/plot_block_normalization.py \\
-        compression/hawq/artifacts/block_sensitivity_12_separable_dense_relu.json
+        compression/hawq/artifacts/archive/block_sensitivity_12_separable_dense_relu.json
 
     python compression/analysis/sensitivity/plot_block_normalization.py \\
-        compression/hawq/artifacts/block_sensitivity_27_2_reg_trailing.json \\
+        compression/hawq/artifacts/archive/block_sensitivity_27_2_reg_trailing.json \\
         --metric sensitivity_a --bits 8 --robust-pct 10 --highlight down1 up5
 """
 from __future__ import annotations

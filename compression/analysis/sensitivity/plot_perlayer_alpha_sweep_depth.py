@@ -15,8 +15,8 @@ block), plots:
 
 Usage:
     python compression/analysis/sensitivity/plot_perlayer_alpha_sweep_depth.py \\
-        --inputs compression/hawq/artifacts/S12_ILP_outputs_perlayer/layer_bits_folding_12_separable_dense_relu_joint_alpha*_candidatebits468_maxlat1000ms.json \\
-        --out-dir compression/hawq/artifacts/S12_ILP_outputs_perlayer
+        --inputs compression/hawq/artifacts/archive/S12_ILP_outputs_perlayer/layer_bits_folding_12_separable_dense_relu_joint_alpha*_candidatebits468_maxlat1000ms.json \\
+        --out-dir compression/hawq/artifacts/archive/S12_ILP_outputs_perlayer
 """
 from __future__ import annotations
 

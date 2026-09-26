@@ -18,7 +18,7 @@ set -e
 # finn_cost_model.py's force_dsp=True path, fit from two real S12 8-way
 # forced-DSP OOC builds -- see compression/hawq/fit_forced_dsp_derating.py
 # and finn_cost_model.py's own module comment on _FORCED_DSP_LUT_FACTOR).
-# compression/hawq/artifacts/S12_ILP_outputs_perlayer_forcedsp_lut70/, real
+# compression/hawq/artifacts/archive/S12_ILP_outputs_perlayer_forcedsp_lut70/, real
 # non-force-serial folding search, predecessor-corrected act sensitivity --
 # see joint_bits_folding_ilp_perlayer.py's and layer_topology.py's own
 # module docstrings. Same 5 alpha points and --max-latency-ms 1000
@@ -60,18 +60,18 @@ TRAINER_CLASS="nnUNetTrainerLayerQuantENet_12_separable_dense_relu_perlayer"
 FP32_SOURCE_NET_NAME="nnUNetTrainerENet_12_separable_dense_relu"
 
 LAYER_BITS_ILP_ARR=(
-    "compression/hawq/artifacts/S12_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_separable_dense_relu_joint_alpha0.0_candidatebits468_forcedsp_lut70.json"
-    "compression/hawq/artifacts/S12_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_separable_dense_relu_joint_alpha0.25_candidatebits468_forcedsp_lut70.json"
-    "compression/hawq/artifacts/S12_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_separable_dense_relu_joint_alpha0.5_candidatebits468_forcedsp_lut70.json"
-    "compression/hawq/artifacts/S12_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_separable_dense_relu_joint_alpha0.75_candidatebits468_forcedsp_lut70.json"
-    "compression/hawq/artifacts/S12_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_separable_dense_relu_joint_alpha1.0_candidatebits468_forcedsp_lut70.json"
+    "compression/hawq/artifacts/archive/S12_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_separable_dense_relu_joint_alpha0.0_candidatebits468_forcedsp_lut70.json"
+    "compression/hawq/artifacts/archive/S12_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_separable_dense_relu_joint_alpha0.25_candidatebits468_forcedsp_lut70.json"
+    "compression/hawq/artifacts/archive/S12_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_separable_dense_relu_joint_alpha0.5_candidatebits468_forcedsp_lut70.json"
+    "compression/hawq/artifacts/archive/S12_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_separable_dense_relu_joint_alpha0.75_candidatebits468_forcedsp_lut70.json"
+    "compression/hawq/artifacts/archive/S12_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_separable_dense_relu_joint_alpha1.0_candidatebits468_forcedsp_lut70.json"
 )
 LAYER_BITS_SITES_ARR=(
-    "compression/hawq/artifacts/S12_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_separable_dense_relu_joint_alpha0.0_candidatebits468_forcedsp_lut70.json"
-    "compression/hawq/artifacts/S12_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_separable_dense_relu_joint_alpha0.25_candidatebits468_forcedsp_lut70.json"
-    "compression/hawq/artifacts/S12_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_separable_dense_relu_joint_alpha0.5_candidatebits468_forcedsp_lut70.json"
-    "compression/hawq/artifacts/S12_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_separable_dense_relu_joint_alpha0.75_candidatebits468_forcedsp_lut70.json"
-    "compression/hawq/artifacts/S12_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_separable_dense_relu_joint_alpha1.0_candidatebits468_forcedsp_lut70.json"
+    "compression/hawq/artifacts/archive/S12_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_separable_dense_relu_joint_alpha0.0_candidatebits468_forcedsp_lut70.json"
+    "compression/hawq/artifacts/archive/S12_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_separable_dense_relu_joint_alpha0.25_candidatebits468_forcedsp_lut70.json"
+    "compression/hawq/artifacts/archive/S12_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_separable_dense_relu_joint_alpha0.5_candidatebits468_forcedsp_lut70.json"
+    "compression/hawq/artifacts/archive/S12_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_separable_dense_relu_joint_alpha0.75_candidatebits468_forcedsp_lut70.json"
+    "compression/hawq/artifacts/archive/S12_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_SITES_12_separable_dense_relu_joint_alpha1.0_candidatebits468_forcedsp_lut70.json"
 )
 CALIBRATED_NET_ARR=(
     nnUNetTrainerLayerQuantENet_12_separable_dense_relu_perlayer_joint_alpha0.0_candidatebits468_forcedsp_lut70_calibrated
@@ -145,7 +145,7 @@ cd "$HOME/LightM-UNet"
 
 if [ ! -f "$LAYER_BITS_ILP_FILE" ]; then
     echo "ERROR: $LAYER_BITS_ILP_FILE not found -- run the per-layer candidate-bits={4,6,8} --hard-lut-fraction 0.7 " \
-         "--force-dsp joint ILP sweep first (see compression/hawq/artifacts/S12_ILP_outputs_perlayer_forcedsp_lut70/run_args.json " \
+         "--force-dsp joint ILP sweep first (see compression/hawq/artifacts/archive/S12_ILP_outputs_perlayer_forcedsp_lut70/run_args.json " \
          "for the exact command)." >&2
     exit 1
 fi

@@ -75,7 +75,7 @@ _sensitivity.CANDIDATE_BITS = CANDIDATE_BITS
 def load_config(config_module: str) -> None:
     """Same pattern as block_sensitivity.py/sensitivity.py's own loader --
     injects the named config_*.py's constants into this module's globals."""
-    cfg = importlib.import_module(config_module)
+    cfg = importlib.import_module(f"configs.{config_module}")
     globals().update({k: v for k, v in vars(cfg).items() if not k.startswith("_")})
 
 
@@ -216,7 +216,7 @@ def run_layer_sensitivity(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", default="config_23_1",
-                         help="Which compression/hawq/config_*.py to load -- e.g. config_12_separable_dense_relu.")
+                         help="Which MILP/configs/config_*.py to load -- e.g. config_12_separable_dense_relu.")
     parser.add_argument("--net-name", default=None, help="Defaults to the loaded config's own NET_NAME.")
     parser.add_argument("--dataset-name", default="Dataset509_ARCADE_1x1_4c")
     parser.add_argument("--plans-name", default="nnUNetPlans")
@@ -259,11 +259,49 @@ def main() -> None:
 
     report = run_layer_sensitivity(checkpoint_path, args.dataset_name, args.n_batches, args.n_probes, args.device, args.seed)
 
+    # Zero-sensitivity detector: trace_w/trace_a are RAW Hessian traces, and
+    # sensitivity_w[b]/sensitivity_a[b] = trace_w * delta_w[b] / trace_a *
+    # delta_a[b] for every candidate bit b -- so trace==0 makes EVERY
+    # candidate-bit sensitivity exactly 0 too, by construction (checking
+    # "zero at all bit-widths" reduces to checking the raw trace alone, no
+    # need to scan CANDIDATE_BITS separately). A layer with a truly-dead
+    # activation (its own ReLU permanently off, e.g. a collapsed BatchNorm
+    # in a too-narrow bottleneck -- see this session's own regular5.0
+    # postmortem, MILP/artifacts/.../S12_dense_nn_upsample_v1 investigation)
+    # reports an EXACT 0.0 here, not just a small number -- the epsilon
+    # below is generous (1e-9) purely to also catch float-noise-adjacent
+    # cases, real "small but alive" layers measured this session sit in the
+    # 1e-2 to 1e-1 range, several orders of magnitude above it. This is
+    # exactly the signal that would have caught regular5.0's own dead
+    # block (trace_w=0.0, trace_a=0.0) BEFORE it ever reached calibration/
+    # fp16 deployment -- see finn_milp.py's own --candidate-bits sweep
+    # summary.csv, which surfaces the same list per-solve.
+    ZERO_SENSITIVITY_EPS = 1e-9
+    zero_sensitivity_layers = [
+        name for name, entry in report.items()
+        if abs(entry["trace_w"]) < ZERO_SENSITIVITY_EPS and abs(entry["trace_a"]) < ZERO_SENSITIVITY_EPS
+    ]
+    if zero_sensitivity_layers:
+        print(f"\nWARNING: {len(zero_sensitivity_layers)} layer(s) have ZERO measured sensitivity "
+              f"(both trace_w and trace_a < {ZERO_SENSITIVITY_EPS:.0e}) -- their weight/act bit-width choice "
+              f"cannot affect accuracy AT ALL under this HAWQ measurement, since sensitivity_w[b]/sensitivity_a[b] "
+              f"= trace * delta[b] is then exactly 0 for every candidate bit b. This usually means the layer's "
+              f"real output is dead/near-constant (a collapsed BatchNorm permanently off its own ReLU is the "
+              f"known real cause -- check before trusting these layers' own compressed accuracy, and consider "
+              f"pruning them with ENet.py's apply_block_pruning / ENET_PRUNED_BLOCKS instead of just compressing "
+              f"them, since a dead layer's near-zero calibrated quantizer scale can silently underflow to exactly "
+              f"0.0 under fp16 deployment -- x/0 -> inf -> NaN -- even though fp32 tolerates it fine):")
+        for name in zero_sensitivity_layers:
+            print(f"    {name} ({report[name]['stage']})")
+    report["_zero_sensitivity_layers"] = zero_sensitivity_layers
+
     out_file.parent.mkdir(parents=True, exist_ok=True)
     with open(out_file, "w") as f:
         json.dump(report, f, indent=2)
     print(f"Wrote {out_file}")
     for layer_name, entry in report.items():
+        if layer_name == "_zero_sensitivity_layers":
+            continue
         print(f"  {layer_name} ({entry['stage']}): trace_w={entry['trace_w']:.4e} trace_a={entry['trace_a']:.4e} "
               f"n_weight_params={entry['n_weight_params']}")
 

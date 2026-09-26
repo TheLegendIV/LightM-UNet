@@ -13,13 +13,13 @@ OUTPUT -- the bit-width the ILP (or --fix-bits) actually chose.
 
 Usage:
     python compression/analysis/sensitivity/plot_block_bits.py \\
-        compression/hawq/artifacts/block_bits_12_separable_dense_relu_min4_fixr5_4_down1_8.json
+        compression/hawq/artifacts/archive/block_bits_12_separable_dense_relu_min4_fixr5_4_down1_8.json
 
     # compare against a baseline (e.g. the unfixed run) -- baseline value
     # shown as a faint ghost marker, changed blocks get a ring around them:
     python compression/analysis/sensitivity/plot_block_bits.py \\
-        compression/hawq/artifacts/block_bits_12_separable_dense_relu_min4_fixr5_4_down1_8.json \\
-        --baseline compression/hawq/artifacts/block_bits_12_separable_dense_relu_min4.json
+        compression/hawq/artifacts/archive/block_bits_12_separable_dense_relu_min4_fixr5_4_down1_8.json \\
+        --baseline compression/hawq/artifacts/archive/block_bits_12_separable_dense_relu_min4.json
 """
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ DEFAULT_OUT_DIR = Path(__file__).resolve().parent / "out"
 # order is NOT reliable for this once --fix-bits has been used (pinned
 # blocks get appended at the end, out of depth order -- see ilp_search.py's
 # main()), so ordering is sourced from a separate reference file instead.
-DEFAULT_ORDER_FROM = REPO_ROOT / "compression/hawq/artifacts/block_sensitivity_12_separable_dense_relu.json"
+DEFAULT_ORDER_FROM = REPO_ROOT / "compression/hawq/artifacts/archive/block_sensitivity_12_separable_dense_relu.json"
 
 INK, SECONDARY_INK, MUTED, GRID, SURFACE = (
     "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#fcfcfb",

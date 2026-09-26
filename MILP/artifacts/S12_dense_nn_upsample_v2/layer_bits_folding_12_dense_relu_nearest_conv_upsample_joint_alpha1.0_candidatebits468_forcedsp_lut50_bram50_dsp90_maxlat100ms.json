@@ -1,0 +1,1595 @@
+{
+  "status": "Infeasible",
+  "alpha": 1.0,
+  "layer_weight_bits": {},
+  "layer_act_bits": {},
+  "per_layer": {},
+  "threshold_nodes": {},
+  "_diagnostics": {
+    "alpha": 1.0,
+    "candidate_bits": [
+      4,
+      6,
+      8
+    ],
+    "n_layers": 90,
+    "n_threshold_nodes": 79,
+    "n_binary_vars": 43953,
+    "n_constraints": 1154,
+    "hard_lut_fraction": 0.5,
+    "hard_bram_fraction": 0.5,
+    "hard_dsp_fraction": 0.9,
+    "hard_uram_fraction": 1.0,
+    "max_cycles": 10000000.0,
+    "optimize_downstream_rate": null,
+    "n_join_constraints": 0,
+    "n_chain_rate_constraints": 0,
+    "solver_time_limit_s": 900,
+    "solver_gap_rel": 0.02,
+    "force_serial": false,
+    "force_dsp": true,
+    "require_simd_ge_pe": false,
+    "allow_lut_mult": false,
+    "note": "Solver status 'Infeasible' -- no joint per-layer (bits, folding) assignment satisfies the requested hard LUT/BRAM/DSP/URAM budget(s) (hard_lut_fraction=0.5, hard_bram_fraction=0.5, hard_dsp_fraction=0.9, hard_uram_fraction=1.0) and max_cycles=10000000 at all."
+  },
+  "dataflow_graph": {
+    "input": [
+      1,
+      512,
+      512
+    ],
+    "edges": {
+      "initial.conv": [],
+      "initial.pool": [],
+      "down1.pool": [
+        "initial.conv",
+        "initial.pool"
+      ],
+      "down1.reduce.0": [
+        "initial.conv",
+        "initial.pool"
+      ],
+      "down1.conv.0": [
+        "down1.reduce.0"
+      ],
+      "down1.expand.0": [
+        "down1.conv.0"
+      ],
+      "regular1.0.reduce.0": [
+        "down1.out_act"
+      ],
+      "regular1.0.conv": [
+        "regular1.0.reduce.0"
+      ],
+      "regular1.0.expand.0": [
+        "regular1.0.conv"
+      ],
+      "regular1.1.reduce.0": [
+        "regular1.0.out_act"
+      ],
+      "regular1.1.conv": [
+        "regular1.1.reduce.0"
+      ],
+      "regular1.1.expand.0": [
+        "regular1.1.conv"
+      ],
+      "regular1.2.reduce.0": [
+        "regular1.1.out_act"
+      ],
+      "regular1.2.conv": [
+        "regular1.2.reduce.0"
+      ],
+      "regular1.2.expand.0": [
+        "regular1.2.conv"
+      ],
+      "regular1.3.reduce.0": [
+        "regular1.2.out_act"
+      ],
+      "regular1.3.conv": [
+        "regular1.3.reduce.0"
+      ],
+      "regular1.3.expand.0": [
+        "regular1.3.conv"
+      ],
+      "down2.pool": [
+        "regular1.3.out_act"
+      ],
+      "down2.reduce.0": [
+        "regular1.3.out_act"
+      ],
+      "down2.conv.0": [
+        "down2.reduce.0"
+      ],
+      "down2.expand.0": [
+        "down2.conv.0"
+      ],
+      "stage2.0.reduce.0": [
+        "down2.out_act"
+      ],
+      "stage2.0.conv": [
+        "stage2.0.reduce.0"
+      ],
+      "stage2.0.expand.0": [
+        "stage2.0.conv"
+      ],
+      "stage2.1.reduce.0": [
+        "stage2.0.out_act"
+      ],
+      "stage2.1.conv": [
+        "stage2.1.reduce.0"
+      ],
+      "stage2.1.expand.0": [
+        "stage2.1.conv"
+      ],
+      "stage2.2.reduce.0": [
+        "stage2.1.out_act"
+      ],
+      "stage2.2.conv": [
+        "stage2.2.reduce.0"
+      ],
+      "stage2.2.expand.0": [
+        "stage2.2.conv"
+      ],
+      "stage2.3.reduce.0": [
+        "stage2.2.out_act"
+      ],
+      "stage2.3.conv": [
+        "stage2.3.reduce.0"
+      ],
+      "stage2.3.expand.0": [
+        "stage2.3.conv"
+      ],
+      "stage2.4.reduce.0": [
+        "stage2.3.out_act"
+      ],
+      "stage2.4.conv": [
+        "stage2.4.reduce.0"
+      ],
+      "stage2.4.expand.0": [
+        "stage2.4.conv"
+      ],
+      "stage2.5.reduce.0": [
+        "stage2.4.out_act"
+      ],
+      "stage2.5.conv": [
+        "stage2.5.reduce.0"
+      ],
+      "stage2.5.expand.0": [
+        "stage2.5.conv"
+      ],
+      "stage2.6.reduce.0": [
+        "stage2.5.out_act"
+      ],
+      "stage2.6.conv": [
+        "stage2.6.reduce.0"
+      ],
+      "stage2.6.expand.0": [
+        "stage2.6.conv"
+      ],
+      "stage2.7.reduce.0": [
+        "stage2.6.out_act"
+      ],
+      "stage2.7.conv": [
+        "stage2.7.reduce.0"
+      ],
+      "stage2.7.expand.0": [
+        "stage2.7.conv"
+      ],
+      "stage3.0.reduce.0": [
+        "stage2.7.out_act"
+      ],
+      "stage3.0.conv": [
+        "stage3.0.reduce.0"
+      ],
+      "stage3.0.expand.0": [
+        "stage3.0.conv"
+      ],
+      "stage3.1.reduce.0": [
+        "stage3.0.out_act"
+      ],
+      "stage3.1.conv": [
+        "stage3.1.reduce.0"
+      ],
+      "stage3.1.expand.0": [
+        "stage3.1.conv"
+      ],
+      "stage3.2.reduce.0": [
+        "stage3.1.out_act"
+      ],
+      "stage3.2.conv": [
+        "stage3.2.reduce.0"
+      ],
+      "stage3.2.expand.0": [
+        "stage3.2.conv"
+      ],
+      "stage3.3.reduce.0": [
+        "stage3.2.out_act"
+      ],
+      "stage3.3.conv": [
+        "stage3.3.reduce.0"
+      ],
+      "stage3.3.expand.0": [
+        "stage3.3.conv"
+      ],
+      "stage3.4.reduce.0": [
+        "stage3.3.out_act"
+      ],
+      "stage3.4.conv": [
+        "stage3.4.reduce.0"
+      ],
+      "stage3.4.expand.0": [
+        "stage3.4.conv"
+      ],
+      "stage3.5.reduce.0": [
+        "stage3.4.out_act"
+      ],
+      "stage3.5.conv": [
+        "stage3.5.reduce.0"
+      ],
+      "stage3.5.expand.0": [
+        "stage3.5.conv"
+      ],
+      "stage3.6.reduce.0": [
+        "stage3.5.out_act"
+      ],
+      "stage3.6.conv": [
+        "stage3.6.reduce.0"
+      ],
+      "stage3.6.expand.0": [
+        "stage3.6.conv"
+      ],
+      "stage3.7.reduce.0": [
+        "stage3.6.out_act"
+      ],
+      "stage3.7.conv": [
+        "stage3.7.reduce.0"
+      ],
+      "stage3.7.expand.0": [
+        "stage3.7.conv"
+      ],
+      "up4.main_proj.0": [
+        "stage3.7.out_act"
+      ],
+      "up4.skip_resize_conv.0": [
+        "up4.main_proj.0",
+        "regular1.3.out_act"
+      ],
+      "up4.reduce.0": [
+        "stage3.7.out_act"
+      ],
+      "up4.up.0": [
+        "up4.reduce.0"
+      ],
+      "up4.expand.0": [
+        "up4.up.0"
+      ],
+      "regular4.0.reduce.0": [
+        "up4.out_act"
+      ],
+      "regular4.0.conv": [
+        "regular4.0.reduce.0"
+      ],
+      "regular4.0.expand.0": [
+        "regular4.0.conv"
+      ],
+      "regular4.1.reduce.0": [
+        "regular4.0.out_act"
+      ],
+      "regular4.1.conv": [
+        "regular4.1.reduce.0"
+      ],
+      "regular4.1.expand.0": [
+        "regular4.1.conv"
+      ],
+      "up5.main_proj.0": [
+        "regular4.1.out_act"
+      ],
+      "up5.skip_resize_conv.0": [
+        "up5.main_proj.0"
+      ],
+      "up5.reduce.0": [
+        "regular4.1.out_act"
+      ],
+      "up5.up.0": [
+        "up5.reduce.0"
+      ],
+      "up5.expand.0": [
+        "up5.up.0"
+      ],
+      "regular5.0.reduce.0": [
+        "up5.out_act"
+      ],
+      "regular5.0.conv": [
+        "regular5.0.reduce.0"
+      ],
+      "regular5.0.expand.0": [
+        "regular5.0.conv"
+      ],
+      "final": [
+        "regular5.0.out_act"
+      ],
+      "down1.out_act": [
+        "down1.residual_add"
+      ],
+      "regular1.0.out_act": [
+        "regular1.0.residual_add"
+      ],
+      "regular1.1.out_act": [
+        "regular1.1.residual_add"
+      ],
+      "regular1.2.out_act": [
+        "regular1.2.residual_add"
+      ],
+      "regular1.3.out_act": [
+        "regular1.3.residual_add"
+      ],
+      "down2.out_act": [
+        "down2.residual_add"
+      ],
+      "stage2.0.out_act": [
+        "stage2.0.residual_add"
+      ],
+      "stage2.1.out_act": [
+        "stage2.1.residual_add"
+      ],
+      "stage2.2.out_act": [
+        "stage2.2.residual_add"
+      ],
+      "stage2.3.out_act": [
+        "stage2.3.residual_add"
+      ],
+      "stage2.4.out_act": [
+        "stage2.4.residual_add"
+      ],
+      "stage2.5.out_act": [
+        "stage2.5.residual_add"
+      ],
+      "stage2.6.out_act": [
+        "stage2.6.residual_add"
+      ],
+      "stage2.7.out_act": [
+        "stage2.7.residual_add"
+      ],
+      "stage3.0.out_act": [
+        "stage3.0.residual_add"
+      ],
+      "stage3.1.out_act": [
+        "stage3.1.residual_add"
+      ],
+      "stage3.2.out_act": [
+        "stage3.2.residual_add"
+      ],
+      "stage3.3.out_act": [
+        "stage3.3.residual_add"
+      ],
+      "stage3.4.out_act": [
+        "stage3.4.residual_add"
+      ],
+      "stage3.5.out_act": [
+        "stage3.5.residual_add"
+      ],
+      "stage3.6.out_act": [
+        "stage3.6.residual_add"
+      ],
+      "stage3.7.out_act": [
+        "stage3.7.residual_add"
+      ],
+      "up4.out_act": [
+        "up4.residual_add"
+      ],
+      "regular4.0.out_act": [
+        "regular4.0.residual_add"
+      ],
+      "regular4.1.out_act": [
+        "regular4.1.residual_add"
+      ],
+      "up5.out_act": [
+        "up5.residual_add"
+      ],
+      "regular5.0.out_act": [
+        "regular5.0.residual_add"
+      ],
+      "down1.skip_quant": [
+        "down1.pool"
+      ],
+      "down1.residual_add": [
+        "down1.skip_quant",
+        "down1.expand.0"
+      ],
+      "regular1.0.skip_quant": [
+        "down1.out_act"
+      ],
+      "regular1.0.residual_add": [
+        "regular1.0.skip_quant",
+        "regular1.0.expand.0"
+      ],
+      "regular1.1.skip_quant": [
+        "regular1.0.out_act"
+      ],
+      "regular1.1.residual_add": [
+        "regular1.1.skip_quant",
+        "regular1.1.expand.0"
+      ],
+      "regular1.2.skip_quant": [
+        "regular1.1.out_act"
+      ],
+      "regular1.2.residual_add": [
+        "regular1.2.skip_quant",
+        "regular1.2.expand.0"
+      ],
+      "regular1.3.skip_quant": [
+        "regular1.2.out_act"
+      ],
+      "regular1.3.residual_add": [
+        "regular1.3.skip_quant",
+        "regular1.3.expand.0"
+      ],
+      "down2.skip_quant": [
+        "down2.pool"
+      ],
+      "down2.residual_add": [
+        "down2.skip_quant",
+        "down2.expand.0"
+      ],
+      "stage2.0.skip_quant": [
+        "down2.out_act"
+      ],
+      "stage2.0.residual_add": [
+        "stage2.0.skip_quant",
+        "stage2.0.expand.0"
+      ],
+      "stage2.1.skip_quant": [
+        "stage2.0.out_act"
+      ],
+      "stage2.1.residual_add": [
+        "stage2.1.skip_quant",
+        "stage2.1.expand.0"
+      ],
+      "stage2.2.skip_quant": [
+        "stage2.1.out_act"
+      ],
+      "stage2.2.residual_add": [
+        "stage2.2.skip_quant",
+        "stage2.2.expand.0"
+      ],
+      "stage2.3.skip_quant": [
+        "stage2.2.out_act"
+      ],
+      "stage2.3.residual_add": [
+        "stage2.3.skip_quant",
+        "stage2.3.expand.0"
+      ],
+      "stage2.4.skip_quant": [
+        "stage2.3.out_act"
+      ],
+      "stage2.4.residual_add": [
+        "stage2.4.skip_quant",
+        "stage2.4.expand.0"
+      ],
+      "stage2.5.skip_quant": [
+        "stage2.4.out_act"
+      ],
+      "stage2.5.residual_add": [
+        "stage2.5.skip_quant",
+        "stage2.5.expand.0"
+      ],
+      "stage2.6.skip_quant": [
+        "stage2.5.out_act"
+      ],
+      "stage2.6.residual_add": [
+        "stage2.6.skip_quant",
+        "stage2.6.expand.0"
+      ],
+      "stage2.7.skip_quant": [
+        "stage2.6.out_act"
+      ],
+      "stage2.7.residual_add": [
+        "stage2.7.skip_quant",
+        "stage2.7.expand.0"
+      ],
+      "stage3.0.skip_quant": [
+        "stage2.7.out_act"
+      ],
+      "stage3.0.residual_add": [
+        "stage3.0.skip_quant",
+        "stage3.0.expand.0"
+      ],
+      "stage3.1.skip_quant": [
+        "stage3.0.out_act"
+      ],
+      "stage3.1.residual_add": [
+        "stage3.1.skip_quant",
+        "stage3.1.expand.0"
+      ],
+      "stage3.2.skip_quant": [
+        "stage3.1.out_act"
+      ],
+      "stage3.2.residual_add": [
+        "stage3.2.skip_quant",
+        "stage3.2.expand.0"
+      ],
+      "stage3.3.skip_quant": [
+        "stage3.2.out_act"
+      ],
+      "stage3.3.residual_add": [
+        "stage3.3.skip_quant",
+        "stage3.3.expand.0"
+      ],
+      "stage3.4.skip_quant": [
+        "stage3.3.out_act"
+      ],
+      "stage3.4.residual_add": [
+        "stage3.4.skip_quant",
+        "stage3.4.expand.0"
+      ],
+      "stage3.5.skip_quant": [
+        "stage3.4.out_act"
+      ],
+      "stage3.5.residual_add": [
+        "stage3.5.skip_quant",
+        "stage3.5.expand.0"
+      ],
+      "stage3.6.skip_quant": [
+        "stage3.5.out_act"
+      ],
+      "stage3.6.residual_add": [
+        "stage3.6.skip_quant",
+        "stage3.6.expand.0"
+      ],
+      "stage3.7.skip_quant": [
+        "stage3.6.out_act"
+      ],
+      "stage3.7.residual_add": [
+        "stage3.7.skip_quant",
+        "stage3.7.expand.0"
+      ],
+      "up4.residual_add": [
+        "up4.skip_resize_conv.0",
+        "up4.expand.0"
+      ],
+      "regular4.0.skip_quant": [
+        "up4.out_act"
+      ],
+      "regular4.0.residual_add": [
+        "regular4.0.skip_quant",
+        "regular4.0.expand.0"
+      ],
+      "regular4.1.skip_quant": [
+        "regular4.0.out_act"
+      ],
+      "regular4.1.residual_add": [
+        "regular4.1.skip_quant",
+        "regular4.1.expand.0"
+      ],
+      "up5.residual_add": [
+        "up5.skip_resize_conv.0",
+        "up5.expand.0"
+      ],
+      "regular5.0.skip_quant": [
+        "up5.out_act"
+      ],
+      "regular5.0.residual_add": [
+        "regular5.0.skip_quant",
+        "regular5.0.expand.0"
+      ]
+    },
+    "shapes": {
+      "initial.conv": [
+        3,
+        256,
+        256
+      ],
+      "initial.pool": [
+        1,
+        256,
+        256
+      ],
+      "down1.pool": [
+        4,
+        128,
+        128
+      ],
+      "down1.reduce.0": [
+        4,
+        128,
+        128
+      ],
+      "down1.conv.0": [
+        4,
+        128,
+        128
+      ],
+      "down1.expand.0": [
+        16,
+        128,
+        128
+      ],
+      "regular1.0.reduce.0": [
+        4,
+        128,
+        128
+      ],
+      "regular1.0.conv": [
+        4,
+        128,
+        128
+      ],
+      "regular1.0.expand.0": [
+        16,
+        128,
+        128
+      ],
+      "regular1.1.reduce.0": [
+        4,
+        128,
+        128
+      ],
+      "regular1.1.conv": [
+        4,
+        128,
+        128
+      ],
+      "regular1.1.expand.0": [
+        16,
+        128,
+        128
+      ],
+      "regular1.2.reduce.0": [
+        4,
+        128,
+        128
+      ],
+      "regular1.2.conv": [
+        4,
+        128,
+        128
+      ],
+      "regular1.2.expand.0": [
+        16,
+        128,
+        128
+      ],
+      "regular1.3.reduce.0": [
+        4,
+        128,
+        128
+      ],
+      "regular1.3.conv": [
+        4,
+        128,
+        128
+      ],
+      "regular1.3.expand.0": [
+        16,
+        128,
+        128
+      ],
+      "down2.pool": [
+        16,
+        64,
+        64
+      ],
+      "down2.reduce.0": [
+        8,
+        64,
+        64
+      ],
+      "down2.conv.0": [
+        8,
+        64,
+        64
+      ],
+      "down2.expand.0": [
+        32,
+        64,
+        64
+      ],
+      "stage2.0.reduce.0": [
+        8,
+        64,
+        64
+      ],
+      "stage2.0.conv": [
+        8,
+        64,
+        64
+      ],
+      "stage2.0.expand.0": [
+        32,
+        64,
+        64
+      ],
+      "stage2.1.reduce.0": [
+        8,
+        64,
+        64
+      ],
+      "stage2.1.conv": [
+        8,
+        64,
+        64
+      ],
+      "stage2.1.expand.0": [
+        32,
+        64,
+        64
+      ],
+      "stage2.2.reduce.0": [
+        8,
+        64,
+        64
+      ],
+      "stage2.2.conv": [
+        8,
+        64,
+        64
+      ],
+      "stage2.2.expand.0": [
+        32,
+        64,
+        64
+      ],
+      "stage2.3.reduce.0": [
+        8,
+        64,
+        64
+      ],
+      "stage2.3.conv": [
+        8,
+        64,
+        64
+      ],
+      "stage2.3.expand.0": [
+        32,
+        64,
+        64
+      ],
+      "stage2.4.reduce.0": [
+        8,
+        64,
+        64
+      ],
+      "stage2.4.conv": [
+        8,
+        64,
+        64
+      ],
+      "stage2.4.expand.0": [
+        32,
+        64,
+        64
+      ],
+      "stage2.5.reduce.0": [
+        8,
+        64,
+        64
+      ],
+      "stage2.5.conv": [
+        8,
+        64,
+        64
+      ],
+      "stage2.5.expand.0": [
+        32,
+        64,
+        64
+      ],
+      "stage2.6.reduce.0": [
+        8,
+        64,
+        64
+      ],
+      "stage2.6.conv": [
+        8,
+        64,
+        64
+      ],
+      "stage2.6.expand.0": [
+        32,
+        64,
+        64
+      ],
+      "stage2.7.reduce.0": [
+        8,
+        64,
+        64
+      ],
+      "stage2.7.conv": [
+        8,
+        64,
+        64
+      ],
+      "stage2.7.expand.0": [
+        32,
+        64,
+        64
+      ],
+      "stage3.0.reduce.0": [
+        8,
+        64,
+        64
+      ],
+      "stage3.0.conv": [
+        8,
+        64,
+        64
+      ],
+      "stage3.0.expand.0": [
+        32,
+        64,
+        64
+      ],
+      "stage3.1.reduce.0": [
+        8,
+        64,
+        64
+      ],
+      "stage3.1.conv": [
+        8,
+        64,
+        64
+      ],
+      "stage3.1.expand.0": [
+        32,
+        64,
+        64
+      ],
+      "stage3.2.reduce.0": [
+        8,
+        64,
+        64
+      ],
+      "stage3.2.conv": [
+        8,
+        64,
+        64
+      ],
+      "stage3.2.expand.0": [
+        32,
+        64,
+        64
+      ],
+      "stage3.3.reduce.0": [
+        8,
+        64,
+        64
+      ],
+      "stage3.3.conv": [
+        8,
+        64,
+        64
+      ],
+      "stage3.3.expand.0": [
+        32,
+        64,
+        64
+      ],
+      "stage3.4.reduce.0": [
+        8,
+        64,
+        64
+      ],
+      "stage3.4.conv": [
+        8,
+        64,
+        64
+      ],
+      "stage3.4.expand.0": [
+        32,
+        64,
+        64
+      ],
+      "stage3.5.reduce.0": [
+        8,
+        64,
+        64
+      ],
+      "stage3.5.conv": [
+        8,
+        64,
+        64
+      ],
+      "stage3.5.expand.0": [
+        32,
+        64,
+        64
+      ],
+      "stage3.6.reduce.0": [
+        8,
+        64,
+        64
+      ],
+      "stage3.6.conv": [
+        8,
+        64,
+        64
+      ],
+      "stage3.6.expand.0": [
+        32,
+        64,
+        64
+      ],
+      "stage3.7.reduce.0": [
+        8,
+        64,
+        64
+      ],
+      "stage3.7.conv": [
+        8,
+        64,
+        64
+      ],
+      "stage3.7.expand.0": [
+        32,
+        64,
+        64
+      ],
+      "up4.main_proj.0": [
+        16,
+        64,
+        64
+      ],
+      "up4.skip_resize_conv.0": [
+        16,
+        128,
+        128
+      ],
+      "up4.reduce.0": [
+        8,
+        64,
+        64
+      ],
+      "up4.up.0": [
+        8,
+        128,
+        128
+      ],
+      "up4.expand.0": [
+        16,
+        128,
+        128
+      ],
+      "regular4.0.reduce.0": [
+        4,
+        128,
+        128
+      ],
+      "regular4.0.conv": [
+        4,
+        128,
+        128
+      ],
+      "regular4.0.expand.0": [
+        16,
+        128,
+        128
+      ],
+      "regular4.1.reduce.0": [
+        4,
+        128,
+        128
+      ],
+      "regular4.1.conv": [
+        4,
+        128,
+        128
+      ],
+      "regular4.1.expand.0": [
+        16,
+        128,
+        128
+      ],
+      "up5.main_proj.0": [
+        4,
+        128,
+        128
+      ],
+      "up5.skip_resize_conv.0": [
+        4,
+        256,
+        256
+      ],
+      "up5.reduce.0": [
+        4,
+        128,
+        128
+      ],
+      "up5.up.0": [
+        4,
+        256,
+        256
+      ],
+      "up5.expand.0": [
+        4,
+        256,
+        256
+      ],
+      "regular5.0.reduce.0": [
+        1,
+        256,
+        256
+      ],
+      "regular5.0.conv": [
+        1,
+        256,
+        256
+      ],
+      "regular5.0.expand.0": [
+        4,
+        256,
+        256
+      ],
+      "final": [
+        5,
+        512,
+        512
+      ],
+      "down1.out_act": [
+        16,
+        128,
+        128
+      ],
+      "regular1.0.out_act": [
+        16,
+        128,
+        128
+      ],
+      "regular1.1.out_act": [
+        16,
+        128,
+        128
+      ],
+      "regular1.2.out_act": [
+        16,
+        128,
+        128
+      ],
+      "regular1.3.out_act": [
+        16,
+        128,
+        128
+      ],
+      "down2.out_act": [
+        32,
+        64,
+        64
+      ],
+      "stage2.0.out_act": [
+        32,
+        64,
+        64
+      ],
+      "stage2.1.out_act": [
+        32,
+        64,
+        64
+      ],
+      "stage2.2.out_act": [
+        32,
+        64,
+        64
+      ],
+      "stage2.3.out_act": [
+        32,
+        64,
+        64
+      ],
+      "stage2.4.out_act": [
+        32,
+        64,
+        64
+      ],
+      "stage2.5.out_act": [
+        32,
+        64,
+        64
+      ],
+      "stage2.6.out_act": [
+        32,
+        64,
+        64
+      ],
+      "stage2.7.out_act": [
+        32,
+        64,
+        64
+      ],
+      "stage3.0.out_act": [
+        32,
+        64,
+        64
+      ],
+      "stage3.1.out_act": [
+        32,
+        64,
+        64
+      ],
+      "stage3.2.out_act": [
+        32,
+        64,
+        64
+      ],
+      "stage3.3.out_act": [
+        32,
+        64,
+        64
+      ],
+      "stage3.4.out_act": [
+        32,
+        64,
+        64
+      ],
+      "stage3.5.out_act": [
+        32,
+        64,
+        64
+      ],
+      "stage3.6.out_act": [
+        32,
+        64,
+        64
+      ],
+      "stage3.7.out_act": [
+        32,
+        64,
+        64
+      ],
+      "up4.out_act": [
+        16,
+        128,
+        128
+      ],
+      "regular4.0.out_act": [
+        16,
+        128,
+        128
+      ],
+      "regular4.1.out_act": [
+        16,
+        128,
+        128
+      ],
+      "up5.out_act": [
+        4,
+        256,
+        256
+      ],
+      "regular5.0.out_act": [
+        4,
+        256,
+        256
+      ],
+      "down1.skip_quant": [
+        16,
+        128,
+        128
+      ],
+      "down1.residual_add": [
+        16,
+        128,
+        128
+      ],
+      "regular1.0.skip_quant": [
+        16,
+        128,
+        128
+      ],
+      "regular1.0.residual_add": [
+        16,
+        128,
+        128
+      ],
+      "regular1.1.skip_quant": [
+        16,
+        128,
+        128
+      ],
+      "regular1.1.residual_add": [
+        16,
+        128,
+        128
+      ],
+      "regular1.2.skip_quant": [
+        16,
+        128,
+        128
+      ],
+      "regular1.2.residual_add": [
+        16,
+        128,
+        128
+      ],
+      "regular1.3.skip_quant": [
+        16,
+        128,
+        128
+      ],
+      "regular1.3.residual_add": [
+        16,
+        128,
+        128
+      ],
+      "down2.skip_quant": [
+        32,
+        64,
+        64
+      ],
+      "down2.residual_add": [
+        32,
+        64,
+        64
+      ],
+      "stage2.0.skip_quant": [
+        32,
+        64,
+        64
+      ],
+      "stage2.0.residual_add": [
+        32,
+        64,
+        64
+      ],
+      "stage2.1.skip_quant": [
+        32,
+        64,
+        64
+      ],
+      "stage2.1.residual_add": [
+        32,
+        64,
+        64
+      ],
+      "stage2.2.skip_quant": [
+        32,
+        64,
+        64
+      ],
+      "stage2.2.residual_add": [
+        32,
+        64,
+        64
+      ],
+      "stage2.3.skip_quant": [
+        32,
+        64,
+        64
+      ],
+      "stage2.3.residual_add": [
+        32,
+        64,
+        64
+      ],
+      "stage2.4.skip_quant": [
+        32,
+        64,
+        64
+      ],
+      "stage2.4.residual_add": [
+        32,
+        64,
+        64
+      ],
+      "stage2.5.skip_quant": [
+        32,
+        64,
+        64
+      ],
+      "stage2.5.residual_add": [
+        32,
+        64,
+        64
+      ],
+      "stage2.6.skip_quant": [
+        32,
+        64,
+        64
+      ],
+      "stage2.6.residual_add": [
+        32,
+        64,
+        64
+      ],
+      "stage2.7.skip_quant": [
+        32,
+        64,
+        64
+      ],
+      "stage2.7.residual_add": [
+        32,
+        64,
+        64
+      ],
+      "stage3.0.skip_quant": [
+        32,
+        64,
+        64
+      ],
+      "stage3.0.residual_add": [
+        32,
+        64,
+        64
+      ],
+      "stage3.1.skip_quant": [
+        32,
+        64,
+        64
+      ],
+      "stage3.1.residual_add": [
+        32,
+        64,
+        64
+      ],
+      "stage3.2.skip_quant": [
+        32,
+        64,
+        64
+      ],
+      "stage3.2.residual_add": [
+        32,
+        64,
+        64
+      ],
+      "stage3.3.skip_quant": [
+        32,
+        64,
+        64
+      ],
+      "stage3.3.residual_add": [
+        32,
+        64,
+        64
+      ],
+      "stage3.4.skip_quant": [
+        32,
+        64,
+        64
+      ],
+      "stage3.4.residual_add": [
+        32,
+        64,
+        64
+      ],
+      "stage3.5.skip_quant": [
+        32,
+        64,
+        64
+      ],
+      "stage3.5.residual_add": [
+        32,
+        64,
+        64
+      ],
+      "stage3.6.skip_quant": [
+        32,
+        64,
+        64
+      ],
+      "stage3.6.residual_add": [
+        32,
+        64,
+        64
+      ],
+      "stage3.7.skip_quant": [
+        32,
+        64,
+        64
+      ],
+      "stage3.7.residual_add": [
+        32,
+        64,
+        64
+      ],
+      "up4.residual_add": [
+        16,
+        128,
+        128
+      ],
+      "regular4.0.skip_quant": [
+        16,
+        128,
+        128
+      ],
+      "regular4.0.residual_add": [
+        16,
+        128,
+        128
+      ],
+      "regular4.1.skip_quant": [
+        16,
+        128,
+        128
+      ],
+      "regular4.1.residual_add": [
+        16,
+        128,
+        128
+      ],
+      "up5.residual_add": [
+        4,
+        256,
+        256
+      ],
+      "regular5.0.skip_quant": [
+        4,
+        256,
+        256
+      ],
+      "regular5.0.residual_add": [
+        4,
+        256,
+        256
+      ]
+    },
+    "op_types": {
+      "initial.conv": "Conv2d",
+      "initial.pool": "MaxPool2d",
+      "down1.pool": "MaxPool2d",
+      "down1.reduce.0": "Conv2d",
+      "down1.conv.0": "Conv2d",
+      "down1.expand.0": "Conv2d",
+      "regular1.0.reduce.0": "Conv2d",
+      "regular1.0.conv": "Conv2d",
+      "regular1.0.expand.0": "Conv2d",
+      "regular1.1.reduce.0": "Conv2d",
+      "regular1.1.conv": "Conv2d",
+      "regular1.1.expand.0": "Conv2d",
+      "regular1.2.reduce.0": "Conv2d",
+      "regular1.2.conv": "Conv2d",
+      "regular1.2.expand.0": "Conv2d",
+      "regular1.3.reduce.0": "Conv2d",
+      "regular1.3.conv": "Conv2d",
+      "regular1.3.expand.0": "Conv2d",
+      "down2.pool": "MaxPool2d",
+      "down2.reduce.0": "Conv2d",
+      "down2.conv.0": "Conv2d",
+      "down2.expand.0": "Conv2d",
+      "stage2.0.reduce.0": "Conv2d",
+      "stage2.0.conv": "Conv2d",
+      "stage2.0.expand.0": "Conv2d",
+      "stage2.1.reduce.0": "Conv2d",
+      "stage2.1.conv": "Conv2d",
+      "stage2.1.expand.0": "Conv2d",
+      "stage2.2.reduce.0": "Conv2d",
+      "stage2.2.conv": "Conv2d",
+      "stage2.2.expand.0": "Conv2d",
+      "stage2.3.reduce.0": "Conv2d",
+      "stage2.3.conv": "Conv2d",
+      "stage2.3.expand.0": "Conv2d",
+      "stage2.4.reduce.0": "Conv2d",
+      "stage2.4.conv": "Conv2d",
+      "stage2.4.expand.0": "Conv2d",
+      "stage2.5.reduce.0": "Conv2d",
+      "stage2.5.conv": "Conv2d",
+      "stage2.5.expand.0": "Conv2d",
+      "stage2.6.reduce.0": "Conv2d",
+      "stage2.6.conv": "Conv2d",
+      "stage2.6.expand.0": "Conv2d",
+      "stage2.7.reduce.0": "Conv2d",
+      "stage2.7.conv": "Conv2d",
+      "stage2.7.expand.0": "Conv2d",
+      "stage3.0.reduce.0": "Conv2d",
+      "stage3.0.conv": "Conv2d",
+      "stage3.0.expand.0": "Conv2d",
+      "stage3.1.reduce.0": "Conv2d",
+      "stage3.1.conv": "Conv2d",
+      "stage3.1.expand.0": "Conv2d",
+      "stage3.2.reduce.0": "Conv2d",
+      "stage3.2.conv": "Conv2d",
+      "stage3.2.expand.0": "Conv2d",
+      "stage3.3.reduce.0": "Conv2d",
+      "stage3.3.conv": "Conv2d",
+      "stage3.3.expand.0": "Conv2d",
+      "stage3.4.reduce.0": "Conv2d",
+      "stage3.4.conv": "Conv2d",
+      "stage3.4.expand.0": "Conv2d",
+      "stage3.5.reduce.0": "Conv2d",
+      "stage3.5.conv": "Conv2d",
+      "stage3.5.expand.0": "Conv2d",
+      "stage3.6.reduce.0": "Conv2d",
+      "stage3.6.conv": "Conv2d",
+      "stage3.6.expand.0": "Conv2d",
+      "stage3.7.reduce.0": "Conv2d",
+      "stage3.7.conv": "Conv2d",
+      "stage3.7.expand.0": "Conv2d",
+      "up4.main_proj.0": "Conv2d",
+      "up4.skip_resize_conv.0": "Conv2d",
+      "up4.reduce.0": "Conv2d",
+      "up4.up.0": "ConvTranspose2d",
+      "up4.expand.0": "Conv2d",
+      "regular4.0.reduce.0": "Conv2d",
+      "regular4.0.conv": "Conv2d",
+      "regular4.0.expand.0": "Conv2d",
+      "regular4.1.reduce.0": "Conv2d",
+      "regular4.1.conv": "Conv2d",
+      "regular4.1.expand.0": "Conv2d",
+      "up5.main_proj.0": "Conv2d",
+      "up5.skip_resize_conv.0": "Conv2d",
+      "up5.reduce.0": "Conv2d",
+      "up5.up.0": "ConvTranspose2d",
+      "up5.expand.0": "Conv2d",
+      "regular5.0.reduce.0": "Conv2d",
+      "regular5.0.conv": "Conv2d",
+      "regular5.0.expand.0": "Conv2d",
+      "final": "ConvTranspose2d",
+      "down1.out_act": "Thresholding",
+      "regular1.0.out_act": "Thresholding",
+      "regular1.1.out_act": "Thresholding",
+      "regular1.2.out_act": "Thresholding",
+      "regular1.3.out_act": "Thresholding",
+      "down2.out_act": "Thresholding",
+      "stage2.0.out_act": "Thresholding",
+      "stage2.1.out_act": "Thresholding",
+      "stage2.2.out_act": "Thresholding",
+      "stage2.3.out_act": "Thresholding",
+      "stage2.4.out_act": "Thresholding",
+      "stage2.5.out_act": "Thresholding",
+      "stage2.6.out_act": "Thresholding",
+      "stage2.7.out_act": "Thresholding",
+      "stage3.0.out_act": "Thresholding",
+      "stage3.1.out_act": "Thresholding",
+      "stage3.2.out_act": "Thresholding",
+      "stage3.3.out_act": "Thresholding",
+      "stage3.4.out_act": "Thresholding",
+      "stage3.5.out_act": "Thresholding",
+      "stage3.6.out_act": "Thresholding",
+      "stage3.7.out_act": "Thresholding",
+      "up4.out_act": "Thresholding",
+      "regular4.0.out_act": "Thresholding",
+      "regular4.1.out_act": "Thresholding",
+      "up5.out_act": "Thresholding",
+      "regular5.0.out_act": "Thresholding",
+      "down1.skip_quant": "Thresholding",
+      "down1.residual_add": "Thresholding",
+      "regular1.0.skip_quant": "Thresholding",
+      "regular1.0.residual_add": "Thresholding",
+      "regular1.1.skip_quant": "Thresholding",
+      "regular1.1.residual_add": "Thresholding",
+      "regular1.2.skip_quant": "Thresholding",
+      "regular1.2.residual_add": "Thresholding",
+      "regular1.3.skip_quant": "Thresholding",
+      "regular1.3.residual_add": "Thresholding",
+      "down2.skip_quant": "Thresholding",
+      "down2.residual_add": "Thresholding",
+      "stage2.0.skip_quant": "Thresholding",
+      "stage2.0.residual_add": "Thresholding",
+      "stage2.1.skip_quant": "Thresholding",
+      "stage2.1.residual_add": "Thresholding",
+      "stage2.2.skip_quant": "Thresholding",
+      "stage2.2.residual_add": "Thresholding",
+      "stage2.3.skip_quant": "Thresholding",
+      "stage2.3.residual_add": "Thresholding",
+      "stage2.4.skip_quant": "Thresholding",
+      "stage2.4.residual_add": "Thresholding",
+      "stage2.5.skip_quant": "Thresholding",
+      "stage2.5.residual_add": "Thresholding",
+      "stage2.6.skip_quant": "Thresholding",
+      "stage2.6.residual_add": "Thresholding",
+      "stage2.7.skip_quant": "Thresholding",
+      "stage2.7.residual_add": "Thresholding",
+      "stage3.0.skip_quant": "Thresholding",
+      "stage3.0.residual_add": "Thresholding",
+      "stage3.1.skip_quant": "Thresholding",
+      "stage3.1.residual_add": "Thresholding",
+      "stage3.2.skip_quant": "Thresholding",
+      "stage3.2.residual_add": "Thresholding",
+      "stage3.3.skip_quant": "Thresholding",
+      "stage3.3.residual_add": "Thresholding",
+      "stage3.4.skip_quant": "Thresholding",
+      "stage3.4.residual_add": "Thresholding",
+      "stage3.5.skip_quant": "Thresholding",
+      "stage3.5.residual_add": "Thresholding",
+      "stage3.6.skip_quant": "Thresholding",
+      "stage3.6.residual_add": "Thresholding",
+      "stage3.7.skip_quant": "Thresholding",
+      "stage3.7.residual_add": "Thresholding",
+      "up4.residual_add": "Thresholding",
+      "regular4.0.skip_quant": "Thresholding",
+      "regular4.0.residual_add": "Thresholding",
+      "regular4.1.skip_quant": "Thresholding",
+      "regular4.1.residual_add": "Thresholding",
+      "up5.residual_add": "Thresholding",
+      "regular5.0.skip_quant": "Thresholding",
+      "regular5.0.residual_add": "Thresholding"
+    }
+  }
+}

@@ -33,7 +33,7 @@ def main() -> int:
 
     for arch_name, spec in ARCHS.items():
         dice = load_final_dice(DEFAULT_CSV, spec["config_prefix"], "dice")
-        ilp_summary = REPO_ROOT / "compression" / "hawq" / "artifacts" / f"{spec['ilp_dir_prefix']}_ILP_outputs_perlayer_forcedsp_lut70" / "summary.csv"
+        ilp_summary = REPO_ROOT / "MILP" / "artifacts" / "archive" / f"{spec['ilp_dir_prefix']}_ILP_outputs_perlayer_forcedsp_lut70" / "summary.csv"
         latency = load_ilp_latency(ilp_summary)
         alphas = sorted(set(dice) & set(latency))
         if not alphas:

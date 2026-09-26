@@ -50,7 +50,7 @@ from torch import nn
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent  # hardware/probes/mvau_variant_matrix/<this file>.py -> repo root
 sys.path.insert(0, str(REPO_ROOT / "enet"))
-sys.path.insert(0, str(REPO_ROOT / "compression" / "MILP"))
+sys.path.insert(0, str(REPO_ROOT / "MILP"))
 
 from nnunetv2.nets.QuantENet import QuantRegularBottleneck  # noqa: E402
 from finn_cost_model import LayerGeometry, layer_cost_pe_simd_auto_ram  # noqa: E402

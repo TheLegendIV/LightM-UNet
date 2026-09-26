@@ -1,173 +1,22 @@
-"""Per-LAYER combined bits+folding MILP for FINN dataflow deployment.
-Assigns an independent (weight_bits, act_bits) pair AND an independent
-(PE, SIMD, ram_style) folding choice to every individual real FINN layer
-(Conv2d/ConvTranspose2d/MaxPool2d) of an S12-family ENet, subject to hard
-LUT/BRAM_18K/DSP budgets on the target device (xczu7ev), by solving one
-mixed-integer program with CBC (via pulp).
+"""Per-layer joint bits + folding MILP for FINN dataflow deployment of S12 ENet.
 
-2026-09-17 REFACTOR: this file used to be joint_bits_folding_ilp_perlayer.py,
-a thin per-layer reindexing of an older per-BLOCK MILP (joint_bits_folding_
-ilp.py) and depended on four other modules (folding_ilp.py, ilp_search.py,
-finn_block_costs.py, finn_stage_costs.py) plus a stale default config
-(config_23_1.py) purely for a handful of small, unchanging helpers. All of
-that is now INLINED below (candidate_folds/FORCE_SERIAL, _normalize,
-trace_layer_geometry/INPUT_HW) -- this is the only file needed to run the
-per-layer ILP, on top of finn_cost_model.py (the cost formulae),
-block_utils.py (model structural introspection), layer_topology.py (the
-predecessor-correction fix, see below) and one of the S12 config_*.py files.
-The old per-BLOCK files (folding_ilp.py, joint_bits_folding_ilp.py,
-ilp_search.py, block_sensitivity.py, finn_block_costs.py, finn_stage_costs.py)
-and non-S12 configs have been moved to archive/ -- see that directory's own
-notes for what still depends on them (mainly older, non-per-layer SLURM
-jobs and analysis plots for architectures other than S12).
+Chooses, per layer, (weight_bits, act_bits) and (PE, SIMD, ram_style, variant),
+plus PE/ram_style for every residual-join threshold node, minimizing
+    alpha * mean(normalized HAWQ sensitivity) + (1 - alpha) * mean(normalized cycles)
+under hard LUT / BRAM_18K / DSP / URAM budgets on xczu7ev and an optional
+latency cap. Solved with CBC (pulp).
 
-WHY PER-LAYER, NOT PER-BLOCK: a whole bottleneck block sharing one
-(weight_bits, act_bits) pair wastes accuracy headroom on its least-sensitive
-layer and wastes resource budget on its most-sensitive one. Reindexing the
-bit-choice variable from block to individual layer name removes that
-coupling; the folding variable (z) was already indexed per individual real
-FINN layer (one entry per Conv2d/ConvTranspose2d/MaxPool2d module, from
-trace_layer_geometry below).
-
-SENSITIVITY SOURCE: layer_sensitivity.py's own output (layer_sensitivity_
-<config>.json), keyed by the identical per-conv-layer dotted names
-trace_layer_geometry produces. MaxPool2d layers (3 for S12: initial.pool/
-down1.pool/down2.pool) have no weight tensor and were never HAWQ-measured
--- they get a fixed raw sensitivity of 0.0 for every (w,a) candidate here.
-Because _normalize is a single GLOBAL affine min-max map applied
-identically to every raw value, a constant 0.0 across all of one layer's
-own (w,a) candidates maps to the SAME normalized number for all of them
-too -- it adds a fixed constant to the objective, but can never influence
-WHICH (w,a) is optimal for that layer; MaxPool sites are chosen purely on
-the (1-alpha) latency/resource term, which is the only real information
-there is for them.
-
-PREDECESSOR-CORRECTED ACT SENSITIVITY (the fix): layer_sensitivity.py
-measures a layer's sensitivity from a forward hook on that SAME layer's own
-module -- i.e. its OWN OUTPUT. But finn_cost_model.py's per-layer cost
-formula uses a layer's `act_bits` as its OWN INPUT stream's bit-width (see
-finn_cost_formulae.md's BRAM_swu term, `ceil(C*A/36)`, sizing the line
-buffer that receives the INCOMING feature map). Naively using
-sensitivity[L]["sensitivity_a"] to price z[L,...,a]'s accuracy term
-therefore evaluates the accuracy signal on a DIFFERENT physical tensor than
-the one the cost model's `a` actually represents -- L's own output, not
-L's own input (= whatever fed it, several ops upstream through BN/
-activation/residual-add glue that don't get their own HAWQ measurement at
-all). This file corrects that: layer_topology.compute_predecessor_map
-traces a PLAIN FP32 mirror of the architecture via torch.fx and returns,
-for every layer, the REAL upstream layer(s) whose output actually becomes
-its input. `raw_sensitivity`'s act term is built from
-`max(sensitivity[pred]["sensitivity_a"][a] for pred in real predecessors)`
-instead of `sensitivity[L]["sensitivity_a"][a]` -- MAX (not mean/sum)
-because a residual join can have TWO real predecessors (e.g. a
-downsampling bottleneck's pooled branch and its own reduce/conv/expand
-branch), and a wire is only as safe to compress as its most sensitive real
-contributor. A layer with no real predecessor (the network's very first
-tracked layer -- its input is the raw, unmeasured network input) or whose
-predecessor(s) could not be traced falls back to its OWN sensitivity -- the
-pre-existing, imperfect convention -- since no better signal is available.
-
-VARIABLES:
-    y[layer, w, a]   one-hot per INDIVIDUAL LAYER -- sensitivity attaches here.
-    z[layer, pe, simd, ram_style, variant, w, a]   one binary per (layer,
-                     fold, variant, w, a) combination; cycles/LUT/BRAM/DSP
-                     attach here. `variant` (2026-09-17 addition, additive/
-                     opt-in via --allow-lut-mult, see VARIANT_RTL_DSP_NOACT1/
-                     VARIANT_HLS_LUT_NOACT0/candidate_folds below) is always
-                     VARIANT_RTL_DSP_NOACT1 unless --allow-lut-mult is set,
-                     in which case VARIANT_HLS_LUT_NOACT0 (HLS backend,
-                     LUT-based multiplication instead of DSP, fused
-                     activation instead of a separate Thresholding node) also
-                     becomes eligible per layer -- lets the ILP spend spare
-                     LUT budget instead of DSP budget on specific layers.
-
-LINKING CONSTRAINT (same-layer identity):
-    for layer, (w,a):  sum_{pe,simd,ram_style} z[layer,...,w,a] == y[layer,w,a]
-
-OBJECTIVE -- y and z share the SAME index cardinality (n_layers) by
-construction (y is one-hot per layer here, exactly like z's own fold-marginal
-already is for every layer), both mean-normalized by n_layers:
-    sensitivity_term = (1/n_layers) * sum_{layer,w,a} y[layer,w,a] * sens_norm[layer,w,a]
-    latency_term     = (1/n_layers) * sum_{layer,fold,w,a} z[layer,fold,w,a] * cycles_norm[layer,fold,w,a]
-    minimize alpha * sensitivity_term + (1-alpha) * latency_term
-
-HARD CONSTRAINTS: real `<=` LUT/BRAM_18K/DSP/URAM/max-cycles constraints
-(not a soft penalty) -- --hard-lut-fraction/--hard-bram-fraction/--hard-dsp-
-fraction/--hard-uram-fraction (all default 1.0, always enforced) cap each
-resource at that fraction of XCZU7EV's nominal budget. BRAM_18K includes the
-standalone Thresholding_rtl's own memory (thr_bram18, noActivation=1 regime
--- see finn_cost_model.conv_cost_pe_simd) alongside the SWU line buffer and
-weight memory. DSP was added 2026-09-17: uncapped, the RTL DSP-packing rule
-(ceil(PE/lanes)*SIMD) let an S12-dense alpha=0.25 solve pick a plan needing
-2564 DSP48s on a 1728-DSP device -- it is now always a real constraint, not
-just tracked in diagnostics.
-
-URAM went through a whole rise-and-fall arc over 2026-09-17/18, ending with
-it permanently disabled for every consumer -- kept here for the record.
-Added 2026-09-17: uncapped, an S12-dense alpha=0.25 solve picked wm_uram18=
-205 (all on MVAU's own weight memory), but the real 8-way hardware build for
-that exact solve landed at URAM=2/96 -- real hardware essentially never
-realized the ILP's own "ultra" choice for MVAU weights. Response #1: MVAU's
-`ram_style` hard-fixed to "block" permanently. The freed decision variable
-was then repointed to SWU's own line-buffer memory, then to the standalone
-Thresholding_rtl node's own memory (real data showed THAT was the dominant
-real BRAM consumer, up to 24 blocks/node, while URAM sat mostly idle) -- but
-both of those turned out to have the same problem MVAU did, for different
-reasons: 48/48 real SWU nodes across both real hardware datasets used
-ram_style="distributed" regardless of what was requested (zero real
-block/ultra SWU evidence ever existed), and a REAL Vivado synthesis attempt
-of Thresholding_rtl with ram_style="ultra" FAILS outright -- URAM288 cannot
-be used as ROM, and Thresholding's memory is exactly that: a compile-time-
-constant lookup table, never written at runtime. See finn_milp.py's own
-RAM_STYLES/candidate_folds docstrings for the full blow-by-blow. Net result:
-total_uram18 is now structurally 0 for every layer, always -- URAM was never
-a real option on this device (xczu7ev, UltraScale+) for any consumer this
-cost model has. XCZU7EV["URAM"]/--hard-uram-fraction are kept, not removed,
-purely for provenance and in case a genuinely URAM-eligible consumer is ever
-added later.
-
-The freed `ram_style` decision variable was NOT left permanently inert,
-though: since 2026-09-18 it drives a different, real tradeoff for the same
-Thresholding_rtl node -- block (BRAM) vs. distributed (LUTRAM), not vs.
-ultra. Unlike "ultra", "distributed" IS structurally synthesis-safe here
-(thresholding.sv's own RAM_STYLE localparam genuinely supports it, forceable
-per-node via depth_trigger_bram) -- it's just never been exercised in real
-hardware (0/240 real Thresholding_rtl nodes across both datasets ever showed
-nonzero real_LUTRAM, since every real node used "auto", and Vivado's own
-choice always landed on BRAM for the geometries tested). So BRAM_18K usage
-now includes thr_bram18 only when a layer's Thresholding memory is on
-"block"; when it's on "distributed" instead, that same memory shows up in
-the LUT budget via thr_lut instead, using a DERIVED (not fit) LUTRAM cost --
-see finn_cost_model.py's _THR_RTL_LUTRAM_PER_PE_NUMSTEP docstring. FIFOs are
-a separate resource this cost model does NOT model at all yet (see finn_cost_
-model.py's own top-of-file "Still not covered" list).
-
---pin-bits-file expects a layer_bits_*.json's own {"layer_weight_bits":
-{...}, "layer_act_bits": {...}} shape (one entry per layer name) -- TEST-
-ONLY, pins y to a known assignment and skips using alpha to choose it
-(--alpha is still required but has no effect on the result).
-
-OUTPUT SCHEMA: {"layer_weight_bits": {...}, "layer_act_bits": {...},
-"per_layer": {...}, "_diagnostics": {...}} -- one entry per individual
-layer (88 for the S12 dense family, including the 3 MaxPool2d ones),
-matching layer_sensitivity.py's own naming convention.
-
-SCOPE BOUNDARY (deliberately not solved here): this is coarser than
-nnunetv2.nets.LayerQuantENet's own full per-QUANTIZER-SITE deployment
-schema -- e.g. a single RegularBottleneck's reduce/conv_bn_act/
-residual_add/out_act activations each get their OWN independent bit-width
-in LayerQuantENet, whereas this ILP's z/y (and the underlying FINN folding
-cost model) assign only ONE act_bits per whole conv "layer"'s own dataflow
-stream. expand_layer_bits.py is the separate, later bridge that expands
-this file's output into that full per-site schema for actual deployment.
+AGENTS: read MILP/finn_milp.md before changing this file, and update it with
+any behavior change -- it holds the formulation, the rationale and evidence
+behind every constraint and constant, the known gaps, and the output schema.
+Cost formulas live in finn_cost_model.py (+ finn_cost_model.md).
 
 Usage:
-    python MILP/finn_milp.py \\
-        --config config_12_dense_relu_warmstart150ep \\
-        --sensitivity-file MILP/artifacts/layer_sensitivity_12_dense_relu_warmstart150ep.json \\
-        --candidate-bits 4,6,8 --alpha 0.25 \\
-        --hard-lut-fraction 0.7 --force-dsp \\
-        --out-file MILP/artifacts/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.25.json
+    python MILP/finn_milp.py --config config_12_dense_relu_nearest_conv_upsample \\
+        --sensitivity-file MILP/artifacts/layer_sensitivity_12_dense_relu_nearest_conv_upsample.json \\
+        --candidate-bits 4,6,8 --alpha 1.0 --force-dsp \\
+        --hard-lut-fraction 0.5 --hard-bram-fraction 0.5 --hard-dsp-fraction 0.9 --max-latency-ms 200 \\
+        --out-file MILP/artifacts/<dir>/layer_bits_folding_<...>.json
 """
 from __future__ import annotations
 
@@ -176,111 +25,49 @@ import csv
 import importlib
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import pulp
-import torch  # noqa: F401 -- imported for side-effect parity with the model-tracing setup below
+import torch  # noqa: F401
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from block_utils import enumerate_blocks, path_to_block_map  # noqa: E402
 from finn_cost_model import (  # noqa: E402
     IMPL_STYLE_HLS, IMPL_STYLE_RTL, RAM_STYLE_BLOCK, RAM_STYLE_ULTRA, LayerGeometry, calibrated_bram18k,
-    calibrated_lut, divisors, layer_cost_pe_simd, max_pe, max_simd,
+    calibrated_lut, divisors, layer_cost_pe_simd, max_pe, max_simd, threshold_node_cost,
+    FOLDABLE_STREAM_KINDS, STREAM_NODE_KINDS, stream_node_cost,
 )
-from layer_topology import compute_predecessor_map  # noqa: E402 -- the predecessor-correction fix
+from layer_topology import (  # noqa: E402
+    ACT_SUFFIX, CONCAT_SUFFIX, OUT_ACT_SUFFIX, SKIP_PAD_SUFFIX, SKIP_QUANT_SUFFIX, compute_dataflow_graph,
+    compute_predecessor_map,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PACKAGE_ROOT = REPO_ROOT / "enet"
 sys.path.insert(0, str(PACKAGE_ROOT))
 from nnunetv2.nets.ENet import ENet  # noqa: E402
+from expand_layer_bits import resolve_act_sources  # noqa: E402
+from milp_outputs import write_outputs  # noqa: E402
 
-XCZU7EV = {"LUT": 230_400, "BRAM_18K": 624, "DSP": 1_728, "URAM": 96}  # xczu7ev-ffvc1156-2-e (DSP48E2 count matches hardware/results.csv's DSP_pct column; URAM=96 real URAM288 blocks, 96*288Kib=27Mib, confirmed against the real S12-dense-warmstart hardware build's own URAM=2/96 utilization row)
+# ---- Device, search space, CLI-set globals (see finn_milp.md "Constants") ----
+
+XCZU7EV = {"LUT": 230_400, "BRAM_18K": 624, "DSP": 1_728, "URAM": 96}
 CANDIDATE_BITS = (2, 4, 6, 8, 16)
-INPUT_HW = (512, 512)  # real nnU-Net patch size (see debug.json's configuration_manager.patch_size)
-RAM_STYLES = (RAM_STYLE_BLOCK, "distributed")  # 2026-09-18: a free choice again, FOURTH state in two
-# days, but a different axis than any before -- block vs. URAM ("ultra") for MVAU weight memory, then
-# SWU's line buffer, then Thresholding's own memory, each in turn found to have NO real, working URAM
-# path on this device (xczu7ev, UltraScale+): real hardware never materialized MVAU's "ultra" request,
-# 48/48 real SWU nodes always used "distributed" regardless of what was requested, and a real Vivado
-# synthesis attempt of Thresholding_rtl with ram_style="ultra" FAILS outright (URAM288 cannot be used
-# as ROM -- Thresholding's memory is a compile-time-constant lookup table, never written at runtime,
-# and URAM lacks the INIT-file-based ROM initialization mechanism BRAM primitives have). URAM is now
-# permanently 0 for every layer and every consumer -- XCZU7EV["URAM"]/--hard-uram-fraction are kept,
-# not removed, purely for provenance and in case a genuinely URAM-eligible consumer is ever added.
-#
-# This axis now drives block-vs-DISTRIBUTED for Thresholding_rtl's own memory instead (thr_ram_style)
-# -- a real LUT-vs-BRAM tradeoff, not a LUT-vs-URAM one. Unlike "ultra", "distributed" IS structurally
-# real here: thresholding.sv's own RAM_STYLE localparam has a genuine "auto"/"distributed" branch
-# (confirmed via direct .sv source read), forceable per-node via depth_trigger_bram (see thresholding.sv
-# comment inline where DEPTH_TRIGGER_BRAM resolves to "distributed" when the node's own depth never
-# reaches that trigger). It's just never been exercised in any real build -- every real node so far used
-# "auto" (i.e. Vivado's own choice), which always landed on BRAM for the geometries tested (0/240 real
-# Thresholding_rtl nodes across both datasets ever showed nonzero real_LUTRAM). The LUTRAM cost
-# (_THR_RTL_LUTRAM_PER_PE_NUMSTEP in finn_cost_model.py) is DERIVED the same way the now-dead URAM
-# constant was -- scaled from the real, validated BRAM18 constant by the real capacity ratio to FINN's
-# own LUTRAM primitive shape (finn.util.basic.mem_primitives_versal: "LUTRAM": (1, 64), a real Xilinx
-# RAM64X1S shape) -- so it correctly predicts distributed is a BAD deal at this project's typical
-# numSteps (e.g. ~840 LUTs vs ~3 BRAM18 blocks at numSteps=255), matching why Vivado's own "auto" never
-# picks it; it only wins at small numSteps, where BRAM's own fixed per-block overhead dominates -- a
-# real per-layer resource-pressure tradeoff an ILP can evaluate, unlike a fixed local heuristic.
-FORCE_SERIAL = False  # set True by --force-serial: restricts every layer to (PE, SIMD) = (1, 1)
+INPUT_HW = (512, 512)
+RAM_STYLES = (RAM_STYLE_BLOCK, "distributed")  # the standalone Thresholding node's memory -- the only free RAM choice
+FORCE_SERIAL = False
 
-# Curated per-layer resource variants (2026-09-17 addition, additive/opt-in
-# via --allow-lut-mult -- see module docstring's RESOURCE VARIANTS section).
-# "rtl_dsp_noact1" is today's ONLY variant, unchanged in every existing
-# invocation. "hls_lut_noact0" is the new "spend spare LUT instead of DSP"
-# option: HLS backend, LUT-based multiplication (force_dsp=False), fused
-# activation (no separate Thresholding node). Deliberately NOT a full
-# {hls,rtl}x{dsp,lut}x{0,1} cross product -- rtl_dsp_noact0 is never a legal
-# FINN config (MVAU_rtl structurally requires noActivation=1), and
-# hls_dsp_noact1 is dominated by rtl_dsp_noact1 wherever RTL is legal (same
-# DSP pricing, without RTL's own derating/packing efficiency) so it's left
-# out of the curated set for now -- see the plan this was built from,
-# C:\Users\win32\.claude\plans\the-current-ilp-inherited-lynx.md.
 VARIANT_RTL_DSP_NOACT1 = "rtl_dsp_noact1"
 VARIANT_HLS_LUT_NOACT0 = "hls_lut_noact0"
 
-# VARIANT_HLS_DSP_NOACT0 -- PLACEHOLDER ONLY, not yet wired into
-# candidate_folds/any CLI flag (deliberately absent from every variants list
-# below, so its mere existence here has ZERO effect on any run). Real FINN
-# config: HLS backend, DSP-based multiplication (force_dsp=True), fused
-# activation (no separate Thresholding node) -- i.e. "keep DSP, but still
-# shed the standalone Thresholding node's cost." _variant_cost_kwargs
-# already handles it correctly (same 3 already-implemented cost-model knobs,
-# no new formula needed), but do NOT add it to any layer's eligible variant
-# list without ALSO hard-restricting that layer's own candidate folds to
-# PE<=SIMD first -- confirmed via hardware/datasets/mvau_lut_calibration_
-# dataset.csv (89 real MVAU_hls nodes, ALL resType=dsp/force_dsp=True,
-# fused-threshold outputDataType -- i.e. exactly this variant) and hardware/
-# mvau_lut_correlation_report.txt: this repo's own structural LUT formula
-# (mult_luts+addertree_luts+acc_luts, the same family thr_luts_fused/
-# comp_luts_fused extends) gets R^2=0.009 against that real data -- "beyond
-# useless" -- while PE alone correlates at 0.69 and SIMD is NEGATIVELY
-# correlated (-0.41); PE>SIMD rows are 36% of that dataset but 70.7% of its
-# real_LUT (see --require-simd-ge-pe's own docstring, same finding). This is
-# NOT evidence against VARIANT_HLS_LUT_NOACT0 above (that dataset is 100%
-# resType=dsp, zero variance, so it says nothing about resType=lut behavior)
-# -- it is specifically about the DSP-multiplier + fused-threshold
-# combination this placeholder represents. When this variant is actually
-# enabled, bake PE<=SIMD into ITS OWN eligibility in candidate_folds (not a
-# bolt-on --require-simd-ge-pe the user has to remember to pass).
-VARIANT_HLS_DSP_NOACT0 = "hls_dsp_noact0"
+VARIANT_HLS_DSP_NOACT0 = "hls_dsp_noact0"  # placeholder, never eligible -- see finn_milp.md before enabling
 
-ALLOW_LUT_MULT = False  # set True by --allow-lut-mult: makes VARIANT_HLS_LUT_NOACT0 eligible alongside the RTL default
+ALLOW_LUT_MULT = False
 
 
 def _variant_cost_kwargs(variant: str, force_dsp: bool) -> dict:
-    """Maps a curated `variant` to the (impl_style, force_dsp, no_activation)
-    triple conv_cost_pe_simd (via layer_cost_pe_simd's **kw) expects.
-    "rtl_dsp_noact1" honors the CLI-level --force-dsp flag exactly as every
-    existing caller already does (in practice always DSP regardless of the
-    flag, since impl_style=rtl alone already forces it -- see finn_cost_
-    model.py's conv_cost_pe_simd docstring). "hls_lut_noact0" is DSP-free by
-    construction -- --force-dsp has no effect on it, deliberately, since
-    forcing DSP on the free-LUT variant would defeat its whole purpose.
-    "hls_dsp_noact0" is a PLACEHOLDER (see its own module-level comment
-    above) -- handled here for completeness/testability, but never reachable
-    from any live run since it's never added to a layer's variants list."""
+    """variant -> (impl_style, force_dsp, no_activation) for layer_cost_pe_simd."""
     if variant == VARIANT_RTL_DSP_NOACT1:
         return {"impl_style": IMPL_STYLE_RTL, "force_dsp": force_dsp, "no_activation": True}
     if variant == VARIANT_HLS_LUT_NOACT0:
@@ -291,45 +78,24 @@ def _variant_cost_kwargs(variant: str, force_dsp: bool) -> dict:
 
 
 def _calibration_force_dsp(variant_kwargs: dict) -> bool:
-    """The `force_dsp` calibrated_lut/calibrated_bram18k should be told for
-    a given variant's own cost -- NOT simply variant_kwargs["force_dsp"]
-    (the raw CLI flag value), because that flag is not the same question as
-    "was this node's multiplication actually forced onto DSP". Mirrors
-    conv_cost_pe_simd's own `use_dsp = force_dsp or impl_style == IMPL_STYLE_
-    RTL` exactly: rtl_dsp_noact1 ALWAYS gets _RTL_MVU_LUT_DERATE applied
-    inside conv_cost_pe_simd regardless of --force-dsp (impl_style=RTL alone
-    forces it), so calibrated_lut must ALWAYS bypass its own avg_bits table
-    for this variant too -- not just when --force-dsp happens to be set.
-    Every run so far has passed --force-dsp, which made variant_kwargs
-    ["force_dsp"] already True for rtl_dsp_noact1 and masked this: a run
-    WITHOUT --force-dsp would otherwise double/mis-derate RTL's already-
-    node-derated LUT through the wrong (unrelated, pre-noActivation-choice)
-    avg_bits table, same failure mode _HLS_MVU_LUT_MULT_DERATE's own
-    lut_mult bypass exists to avoid."""
+    """RTL is always DSP, whatever --force-dsp says -- calibrated_lut must know."""
     return variant_kwargs["force_dsp"] or variant_kwargs["impl_style"] == IMPL_STYLE_RTL
 
 
 def load_config(config_module: str) -> None:
-    """Injects the named config_*.py's constants into this module's
-    globals (IN_CHANNELS, CHANNELS, BOTTLENECKS_PER_STAGE, ... -- everything
-    ENet(...)'s call in main() below reads). Always called from main();
-    there is no built-in default config any more (see module docstring's
-    2026-09-17 REFACTOR note -- the old config_23_1.py default is archived)."""
-    cfg = importlib.import_module(config_module)
+    """Inject a MILP/configs/config_*.py's constants into this module's globals."""
+    cfg = importlib.import_module(f"configs.{config_module}")
     globals().update({k: v for k, v in vars(cfg).items() if not k.startswith("_")})
 
+
+# ---- Model tracing ----
 
 def _pair(v) -> tuple[int, int]:
     return (v, v) if isinstance(v, int) else tuple(v)
 
 
 def trace_layer_geometry(model: torch.nn.Module, input_hw: tuple[int, int], in_channels: int) -> tuple[list[LayerGeometry], list[str]]:
-    """Forward-hook trace of every real Conv2d/ConvTranspose2d/MaxPool2d in
-    `model`, tagged with its owning bottleneck BLOCK name (via
-    block_utils.path_to_block_map's exact full-path lookup) -- purely for
-    traceability/reporting on each per_layer output entry's own "stage"
-    field, not load-bearing for bit-width or folding linking (both are
-    indexed by individual layer name, not block, throughout this file)."""
+    """Shape of every Conv2d/ConvTranspose2d/MaxPool2d, tagged with its block."""
     blocks = enumerate_blocks(model)
     path_to_block = path_to_block_map(blocks)
     geometries: list[LayerGeometry] = []
@@ -337,17 +103,18 @@ def trace_layer_geometry(model: torch.nn.Module, input_hw: tuple[int, int], in_c
     def make_hook(name: str, block_name: str, op_type: str):
         def hook(module, inputs, output):
             x = inputs[0]
-            if isinstance(output, tuple):  # MaxPool2d(return_indices=True) -> (values, indices)
+            if isinstance(output, tuple):
                 output = output[0]
             kh, kw = _pair(module.kernel_size)
             sh, sw = _pair(module.stride)
             dh, dw = _pair(getattr(module, "dilation", 1))
+            ph, pw = _pair(module.padding) if op_type == "Conv2d" else (0, 0)
             geometries.append(LayerGeometry(
                 op_type=op_type, name=name, stage=block_name,
                 cin=x.shape[1], hin=x.shape[2], win=x.shape[3],
                 cout=output.shape[1], hout=output.shape[2], wout=output.shape[3],
                 kh=kh, kw=kw, sh=sh, sw=sw, dh=dh, dw=dw,
-                groups=getattr(module, "groups", 1),
+                groups=getattr(module, "groups", 1), ph=ph, pw=pw,
             ))
         return hook
 
@@ -371,48 +138,168 @@ def trace_layer_geometry(model: torch.nn.Module, input_hw: tuple[int, int], in_c
     return geometries, list(blocks.keys())
 
 
+# ---- Extra hardware nodes with no conv/pool module (see finn_milp.md "Dataflow graph") ----
+
+RESIDUAL_QUANT_BITS = 8  # QuantEltwiseAdd's input/output quant: Int8 regardless of bit_width= (Brevitas kwarg routing)
+THRESHOLD_KINDS = ("skip_quant", "residual_add", "out_act", "input_quant", "act")
+FIXED_BIT_KINDS = ("skip_quant", "residual_add")
+PAD_MVAU_BITS = (2, 8)  # (weight, act) for the downsampling zero-pad MVAU -- PROVISIONAL, see finn_milp.md
+EXTRA_OP_LABEL = {
+    **{kind: "Thresholding" for kind in THRESHOLD_KINDS},
+    "add": "AddStreams", "dup": "DuplicateStreams", "concat": "StreamingConcat",
+    "upsample": "UpsampleNearestNeighbour", "pad_mvau": "MVAU",
+}
+
+
+@dataclass(frozen=True)
+class ExtraNode:
+    """A FINN node with no conv/pool module: residual-join/Initial thresholds,
+    stream nodes, the downsampling pad-MVAU. fixed_bits None and non-empty
+    bit_sources -> bits = max over bit_sources (the deployed rule)."""
+    geom: LayerGeometry
+    kind: str
+    fixed_bits: int | None
+    bit_sources: tuple[str, ...]
+
+
+def trace_activation_shapes(model: torch.nn.Module, input_hw: tuple[int, int], in_channels: int) -> dict[str, tuple[int, int, int]]:
+    """(C, H, W) of every `*.out_act` / `*.act` module output."""
+    shapes: dict[str, tuple[int, int, int]] = {}
+    handles = [
+        module.register_forward_hook(lambda _m, _i, out, name=name: shapes.__setitem__(name, tuple(out.shape[1:])))
+        for name, module in model.named_modules() if name.endswith((OUT_ACT_SUFFIX, ACT_SUFFIX))
+    ]
+    model.eval()
+    with torch.no_grad():
+        model(torch.zeros(1, in_channels, *input_hw))
+    for h in handles:
+        h.remove()
+    return shapes
+
+
+def insert_skip_pads(
+    dataflow_map: dict[str, list[str]], kinds: dict[str, str], geometries: list[LayerGeometry],
+    act_shapes: dict[str, tuple[int, int, int]],
+) -> None:
+    """Downsampling skip: pool -> zero-pad concat, which FINN lowers to a 1x1 MVAU
+    (cin -> cout) ahead of the skip requant. Inserted in place when channels grow."""
+    geom = {g.name: g for g in geometries}
+    for name, kind in list(kinds.items()):
+        if kind != "skip_quant":
+            continue
+        block = name[: -len(SKIP_QUANT_SUFFIX)]
+        pools = [p for p in dataflow_map[name] if p in geom and geom[p].op_type == "MaxPool2d"]
+        if len(pools) != 1 or geom[pools[0]].cout == act_shapes[block + OUT_ACT_SUFFIX][0]:
+            continue
+        pad = block + SKIP_PAD_SUFFIX
+        dataflow_map[pad] = pools
+        kinds[pad] = "pad_mvau"
+        dataflow_map[name] = [pad]
+
+
+def _node_shape(
+    name: str, dataflow_map: dict[str, list[str]], kinds: dict[str, str], geom: dict[str, LayerGeometry],
+    act_shapes: dict[str, tuple[int, int, int]], input_shape: tuple[int, int, int],
+) -> tuple[int, int, int]:
+    """(C, H, W) of a node's output stream."""
+    if name in geom:
+        g = geom[name]
+        return g.cout, g.hout, g.wout
+    kind = kinds[name]
+    if kind == "input_quant":
+        return input_shape
+    if kind == "dup":
+        return _node_shape(dataflow_map[name][0], dataflow_map, kinds, geom, act_shapes, input_shape)
+    if kind in ("act", "concat"):
+        return act_shapes[name[: -len(CONCAT_SUFFIX)] + ACT_SUFFIX if kind == "concat" else name]
+    if kind == "upsample":
+        for consumer, preds in dataflow_map.items():
+            if name in preds and consumer in geom:
+                g = geom[consumer]
+                return g.cin, g.hin, g.win
+    block = name.rsplit(".", 1)[0]
+    return act_shapes[block + OUT_ACT_SUFFIX]
+
+
+def build_extra_nodes(
+    dataflow_map: dict[str, list[str]], kinds: dict[str, str], act_shapes: dict[str, tuple[int, int, int]],
+    geometries: list[LayerGeometry], predecessor_map: dict[str, list[str]], input_shape: tuple[int, int, int],
+) -> list[ExtraNode]:
+    """One ExtraNode per virtual node. Threshold bit sources are exactly what
+    expand_layer_bits.py deploys; the pad-MVAU is a 1x1 conv geometry."""
+    geom = {g.name: g for g in geometries}
+    weight_names = {g.name: 0 for g in geometries if g.op_type != "MaxPool2d"}
+    act_names = {g.name: 0 for g in geometries}
+    def stage_of(n: str) -> str:
+        return geom[n].stage if n in geom else n.rsplit(".", 1)[0]
+
+    nodes = []
+    for name, kind in kinds.items():
+        channels, height, width = _node_shape(name, dataflow_map, kinds, geom, act_shapes, input_shape)
+        if kind == "dup":  # belongs to the block consuming the fork -- pruning that block removes it
+            consumer_stages = {stage_of(c) for c, preds in dataflow_map.items() if name in preds}
+            stage = consumer_stages.pop() if len(consumer_stages) == 1 else stage_of(dataflow_map[name][0])
+        else:
+            stage = name.rsplit(".", 1)[0]
+        if kind == "pad_mvau":
+            pool = geom[dataflow_map[name][0]]
+            node_geom = LayerGeometry(
+                op_type="Conv2d", name=name, stage=stage, cin=pool.cout, hin=pool.hout, win=pool.wout,
+                cout=channels, hout=pool.hout, wout=pool.wout, kh=1, kw=1, sh=1, sw=1,
+            )
+        else:
+            node_geom = LayerGeometry(
+                op_type=EXTRA_OP_LABEL[kind], name=name, stage=stage,
+                cin=channels, hin=height, win=width, cout=channels, hout=height, wout=width, kh=1, kw=1, sh=1, sw=1,
+            )
+        if kind in FIXED_BIT_KINDS:
+            nodes.append(ExtraNode(node_geom, kind, RESIDUAL_QUANT_BITS, ()))
+        elif kind in THRESHOLD_KINDS:
+            sources = tuple(s for s in resolve_act_sources(name, weight_names, act_names, predecessor_map) if s in act_names)
+            if not sources:
+                raise ValueError(f"{name}: no act-bit source resolvable (expand_layer_bits.resolve_act_sources).")
+            nodes.append(ExtraNode(node_geom, kind, None, sources))
+        else:
+            nodes.append(ExtraNode(node_geom, kind, None, ()))
+    return nodes
+
+
+def extra_node_options(node: ExtraNode, force_dsp: bool) -> list[tuple[tuple, dict]]:
+    """[(z key, cost dict)] for every legal (fold, bits) of an extra node -- the
+    folding each FINN v0.10.1 op actually supports (see finn_milp.md)."""
+    g, kind = node.geom, node.kind
+    options = []
+    if kind in THRESHOLD_KINDS:
+        bit_options = (node.fixed_bits,) if node.fixed_bits is not None else CANDIDATE_BITS
+        for pe in ([1] if FORCE_SERIAL else divisors(g.cout)):
+            for ram_style in RAM_STYLES:
+                for bits in bit_options:
+                    key = (g.name, pe, 1, ram_style, VARIANT_RTL_DSP_NOACT1, 0, bits)
+                    options.append((key, threshold_node_cost(g, bits, pe, ram_style=ram_style)))
+    elif kind in FOLDABLE_STREAM_KINDS:
+        for pe in ([1] if FORCE_SERIAL else divisors(g.cout)):
+            options.append(((g.name, pe, 1, "none", "stream", 0, 0), stream_node_cost(kind, g, pe)))
+    elif kind in STREAM_NODE_KINDS:
+        options.append(((g.name, 1, 1, "none", "stream", 0, 0), stream_node_cost(kind, g)))
+    elif kind == "pad_mvau":
+        w, a = PAD_MVAU_BITS
+        rtl_kwargs = _variant_cost_kwargs(VARIANT_RTL_DSP_NOACT1, force_dsp)
+        for pe in ([1] if FORCE_SERIAL else divisors(max_pe(g))):
+            for simd in ([1] if FORCE_SERIAL else divisors(max_simd(g))):
+                cost = layer_cost_pe_simd(
+                    g, w, a, pe, simd, RAM_STYLE_BLOCK, swu_ram_style="distributed",
+                    **{**rtl_kwargs, "no_activation": False},
+                )
+                options.append(((g.name, pe, simd, "block", VARIANT_RTL_DSP_NOACT1, w, a), cost))
+    else:
+        raise ValueError(f"unknown extra node kind {kind!r}")
+    return options
+
+
+# ---- Search space and sensitivity helpers ----
+
 def candidate_folds(layer: LayerGeometry) -> list[tuple[int, int, str, str]]:
-    """Every valid (PE, SIMD, ram_style, variant) 4-tuple for this layer --
-    MaxPool2d has neither PE/SIMD/ram_style/variant (no MVAU, no weights,
-    no activation to fuse), so it gets the single sentinel
-    (1, 1, "block", VARIANT_RTL_DSP_NOACT1), which layer_cost_pe_simd
-    ignores for that op_type anyway (its cost/cycles don't depend on any of
-    those at all -- see maxpool_cost).
-
-    ram_style (2026-09-18): drives block-vs-distributed for the standalone
-    Thresholding_rtl node's OWN memory only (thr_ram_style) -- a real, free
-    per-layer LUT-vs-BRAM tradeoff. MVAU's own weight memory and SWU's own
-    line-buffer memory both have NO free choice left at all (hard-fixed to
-    block and distributed respectively) -- see RAM_STYLES' own module-level
-    comment for the full history and evidence on all three consumers, URAM's
-    now-permanent retirement everywhere, and why "distributed" is real for
-    Thresholding specifically (structurally synthesis-safe, just never yet
-    exercised in real hardware) unlike "ultra" (a confirmed real synthesis
-    failure). See finn_cost_model.py's _thresholding_rtl_cost and
-    _THR_RTL_LUTRAM_PER_PE_NUMSTEP docstrings for the cost formula itself.
-    FIFOs remain a separate, NOT-YET-modeled resource in this cost model
-    (see finn_cost_model.py's own top-of-file "Still not covered" list) --
-    their own real ram_style choice is not part of this ILP at all yet.
-
-    FORCE_SERIAL (set via --force-serial) restricts every layer to (1, 1).
-
-    variant (2026-09-17 addition, additive/opt-in): VARIANT_RTL_DSP_NOACT1 is
-    always eligible for every Conv2d/ConvTranspose2d layer (today's only
-    variant, unchanged) -- INCLUDING depthwise ones: conv_cost_pe_simd
-    itself already silently overrides impl_style to HLS for depthwise
-    layers regardless of what's requested (finn_cost_model.py:686-687,
-    VVAU_rtl needs a Versal DSP58), so requesting VARIANT_RTL_DSP_NOACT1
-    for a depthwise layer already resolves to exactly today's real
-    behavior (HLS + force_dsp + noActivation=1) -- excluding it here would
-    silently change depthwise layers' candidate set instead of preserving
-    it. VARIANT_HLS_LUT_NOACT0 is eligible for every layer too, but only
-    ADDED to the candidate set when ALLOW_LUT_MULT is set
-    (--allow-lut-mult) -- with it unset (the default), every layer's
-    candidate set is IDENTICAL to before this addition, just each tuple now
-    carries an extra, constant VARIANT_RTL_DSP_NOACT1 tag. Note: RTL's
-    further bit-width eligibility (weights signed, 2<=w<=8, a<=8) can't be
-    checked here -- candidate_folds doesn't see (w,a) at all -- it's
-    filtered in solve_joint_perlayer's own (w,a) inner loop instead."""
+    """Every (PE, SIMD, thr_ram_style, variant). MaxPool2d: one fixed sentinel fold."""
     if layer.op_type == "MaxPool2d":
         return [(1, 1, "block", VARIANT_RTL_DSP_NOACT1)]
     variants = [VARIANT_RTL_DSP_NOACT1]
@@ -429,14 +316,7 @@ def candidate_folds(layer: LayerGeometry) -> list[tuple[int, int, str, str]]:
 
 
 def _normalize(values: dict[tuple, float]) -> dict[tuple, float]:
-    """Plain min-max scale to [0,1] -- puts sensitivity and cycles, which
-    differ by several orders of magnitude, on a comparable footing so
-    alpha is a meaningful single knob rather than requiring the caller to
-    know each quantity's raw scale. (A trimmed copy of the old ilp_search.py
-    _normalize: that version also supported a robust-percentile clip and a
-    log-space option for the per-BLOCK/per-STAGE search's own outlier
-    problems -- neither is exercised by this file, which only ever calls
-    _normalize with its defaults, so only the plain min-max path is kept.)"""
+    """Min-max scale to [0, 1] so sensitivity and cycles are comparable under alpha."""
     vals = values.values()
     lo, hi = min(vals), max(vals)
     span = hi - lo
@@ -446,14 +326,8 @@ def _normalize(values: dict[tuple, float]) -> dict[tuple, float]:
 
 
 def _act_sensitivity_sources(name: str, predecessor_map: dict[str, list[str]] | None) -> list[str]:
-    """Which layer name(s) sensitivity[...]["sensitivity_a"] should be read
-    from for `name`'s OWN act_bits decision -- see module docstring's
-    PREDECESSOR-CORRECTED ACT SENSITIVITY section. Falls back to `name`
-    itself (the pre-existing, imperfect convention) when: predecessor_map
-    is None (tracing failed for the whole model), `name` has no entry in it
-    (inside an opaque leaf_module_types boundary), or the entry is an empty
-    list (name is the network's own first tracked layer, no real
-    predecessor exists at all)."""
+    """A layer's act_bits is its INPUT stream, so read act sensitivity from its
+    real predecessor(s); fall back to itself when there is none."""
     if predecessor_map is None:
         return [name]
     preds = predecessor_map.get(name)
@@ -470,44 +344,17 @@ def solve_joint_perlayer(
     require_simd_ge_pe: bool = False,
     hard_dsp_fraction: float = 1.0,
     hard_uram_fraction: float = 1.0,
-    max_join_imbalance_ratio: float | None = None,
+    optimize_downstream_rate: float | None = None,
+    max_node_cycles: float | None = None,
+    extra_nodes: list[ExtraNode] = (),
+    dataflow_map: dict[str, list[str]] | None = None,
 ) -> dict:
-    """The per-layer combined MILP -- see module docstring for the full
-    formulation.
-
-    predecessor_map: from layer_topology.compute_predecessor_map (or None to
-    skip the correction entirely, falling back to self-indexed act
-    sensitivity for every layer) -- see module docstring's PREDECESSOR-
-    CORRECTED ACT SENSITIVITY section for what this fixes and
-    _act_sensitivity_sources for the exact fallback rules.
-
-    max_join_imbalance_ratio: hard per-join balance constraint (None =
-    disabled, prior behavior exactly). A "join" is any layer with 2+ real
-    predecessors in `predecessor_map` -- two (or more) PARALLEL branches
-    that execute CONCURRENTLY in real FINN dataflow hardware, reconverging
-    at a residual add/concat. Nothing else in this ILP is aware layers can
-    be siblings this way -- each layer's own (PE,SIMD,bits) is chosen with
-    zero visibility into its join partner, and a large skew is exactly what
-    forces a real, UNMODELED FIFO in actual hardware (see finn_cost_model.py's
-    own "still not covered: FIFOs" note and MILP/scan_fork_join_mismatch.py's
-    `predicted_depth`). For every real join (deduplicated by its own
-    predecessor set), every ordered pair of branches (i, j) gets
-    `cycles[i] <= max_join_imbalance_ratio * cycles[j]`. MaxPool2d branches
-    are EXEMPT (candidate_folds gives them a single fixed (1,1) fold -- no
-    real folding choice to trade off, so balancing a conv branch against one
-    always forces over-folding regardless of ratio; only pairs where BOTH
-    branches have a real folding decision get balanced). Does NOT add or
-    price any FIFO resource itself -- it only prevents the solver from
-    choosing a badly skewed pair in the first place."""
+    """Build and solve the MILP. Formulation: finn_milp.md "Formulation"."""
     candidate_pairs = tuple((w, a) for w in CANDIDATE_BITS for a in CANDIDATE_BITS)
     layer_names = tuple(g.name for g in geometries)
     n_layers = len(geometries)
 
-    # -- y[layer,w,a]: sensitivity attaches here. Layers absent from
-    # `sensitivity` (the 3 MaxPool2d sites for S12 -- no weight, never HAWQ-
-    # measured) get a constant raw sensitivity of 0.0 for every (w,a) --
-    # see module docstring for why this can bias the objective's constant
-    # offset but never which (w,a) is chosen for that specific layer.
+    # ---- Variables: y[layer, w, a] -- one-hot bits per layer; sensitivity attaches here ----
     y = {
         (name, w, a): pulp.LpVariable(f"y_{name}_{w}_{a}", cat=pulp.LpBinary)
         for name in layer_names for w, a in candidate_pairs
@@ -517,24 +364,12 @@ def solve_joint_perlayer(
         act_sources = [s for s in _act_sensitivity_sources(name, predecessor_map) if s in sensitivity]
         for w, a in candidate_pairs:
             sens_w = sensitivity[name]["sensitivity_w"][str(w)] if name in sensitivity else 0.0
-            # MAX across real predecessor(s), not self -- see module docstring.
-            # Falls back to 0.0 only if NEITHER name nor any of its real
-            # predecessors have a sensitivity entry at all (e.g. name is a
-            # MaxPool2d whose own predecessor is ALSO a MaxPool2d, both
-            # unmeasured -- rare, but a real possibility worth a clean
-            # fallback rather than a KeyError).
             sens_a = max((sensitivity[s]["sensitivity_a"][str(a)] for s in act_sources), default=0.0)
             raw_sensitivity[(name, w, a)] = sens_w + sens_a
     sens_norm = _normalize(raw_sensitivity)
 
-    # -- z[layer,pe,simd,ram_style,variant,w,a]: cycles/LUT/BRAM/DSP attach
-    # here, at the EXACT (fold,variant,bits) combination. `variant` is the
-    # 2026-09-17 addition (see VARIANT_RTL_DSP_NOACT1/VARIANT_HLS_LUT_NOACT0
-    # above) -- additive/opt-in, see candidate_folds' own docstring: with
-    # ALLOW_LUT_MULT unset (the default) every layer's folds list carries
-    # only VARIANT_RTL_DSP_NOACT1, so this loop and everything downstream is
-    # BYTE-IDENTICAL to before this addition (force_dsp resolves to the same
-    # `force_dsp` argument via _variant_cost_kwargs).
+    # ---- Variables: z[layer, pe, simd, thr_ram_style, variant, w, a] -- one-hot fold x bits;
+    # cycles / LUT / BRAM / DSP / URAM attach here ----
     z: dict[tuple, pulp.LpVariable] = {}
     layer_costs: dict[tuple, dict] = {}
     raw_cycles: dict[tuple, float] = {}
@@ -543,41 +378,17 @@ def solve_joint_perlayer(
     raw_dsp: dict[tuple, float] = {}
     raw_uram: dict[tuple, float] = {}
     layer_folds: dict[str, list[tuple[int, int, str, str]]] = {}
-    # Per-layer RAW (un-normalized) cycle expression -- sum over that
-    # layer's own chosen (fold,variant,bits) z-variable weighted by its own
-    # raw_cycles -- built alongside z/raw_cycles below and reused by the
-    # join-balance constraints (max_join_imbalance_ratio) since it needs
-    # each layer's cycles as one linear pulp expression, the exact same
-    # quantity latency_term/max_cycles already sum across every layer.
     layer_cycle_terms: dict[str, list[tuple[pulp.LpVariable, float]]] = {g.name: [] for g in geometries}
 
     for layer in geometries:
-        folds = candidate_folds(layer)  # respects module-level FORCE_SERIAL/ALLOW_LUT_MULT if set
+        folds = candidate_folds(layer)
         if require_simd_ge_pe:
-            # Hard structural fix for the PE>>SIMD real-LUT blowup documented in
-            # hardware/mvau_lut_correlation_report.txt: 36% of the 89-row real
-            # calibration dataset has PE>SIMD, yet those rows account for 70.7%
-            # of total real_LUT. Rules out that whole region up front instead of
-            # relying on a fitted imbalance_luts penalty to price it correctly
-            # (that term has since been REMOVED from finn_cost_model.py -- see
-            # its own module docstring's 2026-09-17 refresh). PE=1 is always
-            # paired with SIMD=max_simd(layer)>=1 by candidate_folds, so this
-            # never empties a layer's fold set. (f[1]=simd, f[0]=pe -- unaffected
-            # by the variant element now at f[3].)
             folds = [f for f in folds if f[1] >= f[0]]
         layer_folds[layer.name] = folds
         for pe, simd, ram_style, variant in folds:
             variant_kwargs = _variant_cost_kwargs(variant, force_dsp)
             for w, a in candidate_pairs:
-                # MVAU's own weight memory is hard-fixed to block (real hardware never
-                # materialized "ultra"). SWU's own line-buffer memory is hard-fixed to
-                # distributed (48/48 real nodes, regardless of what was requested). Neither
-                # has a real free choice left -- see RAM_STYLES' own comment above for the
-                # full story/evidence on both. The `ram_style` loop variable now drives
-                # block-vs-distributed for the standalone Thresholding_rtl node's own
-                # memory (thr_ram_style) -- a real, free per-layer LUT-vs-BRAM tradeoff
-                # (see RAM_STYLES' own comment for why "distributed" is real here but
-                # "ultra" never was).
+                # MVAU weights hard-fixed to block, SWU buffer to distributed (what real hardware does).
                 cost = layer_cost_pe_simd(
                     layer, w, a, pe, simd, RAM_STYLE_BLOCK,
                     swu_ram_style="distributed", thr_ram_style=ram_style, **variant_kwargs,
@@ -589,22 +400,36 @@ def solve_joint_perlayer(
                     cost["total_lut"], w, a, force_dsp=_calibration_force_dsp(variant_kwargs),
                     lut_mult=(variant == VARIANT_HLS_LUT_NOACT0),
                 )
-                # thr_bram18: the standalone Thresholding_rtl's own memory (noActivation=1 regime, see
-                # finn_cost_model.conv_cost_pe_simd) -- absent for MaxPool2d, and 0 for VARIANT_HLS_LUT_NOACT0
-                # (no separate node -- see that function's no_activation=False docstring).
                 raw_bram[key] = calibrated_bram18k(
                     cost["swu_bram18"] + cost["wm_bram18"] + cost.get("thr_bram18", 0), w, a,
                     force_dsp=variant_kwargs["force_dsp"],
                 )
                 raw_dsp[key] = cost["total_dsp"]
-                # wm_uram18 is always 0 (MVAU ram_style hard-fixed to block).
-                # swu_uram18 is always 0 too (SWU ram_style hard-fixed to distributed,
-                # 2026-09-18 -- see the cost call's own comment above for why).
-                # thr_uram18 comes from the `ram_style` loop variable (Thresholding's
-                # own real, free ILP choice) -- see candidate_folds' docstring.
                 raw_uram[key] = cost.get("wm_uram18", 0) + cost.get("swu_uram18", 0) + cost.get("thr_uram18", 0)
                 z[key] = pulp.LpVariable(f"z_{layer.name}_{pe}_{simd}_{ram_style}_{variant}_{w}_{a}", cat=pulp.LpBinary)
                 layer_cycle_terms[layer.name].append((z[key], raw_cycles[key]))
+
+    # ---- Variables: z for extra nodes -- key (name, pe, simd, ram_style, variant, w, bits) ----
+    extra_keys: dict[str, list[tuple]] = {}
+    rtl_kwargs = _variant_cost_kwargs(VARIANT_RTL_DSP_NOACT1, force_dsp)
+    for node in extra_nodes:
+        name = node.geom.name
+        layer_cycle_terms[name] = []
+        extra_keys[name] = []
+        for key, cost in extra_node_options(node, force_dsp):
+            _, pe, simd, ram_style, variant, w, bits = key
+            calib_w = w or bits  # thresholds: (bits, bits) as for every standalone threshold
+            layer_costs[key] = cost
+            raw_cycles[key] = cost["cycles"]
+            raw_lut[key] = calibrated_lut(cost["total_lut"], calib_w, bits, force_dsp=_calibration_force_dsp(rtl_kwargs))
+            raw_bram[key] = calibrated_bram18k(
+                cost["swu_bram18"] + cost["wm_bram18"] + cost["thr_bram18"], calib_w, bits, force_dsp=rtl_kwargs["force_dsp"],
+            )
+            raw_dsp[key] = cost["total_dsp"]
+            raw_uram[key] = cost["wm_uram18"] + cost.get("swu_uram18", 0) + cost["thr_uram18"]
+            z[key] = pulp.LpVariable(f"z_{name}_{pe}_{simd}_{ram_style}_{variant}_{w}_{bits}", cat=pulp.LpBinary)
+            layer_cycle_terms[name].append((z[key], raw_cycles[key]))
+            extra_keys[name].append(key)
 
     cycles_norm = _normalize(raw_cycles)
     layer_cycles_expr: dict[str, pulp.LpAffineExpression] = {
@@ -613,6 +438,9 @@ def solve_joint_perlayer(
 
     prob = pulp.LpProblem("FINN_MILP_perlayer", pulp.LpMinimize)
 
+    # ---- Constraints ----
+
+    # One (w, a) per layer; optional pin.
     for name in layer_names:
         prob += pulp.lpSum(y[(name, w, a)] for w, a in candidate_pairs) == 1, f"one_pair_per_layer_{name}"
 
@@ -626,7 +454,7 @@ def solve_joint_perlayer(
                 raise ValueError(f"pinned_bits[{name!r}]=({w_fixed},{a_fixed}) not in candidate_pairs {candidate_pairs}")
             prob += y[(name, w_fixed, a_fixed)] == 1, f"pin_{name}"
 
-    # Linking constraint -- a same-layer identity.
+    # Link: exactly one fold at the chosen (w, a).
     for layer in geometries:
         folds = layer_folds[layer.name]
         for w, a in candidate_pairs:
@@ -635,64 +463,109 @@ def solve_joint_perlayer(
                 == y[(layer.name, w, a)]
             ), f"link_{layer.name}_{w}_{a}"
 
-    # Join-balance constraints (max_join_imbalance_ratio). Dedupe joins by
-    # their own predecessor SET first: predecessor_map is keyed by CONSUMER
-    # layer, so multiple consumers of the same join (e.g. both of down1's
-    # own two downstream layers) independently map to the SAME branch pair
-    # -- that is one real join, not two. MaxPool2d branches are EXEMPT (see
-    # this function's own docstring) -- only pairs where BOTH sides have a
-    # real folding decision get balanced.
-    maxpool_names = {g.name for g in geometries if g.op_type == "MaxPool2d"}
+    # Extra nodes: one option each; threshold bits with sources = max(source bits), exactly:
+    # [bits_V >= b] = OR_s [bits_s >= b]  ->  >= each source, <= their sum.
+    n_extra_constraints = 0
+    for node in extra_nodes:
+        name = node.geom.name
+        prob += pulp.lpSum(z[k] for k in extra_keys[name]) == 1, f"one_option_{name}"
+        n_extra_constraints += 1
+        if not node.bit_sources:
+            continue
+        for level in sorted(CANDIDATE_BITS)[1:]:
+            node_at_least = pulp.lpSum(z[k] for k in extra_keys[name] if k[-1] >= level)
+            sources_at_least = [
+                pulp.lpSum(y[(s, w, a)] for w, a in candidate_pairs if a >= level) for s in node.bit_sources
+            ]
+            for i, source_expr in enumerate(sources_at_least):
+                prob += node_at_least >= source_expr, f"thr_bits_ge_{name}_{level}_{i}"
+            prob += node_at_least <= pulp.lpSum(sources_at_least), f"thr_bits_le_{name}_{level}"
+            n_extra_constraints += len(sources_at_least) + 1
+
+    # Rate coherence (--optimize-downstream-rate), on the dataflow graph.
+    topology = dataflow_map if dataflow_map is not None else predecessor_map
+    fixed_cycle_names = {name for name, terms in layer_cycle_terms.items() if len({c for _, c in terms}) == 1}
     n_join_constraints = 0
-    if max_join_imbalance_ratio is not None:
-        if predecessor_map is None:
-            raise ValueError(
-                "max_join_imbalance_ratio requires a predecessor_map (pass predecessor_map=... -- "
-                "see layer_topology.compute_predecessor_map) -- without it there is no join information "
-                "to balance."
-            )
+    n_chain_rate_constraints = 0
+    if optimize_downstream_rate is not None:
+        if topology is None:
+            raise ValueError("optimize_downstream_rate needs a predecessor_map or dataflow_map.")
+
+        # Join balance: sibling branches within ratio, both ways (fixed-cycle nodes -- pools,
+        # concat, upsample -- exempt: nothing to fold on that side).
         unique_joins = {
-            tuple(sorted(preds)) for preds in predecessor_map.values()
+            tuple(sorted(preds)) for preds in topology.values()
             if len(preds) >= 2 and all(p in layer_cycles_expr for p in preds)
         }
         for branches in unique_joins:
-            foldable_branches = [b for b in branches if b not in maxpool_names]
+            foldable_branches = [b for b in branches if b not in fixed_cycle_names]
             for branch_i in foldable_branches:
                 for branch_j in foldable_branches:
                     if branch_i == branch_j:
                         continue
                     prob += (
-                        layer_cycles_expr[branch_i] <= max_join_imbalance_ratio * layer_cycles_expr[branch_j]
+                        layer_cycles_expr[branch_i] <= optimize_downstream_rate * layer_cycles_expr[branch_j]
                     ), f"join_balance_{branch_i}_vs_{branch_j}"
                     n_join_constraints += 1
 
-    # Hard resource constraints.
+        # Chain: rate[L] <= ratio * rate[D] for every descendant D, in O(edges) via
+        # min_downstream_rate bounded ABOVE (so it can't be inflated). rate = cycles / outputs.
+        node_shapes = [*geometries, *(node.geom for node in extra_nodes)]
+        rate_expr = {
+            g.name: layer_cycles_expr[g.name] * (1.0 / (g.hout * g.wout * g.cout))
+            for g in node_shapes if g.name in layer_cycles_expr
+        }
+        successors: dict[str, list[str]] = {name: [] for name in rate_expr}
+        for consumer, preds in topology.items():
+            if consumer not in rate_expr:
+                continue
+            for pred in preds:
+                if pred in successors:
+                    successors[pred].append(consumer)
+        min_downstream_rate = {
+            name: pulp.LpVariable(f"min_downstream_rate_{name}", lowBound=0)
+            for name, children in successors.items() if children
+        }
+        for name, children in successors.items():
+            if not children:
+                continue
+            for child in children:
+                prob += min_downstream_rate[name] <= rate_expr[child], f"min_rate_{name}_le_{child}"
+                n_chain_rate_constraints += 1
+                if child in min_downstream_rate:
+                    prob += min_downstream_rate[name] <= min_downstream_rate[child], f"min_rate_{name}_le_min_{child}"
+                    n_chain_rate_constraints += 1
+            prob += (
+                rate_expr[name] <= optimize_downstream_rate * min_downstream_rate[name]
+            ), f"downstream_rate_{name}"
+            n_chain_rate_constraints += 1
+
+    # Hard resource budgets and latency cap (sum of cycles).
     prob += pulp.lpSum(z[k] * raw_lut[k] for k in z) <= hard_lut_fraction * XCZU7EV["LUT"], "hard_lut_budget"
     prob += pulp.lpSum(z[k] * raw_bram[k] for k in z) <= hard_bram_fraction * XCZU7EV["BRAM_18K"], "hard_bram_budget"
-    # DSP: real hard constraint too (2026-09-17). Uncapped, the RTL packing
-    # rule (ceil(PE/lanes)*SIMD) let the S12 dense alpha=0.25 solve pick a
-    # plan needing 2564 DSP48s on a 1728-DSP device.
     prob += pulp.lpSum(z[k] * raw_dsp[k] for k in z) <= hard_dsp_fraction * XCZU7EV["DSP"], "hard_dsp_budget"
-    # URAM: real hard constraint too (2026-09-17). Previously UNCAPPED --
-    # the S12 dense alpha=0.25 solve picked wm_uram18=205 total (an
-    # unconstrained "ultra" ram_style choice with zero resource pressure
-    # pushing back), while the real 8-way hardware build for that exact
-    # solve landed at URAM=2/96 -- either the ILP's own ram_style choice was
-    # never applied to the real per-node build (a bridge gap, see thr_pe's
-    # own analogous note), or an unconstrained URAM axis alone can already
-    # produce plans far past the real 96-block budget. Capping it here fixes
-    # the latter regardless of the former. XCZU7EV["URAM"]=96 real URAM288
-    # blocks (96*288Kib=27Mib) on xczu7ev-ffvc1156-2-e.
     prob += pulp.lpSum(z[k] * raw_uram[k] for k in z) <= hard_uram_fraction * XCZU7EV["URAM"], "hard_uram_budget"
     if max_cycles is not None:
         prob += pulp.lpSum(z[k] * raw_cycles[k] for k in z) <= max_cycles, "max_cycles_budget"
 
+    # Throughput (--target-fps): a pipeline delivers one frame per slowest-node frame time,
+    # so EVERY node must fit in max_node_cycles. Nodes that can't even fully folded are reported.
+    min_node_cycles = {name: min(c for _, c in terms) for name, terms in layer_cycle_terms.items()}
+    throughput_floor_violations = {}
+    if max_node_cycles is not None:
+        throughput_floor_violations = {n: c for n, c in min_node_cycles.items() if c > max_node_cycles}
+        for name, expr in layer_cycles_expr.items():
+            prob += expr <= max_node_cycles, f"throughput_{name}"
+
+    # ---- Objective: alpha * mean(sens_norm over layers) + (1 - alpha) * mean(cycles_norm over hardware nodes) ----
     sensitivity_term = (1.0 / n_layers) * pulp.lpSum(
         y[(name, w, a)] * sens_norm[(name, w, a)] for name in layer_names for w, a in candidate_pairs
     )
-    latency_term = (1.0 / n_layers) * pulp.lpSum(z[k] * cycles_norm[k] for k in z)
+    n_hardware_nodes = n_layers + len(extra_nodes)
+    latency_term = (1.0 / n_hardware_nodes) * pulp.lpSum(z[k] * cycles_norm[k] for k in z)
     prob += alpha * sensitivity_term + (1 - alpha) * latency_term
 
+    # ---- Solve and extract ----
     status = prob.solve(pulp.PULP_CBC_CMD(msg=0, timeLimit=time_limit, gapRel=gap_rel))
     status_name = pulp.LpStatus[status]
     if status_name not in ("Optimal", "Infeasible"):
@@ -701,21 +574,25 @@ def solve_joint_perlayer(
     n_binary_vars = len(y) + len(z)
     n_constraints = (
         n_layers + sum(len(candidate_pairs) for _ in geometries) + 4
-        + (1 if max_cycles is not None else 0) + n_join_constraints
+        + (1 if max_cycles is not None else 0) + n_join_constraints + n_chain_rate_constraints
+        + n_extra_constraints
     )
 
     if status_name != "Optimal":
         return {
             "status": status_name,
             "alpha": alpha,
-            "layer_weight_bits": {}, "layer_act_bits": {}, "per_layer": {},
+            "layer_weight_bits": {}, "layer_act_bits": {}, "per_layer": {}, "extra_nodes": {},
             "_diagnostics": {
                 "alpha": alpha, "candidate_bits": list(CANDIDATE_BITS), "n_layers": n_layers,
+                "n_extra_nodes": len(extra_nodes),
                 "n_binary_vars": n_binary_vars, "n_constraints": n_constraints,
                 "hard_lut_fraction": hard_lut_fraction, "hard_bram_fraction": hard_bram_fraction,
                 "hard_dsp_fraction": hard_dsp_fraction, "hard_uram_fraction": hard_uram_fraction,
-                "max_cycles": max_cycles,
-                "max_join_imbalance_ratio": max_join_imbalance_ratio, "n_join_constraints": n_join_constraints,
+                "max_cycles": max_cycles, "max_node_cycles": max_node_cycles,
+                "throughput_floor_violations": throughput_floor_violations,
+                "optimize_downstream_rate": optimize_downstream_rate, "n_join_constraints": n_join_constraints,
+                "n_chain_rate_constraints": n_chain_rate_constraints,
                 "solver_time_limit_s": time_limit, "solver_gap_rel": gap_rel, "force_serial": FORCE_SERIAL,
                 "force_dsp": force_dsp, "require_simd_ge_pe": require_simd_ge_pe, "allow_lut_mult": ALLOW_LUT_MULT,
                 "note": f"Solver status {status_name!r} -- no joint per-layer (bits, folding) assignment "
@@ -723,7 +600,9 @@ def solve_joint_perlayer(
                         f"hard_bram_fraction={hard_bram_fraction}, hard_dsp_fraction={hard_dsp_fraction}, "
                         f"hard_uram_fraction={hard_uram_fraction})"
                         + (f" and max_cycles={max_cycles:.0f}" if max_cycles is not None else "")
-                        + (f" and max_join_imbalance_ratio={max_join_imbalance_ratio}" if max_join_imbalance_ratio is not None else "")
+                        + (f" and max_node_cycles={max_node_cycles:.0f} (nodes that cannot reach it even fully "
+                           f"folded: {throughput_floor_violations or 'none'})" if max_node_cycles is not None else "")
+                        + (f" and optimize_downstream_rate={optimize_downstream_rate}" if optimize_downstream_rate is not None else "")
                         + " at all.",
             },
         }
@@ -749,49 +628,58 @@ def solve_joint_perlayer(
         cost = layer_costs[(layer.name, pe, simd, ram_style, variant, w, a)]
         variant_kwargs = _variant_cost_kwargs(variant, force_dsp)
         per_layer[layer.name] = {
-            # thr_ram_style (renamed from "ram_style" 2026-09-18): this loop
-            # variable/z-key element only ever drives the standalone
-            # Thresholding_rtl node's own memory now (see candidate_folds'
-            # docstring) -- MVAU's own weight memory is hard-fixed to block,
-            # SWU's own line-buffer memory is hard-fixed to distributed.
-            # "ram_style" was a stale, misleadingly-generic export name.
             "stage": layer.stage, "pe": pe, "simd": simd, "thr_ram_style": ram_style, "variant": variant,
-            # force_dsp/mvau_noAct: the same two axes packed into `variant`
-            # (impl_style is already its own field, from **cost below), split
-            # out explicitly for readability -- `variant` itself is KEPT (not
-            # replaced) since it's still used internally below (the per-layer
-            # force_dsp lookup for calibrated_lut/calibrated_bram18k re-derives
-            # this same variant_kwargs from `variant` again, see the comment
-            # a few lines down) and as the z-key/candidate_folds identity.
             "force_dsp": variant_kwargs["force_dsp"], "mvau_noAct": variant_kwargs["no_activation"],
             "weight_bits": w, "act_bits": a, **cost,
         }
 
-    # Per-layer force_dsp for the post-hoc calibration below MUST follow each
-    # layer's OWN chosen variant, not the single global `force_dsp` CLI flag
-    # -- with ALLOW_LUT_MULT unset every v["variant"] is VARIANT_RTL_DSP_NOACT1,
-    # for which _variant_cost_kwargs(...)["force_dsp"] == force_dsp exactly,
-    # so this is byte-identical to before for every existing invocation.
-    total_lut = sum(
-        calibrated_lut(
+    for v in per_layer.values():
+        v["lut_calibrated"] = calibrated_lut(
             v["total_lut"], v["weight_bits"], v["act_bits"],
             force_dsp=_calibration_force_dsp(_variant_cost_kwargs(v["variant"], force_dsp)),
             lut_mult=(v["variant"] == VARIANT_HLS_LUT_NOACT0),
         )
-        for v in per_layer.values()
-    )
-    total_bram = sum(
-        calibrated_bram18k(
+        v["bram18k_calibrated"] = calibrated_bram18k(
             v["swu_bram18"] + v["wm_bram18"] + v.get("thr_bram18", 0), v["weight_bits"], v["act_bits"],
             force_dsp=_variant_cost_kwargs(v["variant"], force_dsp)["force_dsp"],
         )
-        for v in per_layer.values()
-    )
+    total_lut = sum(v["lut_calibrated"] for v in per_layer.values())
+    total_bram = sum(v["bram18k_calibrated"] for v in per_layer.values())
     total_uram = sum(
         v.get("wm_uram18", 0) + v.get("swu_uram18", 0) + v.get("thr_uram18", 0) for v in per_layer.values()
     )
     total_dsp = sum(v["total_dsp"] for v in per_layer.values())
     total_cycles = sum(v["cycles"] for v in per_layer.values())
+
+    extra_out: dict[str, dict] = {}
+    for node in extra_nodes:
+        name = node.geom.name
+        chosen = next(k for k in extra_keys[name] if pulp.value(z[k]) > 0.5)
+        _, pe, simd, ram_style, _, w, bits = chosen
+        bits_rule = "fixed" if node.fixed_bits is not None else ("max_of_sources" if node.bit_sources else "n/a")
+        extra_out[name] = {
+            "kind": node.kind, "stage": node.geom.stage, "pe": pe, "simd": simd, "ram_style": ram_style,
+            "weight_bits": w or None, "act_bits": bits or None, "bits_rule": bits_rule,
+            "bit_sources": list(node.bit_sources), "channels": node.geom.cout,
+            "cycles": raw_cycles[chosen], "lut_calibrated": raw_lut[chosen],
+            "bram18k_calibrated": raw_bram[chosen], "dsp": raw_dsp[chosen], "uram18": raw_uram[chosen],
+        }
+    extra_by_kind: dict[str, dict] = {}
+    for v in extra_out.values():
+        agg = extra_by_kind.setdefault(v["kind"], {"n": 0, "lut_calibrated": 0.0, "bram18k_calibrated": 0.0, "dsp": 0, "cycles": 0})
+        agg["n"] += 1
+        for field in ("lut_calibrated", "bram18k_calibrated", "dsp", "cycles"):
+            agg[field] += v[field]
+    extra_lut = sum(v["lut_calibrated"] for v in extra_out.values())
+    extra_bram = sum(v["bram18k_calibrated"] for v in extra_out.values())
+    extra_cycles = sum(v["cycles"] for v in extra_out.values())
+    total_lut += extra_lut
+    total_bram += extra_bram
+    total_uram += sum(v["uram18"] for v in extra_out.values())
+    total_dsp += sum(v["dsp"] for v in extra_out.values())
+    total_cycles += extra_cycles
+    node_cycles = {**{n: v["cycles"] for n, v in per_layer.items()}, **{n: v["cycles"] for n, v in extra_out.items()}}
+    bottleneck_node = max(node_cycles, key=node_cycles.get)
 
     return {
         "status": status_name,
@@ -799,9 +687,12 @@ def solve_joint_perlayer(
         "layer_weight_bits": layer_weight_bits,
         "layer_act_bits": layer_act_bits,
         "per_layer": per_layer,
+        "extra_nodes": extra_out,
         "_diagnostics": {
             "alpha": alpha, "candidate_bits": list(CANDIDATE_BITS), "n_layers": n_layers,
             "n_binary_vars": n_binary_vars, "n_constraints": n_constraints,
+            "n_extra_nodes": len(extra_nodes), "extra_lut_calibrated": extra_lut,
+            "extra_bram18k_calibrated": extra_bram, "extra_cycles": extra_cycles, "extra_by_kind": extra_by_kind,
             "total_lut_calibrated": total_lut, "xczu7ev_lut_budget": XCZU7EV["LUT"],
             "lut_pct_of_budget": 100 * total_lut / XCZU7EV["LUT"],
             "total_bram18k_calibrated": total_bram, "xczu7ev_bram18k_budget": XCZU7EV["BRAM_18K"],
@@ -812,8 +703,10 @@ def solve_joint_perlayer(
             "dsp_pct_of_budget": 100 * total_dsp / XCZU7EV["DSP"],
             "hard_lut_fraction": hard_lut_fraction, "hard_bram_fraction": hard_bram_fraction,
             "hard_dsp_fraction": hard_dsp_fraction, "hard_uram_fraction": hard_uram_fraction,
-            "max_cycles": max_cycles,
-            "max_join_imbalance_ratio": max_join_imbalance_ratio, "n_join_constraints": n_join_constraints,
+            "max_cycles": max_cycles, "max_node_cycles": max_node_cycles,
+            "bottleneck_node": bottleneck_node, "bottleneck_cycles": node_cycles[bottleneck_node],
+            "optimize_downstream_rate": optimize_downstream_rate, "n_join_constraints": n_join_constraints,
+            "n_chain_rate_constraints": n_chain_rate_constraints,
             "solver_time_limit_s": time_limit, "solver_gap_rel": gap_rel, "force_serial": FORCE_SERIAL,
             "force_dsp": force_dsp, "require_simd_ge_pe": require_simd_ge_pe, "allow_lut_mult": ALLOW_LUT_MULT,
             "note": "Joint per-LAYER MILP: y[layer,w,a] (sensitivity) linked to z[layer,pe,simd,ram_style,w,a] "
@@ -830,35 +723,20 @@ def solve_joint_perlayer(
     }
 
 
+# ---- Sweep summary (summary.csv + run_args.json, one row per alpha) ----
+
 _SUMMARY_FIELDS = [
     "alpha", "status", "avg_weight_bits", "avg_act_bits",
     "lut_pct_of_budget", "bram_pct_of_budget", "dsp_pct_of_budget",
-    "total_dsp", "total_cycles", "clock_mhz", "latency_ms",
-    "n_binary_vars", "n_layers",
+    "total_dsp", "total_cycles", "clock_mhz", "latency_ms", "target_fps", "fps", "bottleneck_node",
+    "n_binary_vars", "n_layers", "n_zero_sensitivity_layers", "zero_sensitivity_layers",
 ]
 
 
-def _update_sweep_summary(out_dir: Path, args: argparse.Namespace, result: dict) -> None:
-    """Maintains summary.csv and run_args.json in out_dir across an ALPHA
-    SWEEP -- a 5-alpha sweep normally run as 5 separate `finn_milp.py`
-    invocations (see e.g. compression/slurm/sensitivity_ilp_*.job's own
-    per-alpha loop), each one upserting its own row/shared-args here, so
-    the sweep ends up with one coherent, always-current summary with no
-    separate aggregation script or manual step needed.
-
-    summary.csv: one row per alpha, replaced (not duplicated) on rerun --
-    keyed by the `alpha` column, matching upsert_row's own config_name-keyed
-    replace semantics in compression/collect_results.py. An existing row
-    from an OLDER schema version (e.g. missing dsp_pct_of_budget, before
-    this repo's forced-DSP-regime hard DSP cap existed) is dropped rather
-    than partially merged -- summary.csv is a derived artifact, safe to
-    regenerate wrong-then-right one alpha at a time as each is rerun.
-
-    run_args.json: shared_args should be IDENTICAL across every alpha of one
-    real sweep -- if an existing run_args.json's shared_args disagree with
-    this invocation's, that's flagged loudly (a real inconsistency, e.g.
-    someone changed --hard-lut-fraction between alphas) rather than
-    silently overwritten without comment."""
+def _update_sweep_summary(
+    out_dir: Path, args: argparse.Namespace, result: dict, zero_sensitivity_layers: list[str],
+) -> None:
+    """Upsert this alpha's row; warn if shared args differ from earlier alphas."""
     diag = result["_diagnostics"]
     weight_bits, act_bits = result.get("layer_weight_bits", {}), result.get("layer_act_bits", {})
     avg_weight_bits = sum(weight_bits.values()) / len(weight_bits) if weight_bits else float("nan")
@@ -872,7 +750,11 @@ def _update_sweep_summary(out_dir: Path, args: argparse.Namespace, result: dict)
         "lut_pct_of_budget": diag.get("lut_pct_of_budget"), "bram_pct_of_budget": diag.get("bram_pct_of_budget"),
         "dsp_pct_of_budget": diag.get("dsp_pct_of_budget"), "total_dsp": diag.get("total_dsp"),
         "total_cycles": total_cycles, "clock_mhz": args.clock_mhz, "latency_ms": latency_ms,
+        "target_fps": args.target_fps, "bottleneck_node": diag.get("bottleneck_node"),
+        "fps": args.clock_mhz * 1e6 / diag["bottleneck_cycles"] if diag.get("bottleneck_cycles") else float("nan"),
         "n_binary_vars": diag.get("n_binary_vars"), "n_layers": diag.get("n_layers"),
+        "n_zero_sensitivity_layers": len(zero_sensitivity_layers),
+        "zero_sensitivity_layers": ";".join(zero_sensitivity_layers),
     }
 
     summary_path = out_dir / "summary.csv"
@@ -894,8 +776,8 @@ def _update_sweep_summary(out_dir: Path, args: argparse.Namespace, result: dict)
         "candidate-bits": ",".join(str(b) for b in CANDIDATE_BITS),
         "hard-lut-fraction": args.hard_lut_fraction, "hard-bram-fraction": args.hard_bram_fraction,
         "hard-dsp-fraction": args.hard_dsp_fraction, "hard-uram-fraction": args.hard_uram_fraction, "force-dsp": args.force_dsp,
-        "max-latency-ms": args.max_latency_ms, "clock-mhz": args.clock_mhz,
-        "max-join-imbalance-ratio": args.max_join_imbalance_ratio,
+        "max-latency-ms": args.max_latency_ms, "clock-mhz": args.clock_mhz, "target-fps": args.target_fps,
+        "optimize-downstream-rate": args.optimize_downstream_rate,
         "force-serial": FORCE_SERIAL, "require-simd-ge-pe": args.require_simd_ge_pe,
         "allow-lut-mult": ALLOW_LUT_MULT,
         "time-limit": args.time_limit, "gap-rel": args.gap_rel,
@@ -928,89 +810,39 @@ def _update_sweep_summary(out_dir: Path, args: argparse.Namespace, result: dict)
     print(f"Updated {run_args_path}.")
 
 
+# ---- CLI (flag rationale: finn_milp.md "CLI flags") ----
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--config", required=True,
-                         help="Which MILP/config_*.py to load -- e.g. config_12_dense_relu_warmstart150ep.")
+    parser.add_argument("--config", required=True, help="MILP/configs/config_*.py module to load.")
     parser.add_argument("--sensitivity-file", type=Path, required=True,
-                         help="layer_sensitivity_*.json (layer_sensitivity.py output) -- one entry per "
-                              "individual Conv2d/ConvTranspose2d layer name.")
+                         help="layer_sensitivity_*.json from layer_sensitivity.py.")
     parser.add_argument("--candidate-bits", type=str, default=None,
-                         help="Comma-separated override for the module-level CANDIDATE_BITS (e.g. '4,8', "
-                              "this session's established 'min4' convention) -- keeps candidate_pairs small, "
-                              "which matters here since z is indexed over (layer,fold,w,a): every extra (w,a) "
-                              "pair multiplies the folding candidate count for EVERY layer.")
+                         help="Comma-separated bit-width candidates (e.g. '4,6,8'); overrides CANDIDATE_BITS.")
     parser.add_argument("--alpha", type=float, required=True,
-                         help="Objective dial: alpha*mean(normalized sensitivity) + (1-alpha)*mean(normalized "
-                              "cycles). alpha=1.0 is pure accuracy-proxy; alpha=0.0 is pure latency. See module "
-                              "docstring for MaxPool2d layers' fixed zero-sensitivity handling.")
-    parser.add_argument("--hard-lut-fraction", type=float, default=1.0,
-                         help="Hard `<= FRACTION * XCZU7EV['LUT']` constraint (calibrated). Always enforced.")
-    parser.add_argument("--hard-bram-fraction", type=float, default=1.0, help="Same as --hard-lut-fraction, for BRAM_18K.")
-    parser.add_argument("--hard-dsp-fraction", type=float, default=1.0,
-                         help="Same as --hard-lut-fraction, for DSP48E2 slices (XCZU7EV['DSP']=1728). Always enforced.")
+                         help="1.0 = sensitivity only, 0.0 = cycles only.")
+    parser.add_argument("--hard-lut-fraction", type=float, default=1.0, help="Hard cap as a fraction of device LUT.")
+    parser.add_argument("--hard-bram-fraction", type=float, default=1.0, help="Hard cap as a fraction of device BRAM_18K.")
+    parser.add_argument("--hard-dsp-fraction", type=float, default=1.0, help="Hard cap as a fraction of device DSP.")
     parser.add_argument("--hard-uram-fraction", type=float, default=1.0,
-                         help="Same as --hard-lut-fraction, for URAM288 blocks (XCZU7EV['URAM']=96, 27Mib). "
-                              "Currently INERT: total_uram18 is structurally 0 for every layer, always, since "
-                              "2026-09-18 -- MVAU weight memory, SWU line buffer, and Thresholding accumulator "
-                              "ROM (the three consumers this axis has driven, one at a time) each turned out to "
-                              "have no real, working URAM path on this device (xczu7ev, UltraScale+): real "
-                              "hardware never materialized MVAU's own 'ultra' request, 48/48 real SWU nodes used "
-                              "'distributed' regardless of what was requested, and a real Vivado synthesis "
-                              "attempt of Thresholding_rtl with ram_style='ultra' FAILS outright (URAM288 cannot "
-                              "be used as ROM). See RAM_STYLES' own comment for the full history. Kept, not "
-                              "removed, for provenance and in case a genuinely URAM-eligible consumer is added.")
+                         help="Hard cap as a fraction of device URAM (inert: URAM is always 0).")
     parser.add_argument("--force-dsp", action="store_true",
-                         help="Cost every (layer, fold, bits) combination under the FORCED-DSP regime's own "
-                              "flat empirical LUT/BRAM factor (finn_cost_model.py's _FORCED_DSP_LUT_FACTOR/"
-                              "_FORCED_DSP_BRAM_FACTOR, currently identity -- see that file's own module "
-                              "docstring) instead of the default auto-resType avg_bits-interpolated table.")
+                         help="Use the forced-DSP calibration factors instead of the auto-resType table.")
+    parser.add_argument("--target-fps", type=float, default=None,
+                         help="Hard throughput target: every node's cycles per frame <= clock-mhz*1e6/target-fps.")
     parser.add_argument("--max-latency-ms", type=float, default=None,
-                         help="Hard cap on total cycles, expressed as a latency budget at --clock-mhz (default "
-                              "None = no cap). Converted to max_cycles = max_latency_ms/1000 * clock_mhz*1e6 and "
-                              "added as a real <= constraint.")
-    parser.add_argument("--clock-mhz", type=float, default=100.0,
-                         help="Clock frequency --max-latency-ms is expressed against (default 100.0).")
-    parser.add_argument("--max-join-imbalance-ratio", type=float, default=None,
-                         help="Hard per-join balance constraint (default None = no constraint, prior behavior "
-                              "exactly). A 'join' is any point with 2+ real predecessors (layer_topology."
-                              "compute_predecessor_map) -- i.e. branches that run CONCURRENTLY in real FINN "
-                              "dataflow hardware. Without this, each branch's own (PE,SIMD,bits) is chosen with "
-                              "zero awareness of its join partner, so the solver can leave a large cycle-count "
-                              "skew behind -- exactly what forces a real, UNMODELED FIFO in actual hardware "
-                              "(the faster branch has to buffer while waiting on the slower one; see "
-                              "MILP/scan_fork_join_mismatch.py's own `predicted_depth`, which estimates this "
-                              "post-hoc). Setting this to e.g. 1.5 requires every join's own branches to stay "
-                              "within a 1.5x cycle-count ratio of each other. MaxPool2d branches are EXEMPT "
-                              "(fixed (1,1) fold, no real folding choice to trade off -- only conv-vs-conv join "
-                              "pairs get balanced). Does not price the FIFO itself -- only prevents picking a "
-                              "badly skewed pair.")
-    parser.add_argument("--force-serial", action="store_true",
-                         help="Force FOLDING_SERIAL (PE=SIMD=1) on every layer before solving.")
+                         help="Hard cap on the sum of cycles, as ms at --clock-mhz.")
+    parser.add_argument("--clock-mhz", type=float, default=100.0, help="Clock for --max-latency-ms (default 100).")
+    parser.add_argument("--optimize-downstream-rate", type=float, default=None,
+                         help="Ratio for join-balance + downstream-rate coherence constraints (off by default).")
+    parser.add_argument("--force-serial", action="store_true", help="Restrict every node to PE=SIMD=1.")
     parser.add_argument("--allow-lut-mult", action="store_true",
-                         help="Additive/opt-in (2026-09-17): let the ILP choose, PER LAYER, a new "
-                              "'hls_lut_noact0' resource variant (HLS backend, LUT-based multiplication instead "
-                              "of DSP, fused activation instead of a separate Thresholding node) alongside "
-                              "today's default 'rtl_dsp_noact1' variant, to spend spare LUT budget instead of "
-                              "DSP budget on specific layers. Default False preserves prior behavior EXACTLY "
-                              "(every layer stays 'rtl_dsp_noact1' only). The new variant's fused-threshold LUT "
-                              "term is a direct FINN-source transcription, not independently calibrated against "
-                              "real hardware yet -- see finn_cost_model.py's conv_cost_pe_simd docstring.")
-    parser.add_argument("--require-simd-ge-pe", action="store_true",
-                         help="Drop every (PE,SIMD) candidate fold with PE>SIMD before solving -- a hard, "
-                              "zero-fitted-parameter fix for the real-LUT blowup documented in "
-                              "hardware/mvau_lut_correlation_report.txt (PE>SIMD rows are 36%% of the real "
-                              "calibration dataset but 70.7%% of its total real_LUT). Default False preserves "
-                              "prior behavior exactly.")
-    parser.add_argument("--time-limit", type=int, default=1800,
-                         help="CBC wall-clock cap in seconds (default 1800 = 30min).")
-    parser.add_argument("--gap-rel", type=float, default=0.02,
-                         help="CBC relative optimality gap to accept (default 0.02 = accept anything CBC can "
-                              "prove is within 2%% of the true optimum).")
+                         help="Also allow the hls_lut_noact0 variant (LUT multipliers, fused activation).")
+    parser.add_argument("--require-simd-ge-pe", action="store_true", help="Drop conv folds with PE > SIMD.")
+    parser.add_argument("--time-limit", type=int, default=1800, help="CBC time limit in seconds.")
+    parser.add_argument("--gap-rel", type=float, default=0.02, help="CBC relative optimality gap.")
     parser.add_argument("--pin-bits-file", type=Path, default=None,
-                         help="TEST-ONLY: a layer_bits_*.json ({'layer_weight_bits': {...}, 'layer_act_bits': "
-                              "{...}}) to pin y to instead of letting alpha decide. --alpha is still required "
-                              "but has no effect on the result when set.")
+                         help="TEST-ONLY: pin y to a layer_bits_*.json (alpha then has no effect).")
     parser.add_argument("--out-file", type=Path, required=True)
     args = parser.parse_args()
 
@@ -1034,6 +866,21 @@ def main() -> None:
 
     with open(args.sensitivity_file) as f:
         sensitivity = json.load(f)
+    if "_zero_sensitivity_layers" in sensitivity:
+        zero_sensitivity_layers = sensitivity.pop("_zero_sensitivity_layers")
+    else:
+        zero_sensitivity_layers = [
+            name for name, entry in sensitivity.items()
+            if abs(entry.get("trace_w", 1.0)) < 1e-9 and abs(entry.get("trace_a", 1.0)) < 1e-9
+        ]
+    if zero_sensitivity_layers:
+        print(f"WARNING: {len(zero_sensitivity_layers)} layer(s) in {args.sensitivity_file} have ZERO measured "
+              f"sensitivity (see layer_sensitivity.py's own detector) -- their bit-width choice cannot affect "
+              f"accuracy at all, which usually means the layer is dead (e.g. a collapsed BatchNorm permanently "
+              f"off its own ReLU). The ILP will still cheaply-quantize them (correctly, given zero sensitivity), "
+              f"but a dead layer's resulting near-zero calibrated quantizer scale can silently underflow to "
+              f"exactly 0.0 under fp16 deployment -- consider pruning them instead (ENet.py's "
+              f"apply_block_pruning / ENET_PRUNED_BLOCKS): {zero_sensitivity_layers}")
 
     model = ENet(
         in_channels=IN_CHANNELS, out_channels=OUT_CHANNELS, channels=CHANNELS,
@@ -1048,10 +895,8 @@ def main() -> None:
     geometries, _block_names = trace_layer_geometry(model, INPUT_HW, IN_CHANNELS)
     layer_names = tuple(g.name for g in geometries)
 
-    # Predecessor-corrected act sensitivity -- see module docstring's
-    # PREDECESSOR-CORRECTED ACT SENSITIVITY section. Never fatal: any
-    # tracing failure falls back to self-indexed act sensitivity for EVERY
-    # layer, rather than crashing the whole run.
+    # Conv-only predecessor map: drives act-sensitivity sources and deployed bits.
+    # Non-fatal -- falls back to self-indexed act sensitivity.
     try:
         predecessor_map = compute_predecessor_map(model)
         n_resolved = sum(1 for name in layer_names if predecessor_map.get(name))
@@ -1062,6 +907,17 @@ def main() -> None:
         predecessor_map = None
         print(f"WARNING: could not compute a predecessor map ({type(error).__name__}: {error}) -- falling back "
               f"to self-indexed act sensitivity for EVERY layer.")
+
+    # Real FINN dataflow graph incl. every node with no conv/pool module. Fatal on
+    # failure: skipping them would silently under-price every solve.
+    dataflow_map, node_kinds = compute_dataflow_graph(model)
+    act_shapes = trace_activation_shapes(model, INPUT_HW, IN_CHANNELS)
+    insert_skip_pads(dataflow_map, node_kinds, geometries, act_shapes)
+    extra_nodes = build_extra_nodes(
+        dataflow_map, node_kinds, act_shapes, geometries, predecessor_map or {}, (IN_CHANNELS, *INPUT_HW),
+    )
+    kind_counts = {kind: sum(n.kind == kind for n in extra_nodes) for kind in dict.fromkeys(n.kind for n in extra_nodes)}
+    print(f"Extra dataflow nodes: {len(extra_nodes)} {kind_counts}.")
 
     maxpool_names = {g.name for g in geometries if g.op_type == "MaxPool2d"}
     sensitivity_names = set(sensitivity.keys())
@@ -1099,6 +955,12 @@ def main() -> None:
         }
         print(f"--pin-bits-file: y pinned to {args.pin_bits_file} for all {len(layer_names)} layers (alpha ignored).")
 
+    max_node_cycles = None
+    if args.target_fps is not None:
+        max_node_cycles = args.clock_mhz * 1e6 / args.target_fps
+        print(f"--target-fps {args.target_fps} @ {args.clock_mhz}MHz -> every node <= {max_node_cycles:.0f} cycles "
+              f"(hard constraint).")
+
     max_cycles = None
     if args.max_latency_ms is not None:
         max_cycles = args.max_latency_ms / 1000 * args.clock_mhz * 1e6
@@ -1110,8 +972,17 @@ def main() -> None:
         args.time_limit, args.gap_rel, max_cycles=max_cycles, pinned_bits=pinned_bits,
         predecessor_map=predecessor_map, force_dsp=args.force_dsp, require_simd_ge_pe=args.require_simd_ge_pe,
         hard_dsp_fraction=args.hard_dsp_fraction, hard_uram_fraction=args.hard_uram_fraction,
-        max_join_imbalance_ratio=args.max_join_imbalance_ratio,
+        optimize_downstream_rate=args.optimize_downstream_rate, max_node_cycles=max_node_cycles,
+        extra_nodes=extra_nodes, dataflow_map=dataflow_map,
     )
+    hardware_nodes = [*geometries, *(node.geom for node in extra_nodes)]
+    result["dataflow_graph"] = {
+        "input": [IN_CHANNELS, *INPUT_HW],
+        "edges": dataflow_map,
+        "shapes": {g.name: [g.cout, g.hout, g.wout] for g in hardware_nodes},
+        "op_types": {**{g.name: g.op_type for g in geometries}, **{n.geom.name: EXTRA_OP_LABEL[n.kind] for n in extra_nodes}},
+        "kinds": node_kinds,
+    }
 
     args.out_file.parent.mkdir(parents=True, exist_ok=True)
     with open(args.out_file, "w") as f:
@@ -1129,9 +1000,16 @@ def main() -> None:
           f"of {XCZU7EV['BRAM_18K']} budget) -- GUARANTEED (hard constraint).")
     print(f"DSP used: {diag['total_dsp']:.0f} ({diag['dsp_pct_of_budget']:.1f}% of {XCZU7EV['DSP']} budget) "
           f"-- GUARANTEED (hard constraint).")
-    print(f"Total cycles (sum, ~= per-image latency): {diag['total_cycles']:.0f}")
+    print(f"Bottleneck: {diag['bottleneck_node']} at {diag['bottleneck_cycles']:.0f} cycles/frame -> "
+          f"{args.clock_mhz * 1e6 / diag['bottleneck_cycles']:.1f} FPS @ {args.clock_mhz}MHz")
+    print(f"Total cycles (sum over nodes): {diag['total_cycles']:.0f}")
+    for kind, agg in diag["extra_by_kind"].items():
+        print(f"  {kind:13s} x{agg['n']:3d}: LUT {agg['lut_calibrated']:8.0f}  BRAM_18K {agg['bram18k_calibrated']:6.1f}  "
+              f"DSP {agg['dsp']:4.0f}  cycles {agg['cycles']:10.0f}")
 
-    _update_sweep_summary(args.out_file.parent, args, result)
+    for path in write_outputs(result, args.out_file, sensitivity, zero_sensitivity_layers):
+        print(f"Wrote {path}")
+    _update_sweep_summary(args.out_file.parent, args, result, zero_sensitivity_layers)
 
 
 if __name__ == "__main__":
