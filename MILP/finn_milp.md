@@ -32,7 +32,7 @@ extra dataflow node (see "Dataflow graph"):
   here, evaluated by `finn_cost_model.layer_cost_pe_simd` at that exact point.
 - `z[node, pe, simd, ram_style, variant, w, bits]` — the same, for an extra
   node, over that node's own legal options (`extra_node_options`).
-- `min_downstream_rate[node]` — continuous, only with `--optimize-downstream-rate`.
+- `max_downstream_rate[node]` — continuous, only with `--optimize-downstream-rate`.
 
 **Objective**
 ```
@@ -202,11 +202,36 @@ through every FIFO. A fork needs no special case — independent constraints to
 each branch's descendants are exactly `rate[F] ≤ ratio · min(branches)`.
 
 Encoding: all-pairs is O(n²) (≈14k dense constraints with threshold nodes), so
-it uses `min_downstream_rate[L] ≤ rate[c]` and `≤ min_downstream_rate[c]` for
-each child c, then `rate[L] ≤ ratio · min_downstream_rate[L]`. Exact and
-O(edges). The auxiliary is bounded **above** by real rates, so it cannot be
-inflated. (An earlier draft used a running *max* bounded only from below —
-that can be inflated for free to satisfy the constraint vacuously.)
+it uses `max_downstream_rate[L] ≥ rate[c]` and `≥ max_downstream_rate[c]` for
+each child c, then `max_downstream_rate[L] ≤ ratio · rate[L]`. Exact and
+O(edges). `max_downstream_rate[L]` is the slowest (bottleneck) rate anywhere
+in L's downstream subtree, bounded **below** by real rates, so it cannot be
+deflated to cheat the outer `≤`.
+
+**2026-09-26 correction.** The previous encoding tracked `min_downstream_rate`
+(the *fastest* descendant, bounded above) and constrained
+`rate[L] ≤ ratio · min_downstream_rate[L]`. Traced against a toy 3-node chain
+L→M→D with `rate = {L:1, M:1, D:10}` (L, M fast, D a slow bottleneck several
+hops downstream — exactly the compounding-mismatch case this feature exists
+for): that constraint was fully satisfied and non-binding, because L and M
+were only ever compared against the fastest thing downstream of them (each
+other), never against the true bottleneck D. The reverse scenario
+(`rate = {L:10, M:1, D:1}`, a slow producer) was correctly rejected — exactly
+backwards from "producer outruns consumer is the constrained direction" above.
+Root cause: when the vacuous-inflation bug (next paragraph) was fixed by
+switching the auxiliary's bound direction, the tracked extremum (min vs. max)
+flipped with it without re-verifying the outer inequality still matched the
+documented intent. Fixed by swapping to `max_downstream_rate`, bounded below
+instead of above — same anti-inflation principle, mirrored: a MAX-type
+auxiliary sitting on the restricted (left) side of a `≤` must be bounded from
+below only, so it can't be pushed down to cheat the constraint (the mirror
+image of the MIN-type fix, which sat on the generous/right side and had to be
+bounded from above only).
+
+(An even earlier draft used a running *max* bounded only from below while
+ALSO sitting on the generous side of its own outer constraint — that could be
+inflated for free to satisfy it vacuously; a different bug from the one
+above, already fixed before this session's chain-coherence work started.)
 
 Neither family prices the FIFO itself; they only exclude badly skewed plans.
 

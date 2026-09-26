@@ -171,6 +171,12 @@ def export_dataflow_onnx(result: dict, path: Path) -> None:
             "cycles": int(n["cycles"]),
             "ii_cycles_per_pixel": n["cycles"] / (height * width),
             "rate_elems_per_cycle": channels * height * width / n["cycles"],
+            # NOT the same as ii_cycles_per_pixel: this is channel-normalized (cycles per
+            # individual scalar element), exactly finn_milp.py's chain-coherence rate_expr --
+            # so nodes with different channel counts stay comparable, and a node's own value
+            # here directly checked against ratio*(its slowest descendant's value) is exactly
+            # what --optimize-downstream-rate enforced during the solve.
+            "chain_rate_cycles_per_elem": n["cycles"] / (channels * height * width),
             "pct_of_slowest_node": 100 * n["cycles"] / max_cycles, "is_slowest_node": int(n["cycles"] == max_cycles),
             "lut": float(n["lut"]), "bram18k": float(n["bram18k"]), "dsp": int(n["dsp"]), "uram18": float(n["uram18"]),
             "thr_ram_style": n["thr_ram_style"],
