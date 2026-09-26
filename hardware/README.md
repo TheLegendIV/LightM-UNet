@@ -8,8 +8,14 @@ This folder takes the Brevitas-quantized ENet-family segmentation network,
 makes it FINN-compatible, exports it to QONNX, and runs it through FINN
 (Xilinx/AMD's dataflow-accelerator build framework) targeting a Zynq
 UltraScale+ **ZCU7EV** (`xczu7ev-ffvc1156-2-e`: 230400 LUT, 624 BRAM_18K,
-1728 DSP). Current active focus: the **S12 dense** architecture
-(`12_dense_relu_warmstart150ep_alpha025`, per-layer HAWQ mixed precision).
+1728 DSP).
+
+**2026-09-26 refactor**: all job-specific build scripts were archived (see
+`archive/pre_builds_refactor_20260926/`); the active job,
+`12_dense_relu_nearest_conv_upsample` (the last one actually run), lives in
+`builds/12_dense_relu_nearest_conv_upsample/`. The next new job's
+export/preamble/build scripts go in `builds/<job_name>/` per
+`builds/README.md`'s template; only shared infra stays at the top level.
 
 This README replaces three older docs (`FINN_REPO_INDEX.md`,
 `PARTITIONED_BUILD_LOG.md`, `resource_equivalence_int8.md`, all S19-era)
@@ -19,9 +25,14 @@ day-to-day navigation.
 
 ## Folder structure
 
-- **Top level** — only the scripts/data needed to generate the S12 dense
-  build (export → preamble → 8-way partitioned Vivado build → per-partition
-  OOC synth) plus shared infra reused by it. See "S12 dense pipeline" below.
+- **Top level** — only shared infra reused across every job: build-step
+  helpers, partitioning logic, export base classes, result collection, and
+  calibration data. See "Shared infra" below.
+- **`builds/`** — one folder per job (export + HAWQ dump + preamble + build
+  + OOC-synth/zynqbuild scripts for that architecture variant), named per
+  the `AGENTS.md` convention. Currently holds one active job,
+  `12_dense_relu_nearest_conv_upsample` — see `builds/README.md` for the
+  template and naming convention for the next job.
 - **`probes/`** — small, standalone stitched-IP probes (not full builds)
   used to calibrate FINN's analytical cost model against real Vivado
   synthesis on a tiny sub-network (e.g. the S12 context-block stem +
@@ -37,17 +48,22 @@ day-to-day navigation.
   debug stdout captures, etc.). Safe to delete/regenerate; kept only
   because some are inputs to `build_alpha025_calibration_csv.py`-style
   tools.
-- **`archive/`** — retired build families that are **not** S12 dense:
-  older architectures (S19, `8_2_relu_no_reg_w16/w20`, `26_5_w24`,
-  `26_9_w24`, `s13`, `minimal_1bneck`, `decomposed_prelu`), the S12
-  **separable**/`min4` sibling variant (still usable, just not this repo's
-  current focus), the parked RTL-MVAU-forcing experiment
+- **`archive/`** — retired build families: older architectures (S19,
+  `8_2_relu_no_reg_w16/w20`, `26_5_w24`, `26_9_w24`, `s13`,
+  `minimal_1bneck`, `decomposed_prelu`), the S12 **separable**/`min4`
+  sibling variant, the parked RTL-MVAU-forcing experiment
   (`finn_enet_convert_to_hw_rtl_mvau.py` and friends — see git history /
-  `finn_gotchas.md` repo memory for status), and 4 historical docs
+  `finn_gotchas.md` repo memory for status), 4 historical docs
   (`FINN_REPO_INDEX.md`, `PARTITIONED_BUILD_LOG.md`,
-  `resource_equivalence_int8.md`, `README_original_estimate_only_pipeline.md`
-  — earlier-era container/bug-chain notes, superseded by this README +
-  repo memory but kept for detail).
+  `resource_equivalence_int8.md`, `README_original_estimate_only_pipeline.md`),
+  and — as of 2026-09-26 — 2 of the 3 most recent job families under
+  `pre_builds_refactor_20260926/`: `12_dense_relu_warmstart150ep_alpha025`
+  (the former "S12 dense" active build: export → hawq dump → preamble →
+  8-way build → per-partition OOC synth → zynqbuild alt; see git history
+  for that job's full pipeline, previously documented below in this file)
+  and `S12_dense_nn_upsample_conv_alpha1_0` (the third family,
+  `12_dense_relu_nearest_conv_upsample`, was moved back to `builds/` since
+  it's the last build actually run).
 - **`notebook/`** — Jupyter notebooks for interactive/visual inspection
   (deploy notebook, ONNX graph previews).
 - **`outputs/`** — accumulated build outputs (QONNX exports, per-run
