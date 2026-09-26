@@ -47,9 +47,10 @@ import torch
 from brevitas.graph.calibrate import calibration_mode
 from PIL import Image
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
 sys.path.insert(0, str(REPO_ROOT / "analysis" / "501_ARCADE"))
+sys.path.insert(0, str(REPO_ROOT / "hardware"))  # shared infra (finn_enet_prod_export.py, etc.)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from nnunetv2.nets.LayerQuantENet import layer_names_for  # noqa: E402
 from nnunetv2.nets.LayerQuantEnetFINN import LayerQuantEnetFINN  # noqa: E402

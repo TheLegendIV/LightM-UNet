@@ -1,0 +1,6 @@
+#!/bin/bash
+cd /home/thelegendiv/finn/notebooks/enet
+nohup python3 finn_ooc_12_dense_relu_nearest_conv_upsample_256_trained_rtl_mvau_8way_full_v1_256x256.py \
+  finn_deployment_outputs/12_dense_relu_nearest_conv_upsample_256_trained_rtl_mvau_256x256_preamble_20260926_152352 \
+  > /tmp/12_dense_relu_nearest_conv_upsample_256_trained_rtl_mvau_8way_full_v1_256x256.log 2>&1 &
+disown
