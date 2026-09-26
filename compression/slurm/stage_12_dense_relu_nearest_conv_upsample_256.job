@@ -7,7 +7,6 @@
 #SBATCH --gpus=1
 #SBATCH --mem=32G
 #SBATCH --time=02:00:00
-#SBATCH --array=0-4
 #SBATCH --output=logs/%x_%a_%j.out
 #SBATCH --error=logs/%x_%a_%j.err
 
