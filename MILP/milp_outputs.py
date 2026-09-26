@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import statistics
 from collections import defaultdict
 from pathlib import Path
 
@@ -132,6 +133,71 @@ def build_pruning_report(result: dict, sensitivity: dict, zero_sensitivity_layer
     }
 
 
+def compute_branch_imbalance_report(result: dict) -> dict:
+    """Cumulative fork-to-join cycle-SUM ratio for simple 2-branch diamonds
+    (dup -> {branch A, branch B} -> add/concat-style join). DIAGNOSTIC ONLY --
+    not enforced by any solved constraint. Distinct from both existing rate
+    checks: join-balance compares only the single node immediately before the
+    join; chain-coherence compares each node's own rate against its worst
+    reachable descendant. Neither catches a branch that's individually
+    rate-compliant node-by-node but simply has more pipeline stages than its
+    sibling -- this sums every node's cycles along each branch's own path
+    instead. Empirically found to track the chain-coherence ratio fairly
+    closely for this architecture's shallow (1-vs-3-node) diamonds (2026-09-26,
+    S12_dense_nn_upsample_256_v2 at ratio=1.5: median 1.62x, max 1.80x) -- kept
+    as a diagnostic rather than a new constraint since it wasn't shown to be a
+    real problem, not because it can't be. Does NOT capture sliding-window/
+    buffer FILL LATENCY (e.g. ConvolutionInputGenerator needing to buffer
+    several image rows before its first output) -- that's a separate failure
+    mode this diagnostic can't see, since it only sums each node's own
+    steady-state cycles_estimate."""
+    edges = result["dataflow_graph"]["edges"]
+    nodes = _collect_nodes(result)
+    cycles = {name: n["cycles"] for name, n in nodes.items()}
+
+    fanout: dict[str, int] = defaultdict(int)
+    for preds in edges.values():
+        for p in preds:
+            fanout[p] += 1
+
+    def branch_sum_and_fork(start: str) -> tuple[float, str | None, int]:
+        total, node, length = cycles.get(start, 0), start, 1
+        for _ in range(len(nodes) + 1):
+            preds = edges.get(node, [])
+            if len(preds) != 1:
+                return total, None, length
+            p = preds[0]
+            if fanout.get(p, 0) >= 2:
+                return total, p, length
+            total += cycles.get(p, 0)
+            node, length = p, length + 1
+        return total, None, length
+
+    diamonds = []
+    for join, preds in edges.items():
+        if len(preds) != 2:
+            continue
+        (sum_a, fork_a, len_a), (sum_b, fork_b, len_b) = branch_sum_and_fork(preds[0]), branch_sum_and_fork(preds[1])
+        if fork_a is None or fork_a != fork_b:
+            continue  # not a simple 2-branch diamond (nested/overlapping forks) -- skip
+        ratio = max(sum_a, sum_b) / max(1, min(sum_a, sum_b))
+        diamonds.append({
+            "join": join, "fork": fork_a, "ratio": ratio,
+            "branch_a_sum": sum_a, "branch_a_len": len_a, "branch_b_sum": sum_b, "branch_b_len": len_b,
+        })
+    diamonds.sort(key=lambda d: -d["ratio"])
+    ratios = [d["ratio"] for d in diamonds]
+    return {
+        "note": "max(branch cycle sum)/min(branch cycle sum) per simple 2-branch diamond, fork to join. "
+                "Diagnostic only -- see this function's own docstring for scope/limits.",
+        "n_diamonds": len(diamonds),
+        "median_ratio": statistics.median(ratios) if ratios else None,
+        "mean_ratio": statistics.mean(ratios) if ratios else None,
+        "max_ratio": max(ratios) if ratios else None,
+        "diamonds": diamonds,
+    }
+
+
 def _topological_order(names: set[str], edges: dict[str, list[str]]) -> list[str]:
     indegree = {n: sum(p in names for p in edges.get(n, [])) for n in names}
     successors: dict[str, list[str]] = defaultdict(list)
@@ -213,6 +279,7 @@ def write_outputs(result: dict, out_file: Path, sensitivity: dict, zero_sensitiv
     stem = out_file.stem
     pruning_path = out_file.parent / f"pruning_{stem}.json"
     onnx_path = out_file.parent / "final_output.onnx"
+    result["_diagnostics"].setdefault("branch_imbalance", compute_branch_imbalance_report(result))
     pruning_path.write_text(json.dumps(build_pruning_report(result, sensitivity, zero_sensitivity_layers), indent=2))
     export_dataflow_onnx(result, onnx_path)
     return [pruning_path, onnx_path]
@@ -236,6 +303,19 @@ def main() -> None:
         ]
     for path in write_outputs(result, args.result, sensitivity, zero):
         print(f"Wrote {path}")
+
+    bi = result["_diagnostics"]["branch_imbalance"]
+    if bi["n_diamonds"]:
+        print(f"Branch imbalance (diagnostic, {bi['n_diamonds']} fork/join diamonds): "
+              f"median={bi['median_ratio']:.2f}x max={bi['max_ratio']:.2f}x")
+    else:
+        print("Branch imbalance (diagnostic): no simple 2-branch diamonds found.")
+
+    # Regenerating an older artifact (solved before this diagnostic existed) computes
+    # branch_imbalance in memory only -- persist it back so --result's own _diagnostics
+    # stays a complete record, same as a fresh finn_milp.py solve would have written.
+    args.result.write_text(json.dumps(result, indent=2))
+    print(f"Updated {args.result} with _diagnostics.branch_imbalance.")
 
 
 if __name__ == "__main__":

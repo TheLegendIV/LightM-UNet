@@ -48,7 +48,7 @@ PACKAGE_ROOT = REPO_ROOT / "enet"
 sys.path.insert(0, str(PACKAGE_ROOT))
 from nnunetv2.nets.ENet import ENet  # noqa: E402
 from expand_layer_bits import resolve_act_sources  # noqa: E402
-from milp_outputs import write_outputs  # noqa: E402
+from milp_outputs import write_outputs, compute_branch_imbalance_report  # noqa: E402
 
 # ---- Device, search space, CLI-set globals (see finn_milp.md "Constants") ----
 
@@ -754,6 +754,7 @@ _SUMMARY_FIELDS = [
     "lut_pct_of_budget", "bram_pct_of_budget", "dsp_pct_of_budget",
     "total_dsp", "total_cycles", "clock_mhz", "latency_ms", "target_fps", "fps", "bottleneck_node",
     "n_binary_vars", "n_layers", "n_zero_sensitivity_layers", "zero_sensitivity_layers",
+    "branch_imbalance_n_diamonds", "branch_imbalance_median_ratio", "branch_imbalance_max_ratio",
 ]
 
 
@@ -779,6 +780,9 @@ def _update_sweep_summary(
         "n_binary_vars": diag.get("n_binary_vars"), "n_layers": diag.get("n_layers"),
         "n_zero_sensitivity_layers": len(zero_sensitivity_layers),
         "zero_sensitivity_layers": ";".join(zero_sensitivity_layers),
+        "branch_imbalance_n_diamonds": diag.get("branch_imbalance", {}).get("n_diamonds"),
+        "branch_imbalance_median_ratio": diag.get("branch_imbalance", {}).get("median_ratio"),
+        "branch_imbalance_max_ratio": diag.get("branch_imbalance", {}).get("max_ratio"),
     }
 
     summary_path = out_dir / "summary.csv"
@@ -1007,6 +1011,8 @@ def main() -> None:
         "op_types": {**{g.name: g.op_type for g in geometries}, **{n.geom.name: EXTRA_OP_LABEL[n.kind] for n in extra_nodes}},
         "kinds": node_kinds,
     }
+    if result["status"] == "Optimal":
+        result["_diagnostics"]["branch_imbalance"] = compute_branch_imbalance_report(result)
 
     args.out_file.parent.mkdir(parents=True, exist_ok=True)
     with open(args.out_file, "w") as f:
@@ -1027,6 +1033,10 @@ def main() -> None:
     print(f"Bottleneck: {diag['bottleneck_node']} at {diag['bottleneck_cycles']:.0f} cycles/frame -> "
           f"{args.clock_mhz * 1e6 / diag['bottleneck_cycles']:.1f} FPS @ {args.clock_mhz}MHz")
     print(f"Total cycles (sum over nodes): {diag['total_cycles']:.0f}")
+    bi = diag["branch_imbalance"]
+    print(f"Branch imbalance (diagnostic, {bi['n_diamonds']} fork/join diamonds): "
+          f"median={bi['median_ratio']:.2f}x max={bi['max_ratio']:.2f}x" if bi["n_diamonds"] else
+          "Branch imbalance (diagnostic): no simple 2-branch diamonds found.")
     for kind, agg in diag["extra_by_kind"].items():
         print(f"  {kind:13s} x{agg['n']:3d}: LUT {agg['lut_calibrated']:8.0f}  BRAM_18K {agg['bram18k_calibrated']:6.1f}  "
               f"DSP {agg['dsp']:4.0f}  cycles {agg['cycles']:10.0f}")

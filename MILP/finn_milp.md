@@ -341,7 +341,8 @@ Next to `--out-file`:
   - `dataflow_graph` — `input` (C,H,W), `edges` (predecessor lists over every
     hardware node), `shapes`, `op_types` (FINN op names), `kinds`.
   - `_diagnostics` — totals (incl. extra nodes), `extra_by_kind` breakdown,
-    % of budget, constraint counts, solver settings.
+    % of budget, constraint counts, solver settings, `branch_imbalance`
+    (see below).
 - `pruning_<stem>.json` (`milp_outputs.py`) — `candidates`: blocks holding
   zero-sensitivity layers (prunable ones first); `ranked_prunable_blocks`:
   every identity-skip residual block ranked by summed |trace|, with the LUT /
@@ -356,16 +357,38 @@ Next to `--out-file`:
   `StreamingConcat_hls`, `UpsampleNearestNeighbour_hls`,
   `StreamingMaxPool_hls` — see the "Dataflow graph" table above), custom
   domain `finn_milp`, attributes `pe`, `simd`, bits, `cycles`,
-  `ii_cycles_per_pixel` (cycles / output pixels), `rate_elems_per_cycle`,
+  `ii_cycles_per_pixel` (cycles / output pixels, NOT channel-normalized),
+  `rate_elems_per_cycle`, `chain_rate_cycles_per_elem` (cycles / (C·H·W) —
+  channel-normalized, exactly `--optimize-downstream-rate`'s own `rate_expr`,
+  directly checkable node-by-node against `ratio · slowest-descendant-value`),
   `pct_of_slowest_node`, `is_slowest_node`, LUT, BRAM, DSP, URAM, and (convs)
   `mvu_cycles` / `swu_cycles` / `thr_pe`. The graph doc_string carries the run
   summary. Written unconditionally on every Optimal solve, into the same
   directory as the other per-run outputs (always named `final_output.onnx`,
   not stem-derived — one file per run directory).
-- `summary.csv` + `run_args.json` — one row per alpha (upserted), shared args;
-  warns when an alpha was run with different shared args.
+- `_diagnostics.branch_imbalance` (`milp_outputs.compute_branch_imbalance_report`)
+  — DIAGNOSTIC ONLY, not a solved constraint: cumulative fork-to-join cycle-
+  SUM ratio (`max(branch sum)/min(branch sum)`) for every simple 2-branch
+  diamond (`dup -> {branch A, branch B} -> join`, both branches sharing the
+  same nearest fan-out>=2 ancestor). Distinct from both join-balance (compares
+  only the single node immediately before the join) and chain-coherence
+  (per-node rate vs. its worst reachable descendant) — neither catches a
+  branch that's individually rate-compliant node-by-node but simply has more
+  pipeline stages than its sibling. Does NOT capture sliding-window/buffer
+  FILL LATENCY (e.g. ConvolutionInputGenerator needing to buffer several image
+  rows before its first output) — only sums each node's own steady-state
+  `cycles`. 2026-09-26: checked on `S12_dense_nn_upsample_256_v2` (ratio=1.5,
+  28 diamonds) — median 1.62x, max 1.80x, tracking the chain-coherence ratio
+  fairly closely for this architecture's shallow (1-vs-3-node) diamonds; kept
+  as a diagnostic rather than promoted to a constraint since it wasn't shown
+  to be a real problem here, not because it can't be elsewhere.
+- `summary.csv` + `run_args.json` — one row per alpha (upserted), shared args
+  (incl. `branch_imbalance_n_diamonds`/`_median_ratio`/`_max_ratio`); warns
+  when an alpha was run with different shared args.
 
-Regenerate the pruning report / ONNX for an existing result:
+Regenerate the pruning report / ONNX / `_diagnostics.branch_imbalance` for an
+existing result (also writes `branch_imbalance` back into `--result` itself,
+so an older artifact solved before this diagnostic existed gets it too):
 `python MILP/milp_outputs.py --result <json> --sensitivity-file <json>`.
 
 ## Scope boundary
