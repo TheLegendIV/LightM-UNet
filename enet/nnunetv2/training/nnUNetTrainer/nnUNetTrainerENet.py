@@ -328,8 +328,14 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
         return optimizer, scheduler
 
     def perform_actual_validation(self, save_probabilities: bool = False):
-        if os.environ.get("ENET_SKIP_FINAL_VALIDATION", "0") == "1":
-            self.print_to_log_file("Skipping final full validation because ENET_SKIP_FINAL_VALIDATION=1")
+        # Default ON (2026-09-26): nnU-Net's own internal validation/ pass is
+        # redundant with compression/collect_results.py's own independent
+        # predict+eval (which never reads validation/'s own summary.json or
+        # PNGs) -- it only cost real compute/disk with nothing downstream
+        # ever consuming it. Set ENET_SKIP_FINAL_VALIDATION=0 to re-enable
+        # (e.g. to get real npz softmax outputs for ensembling).
+        if os.environ.get("ENET_SKIP_FINAL_VALIDATION", "1") == "1":
+            self.print_to_log_file("Skipping final full validation because ENET_SKIP_FINAL_VALIDATION=1 (default)")
             return
         return super().perform_actual_validation(save_probabilities)
 
