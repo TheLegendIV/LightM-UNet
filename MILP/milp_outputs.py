@@ -4,9 +4,11 @@
   pruning_<stem>.json  -- pruning candidates: blocks holding zero-sensitivity
                           layers first, then every prunable block ranked by
                           measured sensitivity, each with what pruning it frees.
-  dataflow_<stem>.onnx -- the solved dataflow graph (every FINN node: convs, pools,
-                          thresholds, stream nodes) with folding/bits/cycles/II/resources as
-                          node attributes. Open in Netron.
+  final_output.onnx    -- the solved dataflow graph (every FINN node: convs, pools,
+                          thresholds, stream nodes), op_type set to the real FINN
+                          v0.10.1 custom-op name (MVAU_rtl, Thresholding_rtl, ...),
+                          with folding/bits/cycles/II/resources as node attributes.
+                          Open in Netron.
 
 Both are written automatically by finn_milp.py for an Optimal solve. To
 regenerate from an existing result:
@@ -27,7 +29,16 @@ DUP_SUFFIX = ".dup"
 SKIP_QUANT_SUFFIX = ".skip_quant"
 ZERO_SENSITIVITY_EPS = 1e-9
 
-LAYER_DISPLAY_OP = {"Conv2d": "MVAU", "ConvTranspose2d": "MVAU_deconv", "MaxPool2d": "StreamingMaxPool"}
+
+def _layer_op_type(op: str, variant: str) -> str:
+    """Real FINN v0.10.1 op name for a per-layer (conv/pool) node -- extra
+    nodes already carry theirs via finn_milp.EXTRA_OP_LABEL (op_types). MVAU
+    is rtl iff its own chosen resource variant is the RTL one (finn_milp.py's
+    VARIANT_RTL_DSP_NOACT1 vs VARIANT_HLS_LUT_NOACT0, the latter only
+    reachable via --allow-lut-mult, off by default)."""
+    if op == "MaxPool2d":
+        return "StreamingMaxPool_hls"
+    return "MVAU_rtl" if variant.startswith("rtl") else "MVAU_hls"
 
 
 def _collect_nodes(result: dict) -> dict[str, dict]:
@@ -167,8 +178,9 @@ def export_dataflow_onnx(result: dict, path: Path) -> None:
         for key in ("act_bits", "weight_bits", "variant", "kind", "bits_rule", "mvu_cycles", "swu_cycles", "thr_pe"):
             if n.get(key) is not None:
                 attrs[key] = n[key]
+        op_type = n["op"] if "kind" in n else _layer_op_type(n["op"], n["variant"])
         onnx_nodes.append(helper.make_node(
-            LAYER_DISPLAY_OP.get(n["op"], n["op"]), inputs, [f"{name}:out"], name=name, domain="finn_milp", **attrs,
+            op_type, inputs, [f"{name}:out"], name=name, domain="finn_milp", **attrs,
         ))
         info = helper.make_tensor_value_info(f"{name}:out", TensorProto.FLOAT, [1, channels, height, width])
         (value_infos if name in consumed else outputs).append(info)
@@ -194,7 +206,7 @@ def export_dataflow_onnx(result: dict, path: Path) -> None:
 def write_outputs(result: dict, out_file: Path, sensitivity: dict, zero_sensitivity_layers: list[str]) -> list[Path]:
     stem = out_file.stem
     pruning_path = out_file.parent / f"pruning_{stem}.json"
-    onnx_path = out_file.parent / f"dataflow_{stem}.onnx"
+    onnx_path = out_file.parent / "final_output.onnx"
     pruning_path.write_text(json.dumps(build_pruning_report(result, sensitivity, zero_sensitivity_layers), indent=2))
     export_dataflow_onnx(result, onnx_path)
     return [pruning_path, onnx_path]

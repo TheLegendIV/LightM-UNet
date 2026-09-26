@@ -324,12 +324,19 @@ Next to `--out-file`:
   fork) and the
   `ENET_PRUNED_BLOCKS` value. Only identity-skip residual blocks are marked
   prunable — the only case `apply_block_pruning` handles soundly.
-- `dataflow_<stem>.onnx` (`milp_outputs.py`) — the solved graph for Netron:
-  one node per hardware node, custom domain `finn_milp`, attributes `pe`,
-  `simd`, bits, `cycles`, `ii_cycles_per_pixel` (cycles / output pixels),
-  `rate_elems_per_cycle`, `pct_of_slowest_node`, `is_slowest_node`, LUT, BRAM,
-  DSP, URAM, and (convs) `mvu_cycles` / `swu_cycles` / `thr_pe`. The graph
-  doc_string carries the run summary.
+- `final_output.onnx` (`milp_outputs.py`) — the solved graph for Netron:
+  one node per hardware node, `op_type` set to the real FINN v0.10.1 custom-op
+  name (`MVAU_rtl`/`MVAU_hls` per the layer's own chosen variant,
+  `Thresholding_rtl`, `AddStreams_hls`, `DuplicateStreams_hls`,
+  `StreamingConcat_hls`, `UpsampleNearestNeighbour_hls`,
+  `StreamingMaxPool_hls` — see the "Dataflow graph" table above), custom
+  domain `finn_milp`, attributes `pe`, `simd`, bits, `cycles`,
+  `ii_cycles_per_pixel` (cycles / output pixels), `rate_elems_per_cycle`,
+  `pct_of_slowest_node`, `is_slowest_node`, LUT, BRAM, DSP, URAM, and (convs)
+  `mvu_cycles` / `swu_cycles` / `thr_pe`. The graph doc_string carries the run
+  summary. Written unconditionally on every Optimal solve, into the same
+  directory as the other per-run outputs (always named `final_output.onnx`,
+  not stem-derived — one file per run directory).
 - `summary.csv` + `run_args.json` — one row per alpha (upserted), shared args;
   warns when an alpha was run with different shared args.
 
@@ -361,3 +368,9 @@ cost model's calibration, not a certified hardware guarantee.
   pad-MVAU, InitialBlock thresholds) plus FMPadding inside conv cost, with
   folding taken from FINN v0.10.1 code. Same caps, alpha 0: min summed cycles
   16.65M → 23.6M.
+- 2026-09-26 (later still): `dataflow_<stem>.onnx` renamed `final_output.onnx`
+  (one fixed name per run directory); its node `op_type` changed from a
+  display label (`MVAU`, `Thresholding`, ...) to the real FINN v0.10.1
+  custom-op name, `EXTRA_OP_LABEL`'s values updated to match (`finn_milp.py`
+  itself was already unconditional about writing it on every Optimal solve —
+  no CLI flag ever gated it).

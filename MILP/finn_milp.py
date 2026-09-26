@@ -144,10 +144,14 @@ RESIDUAL_QUANT_BITS = 8  # QuantEltwiseAdd's input/output quant: Int8 regardless
 THRESHOLD_KINDS = ("skip_quant", "residual_add", "out_act", "input_quant", "act")
 FIXED_BIT_KINDS = ("skip_quant", "residual_add")
 PAD_MVAU_BITS = (2, 8)  # (weight, act) for the downsampling zero-pad MVAU -- PROVISIONAL, see finn_milp.md
+# Real FINN v0.10.1 custom-op names (finn_milp.md "Dataflow graph" table) --
+# every threshold-kind extra node and the pad-MVAU always use the RTL variant
+# (extra_node_options hardcodes VARIANT_RTL_DSP_NOACT1 for both); the stream
+# nodes (add/dup/concat/upsample) have no RTL alternative in this cost model.
 EXTRA_OP_LABEL = {
-    **{kind: "Thresholding" for kind in THRESHOLD_KINDS},
-    "add": "AddStreams", "dup": "DuplicateStreams", "concat": "StreamingConcat",
-    "upsample": "UpsampleNearestNeighbour", "pad_mvau": "MVAU",
+    **{kind: "Thresholding_rtl" for kind in THRESHOLD_KINDS},
+    "add": "AddStreams_hls", "dup": "DuplicateStreams_hls", "concat": "StreamingConcat_hls",
+    "upsample": "UpsampleNearestNeighbour_hls", "pad_mvau": "MVAU_rtl",
 }
 
 
