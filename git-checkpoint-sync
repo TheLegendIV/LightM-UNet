@@ -1,0 +1,7 @@
+#!/bin/bash
+# Thin wrapper so `git checkpoint-sync [args...]` runs scripts/checkpoint_sync.sh
+# -- git dispatches any `git <verb>` to an executable named `git-<verb>` found
+# on PATH, no git config/alias needed. To enable it, add this repo's root
+# directory to your PATH (e.g. `export PATH="$PATH:$(git rev-parse --show-toplevel)"`
+# in your shell profile). Without that, just run scripts/checkpoint_sync.sh directly.
+exec "$(dirname "${BASH_SOURCE[0]}")/scripts/checkpoint_sync.sh" "$@"

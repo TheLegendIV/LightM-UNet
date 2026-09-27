@@ -23,24 +23,27 @@ analysis/*/predictions/
 data/nnUNet_preprocessed/*
 # data/nnUNet_results/*
 # data/*.log
-# *.pth
+*.pth
 
-# Raw datasets: keep only Dataset509 (the current 4-class objective this
-# branch trains on -- Dataset501 was the retired binary objective, see
-# compression/README.md's top note) -- and even within it, drop any
-# inference-output labelsPr_* dirs a preview notebook may have written;
-# only the ground-truth raw pngs are pushed.
-# data/nnUNet_raw/*
-!data/nnUNet_raw/Dataset509_ARCADE_1x1_4c/
-data/nnUNet_raw/Dataset509_ARCADE_1x1_4c/labelsPr_*/
-
-data/nnUNet_raw/Dataset501_ARCADE/labelsPr_*/
+# Raw datasets: no longer pushed at all (both Dataset509_ARCADE_1x1_4c and
+# Dataset511_ARCADE_1x1_3c now exist as local files on the machines that need
+# them -- the 3c one is regenerable any time from Dataset509 via
+# compression/scripts/make_arcade_3c_dataset.py, and the 4c one is the
+# original ARCADE export). Carrying ~190MB/dataset of raw PNGs through every
+# clone/pull was never worth it once that regeneration path existed.
+data/nnUNet_raw/*
 
 deployment/baremetal
 
 logs/*
 
 **/validation/*
+
+# nnU-Net's own per-run training-curve plot -- regenerable from the run's
+# own training_log_*.txt at any time, never worth committing. Scoped to
+# data/nnUNet_results specifically so this can't ever catch a real report
+# figure (e.g. analysis/report/**/*.png) that happens to be named progress.png.
+data/nnUNet_results/**/progress.png
 
 # Regenerable from a checkpoint + compression/export_quant_checkpoint.py at
 # any time -- never worth committing.

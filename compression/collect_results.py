@@ -53,6 +53,14 @@ from nnunetv2.nets.ERFNet import ERFNet  # noqa: E402
 from nnunetv2.nets.MobileNetV2 import MobileNetV2  # noqa: E402
 from nnunetv2.nets.MobileNetV3 import MobileNetV3  # noqa: E402
 from nnunetv2.nets.QuantENet import QuantENet  # noqa: E402
+from nnunetv2.nets.SegNet import SegNet, SegNetBasic  # noqa: E402
+from nnunetv2.nets.TVResNet101UNet import TVResNet101UNet  # noqa: E402
+from nnunetv2.nets.LightMUNet import LightMUNet  # noqa: E402
+from nnunetv2.nets.LMUNet import LMUNet  # noqa: E402
+from nnunetv2.nets.BSCNet import BSCNet  # noqa: E402
+from nnunetv2.nets.UNeXtS import UNextS  # noqa: E402
+from nnunetv2.utilities.plans_handling.plans_handler import PlansManager  # noqa: E402
+from nnunetv2.training.nnUNetTrainer.nnUNetTrainer import nnUNetTrainer as _PlainNNUNetTrainer  # noqa: E402
 import segmentation_topology as topo  # noqa: E402
 from utils import count_bops, count_buffer_elements, count_flops, count_params  # noqa: E402
 
