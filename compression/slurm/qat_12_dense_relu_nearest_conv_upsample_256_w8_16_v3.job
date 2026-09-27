@@ -23,9 +23,13 @@ set -e
 # from finn_milp.py, not this job's own identity, and renaming them here
 # would just break the lookup.
 #
-# GPU: full A100 (--partition=gpu), not a MIG slice (--partition=gpu_mig)
-# -- this job's own compute (QAT fine-tuning + calibration) benefits from
-# the full card rather than a 3g.20gb fraction.
+# GPU: full A100 (--partition=gpu_a100), not a MIG slice
+# (--partition=gpu_mig) -- this job's own compute (QAT fine-tuning +
+# calibration) benefits from the full card rather than a 3g.20gb fraction.
+# cpus-per-task=18/mem=120G match this repo's own established gpu_a100
+# convention (see qat_12_dense_relu_nearest_conv_upsample_256_joint_alpha1.0_
+# perlayer_candidatebits468_forcedsp_lut50_bram50_dsp90_fps250_ft15ep.job),
+# not the gpu_mig jobs' smaller 8-cpu/32G footprint.
 #
 # w8/16 width-point sibling of qat_12_dense_relu_nearest_conv_upsample_256_
 # finn_joint_alpha1.0_perlayer_candidatebits468_forcedsp_lut50_bram50_dsp90_
