@@ -1,0 +1,247 @@
+#!/bin/bash
+#SBATCH --job-name=stage_group1_enet_family
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=03:00:00
+#SBATCH --array=0-3
+#SBATCH --output=logs/%x_%a_%j.out
+#SBATCH --error=logs/%x_%a_%j.err
+
+set -e
+
+# Group 1 (ENet family, thesis's internal comparison) -- ERFNet, MobileNetV2,
+# MobileNetV3, SegNet, all at 4-class ARCADE (Dataset509_ARCADE_1x1_4c,
+# 512x512), 150 epochs, fixed seed. 3h/submission -- resumable via the same
+# checkpoint_final/checkpoint_latest self-healing + `--c` continue pattern
+# used across this repo's other resumable Slurm jobs (only archives + runs
+# collect_results.py once the real 150-epoch schedule is actually complete;
+# resubmit the array to keep making progress otherwise).
+#
+#   0: ERFNet -- FULLWIDTH (paper-native channels=(16,64,128,64,16), the
+#      class's own default -- see ERFNet.py). Verified in lightmunet_dev:
+#      ERFNet(in=1,out=4) at this width measures 2,063,002 params, matching
+#      the paper's own Cityscapes-config figure of 2,064,191 (in=3,out=19)
+#      -- both land at ~2.06M, confirming the paper's reported total.
+#   1: MobileNetV2 -- R-ASPP decoder (the paper's own Sec 6.3 reduced head:
+#      output_stride=16 backbone, 1x1-conv/global-pool R-ASPP head built on
+#      the 320ch second-to-last feature, NOT the repo's own convtranspose
+#      decoder). 2,108,612 params (in=1,out=4), matching the paper's own
+#      Table 7 "OS=16, no ASPP" candidate row of 2.11M almost exactly.
+#   2: MobileNetV3-Small -- LR-ASPP decoder (the paper's own Sec 6.4
+#      segmentation head: RF2 tail-channel-halving + dilation-held OS=16 +
+#      Lite R-ASPP, NOT the repo's own convtranspose decoder). 513,016
+#      params (in=1,out=4) -- verified BYTE-FOR-BYTE identical (515,614) to
+#      constructing torchvision's own official `reduced_tail=True,
+#      dilated=True` MobileNetV3-Small backbone + its own LRASPPHead
+#      directly, at the paper's own Cityscapes-style in=3/out=19 config.
+#      The paper's own Table 7 row 11 reports 0.47M for this same nominal
+#      config -- that ~10% residual exists even in torchvision's official
+#      port, so it's not a fidelity gap in this repo's own code (most likely
+#      a different low-level tap point in the original TF-Slim
+#      implementation that torchvision's later, independent port didn't
+#      reproduce exactly). 11-block schedule verified against the paper's
+#      own Table 2; SE squeeze-channel basis and head1-SE presence
+#      cross-checked against torchvision's official mobilenetv3.py AND the
+#      d-li14/mobilenetv3.pytorch reference (both agree: squeeze from the
+#      EXPANDED hidden_dim, not the pre-expansion input, and NO
+#      squeeze-excite on head1 for either variant -- see MobileNetV3.py's
+#      own module docstring for the correction history).
+#   3: SegNet-Basic (Badrinarayanan et al., paper's own Sec 3.1 ablation
+#      variant -- 4-stage, constant-64-channel, 7x7-kernel, NOT the full
+#      13-stage VGG16-depth SegNet, whose 29.5M params are wildly out of
+#      scale for this comparison). Verified layer-for-layer against the
+#      official released Caffe prototxt (github.com/alexgkendall/
+#      SegNet-Tutorial, linked from the paper's own abstract) -- confirmed
+#      bias=True on every conv (contradicts the paper's own prose, but the
+#      code is ground truth). 1,409,860 params (in=1,out=4), vs the paper's
+#      Table 1 reference of 1.425M (in=3,out=11) -- ~0.59% under, likely the
+#      released prototxt being a slightly later snapshot than the paper's
+#      own 2015 table run, not an architectural mismatch.
+#      NOT YET wired into compression/collect_results.py's --model-class
+#      choices (only enet/erfnet/mobilenetv2/mobilenetv3 exist there) --
+#      this task trains + checkpoints + archives but SKIPS the
+#      collect_results.py step (deliberate: "train now, collect later").
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+EPOCHS_TARGET=150
+
+TASK_ID=${SLURM_ARRAY_TASK_ID}
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- Per-task config ------------------------------------------------------------
+COLLECT_ARGS=""
+case "$TASK_ID" in
+  0)
+    RUN_NAME="erfnet_fullwidth"
+    TRAINER_CLASS="nnUNetTrainerERFNet"
+    SEED_VAR="ENET_SEED"
+    EPOCHS_VAR="ENET_EPOCHS"
+    OUTFOLDER_VAR="ENET_OUTPUT_FOLDER"
+    export ENET_CHANNELS="16,64,128,64,16"
+    COLLECT_ARGS="--model-class erfnet --channels 16,64,128,64,16 --stage erfnet_fullwidth"
+    RESEED=0
+    ;;
+  1)
+    RUN_NAME="mobilenetv2_raspp"
+    TRAINER_CLASS="nnUNetTrainerMobileNetV2"
+    SEED_VAR="ENET_SEED"
+    EPOCHS_VAR="ENET_EPOCHS"
+    OUTFOLDER_VAR="ENET_OUTPUT_FOLDER"
+    export MOBILENET_WIDTH_MULT=1.0
+    export MOBILENET_DECODER=raspp
+    COLLECT_ARGS="--model-class mobilenetv2 --mobilenet-width-mult 1.0 --mobilenet-decoder raspp --stage mobilenetv2_raspp"
+    RESEED=0
+    ;;
+  2)
+    RUN_NAME="mobilenetv3_small_lraspp"
+    TRAINER_CLASS="nnUNetTrainerMobileNetV3"
+    SEED_VAR="ENET_SEED"
+    EPOCHS_VAR="ENET_EPOCHS"
+    OUTFOLDER_VAR="ENET_OUTPUT_FOLDER"
+    export MOBILENET_WIDTH_MULT=1.0
+    export MOBILENET_VARIANT=small
+    export MOBILENET_DECODER=lraspp
+    # collect_results.py's mobilenetv3 branch always builds Large's
+    # classification-style schedule (no --mobilenet-variant or
+    # --mobilenet-decoder flag exists there yet for v3) -- running it
+    # against this checkpoint would silently write the wrong params/FLOPs
+    # into results.csv. Deferred (same "train now, collect later" treatment
+    # as SegNet/Group 2).
+    COLLECT_ARGS=""
+    RESEED=0
+    ;;
+  3)
+    RUN_NAME="segnet_basic"
+    TRAINER_CLASS="nnUNetTrainerSegNet"
+    SEED_VAR="SEGNET_SEED"
+    EPOCHS_VAR="SEGNET_EPOCHS"
+    OUTFOLDER_VAR="SEGNET_OUTPUT_FOLDER"
+    export SEGNET_VARIANT=basic
+    COLLECT_ARGS=""  # not yet supported by collect_results.py -- train/checkpoint only
+    RESEED=0
+    ;;
+esac
+
+OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+export "${SEED_VAR}=0"
+export "${EPOCHS_VAR}=${EPOCHS_TARGET}"
+export "${OUTFOLDER_VAR}=${OUTPUT_FOLDER}"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Array task: ${TASK_ID} -> ${RUN_NAME} (${TRAINER_CLASS}), seed via ${SEED_VAR}=0"
+echo "Output folder: ${OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+if [ "$RESEED" = "1" ]; then
+    echo "=== Reseed: archiving any pre-existing (unseeded) checkpoint for ${RUN_NAME}, once ==="
+    RESEED_MARKER="${OUTPUT_FOLDER}.reseeded_$(date +%Y%m%d)_marker_dir"
+    if [ -d "${OUTPUT_FOLDER}" ] && [ ! -d "$(dirname "${OUTPUT_FOLDER}")/archive_pre_$(date +%Y%m%d)_reseed_${RUN_NAME}" ]; then
+        mkdir -p "$(dirname "${OUTPUT_FOLDER}")/archive_pre_$(date +%Y%m%d)_reseed_${RUN_NAME}"
+        mv "${OUTPUT_FOLDER}" "$(dirname "${OUTPUT_FOLDER}")/archive_pre_$(date +%Y%m%d)_reseed_${RUN_NAME}/fold_0"
+        echo "Archived old unseeded checkpoint to $(dirname "${OUTPUT_FOLDER}")/archive_pre_$(date +%Y%m%d)_reseed_${RUN_NAME}/fold_0"
+    else
+        echo "Already archived (or never existed) -- proceeding."
+    fi
+fi
+
+echo "=== Self-healing check: promote checkpoint_latest.pth over a STALE checkpoint_final.pth ==="
+if [ -f "${OUTPUT_FOLDER}/checkpoint_final.pth" ] && [ -f "${OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
+    FINAL_EPOCH_CHECK=$(python -c "import torch; print(torch.load('${OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)['current_epoch'])")
+    LATEST_EPOCH_CHECK=$(python -c "import torch; print(torch.load('${OUTPUT_FOLDER}/checkpoint_latest.pth', map_location='cpu', weights_only=False)['current_epoch'])")
+    if [ "$LATEST_EPOCH_CHECK" -gt "$FINAL_EPOCH_CHECK" ]; then
+        echo "checkpoint_final.pth (epoch ${FINAL_EPOCH_CHECK}) is STALE relative to checkpoint_latest.pth (epoch ${LATEST_EPOCH_CHECK}) -- promoting latest, backing up the stale final."
+        cp "${OUTPUT_FOLDER}/checkpoint_final.pth" "${OUTPUT_FOLDER}/checkpoint_final_STALE_epoch${FINAL_EPOCH_CHECK}_backup.pth"
+        cp "${OUTPUT_FOLDER}/checkpoint_latest.pth" "${OUTPUT_FOLDER}/checkpoint_final.pth"
+    fi
+fi
+
+echo "=== Checking training progress for ${RUN_NAME} ==="
+EXISTING_CHECKPOINT=""
+if [ -f "${OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    EXISTING_CHECKPOINT="${OUTPUT_FOLDER}/checkpoint_final.pth"
+elif [ -f "${OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
+    EXISTING_CHECKPOINT="${OUTPUT_FOLDER}/checkpoint_latest.pth"
+fi
+
+if [ -z "$EXISTING_CHECKPOINT" ]; then
+    echo "=== Start training (fresh): ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+else
+    CURRENT_EPOCH=$(cd "$HOME/LightM-UNet" && python -c "import torch; print(torch.load('${EXISTING_CHECKPOINT}', map_location='cpu', weights_only=False)['current_epoch'])")
+    echo "Existing checkpoint (${EXISTING_CHECKPOINT}) is at epoch ${CURRENT_EPOCH}/${EPOCHS_TARGET}."
+    if [ "$CURRENT_EPOCH" -ge "$EPOCHS_TARGET" ]; then
+        echo "Real ${EPOCHS_TARGET}-epoch schedule already complete -- skipping training."
+    else
+        echo "=== Resuming training with --c (continues the SAME ${EPOCHS_TARGET}-epoch LR schedule from epoch ${CURRENT_EPOCH}) ==="
+        nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}" --c
+    fi
+fi
+echo "Training step finished for ${RUN_NAME} (this submission's time budget)."
+
+echo "=== Archiving checkpoints + logs to \$HOME/models (only once the real epoch schedule is complete) ==="
+FINAL_EPOCH=$(python -c "import torch; print(torch.load('${OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)['current_epoch'])" 2>/dev/null || echo -1)
+if [ "$FINAL_EPOCH" -ge "$EPOCHS_TARGET" ]; then
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+
+    if [ -n "$COLLECT_ARGS" ]; then
+        echo "=== Collecting results into compression/results.csv ==="
+        cd "$HOME/LightM-UNet"
+        python compression/collect_results.py \
+            --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+            --dataset-name "${DATASET_NAME}" \
+            --dataset-id "${DATASET_ID}" \
+            --trainer-class "${TRAINER_CLASS}" \
+            ${COLLECT_ARGS}
+    else
+        echo "No collect_results.py support yet for ${TRAINER_CLASS} -- checkpoint archived, results collection deferred."
+    fi
+else
+    echo "Only at epoch ${FINAL_EPOCH}/${EPOCHS_TARGET} -- skipping archive/collect_results.py (resubmit this array to continue training)."
+fi

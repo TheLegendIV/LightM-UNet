@@ -60,6 +60,7 @@ from __future__ import annotations
 
 import torch
 from torch import nn
+import torch.nn.functional as F
 
 
 def _make_divisible(value: float, divisor: int = 8, min_value: int | None = None) -> int:
@@ -76,22 +77,31 @@ def _make_divisible(value: float, divisor: int = 8, min_value: int | None = None
 
 
 class ConvBNReLU6(nn.Sequential):
-    def __init__(self, in_channels: int, out_channels: int, kernel_size: int = 3, stride: int = 1, groups: int = 1):
-        padding = (kernel_size - 1) // 2
+    def __init__(self, in_channels: int, out_channels: int, kernel_size: int = 3, stride: int = 1, groups: int = 1,
+                 dilation: int = 1):
+        padding = dilation * (kernel_size - 1) // 2
         super().__init__(
-            nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, groups=groups, bias=False),
+            nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, dilation=dilation, groups=groups,
+                      bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU6(inplace=True),
         )
 
 
 class InvertedResidual(nn.Module):
-    """1x1 expand (skipped iff expand_ratio==1) -> 3x3 depthwise (stride s)
-    -> 1x1 project (linear, no activation) -> residual iff stride==1 and
-    in_channels==out_channels. See this file's own module docstring for
-    the full verification/rationale."""
+    """1x1 expand (skipped iff expand_ratio==1) -> 3x3 depthwise (stride s,
+    dilation d) -> 1x1 project (linear, no activation) -> residual iff
+    stride==1 and in_channels==out_channels. See this file's own module
+    docstring for the full verification/rationale.
 
-    def __init__(self, in_channels: int, out_channels: int, stride: int, expand_ratio: float):
+    `dilation` (default 1, no-op): used for output_stride=16 R-ASPP support
+    -- when a stage's stride-2 downsample is replaced by a dilated stride-1
+    conv (standard "replace_stride_with_dilation" surgery, same convention
+    torchvision's own ResNet/MobileNetV3 use for DeepLabv3/LR-ASPP), the
+    depthwise conv's dilation compensates for the receptive field the
+    skipped downsample would have provided."""
+
+    def __init__(self, in_channels: int, out_channels: int, stride: int, expand_ratio: float, dilation: int = 1):
         super().__init__()
         if stride not in (1, 2):
             raise ValueError(f"InvertedResidual stride must be 1 or 2, got {stride}.")
@@ -102,7 +112,7 @@ class InvertedResidual(nn.Module):
         if expand_ratio != 1:
             layers.append(ConvBNReLU6(in_channels, hidden_dim, kernel_size=1))
         layers += [
-            ConvBNReLU6(hidden_dim, hidden_dim, kernel_size=3, stride=stride, groups=hidden_dim),
+            ConvBNReLU6(hidden_dim, hidden_dim, kernel_size=3, stride=stride, groups=hidden_dim, dilation=dilation),
             nn.Conv2d(hidden_dim, out_channels, kernel_size=1, bias=False),
             nn.BatchNorm2d(out_channels),
         ]
@@ -110,6 +120,41 @@ class InvertedResidual(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return x + self.conv(x) if self.use_residual else self.conv(x)
+
+
+class RASPP(nn.Module):
+    """Reduced ASPP -- this MobileNetV2 paper's own Sec 6.3 description:
+    "a reduced design of the Atrous Spatial Pyramid Pooling module...
+    which adopts only two branches consisting of a 1x1 convolution and a
+    global-average pooling operation". Same two of full ASPP's five
+    branches (plain 1x1 conv + global-average-pool branch -- verified
+    against torchvision's own `torchvision.models.segmentation.deeplabv3.
+    ASPP`/`ASPPPooling`, same structure for these two branches), dropping
+    the three atrous-rate branches full ASPP has. Deliberately does NOT
+    fuse a low-level skip feature -- that's MobileNetV3's own later LR-ASPP
+    addition (mobilenetv3.pdf Sec 6.4/Fig 10, torchvision's `LRASPP`), not
+    part of R-ASPP itself."""
+
+    def __init__(self, in_channels: int, out_channels: int = 256):
+        super().__init__()
+        self.conv1x1 = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False),
+            nn.BatchNorm2d(out_channels), nn.ReLU6(inplace=True),
+        )
+        self.pool = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False),
+            nn.BatchNorm2d(out_channels), nn.ReLU6(inplace=True),
+        )
+        self.project = nn.Sequential(
+            nn.Conv2d(out_channels * 2, out_channels, kernel_size=1, bias=False),
+            nn.BatchNorm2d(out_channels), nn.ReLU6(inplace=True),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        size = x.shape[-2:]
+        pooled = F.interpolate(self.pool(x), size=size, mode="bilinear", align_corners=False)
+        return self.project(torch.cat([self.conv1x1(x), pooled], dim=1))
 
 
 class UpsampleBlock(nn.Sequential):
@@ -146,54 +191,97 @@ class MobileNetV2(nn.Module):
         width_mult: float = 1.0,
         stem_channels: int = 32,
         head_channels: int = 1280,
+        decoder: str = "convtranspose",
+        raspp_channels: int = 256,
     ):
         super().__init__()
+        if decoder not in ("convtranspose", "raspp"):
+            raise ValueError(f"decoder must be 'convtranspose' or 'raspp', got {decoder!r}.")
+        self.decoder_type = decoder
         stem_c = _make_divisible(stem_channels * width_mult)
         head_c = _make_divisible(head_channels * max(1.0, width_mult))
 
-        # -- Encoder (real architecture, /32 total downsample) --------------
+        # -- Encoder (real architecture) -------------------------------------
+        # "convtranspose": native /32 total downsample, as always.
+        # "raspp": output_stride=16 -- the paper's own Sec 6.4 finding that
+        # OS=16 is more efficient than OS=8, and its own bolded "candidate
+        # for on-device applications" row (Table 7) uses OS=16. Achieved by
+        # replacing the LAST stride-2 stage (row 5, the (6,160,3,2) row --
+        # the /16->/32 transition) with a dilated stride-1 conv instead,
+        # same "replace_stride_with_dilation" surgery torchvision's own
+        # ResNet/MobileNetV3 DeepLabv3/LR-ASPP backbones use. Every
+        # subsequent stage (row 6, the head) inherits the same dilation.
         self.stem = ConvBNReLU6(in_channels, stem_c, kernel_size=3, stride=2)
+
+        dilate_from_row = 5 if decoder == "raspp" else None  # 0-indexed row into _INVERTED_RESIDUAL_SETTING
 
         self.stages = nn.ModuleList()
         in_c = stem_c
-        stage_out_channels = []  # per-stage output width, for the decoder's own channel schedule
-        for t, c, n, s in _INVERTED_RESIDUAL_SETTING:
+        stage_out_channels = []  # per-stage output width, for the convtranspose decoder's own channel schedule
+        running_dilation = 1
+        for row_idx, (t, c, n, s) in enumerate(_INVERTED_RESIDUAL_SETTING):
             out_c = _make_divisible(c * width_mult)
+            if dilate_from_row is not None and row_idx == dilate_from_row:
+                running_dilation *= s  # absorb this row's stride into dilation instead of downsampling
+                s = 1
             blocks = []
             for i in range(n):
                 stride = s if i == 0 else 1
-                blocks.append(InvertedResidual(in_c, out_c, stride, expand_ratio=t))
+                blocks.append(InvertedResidual(in_c, out_c, stride, expand_ratio=t, dilation=running_dilation))
                 in_c = out_c
             self.stages.append(nn.Sequential(*blocks))
             stage_out_channels.append(out_c)
-        self.head = ConvBNReLU6(in_c, head_c, kernel_size=1)
+        # R-ASPP skips this 1280-dim head entirely -- paper's own Sec 6.4(d)
+        # finding: building the segmentation head on the second-to-last
+        # feature map (320 channels, `in_c` here) instead of the 1280-dim
+        # head output is "more efficient... attain similar performance but
+        # require about 2.5 times fewer operations". Building `self.head`
+        # unconditionally would waste ~410K unused params in that branch.
+        self.head = ConvBNReLU6(in_c, head_c, kernel_size=1) if decoder == "convtranspose" else None
 
-        # -- Decoder (this repo's own addition -- see module docstring) -----
-        # Channel schedule mirrors the encoder's own real scale at the 5
-        # downsample depths: head_c -> stage[5] (c=160) -> stage[3] (c=64)
-        # -> stage[1] (c=24) -> stem_c -> out_channels. Indices below are
-        # into stage_out_channels (0-based over the 7 (t,c,n,s) rows), at
-        # the rows that immediately FOLLOW each of the 4 non-stem stride-2
-        # points (rows 1, 2, 3, 5 -- 0-indexed).
-        d0, d1, d2, d3 = (stage_out_channels[i] for i in (5, 3, 1, 0))
-        self.up1 = UpsampleBlock(head_c, d0)
-        self.up2 = UpsampleBlock(d0, d1)
-        self.up3 = UpsampleBlock(d1, d2)
-        self.up4 = UpsampleBlock(d2, d3)
-        self.up5 = UpsampleBlock(d3, stem_c)
-        self.final = nn.Conv2d(stem_c, out_channels, kernel_size=1)
+        if decoder == "convtranspose":
+            # -- Decoder (this repo's own addition -- see module docstring) -
+            # Channel schedule mirrors the encoder's own real scale at the 5
+            # downsample depths: head_c -> stage[5] (c=160) -> stage[3]
+            # (c=64) -> stage[1] (c=24) -> stem_c -> out_channels. Indices
+            # below are into stage_out_channels (0-based over the 7
+            # (t,c,n,s) rows), at the rows that immediately FOLLOW each of
+            # the 4 non-stem stride-2 points (rows 1, 2, 3, 5 -- 0-indexed).
+            d0, d1, d2, d3 = (stage_out_channels[i] for i in (5, 3, 1, 0))
+            self.up1 = UpsampleBlock(head_c, d0)
+            self.up2 = UpsampleBlock(d0, d1)
+            self.up3 = UpsampleBlock(d1, d2)
+            self.up4 = UpsampleBlock(d2, d3)
+            self.up5 = UpsampleBlock(d3, stem_c)
+            self.final = nn.Conv2d(stem_c, out_channels, kernel_size=1)
+        else:
+            # -- R-ASPP head (paper's own reduced segmentation head, see
+            # RASPP's own docstring) -- built on the second-to-last (320-
+            # channel) feature map, not the 1280-dim head (see the `head`
+            # comment above) -- straight bilinear upsample from the OS=16
+            # feature map back to input resolution, no intermediate decoder
+            # stages (matches the paper's own convention: no skip
+            # connections, no learned upsampling).
+            self.raspp = RASPP(in_c, raspp_channels)
+            self.final = nn.Conv2d(raspp_channels, out_channels, kernel_size=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        input_size = x.shape[-2:]
         x = self.stem(x)
         for stage in self.stages:
             x = stage(x)
-        x = self.head(x)
-        x = self.up1(x)
-        x = self.up2(x)
-        x = self.up3(x)
-        x = self.up4(x)
-        x = self.up5(x)
-        return self.final(x)
+        if self.decoder_type == "convtranspose":
+            x = self.head(x)
+            x = self.up1(x)
+            x = self.up2(x)
+            x = self.up3(x)
+            x = self.up4(x)
+            x = self.up5(x)
+            return self.final(x)
+        else:
+            x = self.raspp(x)
+            x = self.final(x)
+            return F.interpolate(x, size=input_size, mode="bilinear", align_corners=False)
 
 
 if __name__ == "__main__":

@@ -68,6 +68,46 @@ def style_legend(ax, loc: str = "lower right") -> None:
 # Stage definitions
 # ---------------------------------------------------------------------------
 STAGES: dict[str, dict] = {
+    "stage_0": {
+        "title": "ENet-paper-faithful origin point",
+        "description": (
+            "The literal starting point of this search, predating even "
+            "Stage 1's naive width sweep: ENet's own paper-faithful config "
+            "(channels=20,72,144,72,20 -- the real paper baseline width, "
+            "not a shrunk U-variant --, decoder_type=max_unpool, prelu=1, "
+            "bottlenecks=4,8,8,2,1, context_pattern=default). Trained as "
+            "nnUNetTrainerENet_Original on Dataset501_ARCADE, git branch "
+            "`enet-compression` (github.com/TheLegendIV/LightM-UNet/tree/"
+            "enet-compression/data/nnUNet_results/Dataset501_ARCADE/"
+            "nnUNetTrainerENet_Original__nnUNetPlans__2d/fold_0). NOT in "
+            "this branch's own compression/results.csv -- it predates the "
+            "later 4-class (LAD/RCA/LCX/LM) relabeling entirely: "
+            "Dataset501_ARCADE is BINARY (background=0, vessel=1), so only "
+            "a single foreground Dice exists for this point, no per-class "
+            "RCA/LCX/LAD/LM breakdown is possible here. decoder_type and "
+            "prelu are confirmed from nnUNetTrainerENet.py's own defaults "
+            "on that branch (ENET_DECODER_TYPE/ENET_USE_PRELU env-var "
+            "fallbacks), since debug.json doesn't log them directly."
+        ),
+        "manual_data": [
+            {
+                "config_name": "nnUNetTrainerENet_Original",
+                "label": "ENet Original (paper-faithful, binary)",
+                "dice": 0.8214667692353737,  # foreground_mean Dice, validation/summary.json
+                "dataset": "Dataset501_ARCADE (binary vessel/background)",
+                "decoder_type": "max_unpool",
+                "channels": "20,72,144,72,20",
+                "prelu": 1,
+            },
+        ],
+        "known_gaps": [
+            "Per-class (LAD/RCA/LCX/LM) breakdown is NOT available for this "
+            "point -- Dataset501_ARCADE is binary. A true apples-to-apples "
+            "4-class re-run of this exact config (paper-width channels + "
+            "max_unpool + prelu, on Dataset509_ARCADE_1x1_4c) has not been "
+            "queued yet.",
+        ],
+    },
     "stage_1": {
         "title": "Naive compression baseline",
         "description": (

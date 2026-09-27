@@ -417,6 +417,12 @@ def main() -> None:
     parser.add_argument("--erfnet-context-depth", type=int, default=8, help="ERFNet.py's own context_depth (default: the real architecture's own 8). Only used with --model-class erfnet.")
     parser.add_argument("--erfnet-decoder-depth", type=int, default=2, help="ERFNet.py's own decoder_depth (default: the real architecture's own 2). Only used with --model-class erfnet.")
     parser.add_argument("--mobilenet-width-mult", type=float, default=1.0, help="MobileNetV2.py's/MobileNetV3.py's own width_mult (default: the real base 1.0 architecture). Only used with --model-class mobilenetv2/mobilenetv3.")
+    parser.add_argument("--mobilenet-decoder", default="convtranspose", choices=["convtranspose", "raspp"],
+                         help="MobileNetV2.py's own `decoder` kwarg -- 'convtranspose' (default) is this repo's "
+                              "own 5-stage learned-upsample decoder, 'raspp' is the paper's own Sec 6.3 R-ASPP "
+                              "head (output_stride=16 + 1x1-conv/global-pool branches on the 320ch feature, no "
+                              "learned decoder stages). Only used with --model-class mobilenetv2 -- MobileNetV3.py "
+                              "has no such kwarg, so this raises if passed alongside --model-class mobilenetv3.")
     parser.add_argument("--stage", required=True, help="e.g. stage1, stage1b, stage2, early_probe.")
     parser.add_argument("--channels", required=True, type=parse_channels)
     parser.add_argument("--bottlenecks", default="4,8,8,2,1", type=lambda v: parse_tuple5(v, "bottlenecks"))
@@ -514,12 +520,17 @@ def main() -> None:
             raise ValueError(f"--model-class {args.model_class} only supports --quant-bits 32 -- no Quant* counterpart in this repo yet.")
         if args.pruned_blocks:
             raise ValueError(f"--pruned-blocks is ENet-specific -- not supported with --model-class {args.model_class}.")
+        if args.model_class == "mobilenetv3" and args.mobilenet_decoder != "convtranspose":
+            raise ValueError("--mobilenet-decoder is mobilenetv2-specific -- MobileNetV3.py has no `decoder` kwarg.")
         model_cls = MobileNetV2 if args.model_class == "mobilenetv2" else MobileNetV3
-        fp32_model = model_cls(
+        model_kwargs = dict(
             in_channels=args.in_channels,
             out_channels=args.out_channels,
             width_mult=args.mobilenet_width_mult,
         )
+        if args.model_class == "mobilenetv2":
+            model_kwargs["decoder"] = args.mobilenet_decoder
+        fp32_model = model_cls(**model_kwargs)
     else:
         # FLOPs/MACs always come from the plain FP32 ENet: thop silently
         # undercounts a QuantENet by ~40x (doesn't recognize Brevitas's quant
@@ -672,6 +683,7 @@ def main() -> None:
                 f"erfnet_context_depth={args.erfnet_context_depth},erfnet_decoder_depth={args.erfnet_decoder_depth}"
             ) if args.model_class == "erfnet" else (
                 f"model_class={args.model_class},mobilenet_width_mult={args.mobilenet_width_mult}"
+                + (f",mobilenet_decoder={args.mobilenet_decoder}" if args.model_class == "mobilenetv2" else "")
             ) if args.model_class in ("mobilenetv2", "mobilenetv3") else (
                 f"dilated={args.use_dilated},asymmetric={args.use_asymmetric},strided={args.use_strided},dsc={args.use_dsc},context_pattern={args.context_pattern},prelu="
                 + ("n/a(quant-forces-relu)" if args.quant_bits != 32 else str(args.use_prelu))

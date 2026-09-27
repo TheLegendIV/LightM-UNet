@@ -8,7 +8,13 @@ UNCHANGED -- same single-stage AdamW/PolyLR pipeline every other
 architecture in this repo trains through, not MobileNetV2's own original
 ImageNet classification recipe (RMSProp, exponential LR decay, dropout,
 label smoothing -- out of scope here, same "architecture-only comparison"
-rationale as every other model file added this session)."""
+rationale as every other model file added this session).
+
+MOBILENET_DECODER selects "convtranspose" (default, this repo's own
+5-stage learned-upsample decoder, unchanged) or "raspp" (the paper's own
+Sec 6.3 reduced segmentation head, R-ASPP -- output_stride=16 backbone +
+1x1-conv/global-pool R-ASPP head + direct bilinear upsample, no learned
+decoder stages -- see MobileNetV2.py's own RASPP docstring)."""
 from __future__ import annotations
 
 import os
@@ -36,4 +42,5 @@ class nnUNetTrainerMobileNetV2(nnUNetTrainerENet):
             in_channels=num_input_channels,
             out_channels=label_manager.num_segmentation_heads,
             width_mult=float(os.environ.get("MOBILENET_WIDTH_MULT", "1.0")),
+            decoder=os.environ.get("MOBILENET_DECODER", "convtranspose"),
         )

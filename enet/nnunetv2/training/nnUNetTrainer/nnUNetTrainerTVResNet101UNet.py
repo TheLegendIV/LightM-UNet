@@ -1,3 +1,7 @@
+import os
+import random
+
+import numpy as np
 from nnunetv2.training.nnUNetTrainer.variants.network_architecture.nnUNetTrainerNoDeepSupervision import \
     nnUNetTrainerNoDeepSupervision
 from nnunetv2.utilities.plans_handling.plans_handler import ConfigurationManager, PlansManager
@@ -26,6 +30,49 @@ class nnUNetTrainerTVResNet101UNet(nnUNetTrainerNoDeepSupervision):
         self.initial_lr = 1e-4
         self.weight_decay = 1e-4
         self.encoder_weights = "IMAGENET1K_V2"
+
+        # Shared env-var hooks (same pattern as nnUNetTrainerENet.py /
+        # nnUNetTrainerLightMUNet.py) -- this trainer extends
+        # nnUNetTrainerNoDeepSupervision directly (not the LightMUNet base),
+        # so it previously had zero epoch-count/seed/etc. control of its own.
+        if os.environ.get("RESNET101_SEED"):
+            # nnU-Net's base trainer only seeds the train/val SPLIT
+            # (np.random.RandomState(12345+fold), see do_split) -- weight
+            # init, augmentation, and dataloader-worker randomness are never
+            # explicitly seeded anywhere upstream. Set as early as possible
+            # (before .initialize() builds the network) so it's
+            # reproducible, not just "whatever the ambient RNG state was".
+            resnet101_seed = int(os.environ["RESNET101_SEED"])
+            random.seed(resnet101_seed)
+            np.random.seed(resnet101_seed)
+            torch.manual_seed(resnet101_seed)
+            torch.cuda.manual_seed_all(resnet101_seed)
+            self.resnet101_seed = resnet101_seed
+        else:
+            self.resnet101_seed = None
+        if os.environ.get("RESNET101_EPOCHS"):
+            self.num_epochs = int(os.environ["RESNET101_EPOCHS"])
+        if os.environ.get("RESNET101_BATCH_SIZE"):
+            self.batch_size = int(os.environ["RESNET101_BATCH_SIZE"])
+        if os.environ.get("RESNET101_ITERATIONS_PER_EPOCH"):
+            self.num_iterations_per_epoch = int(os.environ["RESNET101_ITERATIONS_PER_EPOCH"])
+        if os.environ.get("RESNET101_VAL_ITERATIONS_PER_EPOCH"):
+            self.num_val_iterations_per_epoch = int(os.environ["RESNET101_VAL_ITERATIONS_PER_EPOCH"])
+        if os.environ.get("RESNET101_DISABLE_CHECKPOINTING", "0") == "1":
+            self.disable_checkpointing = True
+            self.save_every = 10**9
+        if os.environ.get("RESNET101_OUTPUT_FOLDER"):
+            self.output_folder = os.environ["RESNET101_OUTPUT_FOLDER"]
+            self.output_folder_base = os.path.dirname(self.output_folder)
+            os.makedirs(self.output_folder, exist_ok=True)
+            # See nnUNetTrainerENet.py's identical fix: nnUNetTrainer.__init__
+            # (called above via super().__init__()) already derived
+            # self.log_file from self.output_folder's DEFAULT value before
+            # this override runs, and never re-derives it later -- relocate
+            # the same timestamped filename the base class already picked
+            # into the right folder so the human-readable log lands next to
+            # this run's own checkpoints instead of a bare shared default.
+            self.log_file = os.path.join(self.output_folder, os.path.basename(self.log_file))
 
     @staticmethod
     def build_network_architecture(plans_manager: PlansManager,

@@ -103,15 +103,20 @@ def _activation(act: str) -> nn.Module:
 
 class SqueezeExcite(nn.Module):
     """Scales the EXPANDED (hidden_dim) feature map -- squeeze width is
-    computed from the block's own INPUT channels (pre-expansion), per the
-    source's own squeeze_factor=4 applied at `ops.squeeze_excite` call
-    time (before expansion happens in the real graph) -- see this file's
-    own module docstring for why that's the detail most implementations
-    get backwards."""
+    computed from that SAME expanded hidden_dim (squeeze_factor=4, rounded to
+    a multiple of 8), not the block's pre-expansion input. This file
+    previously computed it from the pre-expansion input instead (attributed
+    to a TF-slim source reading) -- corrected after cross-checking two
+    independent, code-verified references that both squeeze from hidden_dim:
+    torchvision's own official mobilenetv3.py (`squeeze_channels =
+    _make_divisible(cnf.expanded_channels // 4, 8)`) and the widely-used
+    d-li14/mobilenetv3.pytorch reference (`SELayer(hidden_dim)` with
+    `channel // reduction`). Only affects blocks with expand_ratio != 1
+    (hidden_dim != in_channels); block 0 (t=1) is unaffected either way."""
 
-    def __init__(self, in_channels: int, hidden_dim: int):
+    def __init__(self, hidden_dim: int):
         super().__init__()
-        squeeze_channels = _make_divisible(in_channels / 4, 8)
+        squeeze_channels = _make_divisible(hidden_dim / 4, 8)
         self.fc1 = nn.Conv2d(hidden_dim, squeeze_channels, kernel_size=1)
         self.act1 = nn.ReLU(inplace=True)
         self.fc2 = nn.Conv2d(squeeze_channels, hidden_dim, kernel_size=1)
@@ -126,14 +131,19 @@ class SqueezeExcite(nn.Module):
 class InvertedResidualV3(nn.Module):
     def __init__(
         self, in_channels: int, out_channels: int, kernel_size: int, stride: int,
-        expand_ratio: float, use_se: bool, act: str,
+        expand_ratio: float, use_se: bool, act: str, dilation: int = 1,
     ):
         super().__init__()
         if stride not in (1, 2):
             raise ValueError(f"InvertedResidualV3 stride must be 1 or 2, got {stride}.")
         hidden_dim = _make_divisible(in_channels * expand_ratio)
+        # Residual-eligibility uses the ORIGINAL declared stride, not the
+        # dilation-adjusted one below -- matches torchvision's own
+        # `use_res_connect = cnf.stride == 1 and ...` (dilation never changes
+        # this decision, only the depthwise conv's own stride/padding).
         self.use_residual = stride == 1 and in_channels == out_channels
-        padding = (kernel_size - 1) // 2
+        effective_stride = 1 if dilation > 1 else stride
+        padding = dilation * (kernel_size - 1) // 2
 
         expand: list[nn.Module] = []
         if expand_ratio != 1:
@@ -144,10 +154,10 @@ class InvertedResidualV3(nn.Module):
         self.expand = nn.Sequential(*expand)
 
         self.depthwise = nn.Sequential(
-            nn.Conv2d(hidden_dim, hidden_dim, kernel_size, stride, padding, groups=hidden_dim, bias=False),
+            nn.Conv2d(hidden_dim, hidden_dim, kernel_size, effective_stride, padding, dilation=dilation, groups=hidden_dim, bias=False),
             nn.BatchNorm2d(hidden_dim), _activation(act),
         )
-        self.se = SqueezeExcite(in_channels, hidden_dim) if use_se else nn.Identity()
+        self.se = SqueezeExcite(hidden_dim) if use_se else nn.Identity()
         self.project = nn.Sequential(
             nn.Conv2d(hidden_dim, out_channels, kernel_size=1, bias=False),
             nn.BatchNorm2d(out_channels),
@@ -174,6 +184,41 @@ class UpsampleBlockHS(nn.Sequential):
         )
 
 
+class LRASPPHead(nn.Module):
+    """Lite R-ASPP (Howard et al. 2019, Sec 6.4/Fig 10) -- verified against
+    torchvision's own torchvision/models/segmentation/lraspp.py `LRASPPHead`
+    class, read directly: `cbr` (1x1 conv, no bias -> BN -> ReLU) and `scale`
+    (global-avg-pool -> 1x1 conv, no bias -> Sigmoid) both operate on the
+    SAME high-level (deep, OS=16) feature; their product is bilinear-
+    upsampled to the low-level (OS=8) feature's spatial size and summed with
+    a separate 1x1-conv classifier on the low-level feature. torchvision
+    simplifies the paper's own Fig 10 large-kernel/strided pool to a plain
+    global pool (functionally equivalent for this purpose) -- followed here
+    since it's the citable, code-verified reference, same convention as this
+    file's other paper-vs-code corrections."""
+
+    def __init__(self, low_channels: int, high_channels: int, out_channels: int, inter_channels: int = 128):
+        super().__init__()
+        self.cbr = nn.Sequential(
+            nn.Conv2d(high_channels, inter_channels, kernel_size=1, bias=False),
+            nn.BatchNorm2d(inter_channels), nn.ReLU(inplace=True),
+        )
+        self.scale = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(high_channels, inter_channels, kernel_size=1, bias=False),
+            nn.Sigmoid(),
+        )
+        self.low_classifier = nn.Conv2d(low_channels, out_channels, kernel_size=1)
+        self.high_classifier = nn.Conv2d(inter_channels, out_channels, kernel_size=1)
+
+    def forward(self, low: torch.Tensor, high: torch.Tensor) -> torch.Tensor:
+        x = self.cbr(high)
+        s = self.scale(high)
+        x = x * s
+        x = F.interpolate(x, size=low.shape[-2:], mode="bilinear", align_corners=False)
+        return self.low_classifier(low) + self.high_classifier(x)
+
+
 # Real V3-Large 15-block schedule -- see module docstring.
 _LARGE_SETTING: tuple[tuple[float, int, int, int, bool, str], ...] = (
     # t,        c,   k, s, se,    act
@@ -193,24 +238,78 @@ _LARGE_SETTING: tuple[tuple[float, int, int, int, bool, str], ...] = (
     (6, 160, 5, 1, True, "HS"),
     (6, 160, 5, 1, True, "HS"),
 )
-# 0-indexed rows whose OWN output sits at each of the 4 non-stem downsample
-# depths' deepest point (i.e. the last row before the NEXT stride-2 row) --
-# used to pick the decoder's own mirrored channel schedule, same convention
-# MobileNetV2.py's own decoder construction uses.
-_DEPTH_MARKER_ROWS = (0, 2, 5, 11)  # depths /2, /4, /8, /16 respectively (row 14 / head2 covers /32)
+_LARGE_HEAD1_CHANNELS = 960
+
+# Real V3-Small 11-block schedule (paper Table 2 / official TF-slim
+# V3_SMALL spec, exp_size expressed here as a t=exp_size/block-own-input-
+# channels ratio, same convention _LARGE_SETTING uses): stem(16) -> row0
+# already stride=2 (unlike Large, whose row0 is stride=1) -- see the
+# generic depth-marker scan below, which handles a schedule where the very
+# first row is the one that transitions depth, not just Large's shape.
+_SMALL_SETTING: tuple[tuple[float, int, int, int, bool, str], ...] = (
+    # t,          c,  k, s, se,    act
+    (16 / 16, 16, 3, 2, True, "RE"),
+    (72 / 16, 24, 3, 2, False, "RE"),
+    (88 / 24, 24, 3, 1, False, "RE"),
+    (96 / 24, 40, 5, 2, True, "HS"),
+    (240 / 40, 40, 5, 1, True, "HS"),
+    (240 / 40, 40, 5, 1, True, "HS"),
+    (120 / 40, 48, 5, 1, True, "HS"),
+    (144 / 48, 48, 5, 1, True, "HS"),
+    (288 / 48, 96, 5, 2, True, "HS"),
+    (576 / 96, 96, 5, 1, True, "HS"),
+    (576 / 96, 96, 5, 1, True, "HS"),
+)
+_SMALL_HEAD1_CHANNELS = 576  # Large uses 960 -- Small's own head1 width, per the source spec
+_SMALL_HEAD2_CHANNELS = 1024  # Large uses 1280 -- Small's own head2 width, per the source spec
+# NOTE: an earlier reading of Table 2's row 13 ("conv2d, 1x1, -, 576, X, HS,
+# 1") took the SE column's checkmark to mean Small's head1 carries a
+# squeeze-excite. Cross-checked against two independent, code-verified
+# references -- torchvision's own official mobilenetv3.py (`Conv2dNormActivation`
+# for both Large's and Small's head1, no SE layer at all) and the widely-used
+# d-li14/mobilenetv3.pytorch reference (`conv_1x1_bn`, likewise no SE) -- and
+# both agree head1 has NO squeeze-excite for either variant. Since these are
+# the actual code (one of them literally the weights Google released),
+# treated as authoritative over the earlier OCR'd table reading; the
+# head1-SE mechanism below is removed accordingly.
 
 
 class MobileNetV3(nn.Module):
+    """decoder="convtranspose" (default): this repo's own 5-stage learned-
+    upsample decoder (unchanged, see module docstring). decoder="lraspp":
+    the paper's own Sec 6.4 segmentation-specific configuration -- RF2
+    (`reduced_tail`, halves the last block-group's channels) + dilation held
+    at OS=16 on that same group + the LRASPPHead above, matching Table 7's
+    row 11 (V3-Small, RF2, LR-ASPP, F=128 -> paper's own 0.47M). Both
+    `reduced_tail` and dilation are verified against torchvision's own
+    `_mobilenet_v3_conf(reduced_tail=True, dilated=True)` (read directly):
+    only the TRAILING run of rows sharing the last stride-2 transition's
+    channel width (3 rows for both Large's 160ch group and Small's 96ch
+    group) gets its `c` halved and its depthwise stride forced to 1 via
+    dilation=2 -- `t` is expressed in this file as a ratio of the block's
+    OWN (already-halved, for later tail rows) input channels, so halving
+    only `c` reproduces torchvision's literal exp-channel values exactly
+    without needing to touch `t` at all (worked through by hand against
+    torchvision's own literal (672,960,960)/(288,576,576)-style exp values
+    for Large/Small and confirmed to match)."""
+
     def __init__(
         self,
         in_channels: int = 3,
         out_channels: int = 20,
         width_mult: float = 1.0,
         stem_channels: int = 16,
-        head1_channels: int = 960,
+        setting: tuple = _LARGE_SETTING,
+        head1_channels: int = _LARGE_HEAD1_CHANNELS,
         head2_channels: int = 1280,
+        decoder: str = "convtranspose",
+        reduced_tail: bool = True,
+        lraspp_inter_channels: int = 128,
     ):
         super().__init__()
+        if decoder not in ("convtranspose", "lraspp"):
+            raise ValueError(f"Unknown decoder {decoder!r} -- expected 'convtranspose' or 'lraspp'.")
+        self.decoder_type = decoder
         stem_c = _make_divisible(stem_channels * width_mult)
 
         # -- Encoder (real architecture, /32 total downsample) --------------
@@ -219,25 +318,88 @@ class MobileNetV3(nn.Module):
             nn.BatchNorm2d(stem_c), HardSwish(),
         )
 
+        stride2_rows = [i for i, row in enumerate(setting) if row[3] == 2]
+        # lraspp: halve `c` (only) for every row from the LAST stride-2 row
+        # onward -- `t` is a ratio of the block's own input, so it naturally
+        # recomputes the right (halved-input-relative) exp channels once the
+        # preceding row's halved `c` flows in as this row's `in_c` (see
+        # class docstring). Also hold OS=16 via dilation=2 + forced stride=1
+        # on that same trailing group (row_dilation), rather than the
+        # native OS=32 the un-dilated schedule would reach.
+        effective_setting = list(setting)
+        row_dilation = [1] * len(setting)
+        if decoder == "lraspp":
+            tail_start_row = stride2_rows[-1] if stride2_rows else len(setting)
+            if reduced_tail:
+                effective_setting = [
+                    (t, c // 2 if i >= tail_start_row else c, k, s, se, act)
+                    for i, (t, c, k, s, se, act) in enumerate(setting)
+                ]
+            row_dilation = [2 if i >= tail_start_row else 1 for i in range(len(setting))]
+
         self.blocks = nn.ModuleList()
         in_c = stem_c
-        depth_marker_channels: dict[int, int] = {}
-        for i, (t, c, k, s, se, act) in enumerate(_LARGE_SETTING):
+        for row_idx, (t, c, k, s, se, act) in enumerate(effective_setting):
             out_c = _make_divisible(c * width_mult)
-            self.blocks.append(InvertedResidualV3(in_c, out_c, k, s, t, se, act))
+            self.blocks.append(InvertedResidualV3(in_c, out_c, k, s, t, se, act, dilation=row_dilation[row_idx]))
             in_c = out_c
-            if i in _DEPTH_MARKER_ROWS:
-                depth_marker_channels[i] = out_c
+
+        if decoder == "lraspp":
+            # Low tap: output of the row at stage_markers[-4] -- torchvision's
+            # own "C2" marker (verified: for both Large's/Small's real
+            # 4-stride-2-row schedules this reduces to "the SECOND stride-2
+            # row's output", computed generically here off `stride2_rows`
+            # rather than hardcoded to that count).
+            scaled_channels_eff = [stem_c] + [_make_divisible(c * width_mult) for (_, c, _, _, _, _) in effective_setting]
+            stage_markers = [0] + [r + 1 for r in stride2_rows] + [len(setting)]
+            low_marker = stage_markers[-4]
+            low_channels = scaled_channels_eff[low_marker]
+            self.low_tap_row = low_marker - 1  # 0-indexed row whose output is the low-level tap
+
+            # head1 only (no head2/classifier -- LR-ASPP operates directly on
+            # head1's output): channels = 6x the (possibly tail-halved) last
+            # block's own output, matching torchvision's own
+            # `lastconv_output_channels = 6 * lastconv_input_channels` (this
+            # is ALWAYS how head1's width is derived in the real architecture,
+            # not a separate constant -- 6*96=576/6*160=960 for the
+            # un-reduced classification-style Small/Large head1 widths this
+            # file's own `_SMALL_HEAD1_CHANNELS`/`_LARGE_HEAD1_CHANNELS`
+            # constants already hardcode, confirmed consistent).
+            head1_c = 6 * in_c
+            self.head = nn.Sequential(
+                nn.Conv2d(in_c, head1_c, kernel_size=1, bias=False), nn.BatchNorm2d(head1_c), HardSwish(),
+            )
+            self.lraspp = LRASPPHead(low_channels, head1_c, out_channels, inter_channels=lraspp_inter_channels)
+            return
+
+        # Depth markers: for each stride-2 transition, the channel count of
+        # whatever fed INTO it (the previous row's output, or the stem's
+        # output if row 0 itself is stride=2 -- Small's schedule hits this
+        # case via row_idx-1==-1, Large's doesn't since its row 0 is
+        # stride=1). Computed off the already-scaled per-row channel counts
+        # so this stays consistent under any width_mult.
+        depth_marker_channels: dict[int, int] = {}
+        scaled_channels = [stem_c] + [_make_divisible(c * width_mult) for (_, c, _, _, _, _) in setting]
+        for row_idx, (_, _, _, s, _, _) in enumerate(setting):
+            if s == 2:
+                depth_marker_channels[row_idx - 1] = scaled_channels[row_idx]  # row_idx-1==-1 means "the stem"
 
         head1_c = _make_divisible(head1_channels * width_mult)
         head2_c = _make_divisible(head2_channels * max(1.0, width_mult))
-        self.head = nn.Sequential(
+        head_layers: list[nn.Module] = [
             nn.Conv2d(in_c, head1_c, kernel_size=1, bias=False), nn.BatchNorm2d(head1_c), HardSwish(),
             nn.Conv2d(head1_c, head2_c, kernel_size=1, bias=True), HardSwish(),  # source: normalizer_fn=None here
-        )
+        ]
+        self.head = nn.Sequential(*head_layers)
 
         # -- Decoder (this repo's own addition -- see module docstring) -----
-        d0, d1, d2, d3 = (depth_marker_channels[i] for i in (11, 5, 2, 0))
+        # 4 non-stem downsample depths, deepest first. Marker keys are
+        # SOURCE row indices (the row whose output sits at that depth,
+        # -1 == the stem itself) -- sorted ascending then reversed picks
+        # them deepest-to-shallowest regardless of how many rows the
+        # schedule has (11 for Small, 15 for Large).
+        marker_rows_shallow_to_deep = sorted(depth_marker_channels.keys())
+        d0, d1, d2, d3 = (depth_marker_channels[r] for r in reversed(marker_rows_shallow_to_deep))
         self.up1 = UpsampleBlockHS(head2_c, d0)
         self.up2 = UpsampleBlockHS(d0, d1)
         self.up3 = UpsampleBlockHS(d1, d2)
@@ -246,6 +408,18 @@ class MobileNetV3(nn.Module):
         self.final = nn.Conv2d(stem_c, out_channels, kernel_size=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.decoder_type == "lraspp":
+            input_size = x.shape[-2:]
+            x = self.stem(x)
+            low = None
+            for row_idx, block in enumerate(self.blocks):
+                x = block(x)
+                if row_idx == self.low_tap_row:
+                    low = x
+            high = self.head(x)
+            out = self.lraspp(low, high)
+            return F.interpolate(out, size=input_size, mode="bilinear", align_corners=False)
+
         x = self.stem(x)
         for block in self.blocks:
             x = block(x)
