@@ -73,40 +73,39 @@ STAGES: dict[str, dict] = {
         "description": (
             "The literal starting point of this search, predating even "
             "Stage 1's naive width sweep: ENet's own paper-faithful config "
-            "(channels=20,72,144,72,20 -- the real paper baseline width, "
-            "not a shrunk U-variant --, decoder_type=max_unpool, prelu=1, "
-            "bottlenecks=4,8,8,2,1, context_pattern=default). Trained as "
-            "nnUNetTrainerENet_Original on Dataset501_ARCADE, git branch "
-            "`enet-compression` (github.com/TheLegendIV/LightM-UNet/tree/"
-            "enet-compression/data/nnUNet_results/Dataset501_ARCADE/"
-            "nnUNetTrainerENet_Original__nnUNetPlans__2d/fold_0). NOT in "
-            "this branch's own compression/results.csv -- it predates the "
-            "later 4-class (LAD/RCA/LCX/LM) relabeling entirely: "
-            "Dataset501_ARCADE is BINARY (background=0, vessel=1), so only "
-            "a single foreground Dice exists for this point, no per-class "
-            "RCA/LCX/LAD/LM breakdown is possible here. decoder_type and "
-            "prelu are confirmed from nnUNetTrainerENet.py's own defaults "
-            "on that branch (ENET_DECODER_TYPE/ENET_USE_PRELU env-var "
-            "fallbacks), since debug.json doesn't log them directly."
+            "(channels=16,64,128,128,64,16 -- the real paper's own "
+            "split-stage2/3 widths, not a shrunk U-variant --, "
+            "decoder_type=max_unpool, prelu=1, bottlenecks=4,8,8,2,1, "
+            "context_pattern=default). Trained as "
+            "nnUNetTrainerENet_enet_original_prelu_maxunpool_3c on "
+            "Dataset511_ARCADE_1x1_3c (compression/scripts/"
+            "make_arcade_3c_dataset.py -- Dataset509_ARCADE_1x1_4c with LM "
+            "merged into background, LAD/RCA/LCX untouched, "
+            "compression/slurm/stage_enet_original_prelu_maxunpool_3c.job). "
+            "Real held-out-test-split per-class Dice, collected via the "
+            "normal compression/collect_results.py pipeline (same as every "
+            "other row in results.csv -- imagesTs/labelsTs, not the "
+            "internal CV val-split). Paired with the identical config "
+            "re-trained on the full 4-class dataset "
+            "(nnUNetTrainerENet_enet_original_prelu_maxunpool_4c, "
+            "compression/slurm/stage_enet_original_prelu_maxunpool_4c.job, "
+            "Dataset509_ARCADE_1x1_4c, LM NOT merged) to isolate whether "
+            "dropping LM changes RCA/LCX/LAD Dice. Result: small, mixed "
+            "deltas, not a clear win either way -- LAD +0.0057 and RCA "
+            "+0.0046 favor dropping LM (3c), LCX -0.0105 favors keeping it "
+            "(4c). LM itself scores 0.8055 in the 4c run -- not the "
+            "hardest class despite being the rarest, so it isn't obviously "
+            "'soaking up' the other three's errors as hypothesized."
         ),
-        "manual_data": [
-            {
-                "config_name": "nnUNetTrainerENet_Original",
-                "label": "ENet Original (paper-faithful, binary)",
-                "dice": 0.8214667692353737,  # foreground_mean Dice, validation/summary.json
-                "dataset": "Dataset501_ARCADE (binary vessel/background)",
-                "decoder_type": "max_unpool",
-                "channels": "20,72,144,72,20",
-                "prelu": 1,
-            },
+        "config_names": [
+            "nnUNetTrainerENet_enet_original_prelu_maxunpool_3c",
+            "nnUNetTrainerENet_enet_original_prelu_maxunpool_4c",
         ],
-        "known_gaps": [
-            "Per-class (LAD/RCA/LCX/LM) breakdown is NOT available for this "
-            "point -- Dataset501_ARCADE is binary. A true apples-to-apples "
-            "4-class re-run of this exact config (paper-width channels + "
-            "max_unpool + prelu, on Dataset509_ARCADE_1x1_4c) has not been "
-            "queued yet.",
-        ],
+        "labels": {
+            "nnUNetTrainerENet_enet_original_prelu_maxunpool_3c": "ENet Original (3-class, LM dropped)",
+            "nnUNetTrainerENet_enet_original_prelu_maxunpool_4c": "ENet Original (4-class)",
+        },
+        "known_gaps": [],
     },
     "stage_1": {
         "title": "Naive compression baseline",
@@ -123,12 +122,16 @@ STAGES: dict[str, dict] = {
             "nnUNetTrainerENet_1_naive_baseline_U8",
             "nnUNetTrainerENet_1_naive_baseline_U16",
             # ENet-paper-faithful companion curve (PReLU + max_unpool,
-            # same 5-point channel grid) -- queued via
+            # same U-series channel grid) -- queued via
             # compression/slurm/stage_1_naive_baseline_prelu_maxunpool_array.job,
             # not yet landed in results.csv. harvest() only keeps rows that
             # exist, so these are simply absent from plots/tables until the
-            # array completes.
-            "nnUNetTrainerENet_1_naive_baseline_prelu_maxunpool_Baseline",
+            # array completes. NOTE: the array's own Baseline task (5-tuple
+            # channels=16,64,128,64,16) was REMOVED -- the real
+            # ENet-paper-faithful baseline point now lives in Stage 0
+            # (nnUNetTrainerENet_enet_original_prelu_maxunpool_4c/3c, 6-tuple
+            # channels=16,64,128,128,64,16, the paper's own split-stage2/3
+            # form), not duplicated here.
             "nnUNetTrainerENet_1_naive_baseline_prelu_maxunpool_U2",
             "nnUNetTrainerENet_1_naive_baseline_prelu_maxunpool_U4",
             "nnUNetTrainerENet_1_naive_baseline_prelu_maxunpool_U8",
@@ -140,7 +143,6 @@ STAGES: dict[str, dict] = {
             "nnUNetTrainerENet_1_naive_baseline_U4": "U4",
             "nnUNetTrainerENet_1_naive_baseline_U8": "U8",
             "nnUNetTrainerENet_1_naive_baseline_U16": "U16",
-            "nnUNetTrainerENet_1_naive_baseline_prelu_maxunpool_Baseline": "ENet Original (PReLU+maxunpool)",
             "nnUNetTrainerENet_1_naive_baseline_prelu_maxunpool_U2": "U2 (PReLU+maxunpool)",
             "nnUNetTrainerENet_1_naive_baseline_prelu_maxunpool_U4": "U4 (PReLU+maxunpool)",
             "nnUNetTrainerENet_1_naive_baseline_prelu_maxunpool_U8": "U8 (PReLU+maxunpool)",
@@ -262,6 +264,108 @@ STAGES: dict[str, dict] = {
             "pipeline, not this controlled comparison."
         ),
     },
+    "stage_6": {
+        "title": "Post-selection probe: does stage3 (the dilated context "
+                  "stage) matter, at matched width?",
+        "description": (
+            "Not part of how S12 dense was picked (Stages 1-5 already "
+            "closed that question) -- a later, separate probe on top of "
+            "S12 dense's own recipe applied back onto S5.6's PReLU/"
+            "separable_dilated lineage (5_6_separable_dense_dilation, "
+            "channels=4,16,32,16,4, bottlenecks=4,8,8,2,1, "
+            "context_pattern=dense_dilation, separable_dilated=1), asking "
+            "whether the dilated context block can be collapsed into "
+            "stage2 alone. Raw stage 26_s5_6_probe_family "
+            "(compression/slurm/archive/stage_26_s5_6_probe_family_array.job) "
+            "ran 8 probes, half of which add a 'd1 lead-in' "
+            "(context_pattern=dense_dilation_lead1, a distinct dilation-"
+            "cycle shape). This stage isolates the 4 non-lead-in probes "
+            "(plain dense_dilation) plus their S5.6 reference, i.e. only "
+            "bottlenecks_per_stage[2] (stage3's block count) varies at "
+            "each matched width -- lead-in variants are excluded so the "
+            "stage3-removal effect isn't confounded with the cycle-shape "
+            "change. "
+            "Two matched with/without-stage3 pairs: at S5.6's own width "
+            "(16,32,32,16,4), removing stage3 (bottlenecks 4,8,8,2,1 -> "
+            "4,8,0,2,1) costs -0.065 dice (0.7985 -> 0.7334, -8.2% "
+            "relative) for -37.8% params / -64.8% MACs / -44.2% activation-"
+            "buffer elements. At the narrower w24 width (8,24,24,8,4), the "
+            "same removal costs -0.079 dice (0.7567 -> 0.6776, -10.4% "
+            "relative, a LARGER relative hit) for -40.6% params / -22.2% "
+            "MACs / -45.0% mem elements. clDice and n_components move the "
+            "same direction as dice in both pairs (fragmentation worsens "
+            "when stage3 is removed), so this isn't a Dice-only artifact. "
+            "None of these 5 rows are flagged converged_flag=True (all "
+            "~140-150 of a presumably longer schedule) -- read magnitudes "
+            "as directional, not final."
+        ),
+        "config_names": [
+            "nnUNetTrainerENet_5_6_separable_dense_dilation",
+            "nnUNetTrainerENet_26_3_no_stage3",
+            "nnUNetTrainerENet_26_5_w24",
+            "nnUNetTrainerENet_26_6_w24_no_stage3",
+            "nnUNetTrainerENet_26_1_u8style",
+        ],
+        "labels": {
+            "nnUNetTrainerENet_5_6_separable_dense_dilation": "S5.6 base (stage3 present)",
+            "nnUNetTrainerENet_26_3_no_stage3": "S5.6 width (stage3 removed)",
+            "nnUNetTrainerENet_26_5_w24": "w24 (stage3 present)",
+            "nnUNetTrainerENet_26_6_w24_no_stage3": "w24 (stage3 removed)",
+            "nnUNetTrainerENet_26_1_u8style": "u8-style width (stage3 present)",
+        },
+        "known_gaps": [
+            "26_1_u8style (channels=4,8,16,8,4, the narrowest width probed) "
+            "has no non-lead-in no-stage3 counterpart -- that pairing only "
+            "exists as the lead-in variant 26_8_w24_no_stage3_d1leadin_halved, "
+            "excluded from this stage. Included anyway as the narrowest "
+            "stage3-present width point.",
+        ],
+        "excluded_note": (
+            "The 4 d1-lead-in probes from the same raw stage "
+            "(26_2_d1leadin, 26_4_d1leadin_no_stage3, "
+            "26_7_w24_no_stage3_d1leadin, "
+            "26_8_w24_no_stage3_d1leadin_halved -- context_pattern="
+            "dense_dilation_lead1) are a different axis (dilation-cycle "
+            "shape, not stage3 removal) and are left out so the two "
+            "changes aren't conflated. Also excluded: the later "
+            "26_9/26_10/26_9_..._pruned5 follow-ons (w24 with stage1/4 "
+            "width also bumped to 12, nonneg_block/relu PReLU-variant "
+            "sweep) -- same raw stage tag, different question."
+        ),
+    },
+    "stage_7": {
+        "title": "S12 dense family: width variation",
+        "description": (
+            "Also post-selection (like Stage 6): raw stage "
+            "12_dense_relu_width_sweep re-runs S12 dense's own recipe "
+            "(context_pattern=dense_dilation, prelu=0, upsample_conv, "
+            "bottlenecks=4,8,8,2,1 fixed throughout -- only stage2/3/4 "
+            "channel width f2=f3 and f1=f4 move) at 5 narrower widths "
+            "below the Stage-4/5 winner's own 16,32,32,16,4, plus the "
+            "winner itself (nnUNetTrainerENet_12_dense_relu) as the "
+            "widest point. Unlike Stage 6, bottlenecks_per_stage never "
+            "changes here -- this isolates width alone, holding stage3 "
+            "(and every other topology choice) fixed at the Stage 4/5 "
+            "winner's own settings."
+        ),
+        "config_names": [
+            "nnUNetTrainerENet_12_dense_relu_w4_8",
+            "nnUNetTrainerENet_12_dense_relu_w8_16",
+            "nnUNetTrainerENet_12_dense_relu_w8_20",
+            "nnUNetTrainerENet_12_dense_relu_w12_20",
+            "nnUNetTrainerENet_12_dense_relu_w12_24",
+            "nnUNetTrainerENet_12_dense_relu",
+        ],
+        "labels": {
+            "nnUNetTrainerENet_12_dense_relu_w4_8": "w4/8",
+            "nnUNetTrainerENet_12_dense_relu_w8_16": "w8/16",
+            "nnUNetTrainerENet_12_dense_relu_w8_20": "w8/20",
+            "nnUNetTrainerENet_12_dense_relu_w12_20": "w12/20",
+            "nnUNetTrainerENet_12_dense_relu_w12_24": "w12/24",
+            "nnUNetTrainerENet_12_dense_relu": "w16/32 (Stage 4/5 winner)",
+        },
+        "known_gaps": [],
+    },
 }
 
 EXCLUDED_FAMILIES_NOTE = """\
@@ -274,8 +378,13 @@ Excluded entirely from this narrative (not plotted anywhere):
   `7_reginterleaved_shape_variants`, `8_reginterleaved_isolation` (minus the
   one fullwidth DSC-no-proj row already used in Stage 4),
   `10_reginterleaved_separable_projected`, `13_*`, `15_*`..`22_*`, `23_*`,
-  `25_*`, `26_*`, `27_*` -- none of these were carried forward to the final
-  pick (S12 dense).
+  `25_*`, `27_*` -- none of these were carried forward to the final pick
+  (S12 dense).
+- Raw stage `26_s5_6_probe_family` -- mostly excluded (it's a post-selection
+  probe on S5.6's own lineage, not part of how S12 dense was chosen), EXCEPT
+  the 5 non-lead-in rows now isolated in Stage 6 (see its own excluded_note
+  for exactly which 26_* rows still aren't shown anywhere: the 4 d1-lead-in
+  variants and the later 26_9/26_10/pruned5 follow-ons).
 - Every quantization/QAT/PTQ/HAWQ derivative row (blank `abbrev`,
   `joint_alpha*`/`uniform_int*`/`ptq*`/`qat*` suffixes) -- that's the later
   quantization chapter's material, not this NAS narrative.
