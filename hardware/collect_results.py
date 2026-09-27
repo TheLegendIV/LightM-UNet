@@ -27,17 +27,25 @@ essentially every build so far regardless of whether resType=dsp was forced
 and actually synthesized to real DSP48E2 primitives -- confirmed wrong by
 manual cross-check against the raw Vivado-generated utilization_placed.rpt
 in several past builds (see hardware/results.csv notes on the w16/w24 HAWQ
-rows). Pass --dsp-rpt-dir pointing at a LOCAL directory containing
-copied-out `*Partition_N_wrapper_utilization*.rpt` files (search is
-recursive, one per partition) -- still inside each partition's own Vivado
-OOC-synth project folder while the build container is alive, e.g.
-`/tmp/finn_dev_<user>/synth_out_of_context_XXXXXXXX/results_GenericPartition_N_wrapper/`
-(path recorded in that partition's own "vivado_proj_folder" JSON field) --
-to have this script parse the REAL DSP48E2 "Used" count and override the
-JSON's DSP field for that partition. THESE RAW REPORTS LIVE IN THE
-CONTAINER'S EPHEMERAL /tmp BUILD DIR, NOT UNDER OUTPUT_DIR -- copy them out
-BEFORE the container is stopped/removed or this correction is lost for
-good (this has happened at least once).
+rows). Two ways to correct it (pick whichever is easier to stage locally):
+  --dsp-build-tmp-dir  A LOCAL copy of the whole build's
+      finn_build_tmp/<job>/ dir (e.g. `docker cp <container>:.../finn_build_tmp/<job> <local_dir>`,
+      one shot, no per-partition renaming). Each partition's own
+      GenericPartition_N/synth_out_of_context_*/results_*_wrapper/vivado.log
+      already contains the real report_utilization printout -- this is the
+      same underlying data as dump_real_dsp_utilization.py (which can also
+      be run standalone INSIDE the container, no copy-out needed, if you
+      just want to eyeball the numbers first).
+  --dsp-rpt-dir  A LOCAL directory containing individually copied-out
+      `*Partition_N_wrapper_utilization*.rpt` files (search is recursive,
+      one per partition, filename must contain "partition_N" + "utilization").
+      More manual (one docker cp per partition) but useful if the full
+      finn_build_tmp dir is too large/inconvenient to copy.
+Either way, the real DSP48E2 "Used" count overrides the JSON's DSP field
+for that partition. THESE RAW REPORTS LIVE IN THE CONTAINER'S EPHEMERAL
+/tmp BUILD DIR, NOT UNDER OUTPUT_DIR -- copy them out BEFORE the container
+is stopped/removed or this correction is lost for good (this has happened
+at least once).
 
 Usage:
     python hardware/collect_results.py \\
@@ -48,12 +56,14 @@ Usage:
         --bit-width 2/4/8_mixed_joint \\
         --output-dir finn/notebooks/enet/finn_deployment_outputs/hawq_..._20260904_061905 \\
         --build-start "2026-09-04 06:19:05" --build-end "2026-09-04 22:05:31" \\
+        [--dsp-build-tmp-dir /path/to/local/copy/of/finn_build_tmp/<job>] \\
         [--dsp-rpt-dir /path/to/local/copies/of/utilization_placed_reports] \\
         [--notes "extra free text appended to the auto-generated notes"]
 """
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import re
 import time
@@ -114,6 +124,17 @@ def find_dsp_rpt(dsp_rpt_dir: Path, partition_idx: int) -> Path | None:
         if pattern.search(path.name):
             return path
     return None
+
+
+def find_dsp_log_in_build_tmp(build_tmp_dir: Path, partition_idx: int) -> Path | None:
+    """Locate GenericPartition_N's own top-level OOC-synth vivado.log inside a
+    LOCAL copy of finn_build_tmp/<job>/ (same layout as dump_real_dsp_utilization.py
+    expects inside the container). A partition dir also contains unrelated
+    vivado.log files from HLS ip-gen sub-builds and the stitched-IP project --
+    only synth_out_of_context_*/results_*_wrapper/ covers the whole partition."""
+    pattern = str(build_tmp_dir / f"GenericPartition_{partition_idx}" / "synth_out_of_context_*" / "results_*_wrapper" / "vivado.log")
+    matches = glob.glob(pattern)
+    return Path(matches[0]) if matches else None
 
 
 def load_json(path: Path) -> dict | None:
@@ -324,6 +345,7 @@ def main() -> None:
     ap.add_argument("--build-end", default="")
     ap.add_argument("--vivado-version", default="2022.2")
     ap.add_argument("--dsp-rpt-dir", type=Path, default=None, help="Local dir with copied-out *_utilization*.rpt files, one per partition (searched recursively)")
+    ap.add_argument("--dsp-build-tmp-dir", type=Path, default=None, help="Local copy of the whole finn_build_tmp/<job>/ dir -- reads each partition's own vivado.log directly, no per-file renaming needed (preferred over --dsp-rpt-dir if both given)")
     ap.add_argument("--notes", default="", help="Extra free text appended to the auto-generated notes on every row")
     args = ap.parse_args()
 
@@ -367,7 +389,16 @@ def main() -> None:
     for i, part in enumerate(partitions):
         dsp_override = None
         dsp_verified = False
-        if args.dsp_rpt_dir is not None:
+        if args.dsp_build_tmp_dir is not None:
+            log_path = find_dsp_log_in_build_tmp(args.dsp_build_tmp_dir, i)
+            if log_path is not None:
+                dsp_override = parse_dsp_from_rpt(log_path)
+                dsp_verified = dsp_override is not None
+                if dsp_override is None:
+                    print(f"  WARNING: could not parse a DSP count out of {log_path}")
+            else:
+                print(f"  WARNING: no vivado.log found for partition {i} under {args.dsp_build_tmp_dir}")
+        elif args.dsp_rpt_dir is not None:
             rpt = find_dsp_rpt(args.dsp_rpt_dir, i)
             if rpt is not None:
                 dsp_override = parse_dsp_from_rpt(rpt)
