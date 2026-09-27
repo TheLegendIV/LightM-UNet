@@ -16,8 +16,8 @@ its own.
 
 Usage:
     python compression/post-quantization/calibrate_12_dense_relu_nearest_conv_upsample_256_w8_16_perlayer.py \\
-        --layer-bits-file MILP/artifacts/S12_dense_nn_upsample_256_w8_16_v2/layer_bits_SITES_12_dense_relu_nearest_conv_upsample_256_w8_16_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram50_dsp90_fps250_dsrate1.5.json \\
-        --out-net-name nnUNetTrainerLayerQuantENet_12_dense_relu_nearest_conv_upsample_256_w8_16_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram50_dsp90_fps250_dsrate1.5_calibrated
+        --layer-bits-file MILP/artifacts/S12_dense_nn_upsample_256_w8_16_v2/layer_bits_SITES_12_dense_relu_nearest_conv_upsample_256_w8_16_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram50_dsp90_fps250_dsrate2.25.json \\
+        --out-net-name nnUNetTrainerLayerQuantENet_12_dense_relu_nearest_conv_upsample_256_w8_16_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram50_dsp90_fps250_dsrate2.25_calibrated
 """
 from __future__ import annotations
 
