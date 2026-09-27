@@ -99,12 +99,24 @@ if [ ! -f "$LAYER_BITS_SITES_FILE" ]; then
     exit 1
 fi
 
-CALIBRATED_CHECKPOINT="$nnUNet_results/${DATASET_NAME}/${CALIBRATED_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
-if [ ! -f "$CALIBRATED_CHECKPOINT" ]; then
-    echo "ERROR: $CALIBRATED_CHECKPOINT not found -- this job skips STEP 1 (calibration) " \
-         "unconditionally, so this checkpoint must already exist. Run the parent job " \
-         "(qat_12_dense_relu_nearest_conv_upsample_256_w8_16_v3.job) instead, or run STEP 1 by hand." >&2
+FP32_CHECKPOINT="$nnUNet_results/${DATASET_NAME}/${FP32_SOURCE_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
+echo "=== Checking FP32 source checkpoint exists ==="
+if [ ! -f "$FP32_CHECKPOINT" ]; then
+    echo "ERROR: FP32 source checkpoint not found: $FP32_CHECKPOINT -- run stage_12_dense_relu_nearest_conv_upsample_256_w8_16.job first." >&2
     exit 1
+fi
+
+CALIBRATED_CHECKPOINT="$nnUNet_results/${DATASET_NAME}/${CALIBRATED_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
+echo "=== STEP 1: calibrate real LayerQuantENet at this solve's bits (warm-start from the real FP32 checkpoint; skip if already done) ==="
+if [ -f "$CALIBRATED_CHECKPOINT" ]; then
+    echo "Calibrated checkpoint already exists at ${CALIBRATED_CHECKPOINT} -- skipping calibration."
+else
+    python compression/post-quantization/calibrate_12_dense_relu_nearest_conv_upsample_256_w8_16_perlayer.py \
+        --source-net-name "${FP32_SOURCE_NET_NAME}" \
+        --out-net-name "${CALIBRATED_NET_NAME}" \
+        --dataset-name "${DATASET_NAME}" \
+        --layer-bits-file "${LAYER_BITS_SITES_FILE}" \
+        --calibration-seed "${CALIBRATION_SEED}"
 fi
 
 echo "=== STEP 2: real QAT fine-tuning of LayerQuantEnetFINN directly, complete ${QAT_EPOCHS}-epoch schedule ==="
