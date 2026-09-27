@@ -12,6 +12,21 @@
 
 set -e
 
+# NAMING: this job's own identity (job-name, RUN_NAME, CALIBRATED_NET_NAME)
+# uses the short "_v3" versioned form (matching this file's own filename)
+# instead of spelling out every ILP constraint (alpha/lut/bram/dsp/fps/
+# dsrate/ft-epochs) in the name -- that pattern, used by this job's own
+# sibling files, was becoming unwieldy as more constraints accumulated
+# across ILP solves. The MILP-produced artifact paths below
+# (LAYER_BITS_ILP_FILE/LAYER_BITS_SITES_FILE) are UNCHANGED and still use
+# the solver's own full descriptive naming -- those are external outputs
+# from finn_milp.py, not this job's own identity, and renaming them here
+# would just break the lookup.
+#
+# GPU: full A100 (--partition=gpu), not a MIG slice (--partition=gpu_mig)
+# -- this job's own compute (QAT fine-tuning + calibration) benefits from
+# the full card rather than a 3g.20gb fraction.
+#
 # w8/16 width-point sibling of qat_12_dense_relu_nearest_conv_upsample_256_
 # finn_joint_alpha1.0_perlayer_candidatebits468_forcedsp_lut50_bram50_dsp90_
 # fps250_dsrate1.5_ft15ep.job ("MILP S12 dense 256x256 v2"): SAME ILP
