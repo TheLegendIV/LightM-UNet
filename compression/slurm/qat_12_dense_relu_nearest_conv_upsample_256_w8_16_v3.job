@@ -36,9 +36,9 @@ set -e
 # fps250_dsrate1.5_ft15ep.job ("MILP S12 dense 256x256 v2"): SAME ILP
 # constraint set (candidate bits {4,6,8}, force-dsp, alpha=1.0,
 # --target-fps 250 hard throughput constraint, LUT 50%/BRAM 50%/DSP 90%
-# hard caps, --optimize-downstream-rate 1.5 -- see MILP/finn_milp.md "Rate
-# coherence") applied to the w8/16 width point instead of the base
-# 4,16,32,16,4 width (nnUNetTrainerENet_12_dense_relu_nearest_conv_upsample_256_w8_16,
+# hard caps -- see MILP/finn_milp.md "Rate coherence") applied to the w8/16
+# width point instead of the base 4,16,32,16,4 width
+# (nnUNetTrainerENet_12_dense_relu_nearest_conv_upsample_256_w8_16,
 # CHANNELS=(4, 8, 16, 8, 4), see MILP/configs/config_12_dense_relu_nearest_
 # conv_upsample_256_w8_16.py). Trains LayerQuantEnetFINN DIRECTLY (see
 # enet/nnunetv2/nets/LayerQuantEnetFINN.py and nnUNetTrainerLayerQuantEnetFINN_
@@ -47,19 +47,31 @@ set -e
 # substitutions' accuracy cost instead of eating it as export-time
 # slippage) -- not independently re-verified at this width.
 #
+# --optimize-downstream-rate DIFFERS from the base width: 2.25, not 1.5.
+# Confirmed (2026-09-27) that 1.5 is genuinely Infeasible at this width under
+# the same LUT/BRAM/DSP/fps caps -- isolated to the rate-coherence
+# constraint alone (not its interaction with --target-fps): at Cout as low
+# as 4/5/8 in this width's stage4/stage5/output layers, the discrete PE/SIMD
+# folding options are too coarse (few divisors) to land branch/chain cycle
+# ratios inside 1.5x of each other. Binary-searched the feasibility
+# boundary (Infeasible at 2.0, Optimal from ~2.05 up) and settled on 2.25
+# for margin. This solve (see below) comes back Optimal: 305.2 FPS @
+# 100MHz, LUT 49.9%/BRAM 50.0%/DSP 40.5% of budget -- all still within the
+# same hard caps as the base width, only the rate-coherence ratio moved.
+#
 # IMPORTANT: this is a SEPARATE ILP solve from the base width's own
 # S12_dense_nn_upsample_256_v2 -- per-layer tensor shapes differ at w8/16,
 # so HAWQ sensitivity and the FINN folding/resource cost model both need to
-# be re-solved, not reused. The ILP solve has NOT been run yet for this
-# width (see the guard clause below) -- run it first in the FINN build
-# container (finn_milp.py, same flags as the base width's own v2 solve:
-# --candidate-bits 4,6,8 --force-dsp --alpha 1.0 --target-fps 250
-# --hard-lut-fraction 0.5 --hard-bram-fraction 0.5 --hard-dsp-fraction 0.9
-# --optimize-downstream-rate 1.5 --config config_12_dense_relu_nearest_conv_upsample_256_w8_16
-# --out-dir MILP/artifacts/S12_dense_nn_upsample_256_w8_16_v2), same as the
-# base width's own v1->v2 experience: pinning another solve's bits and only
-# re-solving folding is not guaranteed feasible -- expect to re-solve bits
-# and folding jointly if the pinned-bits attempt fails.
+# be re-solved, not reused. The ILP solve (and its own
+# layer_sensitivity_12_dense_relu_nearest_conv_upsample_256_w8_16.json) has
+# been run for this width (finn_milp.py: --candidate-bits 4,6,8 --force-dsp
+# --alpha 1.0 --target-fps 250 --hard-lut-fraction 0.5 --hard-bram-fraction
+# 0.5 --hard-dsp-fraction 0.9 --optimize-downstream-rate 2.25 --config
+# config_12_dense_relu_nearest_conv_upsample_256_w8_16 --out-file under
+# MILP/artifacts/S12_dense_nn_upsample_256_w8_16_v2/), matching the base
+# width's v1->v2 experience: pinning another solve's bits and only
+# re-solving folding is not guaranteed feasible -- this was a fresh joint
+# bits+folding solve, not a pinned-bits rerun.
 #
 # FOUR steps, same as the base-width job:
 #   STEP 0: expand_layer_bits.py   (per-conv-layer bits -> per-site bits; skip-if-exists)
@@ -76,8 +88,8 @@ DATASET_NAME="Dataset510_ARCADE_256_4c"
 TRAINER_CLASS="nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_nearest_conv_upsample_256_w8_16_perlayer"
 FP32_SOURCE_NET_NAME="nnUNetTrainerENet_12_dense_relu_nearest_conv_upsample_256_w8_16"
 
-LAYER_BITS_ILP_FILE="MILP/artifacts/S12_dense_nn_upsample_256_w8_16_v2/layer_bits_folding_12_dense_relu_nearest_conv_upsample_256_w8_16_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram50_dsp90_fps250_dsrate1.5.json"
-LAYER_BITS_SITES_FILE="MILP/artifacts/S12_dense_nn_upsample_256_w8_16_v2/layer_bits_SITES_12_dense_relu_nearest_conv_upsample_256_w8_16_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram50_dsp90_fps250_dsrate1.5.json"
+LAYER_BITS_ILP_FILE="MILP/artifacts/S12_dense_nn_upsample_256_w8_16_v2/layer_bits_folding_12_dense_relu_nearest_conv_upsample_256_w8_16_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram50_dsp90_fps250_dsrate2.25.json"
+LAYER_BITS_SITES_FILE="MILP/artifacts/S12_dense_nn_upsample_256_w8_16_v2/layer_bits_SITES_12_dense_relu_nearest_conv_upsample_256_w8_16_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram50_dsp90_fps250_dsrate2.25.json"
 CALIBRATED_NET_NAME="nnUNetTrainerLayerQuantENet_12_dense_relu_nearest_conv_upsample_256_w8_16_v3_calibrated"
 RUN_NAME="12_dense_relu_nearest_conv_upsample_256_w8_16_v3"
 
@@ -133,10 +145,12 @@ cd "$HOME/LightM-UNet"
 if [ ! -f "$LAYER_BITS_ILP_FILE" ]; then
     echo "ERROR: $LAYER_BITS_ILP_FILE not found -- run the per-layer candidate-bits={4,6,8} alpha=1.0 " \
          "--hard-lut-fraction 0.5 --hard-bram-fraction 0.5 --hard-dsp-fraction 0.9 --target-fps 250 " \
-         "--optimize-downstream-rate 1.5 --force-dsp joint ILP solve first, against " \
+         "--optimize-downstream-rate 2.25 --force-dsp joint ILP solve first, against " \
          "--config config_12_dense_relu_nearest_conv_upsample_256_w8_16 (this width's own config -- " \
          "see MILP/artifacts/S12_dense_nn_upsample_256_v2/run_args.json for the base width's command to " \
-         "adapt; this is a SEPARATE solve, not reusable across widths)." >&2
+         "adapt; NOTE this width uses --optimize-downstream-rate 2.25, not the base width's 1.5 -- 1.5 is " \
+         "Infeasible here (coarse PE/SIMD folding options at this width's small Cout, e.g. 4/5/8, can't hit " \
+         "branch/chain cycle ratios that tight); this is a SEPARATE solve, not reusable across widths)." >&2
     exit 1
 fi
 

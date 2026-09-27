@@ -12,12 +12,26 @@
 #   HPC_USER=someoneelse scripts/checkpoint_sync.sh               # override the default user
 #
 # Config (env vars, all overridable):
-#   HPC_USER  -- your HPC username (default: yhussein, per the paths logged
-#                in this repo's own debug.json files -- /home/yhussein/...)
-#   HPC_HOST  -- SSH login node (default: snellius.surf.nl -- NOT a compute
-#                node hostname like gcn2.local.snellius.surf.nl, those are
-#                only reachable from inside a running Slurm job)
-#   HPC_ROOT  -- repo path on HPC, relative to $HOME (default: LightM-UNet)
+#   HPC_USER   -- your HPC username (default: yhussein, per the paths logged
+#                 in this repo's own debug.json files -- /home/yhussein/...)
+#   HPC_HOST   -- SSH login node (default: snellius.surf.nl -- NOT a compute
+#                 node hostname like gcn2.local.snellius.surf.nl, those are
+#                 only reachable from inside a running Slurm job)
+#   HPC_ROOT   -- repo path on HPC, relative to $HOME (default: LightM-UNet)
+#   SSH_KEY    -- private key to authenticate with (default:
+#                 /c/Users/win32/.ssh/id_rsa -- confirmed via the fingerprint
+#                 registered on Snellius's own web portal, NOT id_ed25519,
+#                 which is a different, unregistered key -- see this repo's
+#                 own session notes if this ever needs re-diagnosing).
+#   RSYNC_BIN  -- rsync binary (default: MSYS2's own /c/msys64/usr/bin/rsync.exe
+#                 -- plain `rsync` isn't on PATH in Git Bash by default, and
+#                 MUST be paired with MSYS2's own ssh.exe below, not Git
+#                 Bash's -- mixing rsync/ssh builds from different MSYS
+#                 runtimes fails with "dup() in/out/err failed", a low-level
+#                 fd-passing incompatibility between the two runtimes' own
+#                 msys-2.0.dll builds).
+#   SSH_BIN    -- ssh binary for rsync's -e transport (default: MSYS2's own
+#                 /c/msys64/usr/bin/ssh.exe, matching RSYNC_BIN's runtime).
 #
 # Skips validation/ (collect_results.py runs its own separate inference on
 # imagesTs/labelsTs -- it never reads the internal CV val-split PNGs under
@@ -29,6 +43,9 @@ set -euo pipefail
 HPC_USER="${HPC_USER:-yhussein}"
 HPC_HOST="${HPC_HOST:-snellius.surf.nl}"
 HPC_ROOT="${HPC_ROOT:-LightM-UNet}"
+SSH_KEY="${SSH_KEY:-/c/Users/win32/.ssh/id_rsa}"
+RSYNC_BIN="${RSYNC_BIN:-/c/msys64/usr/bin/rsync.exe}"
+SSH_BIN="${SSH_BIN:-/c/msys64/usr/bin/ssh.exe}"
 
 SUBPATH="${1:-}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -48,7 +65,8 @@ echo "From: ${REMOTE}"
 echo "To:   ${LOCAL}"
 echo
 
-rsync -avzP \
+"$RSYNC_BIN" -avzP \
+    -e "$SSH_BIN -i $SSH_KEY -o IdentitiesOnly=yes" \
     --exclude='validation/' \
     --exclude='labelsPr_*/' \
     "$REMOTE" "$LOCAL"
