@@ -30,9 +30,17 @@ When a job is retired, `git mv` its folder into
 
 ## Active jobs
 
-- **`12_dense_relu_nearest_conv_upsample`** — the last build actually run;
-  moved back here from `hardware/archive/pre_builds_refactor_20260926/`
+- **`12_dense_relu_nearest_conv_upsample_256`** — v1, the last build actually
+  run; moved back here from `hardware/archive/pre_builds_refactor_20260926/`
   after the 2026-09-26 refactor archived it along with everything else.
+- **`12_dense_relu_nearest_conv_upsample_256_v2`** — same architecture,
+  v2 MILP solve (`--optimize-downstream-rate 1.5`), checkpoint fine-tuned
+  DIRECTLY on `LayerQuantEnetFINN` (not converted post-hoc like v1). Own
+  job folder per this README's convention rather than sharing v1's; each
+  job's export/conv_order.json artifacts live under that job's own
+  `outputs/` subfolder (NOT the shared/deprecated
+  `hardware/outputs/finn_exports/` — that top-level dir is being phased
+  out in favor of per-job `outputs/`).
 
 This folder was emptied out on 2026-09-26 (see
 `hardware/archive/pre_builds_refactor_20260926/` for the other 2 build

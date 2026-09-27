@@ -24,8 +24,8 @@ ENET_USE_DILATED_VAL="${5:-1}"
 ENET_USE_ASYMMETRIC_VAL="${6:-1}"
 ENET_USE_STRIDED_VAL="${7:-1}"
 
-DATASET_NAME="Dataset509_ARCADE_1x1_4c"
-DATASET_ID=509
+DATASET_NAME="${SMOKE_DATASET_NAME:-Dataset509_ARCADE_1x1_4c}"
+DATASET_ID="${SMOKE_DATASET_ID:-509}"
 
 export nnUNet_raw="$REPO_ROOT/data/nnUNet_raw"
 export nnUNet_preprocessed="$REPO_ROOT/data/nnUNet_preprocessed"
@@ -67,7 +67,7 @@ fi
 cd "$REPO_ROOT/enet"
 
 START_EPOCH_SECONDS=$(date +%s)
-nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr nnUNetTrainerENet
+nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr nnUNetTrainerENet -device "${SMOKE_DEVICE:-cuda}"
 END_EPOCH_SECONDS=$(date +%s)
 
 ELAPSED=$((END_EPOCH_SECONDS - START_EPOCH_SECONDS))
