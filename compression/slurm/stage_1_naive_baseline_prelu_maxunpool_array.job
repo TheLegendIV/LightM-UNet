@@ -7,7 +7,7 @@
 #SBATCH --gpus=1
 #SBATCH --mem=32G
 #SBATCH --time=04:00:00
-#SBATCH --array=0-4
+#SBATCH --array=0-3
 #SBATCH --output=logs/%x_%a_%j.out
 #SBATCH --error=logs/%x_%a_%j.err
 
@@ -55,21 +55,26 @@ set -e
 # defaulting to 0 as a collect_results.py metadata placeholder, not a real
 # enforced seed -- see nnUNetTrainerENet.py's own ENET_SEED handling). This
 # array at least makes ITSELF reproducible/rerunnable.
-#   0: Baseline -- CHANNELS=16,64,128,64,16
-#   1: U2       -- CHANNELS=8,32,64,32,8
-#   2: U4       -- CHANNELS=4,16,32,16,4
-#   3: U8       -- CHANNELS=4,8,16,8,4
-#   4: U16      -- CHANNELS=4,4,8,4,4
+#   0: U2  -- CHANNELS=8,32,64,32,8
+#   1: U4  -- CHANNELS=4,16,32,16,4
+#   2: U8  -- CHANNELS=4,8,16,8,4
+#   3: U16 -- CHANNELS=4,4,8,4,4
+#
+# Baseline (CHANNELS=16,64,128,64,16) was REMOVED from this array -- it now
+# has its own dedicated job (stage_enet_original_prelu_maxunpool_4c.job),
+# using the more paper-faithful 6-tuple split-stage2/3 channel form
+# (16,64,128,128,64,16) so it's directly comparable to the 3-class run
+# (stage_enet_original_prelu_maxunpool_3c.job), rather than this array's own
+# 5-tuple U-series convention.
 
 DATASET_ID=509
 DATASET_NAME="Dataset509_ARCADE_1x1_4c"
 
-CONFIG_NAMES=(Baseline U2 U4 U8 U16)
+CONFIG_NAMES=(U2 U4 U8 U16)
 TASK_ID=${SLURM_ARRAY_TASK_ID}
 CONFIG_NAME="${CONFIG_NAMES[$TASK_ID]}"
 
 case "$CONFIG_NAME" in
-  Baseline) CHANNELS="16,64,128,64,16" ;;
   U2)       CHANNELS="8,32,64,32,8" ;;
   U4)       CHANNELS="4,16,32,16,4" ;;
   U8)       CHANNELS="4,8,16,8,4" ;;
