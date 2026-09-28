@@ -32,7 +32,8 @@ data/nnUNet_preprocessed/*
 # once a real transfer mechanism replaces this.
 !data/nnUNet_results/Dataset510_ARCADE_256_4c/nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_nearest_conv_upsample_256_w8_16_perlayer_12_dense_relu_nearest_conv_upsample_256_w8_16_v3__nnUNetPlans__2d/fold_0/checkpoint_best.pth
 
-!data/nnUNet_results/Dataset510_ARCADE_256_4c/nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_nearest_conv_upsample_256_w8_16_perlayer_12_dense_relu_nearest_conv_upsample_256_w8_16_v4__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
+# Same dirty exception as above, for the w8_16_v4 QAT-calibrated checkpoint.
+!data/nnUNet_results/Dataset510_ARCADE_256_4c/nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_nearest_conv_upsample_256_w8_16_perlayer_12_dense_relu_nearest_conv_upsample_256_w8_16_v4__nnUNetPlans__2d/fold_0/checkpoint_best.pth
 
 # Raw datasets: no longer pushed at all (both Dataset509_ARCADE_1x1_4c and
 # Dataset511_ARCADE_1x1_3c now exist as local files on the machines that need
