@@ -425,10 +425,23 @@ def solve_joint_perlayer(
             calib_w = w or bits  # thresholds: (bits, bits) as for every standalone threshold
             layer_costs[key] = cost
             raw_cycles[key] = cost["cycles"]
-            raw_lut[key] = calibrated_lut(cost["total_lut"], calib_w, bits, force_dsp=_calibration_force_dsp(rtl_kwargs))
-            raw_bram[key] = calibrated_bram18k(
-                cost["swu_bram18"] + cost["wm_bram18"] + cost["thr_bram18"], calib_w, bits, force_dsp=rtl_kwargs["force_dsp"],
-            )
+            if node.kind in STREAM_NODE_KINDS:
+                # AddStreams/DuplicateStreams/Concat/Upsample: NOT calibrated
+                # against real Vivado data (still FINN-estimate-based
+                # PROVISIONAL constants, see finn_cost_model.py's
+                # _ADDSTREAMS_LUT_PER_PE/_DUPSTREAMS_LUT_PER_PE) -- do not
+                # apply the conv_stack-fitted _FORCED_DSP_LUT_FACTOR/
+                # _FORCED_DSP_BRAM_FACTOR here, that factor was fit only
+                # against per_layer MVAU/VVAU/SWU/threshold + standalone-
+                # threshold/pad_mvau real data and would misattribute a
+                # correction with no real basis for this population.
+                raw_lut[key] = cost["total_lut"]
+                raw_bram[key] = cost["swu_bram18"] + cost["wm_bram18"] + cost["thr_bram18"]
+            else:
+                raw_lut[key] = calibrated_lut(cost["total_lut"], calib_w, bits, force_dsp=_calibration_force_dsp(rtl_kwargs))
+                raw_bram[key] = calibrated_bram18k(
+                    cost["swu_bram18"] + cost["wm_bram18"] + cost["thr_bram18"], calib_w, bits, force_dsp=rtl_kwargs["force_dsp"],
+                )
             raw_dsp[key] = cost["total_dsp"]
             raw_uram[key] = cost["wm_uram18"] + cost.get("swu_uram18", 0) + cost["thr_uram18"]
             z[key] = pulp.LpVariable(f"z_{name}_{pe}_{simd}_{ram_style}_{variant}_{w}_{bits}", cat=pulp.LpBinary)

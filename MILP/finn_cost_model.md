@@ -268,27 +268,87 @@ Constants: `_S12_DENSE_DSP_FORCED_LUT_FACTOR = 4.4639`,
 by default), `_S12_DENSE_DSP_FORCED_BRAM_AFFINE = (0.1131, -0.1973)` (also
 weak at n=8, provenance only).
 
-### Active default: identity (2026-09-17)
+### Superseded: identity (2026-09-17 - 2026-09-28)
 
 Both flat factors (`_FORCED_DSP_LUT_FACTOR`, `_FORCED_DSP_BRAM_FACTOR`) and
 both affine constants (`_FORCED_DSP_LUT_AFFINE`, `_FORCED_DSP_BRAM_AFFINE`)
-are currently reset to identity (1.0 / (1.0, 0.0)). Every S12 factor above
-was fit on builds whose MVAU_hls nodes carried FUSED thresholds
+were reset to identity (1.0 / (1.0, 0.0)) as a placeholder. Every S12 factor
+above was fit on builds whose MVAU_hls nodes carried FUSED thresholds
 (`outputDataType=UINTx` on 172/173 calibration nodes — the very thing that
 made FINN pick HLS over RTL and produced the 4-6x LUT blow-up). The model
 now assumes `noActivation=1` + `MVAU_rtl` and prices the standalone
 `Thresholding_rtl` explicitly, so those factors no longer describe the
 regime being estimated; the six real noActivation/RTL probes in
-`hardware/results.csv` sit at 1.1-1.7x of the raw model. Refit against the
-RTL production rebuild when it lands; the S12 constants above are kept for
-provenance only.
+`hardware/results.csv` sit at 1.1-1.7x of the raw model. Superseded below
+now that the RTL production rebuild has real per-node data.
+
+### Active default: S12 dense 256x256 v2 refit (2026-09-28)
+
+`hardware/build_node_resource_calibration_csv.py` was run against the real
+routed `.dcp` for `S12_dense_nn_upsample_256_v2`
+(dsrate1.5/forcedsp/noActivation=1/MVAU_rtl — the SAME regime the identity
+placeholder above was waiting on), producing
+`hardware/builds/12_dense_relu_nearest_conv_upsample_256_v2/results/
+mvau_lut_calibration_dataset_12_dense_relu_nearest_conv_upsample_256_v2_full.csv`
+(921 real per-node rows, all 8 partitions). Excluding `StreamingFIFO_rtl`
+rows (never modeled, see "Not modeled" below) and summing every real
+`MVAU_rtl`/`VVAU_hls`/`ConvolutionInputGenerator_rtl`/`Thresholding_rtl` row:
+real_LUT=66,632, real_BRAM18-equivalent (`BRAM18 + 2*BRAM36`)=427.0.
+
+Compared against this SAME build's `layer_bits_folding_*.json` solve
+(`MILP/artifacts/S12_dense_nn_upsample_256_v2/layer_bits_folding_
+12_dense_relu_nearest_conv_upsample_256_joint_alpha1.0_candidatebits468_
+forcedsp_lut50_bram50_dsp90_fps250_dsrate1.5.json`) — every `per_layer` entry
+PLUS every `extra_nodes` entry whose kind is a standalone join-threshold
+(`input_quant`/`act`/`out_act`/`residual_add`/`skip_quant`) or `pad_mvau`
+(the only extra-node kinds that share this same real op_type pool in the
+CSV — `add`/`dup`/`concat`/`upsample` do NOT, see below), at the identity
+factor (i.e. raw, since force_dsp/RTL always takes that branch — see
+`_calibration_force_dsp`): raw_LUT=108,433, raw_BRAM18k=311.9.
+
+    LUT factor  = 66,632 / 108,433 = 0.6145
+    BRAM factor = 427.0 / 311.9    = 1.3690
+
+Both are single AGGREGATE factors, same caveat as the S12 factors above:
+real per-node data cannot currently distinguish a per_layer-fused
+`Thresholding_rtl` row from a join-point standalone one (both look identical
+in the CSV — same `op_type`, no topological info), so this necessarily
+blends the two populations rather than fitting each separately. DSP was
+**not** recalibrated (real=1,022 vs raw=1,161, ratio 0.880) — no DSP
+calibration hook exists anywhere in this file; left as a known, smaller,
+unaddressed gap.
+
+`finn_milp.py`'s extra-node cost loop was changed at the same time to STOP
+applying `calibrated_lut`/`calibrated_bram18k` to `STREAM_NODE_KINDS`
+(`add`/`dup`/`concat`/`upsample`) — before this fix, those went through the
+SAME force_dsp branch as everything else (since `_calibration_force_dsp`
+always returns True for the fixed RTL variant `extra_node_options` uses),
+which would have applied this new dense-population-fitted 0.6145/1.369
+factor to the FINN-estimate-based `_ADDSTREAMS_LUT_PER_PE`/
+`_DUPSTREAMS_LUT_PER_PE` constants below with no real basis for doing so.
+Those four kinds are now left at their raw (unmultiplied) cost regardless of
+this constant's value.
+
+Constants: `_S12_DENSE_256_V2_FORCED_LUT_FACTOR = 0.6145`,
+`_S12_DENSE_256_V2_FORCED_BRAM_FACTOR = 1.3690`, both wired as the new
+ACTIVE `_FORCED_DSP_LUT_FACTOR`/`_FORCED_DSP_BRAM_FACTOR`.
 
 Note for whoever reuses `calibrated_lut(..., force_dsp=True)` for a
 non-S12-dense architecture: this is a single global slot, not dispatched by
 architecture — applying the dense factor to a future separable-geometry
-estimate would over-correct (separable only needs ~1.26x). No per-geometry
-selector exists yet; swap the constant back by hand until real dispatch
-exists.
+estimate would over-correct. No per-geometry selector exists yet; swap the
+constant back by hand until real dispatch exists.
+
+Not yet real-data-backed at all (still whatever's documented under "Stream
+nodes" below, or genuinely unmodeled): `AddStreams_hls`/`DuplicateStreams_hls`/
+`StreamingConcat_hls`/`UpsampleNearestNeighbour_hls` (still FINN's own
+`estimate_layer_resources_hls.json` analytical estimate, not real Vivado
+placement — see that section's own "PROVISIONAL" note) and
+`StreamingDataWidthConverter_hls`/`_rtl` (not in this file's cost-model
+vocabulary at all — FINN inserts these automatically on stream-width
+mismatches; `dump_node_attrs_all.py`/`build_node_resource_calibration_csv.py`
+were extended 2026-09-28 to capture them in the next real dump, but no ILP
+cost term exists yet).
 
 ## Weight-memory RAM style (`RamStyle` / `RAM_STYLE_BLOCK` / `RAM_STYLE_ULTRA`)
 

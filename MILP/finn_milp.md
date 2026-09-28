@@ -422,3 +422,16 @@ cost model's calibration, not a certified hardware guarantee.
   custom-op name, `EXTRA_OP_LABEL`'s values updated to match (`finn_milp.py`
   itself was already unconditional about writing it on every Optimal solve —
   no CLI flag ever gated it).
+- 2026-09-28: extra-node cost loop stopped applying `calibrated_lut`/
+  `calibrated_bram18k` to `STREAM_NODE_KINDS` (`add`/`dup`/`concat`/
+  `upsample`) — those four go through `extra_node_options`'s fixed RTL
+  variant same as every other extra node, so `_calibration_force_dsp` always
+  took the force_dsp branch for them too, meaning any refit of
+  `_FORCED_DSP_LUT_FACTOR`/`_FORCED_DSP_BRAM_FACTOR` (see finn_cost_model.md's
+  "S12 dense 256x256 v2 refit") would have silently applied a factor fit only
+  from real MVAU/VVAU/SWU/threshold data to the FINN-estimate-based
+  `_ADDSTREAMS_LUT_PER_PE`/`_DUPSTREAMS_LUT_PER_PE` constants, which have no
+  real Vivado basis at all yet. Those four kinds now use their raw
+  (unmultiplied) cost unconditionally; everything else (per_layer entries,
+  standalone join-thresholds, pad_mvau) is unaffected and still calibrated as
+  before.

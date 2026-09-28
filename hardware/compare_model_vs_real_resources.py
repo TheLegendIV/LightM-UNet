@@ -22,9 +22,11 @@ finn_milp.py actually applies `calibrated_lut`/`calibrated_bram18k`:
     extra_nodes entry is calibrated individually (never bundled with
     anything else), so these compare 1:1 against their own real node_kind
     with no attribution risk.
-  - "FIFO": real-only reference row -- finn_milp.py does not model FIFOs at
-    all (see finn_milp.md's "Not modeled" list), so there is nothing on the
-    model side to compare it against.
+  - "FIFO" / "DWC": real-only reference rows -- finn_milp.py does not model
+    FIFOs OR StreamingDataWidthConverter nodes at all (DWCs aren't even in
+    its dataflow-graph vocabulary; FINN inserts them automatically on
+    stream-width mismatches between adjacent folded nodes), so there is
+    nothing on the model side to compare either against.
 
 Usage:
     python compare_model_vs_real_resources.py \\
@@ -136,14 +138,13 @@ def main():
     model_totals, diag = load_model_totals(args.folding_json)
     real_totals, n_real_rows = load_real_totals(args.calibration_csv)
 
-    real_fifo = real_totals.pop("FIFO", new_totals())
-    real_total_all = new_totals()
-    for f in RESOURCE_FIELDS:
-        real_total_all[f] = sum(b[f] for b in real_totals.values()) + real_fifo[f]
-
     print(f"=== Real CSV: {n_real_rows} rows ({args.calibration_csv}) ===")
-    print(f"FIFO (unmodeled, excluded below): LUT={real_fifo['lut']:.0f}  "
-          f"BRAM18eq={real_fifo['bram18_equiv']:.1f}  DSP={real_fifo['dsp']:.0f}  URAM={real_fifo['uram']:.0f}")
+    for kind in ("FIFO", "DWC"):
+        unmodeled = real_totals.pop(kind, None)
+        if unmodeled is None:
+            continue
+        print(f"{kind} (unmodeled by finn_milp.py, excluded below): LUT={unmodeled['lut']:.0f}  "
+              f"BRAM18eq={unmodeled['bram18_equiv']:.1f}  DSP={unmodeled['dsp']:.0f}  URAM={unmodeled['uram']:.0f}")
     print()
 
     buckets = sorted(set(model_totals) | set(real_totals))

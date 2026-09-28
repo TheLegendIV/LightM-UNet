@@ -57,6 +57,12 @@ STREAM_KIND_BY_OP_TYPE = {
     "StreamingConcat_hls": "Concat",
     "UpsampleNearestNeighbour_hls": "Upsample",
     "StreamingMaxPool_hls": "MaxPool",
+    # not in finn_milp.py's cost model at all (FINN auto-inserts these on
+    # stream-width mismatches) -- see dump_node_attrs_all.py's own comment on
+    # why this was added: FINN's own res_estimation report put ~205 of these
+    # in this build, the single largest node-kind bucket in that report.
+    "StreamingDataWidthConverter_hls": "DWC",
+    "StreamingDataWidthConverter_rtl": "DWC",
 }
 STREAM_TYPES = tuple(STREAM_KIND_BY_OP_TYPE)
 

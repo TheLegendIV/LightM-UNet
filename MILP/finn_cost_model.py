@@ -61,11 +61,36 @@ _S12_DENSE_DSP_FORCED_BRAM_FACTOR = 0.4598
 _S12_DENSE_DSP_FORCED_LUT_AFFINE = (-1.1204, 10.9734)  # weak (R^2=0.268), not applied
 _S12_DENSE_DSP_FORCED_BRAM_AFFINE = (0.1131, -0.1973)  # weak (R^2=0.468), not applied
 
-# ACTIVE default (2026-09-17): identity -- the noActivation/RTL regime this
-# model now prices explicitly no longer matches what the S12 factors above
-# were fit against (fused-threshold MVAU_hls builds). See finn_cost_model.md.
-_FORCED_DSP_LUT_FACTOR = 1.0
-_FORCED_DSP_BRAM_FACTOR = 1.0
+# S12 dense 256x256 v2 refit (2026-09-28): real per-node Vivado hierarchy data
+# from the S12_dense_nn_upsample_256_v2 build (dsrate1.5, noActivation=1/RTL
+# regime, matches this file's CURRENT force_dsp/RTL cost path -- unlike the
+# S12 factors above, which were fit against the retired fused-threshold
+# MVAU_hls regime). Single aggregate factor over the whole "conv_stack"
+# population (every per_layer MVAU/VVAU/SWU/fused-threshold entry, PLUS every
+# extra_nodes standalone join-threshold and pad_mvau entry -- see
+# finn_milp.py's extra_node_options, now also routed through calibrated_lut/
+# calibrated_bram18k) -- real per-node data cannot currently distinguish a
+# conv-fused Thresholding_rtl row from a join-point standalone one, so this
+# necessarily blends both populations rather than fitting them separately.
+# real_LUT=66,632 / raw_LUT=108,433 (from
+# hardware/builds/12_dense_relu_nearest_conv_upsample_256_v2/results/
+# mvau_lut_calibration_dataset_..._full.csv, excluding FIFO); real_BRAM18eq=
+# 427.0 / raw_BRAM18k=311.9. DSP was NOT recalibrated here (real=1,022 vs
+# raw=1,161, ratio 0.880 -- no DSP calibration hook exists in this file at
+# all; left as a known, smaller, unaddressed gap). Does NOT cover AddStreams/
+# DuplicateStreams/Concat/Upsample (still the FINN-estimate-based PROVISIONAL
+# constants below) or StreamingDataWidthConverter (not modeled at all, not
+# even in finn_milp.py's dataflow-graph vocabulary) -- neither has real
+# per-node ground truth yet.
+_S12_DENSE_256_V2_FORCED_LUT_FACTOR = 0.6145
+_S12_DENSE_256_V2_FORCED_BRAM_FACTOR = 1.3690
+
+# ACTIVE default (2026-09-28): the S12 dense 256x256 v2 refit above --
+# supersedes the 2026-09-17 identity placeholder now that real per-node data
+# for this exact (noActivation=1/RTL/force_dsp) regime exists. See
+# finn_cost_model.md.
+_FORCED_DSP_LUT_FACTOR = _S12_DENSE_256_V2_FORCED_LUT_FACTOR
+_FORCED_DSP_BRAM_FACTOR = _S12_DENSE_256_V2_FORCED_BRAM_FACTOR
 _FORCED_DSP_LUT_AFFINE = (1.0, 0.0)
 _FORCED_DSP_BRAM_AFFINE = (1.0, 0.0)
 
