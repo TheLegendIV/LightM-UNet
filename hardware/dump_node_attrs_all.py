@@ -26,6 +26,9 @@ OP_TYPES = (
     # extra_by_kind's residual_add/skip_quant/out_act/add/dup entries).
     "AddStreams_hls", "DuplicateStreams_hls", "StreamingConcat_hls",
     "UpsampleNearestNeighbour_hls", "StreamingMaxPool_hls",
+    # DWC and FMPadding -- also previously excluded, same reason as above
+    "StreamingDataWidthConverter_hls", "StreamingDataWidthConverter_rtl",
+    "FMPadding_hls", "FMPadding_rtl", "FMPadding_Pixel_hls",
 )
 
 # union of every nodeattr key any of the above op types might expose
@@ -37,6 +40,10 @@ ATTR_KEYS = (
     "IFMChannels", "IFMDim", "OFMDim", "ConvKernelDim", "Stride", "Dilation",
     "depthwise", "parallel_window",
     "depth", "impl_style", "dataType", "folded_shape",
+    # DWC
+    "shape", "inWidth", "outWidth",
+    # FMPadding / FMPadding_Pixel
+    "ImgDim", "Padding", "inputDataType", "numInputVectors",
 )
 
 
