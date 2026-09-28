@@ -25,10 +25,10 @@ def parse(fn, top_name):
         m = re.match(r"^(.*)_(\d+)$", name)
         cat = m.group(1) if m else name
         try:
-            ramb36 = int(cols[6])
-            ramb18 = int(cols[7])
-            uram = int(cols[8])
-            dsp = int(cols[9])
+            ramb36 = int(cols[7])
+            ramb18 = int(cols[8])
+            uram = int(cols[9])
+            dsp = int(cols[10])
         except ValueError:
             continue
         by_cat[cat]["ramb36"] += ramb36
