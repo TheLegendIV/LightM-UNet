@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=qat_12_dense_relu_nearest_conv_upsample_256_w8_16_v3
+#SBATCH --job-name=qat_12_dense_relu_nearest_conv_upsample_256_w8_16_v3_old
 #SBATCH --partition=gpu_a100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -90,8 +90,8 @@ FP32_SOURCE_NET_NAME="nnUNetTrainerENet_12_dense_relu_nearest_conv_upsample_256_
 
 LAYER_BITS_ILP_FILE="MILP/artifacts/S12_dense_nn_upsample_256_w8_16_v2/layer_bits_folding_12_dense_relu_nearest_conv_upsample_256_w8_16_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram50_dsp90_fps250_dsrate2.25.json"
 LAYER_BITS_SITES_FILE="MILP/artifacts/S12_dense_nn_upsample_256_w8_16_v2/layer_bits_SITES_12_dense_relu_nearest_conv_upsample_256_w8_16_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram50_dsp90_fps250_dsrate2.25.json"
-CALIBRATED_NET_NAME="nnUNetTrainerLayerQuantENet_12_dense_relu_nearest_conv_upsample_256_w8_16_v3_calibrated"
-RUN_NAME="12_dense_relu_nearest_conv_upsample_256_w8_16_v3"
+CALIBRATED_NET_NAME="nnUNetTrainerLayerQuantENet_12_dense_relu_nearest_conv_upsample_256_w8_16_v3_old_calibrated"
+RUN_NAME="12_dense_relu_nearest_conv_upsample_256_w8_16_v3_old"
 
 mkdir -p logs
 

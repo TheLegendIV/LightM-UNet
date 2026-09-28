@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=qat_12_dense_relu_nearest_conv_upsample_256_w8_16_v3_old_step2
+#SBATCH --job-name=qat_12_dense_relu_nearest_conv_upsample_256_w8_16_v3
 #SBATCH --partition=gpu_mig
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -12,30 +12,53 @@
 
 set -e
 
-# STEP-2-focused sibling of qat_12_dense_relu_nearest_conv_upsample_256_w8_16_v3_old.job:
-# that job's own STEP 0 (expand_layer_bits.py) has already been run by hand
-# against this width's dsrate2.25 joint ILP solve (see that job's own header
-# comment for why this width needs --optimize-downstream-rate 2.25, not the
-# base width's 1.5) -- its output (a small tracked JSON under MILP/artifacts/)
-# syncs fine via this repo's normal git-based sync, so THIS job skips STEP 0
-# unconditionally (no expand_layer_bits.py invocation at all) and fails fast
-# with a clear message if that file isn't there.
+# NAMING: "_v3" here now refers to a NEW MILP solve (MILP/artifacts/
+# S12_dense_nn_upsample_256_w8_16_v3/), replacing what "_v3" used to mean.
+# The PREVIOUS w8_16_v3 QAT run (dsrate2.25/bram50/fps250, solved before
+# 2026-09-28's cost-model recalibration) already had real trained output on
+# disk under this exact name, so it was renamed to "_v3_old" (job files
+# qat_..._w8_16_v3_old.job / _old_step2.job, result dirs
+# nnUNetTrainerLayerQuantENet_..._w8_16_v3_old_calibrated__nnUNetPlans__2d /
+# nnUNetTrainerLayerQuantEnetFINN_..._w8_16_v3_old__nnUNetPlans__2d) to free
+# this name up rather than silently colliding with (and skip-logic-hiding)
+# that old run.
 #
-# STEP 1 (calibration) is NOT skipped unconditionally, unlike STEP 0: its
-# output is a real checkpoint (.pth), and *.pth is globally gitignored (see
-# .gitignore) -- a checkpoint calibrated on one machine (e.g. locally, to
-# smoke-test this width before submitting) never reaches the HPC through the
-# normal git sync, so a hard "must already exist" guard here just breaks on
-# every fresh HPC checkout. STEP 1 keeps its own skip-if-exists check
-# instead (cheap/no-op if the checkpoint DID make it over some other way,
-# e.g. scp), and otherwise just (re)runs calibration -- it's fast and
-# deterministic (fixed --calibration-seed), so regenerating it here is not
-# meaningfully more expensive than checking for it.
+# GPU: gpu_mig (3g.20gb slice) -- cpus-per-task=8/mem=32G matches this
+# repo's own gpu_mig convention (see the sibling qat_..._w8_16_v3_old_step2.job).
 #
-# GPU: gpu_mig (3g.20gb slice), NOT the parent job's full A100 --
-# cpus-per-task=8/mem=32G matches this repo's own gpu_mig convention (see
-# qat_12_dense_relu_nearest_conv_upsample_256_finn_joint_alpha1.0_perlayer_
-# candidatebits468_forcedsp_lut50_bram50_dsp90_fps250_dsrate1.5_ft15ep.job).
+# This solve (MILP/artifacts/S12_dense_nn_upsample_256_w8_16_v3/, files
+# renamed short-form per this session's convention: layer_bits_folding_
+# S12_dense_nn_upsample_256_w8_16_v3.json / layer_bits_SITES_..., see that
+# directory's own run_args.json for the exact finn_milp.py invocation) used:
+#   --candidate-bits 4,6,8 --alpha 1.0 --force-dsp
+#   --hard-lut-fraction 0.5 --hard-bram-fraction 0.4 --hard-dsp-fraction 0.9
+#   --target-fps 200 --clock-mhz 100 --optimize-downstream-rate 2.5
+# solved AFTER this session's finn_cost_model.py recalibration (real per-node
+# Vivado data: threshold LUT/BRAM, SWU LUT, MVAU/VVAU weight-memory
+# ram_style="auto" LUTRAM-vs-BRAM threshold -- see MILP/calibration.csv and
+# MILP/finn_cost_model.md). Result: Optimal, 305.2 FPS @ 100MHz (well above
+# the 200 FPS floor), LUT 49.7% / BRAM 39.9% / DSP 37.2% of budget, avg
+# weight/act bits 7.40/6.62.
+#
+# --hard-bram-fraction 0.4 (not the base/older width's 0.5) and
+# --optimize-downstream-rate 2.5 (not 1.5 or 2.25) are deliberate for THIS
+# solve -- --optimize-downstream-rate 1.0/1.5/2.0 were all confirmed
+# Infeasible at bram=0.4 (swept this session); 2.5 was chosen over the
+# tighter-still-feasible 2.25 boundary for FIFO-congestion margin (dsrate
+# bounds relative rate mismatch between adjacent nodes, i.e. FIFO buildup
+# risk -- see MILP/finn_milp.md "Rate coherence"), and --target-fps 200
+# (below where the design naturally lands, 305 FPS) rather than pushing
+# further, since alpha=1.0 already means latency isn't in the soft objective
+# -- target-fps is used here purely as a hard floor, not a speed goal.
+#
+# IMPORTANT: this is a SEPARATE ILP solve from the base (non-w8_16) width --
+# per-layer tensor shapes differ, so HAWQ sensitivity and the FINN folding/
+# resource cost model both need their own solve, not a reused/pinned one.
+#
+# FOUR steps, same as every other perlayer QAT job:
+#   STEP 0: expand_layer_bits.py   (per-conv-layer bits -> per-site bits; skip-if-exists)
+#   STEP 1: calibrate_12_dense_relu_nearest_conv_upsample_256_w8_16_perlayer.py (real LayerQuantENet, warm-start + real calibration, seeded, AT THIS SOLVE's BITS)
+#   STEP 2: real QAT fine-tuning (nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_nearest_conv_upsample_256_w8_16_perlayer, seeded)
 QAT_EPOCHS=15
 ENET_FREEZE_BN=0
 ENET_CHECKPOINT_EVERY=5
@@ -47,9 +70,10 @@ DATASET_NAME="Dataset510_ARCADE_256_4c"
 TRAINER_CLASS="nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_nearest_conv_upsample_256_w8_16_perlayer"
 FP32_SOURCE_NET_NAME="nnUNetTrainerENet_12_dense_relu_nearest_conv_upsample_256_w8_16"
 
-LAYER_BITS_SITES_FILE="MILP/artifacts/S12_dense_nn_upsample_256_w8_16_v2/layer_bits_SITES_12_dense_relu_nearest_conv_upsample_256_w8_16_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram50_dsp90_fps250_dsrate2.25.json"
-CALIBRATED_NET_NAME="nnUNetTrainerLayerQuantENet_12_dense_relu_nearest_conv_upsample_256_w8_16_v3_old_calibrated"
-RUN_NAME="12_dense_relu_nearest_conv_upsample_256_w8_16_v3_old"
+LAYER_BITS_ILP_FILE="MILP/artifacts/S12_dense_nn_upsample_256_w8_16_v3/layer_bits_folding_S12_dense_nn_upsample_256_w8_16_v3.json"
+LAYER_BITS_SITES_FILE="MILP/artifacts/S12_dense_nn_upsample_256_w8_16_v3/layer_bits_SITES_S12_dense_nn_upsample_256_w8_16_v3.json"
+CALIBRATED_NET_NAME="nnUNetTrainerLayerQuantENet_12_dense_relu_nearest_conv_upsample_256_w8_16_v3_calibrated"
+RUN_NAME="12_dense_relu_nearest_conv_upsample_256_w8_16_v3"
 
 mkdir -p logs
 
@@ -81,29 +105,43 @@ echo "=== Job info ==="
 echo "Host: $(hostname)"
 echo "Date: $(date)"
 echo "RUN_NAME=${RUN_NAME}"
-echo "LAYER_BITS_SITES_FILE=${LAYER_BITS_SITES_FILE}"
+echo "LAYER_BITS_ILP_FILE=${LAYER_BITS_ILP_FILE}"
 echo "QAT_EPOCHS=${QAT_EPOCHS}"
 echo "ENET_FREEZE_BN=${ENET_FREEZE_BN}"
 echo "ENET_CHECKPOINT_EVERY=${ENET_CHECKPOINT_EVERY}"
 echo "ENET_SEED=${ENET_SEED}"
-
-echo "=== GPU info ==="
-nvidia-smi
-
-cd "$HOME/LightM-UNet"
-
-if [ ! -f "$LAYER_BITS_SITES_FILE" ]; then
-    echo "ERROR: $LAYER_BITS_SITES_FILE not found -- this job skips STEP 0 (expand_layer_bits.py) " \
-         "unconditionally, so this file must already exist. Run the parent job " \
-         "(qat_12_dense_relu_nearest_conv_upsample_256_w8_16_v3_old.job) instead, or run STEP 0 by hand." >&2
-    exit 1
-fi
+echo "CALIBRATION_SEED=${CALIBRATION_SEED}"
 
 FP32_CHECKPOINT="$nnUNet_results/${DATASET_NAME}/${FP32_SOURCE_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
 echo "=== Checking FP32 source checkpoint exists ==="
 if [ ! -f "$FP32_CHECKPOINT" ]; then
     echo "ERROR: FP32 source checkpoint not found: $FP32_CHECKPOINT -- run stage_12_dense_relu_nearest_conv_upsample_256_w8_16.job first." >&2
     exit 1
+fi
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet"
+
+if [ ! -f "$LAYER_BITS_ILP_FILE" ]; then
+    echo "ERROR: $LAYER_BITS_ILP_FILE not found -- run the per-layer candidate-bits={4,6,8} alpha=1.0 " \
+         "--hard-lut-fraction 0.5 --hard-bram-fraction 0.4 --hard-dsp-fraction 0.9 --target-fps 200 " \
+         "--optimize-downstream-rate 2.5 --force-dsp joint ILP solve first, against " \
+         "--config config_12_dense_relu_nearest_conv_upsample_256_w8_16 (see MILP/artifacts/" \
+         "S12_dense_nn_upsample_256_w8_16_v3/run_args.json for the exact command -- this is a SEPARATE " \
+         "solve from the w8_16_v2/_v3_old artifacts, not reusable across them)." >&2
+    exit 1
+fi
+
+echo "=== STEP 0: expand per-conv-layer bits to LayerQuantENet's full per-site schema (skip if already done) ==="
+if [ -f "$LAYER_BITS_SITES_FILE" ]; then
+    echo "Site-level bits file already exists at ${LAYER_BITS_SITES_FILE} -- skipping expansion."
+else
+    python MILP/expand_layer_bits.py \
+        --config config_12_dense_relu_nearest_conv_upsample_256_w8_16 \
+        --ilp-result "${LAYER_BITS_ILP_FILE}" \
+        --out-file "${LAYER_BITS_SITES_FILE}"
 fi
 
 CALIBRATED_CHECKPOINT="$nnUNet_results/${DATASET_NAME}/${CALIBRATED_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
@@ -193,11 +231,13 @@ if [ "$FINAL_EPOCH" -ge "$ENET_EPOCHS" ]; then
         --quant-bits 32
         --trainer-class "${TRAINER_CLASS}"
     )
-    # --quant-bits 32 (not 8) -- same reasoning as the parent job: collect_results.py's
-    # own params/flops/bops estimate falls back to the plain FP32 ENet count (architecture
-    # shape is IDENTICAL between LayerQuantENet and LayerQuantEnetFINN). This row's REAL
-    # per-site bits AND folding live in $LAYER_BITS_SITES_FILE, not this row's own
-    # params/flops/bops columns.
+    # --quant-bits 32 (not 8) -- same reasoning as every other perlayer job:
+    # collect_results.py's own params/flops/bops estimate falls back to the
+    # plain FP32 ENet count (architecture shape is IDENTICAL between
+    # LayerQuantENet and LayerQuantEnetFINN -- same channels/bottlenecks/
+    # decoder/context_pattern, only internal ops differ). This row's REAL
+    # per-site bits AND folding live in $LAYER_BITS_SITES_FILE /
+    # $LAYER_BITS_ILP_FILE, not this row's own params/flops/bops columns.
     BEST_EPOCH=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_best.pth', map_location='cpu', weights_only=False)['current_epoch'])" 2>/dev/null || echo -1)
     echo "DIAGNOSTIC: checkpoint_best.pth is at epoch ${BEST_EPOCH}, checkpoint_final.pth is at epoch ${FINAL_EPOCH} (target ${ENET_EPOCHS})."
     if [ "$BEST_EPOCH" != "$FINAL_EPOCH" ]; then
