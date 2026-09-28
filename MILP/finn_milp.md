@@ -435,3 +435,13 @@ cost model's calibration, not a certified hardware guarantee.
   (unmultiplied) cost unconditionally; everything else (per_layer entries,
   standalone join-thresholds, pad_mvau) is unaffected and still calibrated as
   before.
+- 2026-09-28 (later): main per-layer cost loop's MVAU/VVAU weight-tile
+  `ram_style` changed from hard-coded `RAM_STYLE_BLOCK` to `RAM_STYLE_AUTO`
+  (`pad_mvau`'s extra-node cost too). The old code's comment claimed
+  block-always was "what real hardware does" — real per-node Vivado data
+  (`MILP/calibration.csv`'s `mvau_weight_bram` row) shows that was wrong:
+  179/189 real MVAU_rtl/VVAU_hls nodes actually built with `ram_style=auto`
+  land in LUTRAM (0 real BRAM), which `RAM_STYLE_BLOCK`'s always-nonzero
+  prediction never captured. See `finn_cost_model.md`'s new `RAM_STYLE_AUTO`
+  section for the empirical threshold (`_WM_BRAM_AUTO_MIN_WMEM`/
+  `_WM_BRAM_AUTO_MIN_MEM_WIDTH`) this relies on.

@@ -282,7 +282,7 @@ regime being estimated; the six real noActivation/RTL probes in
 `hardware/results.csv` sit at 1.1-1.7x of the raw model. Superseded below
 now that the RTL production rebuild has real per-node data.
 
-### Active default: S12 dense 256x256 v2 refit (2026-09-28)
+### Superseded same day: S12 dense 256x256 v2 bundle refit (2026-09-28)
 
 `hardware/build_node_resource_calibration_csv.py` was run against the real
 routed `.dcp` for `S12_dense_nn_upsample_256_v2`
@@ -330,35 +330,118 @@ Those four kinds are now left at their raw (unmultiplied) cost regardless of
 this constant's value.
 
 Constants: `_S12_DENSE_256_V2_FORCED_LUT_FACTOR = 0.6145`,
-`_S12_DENSE_256_V2_FORCED_BRAM_FACTOR = 1.3690`, both wired as the new
-ACTIVE `_FORCED_DSP_LUT_FACTOR`/`_FORCED_DSP_BRAM_FACTOR`.
+`_S12_DENSE_256_V2_FORCED_BRAM_FACTOR = 1.3690` — briefly wired as
+`_FORCED_DSP_LUT_FACTOR`/`_FORCED_DSP_BRAM_FACTOR`, **superseded the same day**
+once a proper per-node dataset arrived (see next section) and showed this
+bundle-level number was compensating for the wrong things. Kept in the source
+for provenance only.
 
 Note for whoever reuses `calibrated_lut(..., force_dsp=True)` for a
 non-S12-dense architecture: this is a single global slot, not dispatched by
-architecture — applying the dense factor to a future separable-geometry
-estimate would over-correct. No per-geometry selector exists yet; swap the
-constant back by hand until real dispatch exists.
+architecture. No per-geometry selector exists yet.
+
+### Active default: per-component calibration, identity bundle (2026-09-28, later)
+
+New real per-node datasets landed for both `S12_dense_256_v1` and `_v2`
+(`hardware/build_node_resource_calibration_csv.py` extended to also capture
+`DWC`/`FMPadding`, see "Not yet real-data-backed" below and the DWC section).
+With real per-node PE/SIMD/MH/MW/geometry available, the bundle-level ratio
+above could finally be decomposed into its actual components by calling
+`conv_cost_pe_simd`/`_finn_swu`/`_thresholding_rtl_cost` directly with each
+real row's own recorded inputs, instead of comparing an aggregate total:
+
+- **`mvu_lut` alone**: real/raw = **0.998** across every `avg_bits` group
+  sampled (n=137, both builds). Already accurate — no derating needed at all.
+- **SWU**: real/raw = 1.318 on top of the *existing* `_SWU_LUT_DERATE`,
+  i.e. the true derate is `0.755 × 1.318 ≈ 0.995` (R²=0.970, n=51) — see the
+  SWU section below, now updated directly.
+- **Threshold**: the per_layer-internal standalone-threshold estimate uses
+  `_thresholding_rtl_cost`, whose constants were themselves stale (see
+  "Standalone Thresholding_rtl" below, now refit, R²=0.92, n=262) — AND its
+  assumed `thr_pe` never matched real hardware anyway (PE=1 everywhere in
+  every real threshold row measured so far, from the folding-propagation bug
+  fixed earlier the same session in the 256x256 build scripts, not yet
+  deployed to a real build).
+
+So the 0.6145/1.369 bundle factor was masking an under-derated SWU term and a
+badly-off internal threshold assumption, while the dominant `mvu_lut` term
+needed nothing. Fixing those two sub-formulas directly and reverting this
+bundle slot to identity is the correct fix — applying 0.6145 *on top of* the
+now-corrected sub-formulas would double-correct.
+
+`_FORCED_DSP_LUT_FACTOR = _FORCED_DSP_BRAM_FACTOR = 1.0` (identity). Full
+per-component fit numbers (method, dataset, n, R², caveats) are tracked in
+`MILP/calibration.csv`, one row per constant per date — check there before
+re-deriving a fit from scratch.
+
+A second, separate finding from this same per-node pass: **MVAU weight-memory
+BRAM is NOT a scalar-fixable gap.** `_finn_wm_bram18`'s real/raw ratio is
+0.028 (real is ~3% of raw) because real BRAM is exactly 0 for most
+`avg_bits` groups — FINN's `ram_style="auto"` routes almost all these small
+weight memories to LUTRAM/distributed instead of a dedicated BRAM18
+primitive, which `_finn_wm_bram18` never accounts for. No factor can
+represent "usually zero, sometimes small nonzero" correctly; this needs
+FINN's actual auto-resType decision logic ported in (a local FINN source
+checkout exists for exactly this kind of lookup), not calibration. Left
+unfixed — see `MILP/calibration.csv`'s `mvau_weight_bram` row.
 
 Not yet real-data-backed at all (still whatever's documented under "Stream
 nodes" below, or genuinely unmodeled): `AddStreams_hls`/`DuplicateStreams_hls`/
 `StreamingConcat_hls`/`UpsampleNearestNeighbour_hls` (still FINN's own
 `estimate_layer_resources_hls.json` analytical estimate, not real Vivado
 placement — see that section's own "PROVISIONAL" note) and
-`StreamingDataWidthConverter_hls`/`_rtl` (not in this file's cost-model
-vocabulary at all — FINN inserts these automatically on stream-width
-mismatches; `dump_node_attrs_all.py`/`build_node_resource_calibration_csv.py`
-were extended 2026-09-28 to capture them in the next real dump, but no ILP
-cost term exists yet).
+`StreamingDataWidthConverter_hls`/`_rtl` — this one now DOES have real
+per-node data and its own `dwc_cost()`/`_DWC_LUT_FACTOR`, see that section;
+still not wired into `finn_milp.py`'s dataflow graph as an ILP-priced node.
 
-## Weight-memory RAM style (`RamStyle` / `RAM_STYLE_BLOCK` / `RAM_STYLE_ULTRA`)
+## Weight-memory RAM style (`RamStyle` / `RAM_STYLE_BLOCK` / `RAM_STYLE_ULTRA` / `RAM_STYLE_AUTO`)
 
 FINN's own "ram_style" nodeattr for the MVU's weight tile (see
 `matrixvectoractivation.py`: block=BRAM, ultra=URAM; mutually exclusive,
 real FINN's `bram_estimation()`/`uram_estimation()` return 0 for the style
-not selected). "distributed" (LUTRAM) is not modeled here — real FINN's
-`lut_estimation()` adds an extra c2 LUT term for that style only, which
-this closed-form model doesn't (yet) carry; not needed for the block-vs-
-ultra BRAM/URAM trade this file supports.
+not selected). "distributed" (LUTRAM) is not modeled as its own priced
+resource here — real FINN's `lut_estimation()` adds an extra c2 LUT term for
+that style only, which this closed-form model doesn't (yet) carry.
+
+### `RAM_STYLE_AUTO` / `_WM_BRAM_AUTO_MIN_WMEM` (2026-09-28)
+
+`ram_style="auto"` is FINN's real, most-common weight-tile setting — and
+`bram_estimation()` does **not** special-case it at all; it estimates as if
+"block" unconditionally, with the actual BRAM-vs-LUTRAM choice left entirely
+to Vivado's synthesis-time inference (confirmed via a local FINN source
+checkout: no `lutram_estimation()` exists anywhere in `fpgadataflow/`, and
+`matrixvectoractivation_hls.py`'s own `ram_style_thresholds=="auto"` branch
+literally emits no pragma — "no pragma needed"). So there's nothing to port
+from FINN source for this; instead it's fit empirically from real per-node
+Vivado data.
+
+Of 189 real MVAU_rtl/VVAU_hls nodes actually built with `ram_style="auto"`
+(S12_dense_256 v1+v2 + the older `warmstart150ep_alpha025` build), only 10
+landed nonzero real BRAM — and every one of those 10 has
+`wmem = MW*MH/(PE*SIMD) >= 256` **and** `mem_width = SIMD*weight_bits*PE >=
+16` jointly; all other 179 (including several at wmem up to 288 with a
+smaller mem_width) are exactly 0. Zero counter-examples either direction in
+this sample, though it's a small one right at the boundary (all 10 nonzero
+points sit close to it, none far past) — revisit with more data before
+trusting this far above wmem~300.
+
+`_WM_BRAM_AUTO_MIN_WMEM = 256`, `_WM_BRAM_AUTO_MIN_MEM_WIDTH = 16`. Below
+both thresholds, `conv_cost_pe_simd(ram_style=RAM_STYLE_AUTO)` returns 0
+BRAM/URAM (matches real LUTRAM allocation); at/above, it falls through to
+the same `_finn_wm_bram18` computation as "block". `layer_cost_pe_simd_
+auto_ram` now tries all three styles (block/auto/ultra) and picks whichever
+predicts the smallest BRAM+URAM, so "auto" only ever helps, never hurts,
+relative to the old block-vs-ultra-only comparison.
+
+**Also found and fixed a real bug while validating this**: `finn_milp.py`'s
+main per-layer cost loop hard-coded `RAM_STYLE_BLOCK` for every MVAU/VVAU
+weight tile, with a comment claiming that's "what real hardware does" — this
+same data shows that's false (179/189 real `auto`-style nodes land in
+LUTRAM, not block). Changed to `RAM_STYLE_AUTO`. Re-validated end-to-end
+against all 226 real MVAU/VVAU rows: aggregate real/raw BRAM ratio went from
+0.028 to 0.987, and zero-real rows went from 0/181 correctly predicted to
+179/181. See `MILP/calibration.csv`'s `mvau_weight_bram` row and
+`finn_milp.md`'s history for the `finn_milp.py` side of this fix.
 
 ## Impl style (`ImplStyle` / `IMPL_STYLE_HLS` / `IMPL_STYLE_RTL`)
 
@@ -416,9 +499,37 @@ undershoots that ~5x. Both LUT and BRAM needed numSteps added, not just PE:
   multiplicative constant generalizes more honestly than an overfit 3-4
   parameter model here.
 
-Constants: `_THR_RTL_LUT_BASE_PER_PE = 70.6827`,
+Constants (2026-09-17): `_THR_RTL_LUT_BASE_PER_PE = 70.6827`,
 `_THR_RTL_LUT_PER_NUMSTEP_PE = 0.1065`,
-`_THR_RTL_BRAM18_PER_PE_NUMSTEP = 0.011444`.
+`_THR_RTL_BRAM18_PER_PE_NUMSTEP = 0.011444` (2026-09-17).
+
+**Refit 2026-09-28** on the same 430-node combined dataset as the LUT refit
+above: `_THR_RTL_BRAM18_PER_PE_NUMSTEP = 0.013378` (OLS through origin,
+uncentered R²=0.753, median abs error 43.1% — real per-node scatter here is
+higher than the LUT fit's R²=0.966, a single-term model doesn't fully
+capture it). Improved the v2-only aggregate threshold-BRAM error from −37.3%
+to −26.7%, a real gain but not a full close — see `MILP/calibration.csv`.
+`real_URAM` confirmed exactly 0 across all 430 rows (consistent with the
+"`ultra` is a dead path" note above); `_THR_RTL_URAM_PER_PE_NUMSTEP`/
+`_THR_RTL_LUTRAM_PER_PE_NUMSTEP` recompute automatically from this constant,
+no separate edit needed.
+
+**Refit 2026-09-28** on 430 real Thresholding_rtl nodes across three
+datasets combined (the 2026-09-17 168-node set above + the new
+`S12_dense_256_v1`/`v2` builds, 262 more nodes): `_THR_RTL_LUT_BASE_PER_PE =
+68.1953`, `_THR_RTL_LUT_PER_NUMSTEP_PE = 0.1095` (2-term OLS through origin,
+uncentered R²=0.966). Barely moved from the 2026-09-17 values — reassuring.
+`_THR_RTL_BRAM18_PER_PE_NUMSTEP` was not touched this round.
+
+Important caveat carried over from the new data: 385 of the 430 rows (both
+new builds, entirely) have `PE=1` — a folding-config-propagation bug (fixed
+the same session in the three 256x256 build scripts, not yet deployed to a
+real rebuild) meant the ILP's solved `thr_pe` never reached real hardware
+there. Only the older 168-node set has genuine PE variation (1/2/4/8). This
+refit is therefore properly validated across PE thanks to that older set
+still being included — a fit using only the two new builds would have been
+PE=1-only and blind to the formula's PE-scaling assumption entirely. See
+`MILP/calibration.csv`.
 
 ### `_THR_RTL_URAM_PER_PE_NUMSTEP` — derived, not fit
 
@@ -675,13 +786,23 @@ calibration data (43/43) used `ram_style="distributed"` — there is no real
 transcription, not a fitted/verified formula (same status as
 `_finn_buffer_bram18`, equally untested against real "block" SWU data).
 
-### `_SWU_LUT_DERATE = 0.755`
+### `_SWU_LUT_DERATE = 0.9951` (refit 2026-09-28, was 0.755)
 
-Provisional, OLS-through-origin fit, n=43 real `ConvolutionInputGenerator_rtl`
-nodes (`hardware/mvau_swu_threshold_calibration_dataset.csv`) — real Vivado
-LUT comes in 51-104% of this formula's estimate (mean 70%), same direction
-as `_RTL_MVU_LUT_DERATE` (real RTL synthesis under FINN's own analytical
-estimate). Refit once the full production rebuild lands.
+Original (2026-09-17ish): OLS-through-origin fit, n=43 real
+`ConvolutionInputGenerator_rtl` nodes
+(`hardware/mvau_swu_threshold_calibration_dataset.csv`) — real Vivado LUT
+came in 51-104% of this formula's estimate (mean 70%), same direction as
+`_RTL_MVU_LUT_DERATE` (real RTL synthesis under FINN's own analytical
+estimate). Flagged "refit once the full production rebuild lands."
+
+**Refit 2026-09-28** on 51 real SWU nodes (S12_dense_256 v1+v2 combined):
+called `_finn_swu()` directly with each real node's own IFMChannels/IFMDim/
+OFMDim/ConvKernelDim/Stride/Dilation/SIMD/depthwise/parallel_window/
+ram_style/act_bits, OLS-through-origin of real_LUT against the function's
+raw output (which already includes the OLD 0.755 derate baked in) gave a
+residual multiplier of 1.318 (uncentered R²=0.970, median abs error 19.4%).
+Composing: `0.755 × 1.318 ≈ 0.9951` — the old derate was too aggressive; the
+raw pre-derate formula was already close to correct.
 
 ## `conv_cost_pe_simd` — the general per-layer cost
 

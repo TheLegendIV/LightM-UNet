@@ -82,15 +82,32 @@ _S12_DENSE_DSP_FORCED_BRAM_AFFINE = (0.1131, -0.1973)  # weak (R^2=0.468), not a
 # constants below) or StreamingDataWidthConverter (not modeled at all, not
 # even in finn_milp.py's dataflow-graph vocabulary) -- neither has real
 # per-node ground truth yet.
-_S12_DENSE_256_V2_FORCED_LUT_FACTOR = 0.6145
-_S12_DENSE_256_V2_FORCED_BRAM_FACTOR = 1.3690
+_S12_DENSE_256_V2_FORCED_LUT_FACTOR = 0.6145  # SUPERSEDED same day, see below
+_S12_DENSE_256_V2_FORCED_BRAM_FACTOR = 1.3690  # SUPERSEDED same day, see below
 
-# ACTIVE default (2026-09-28): the S12 dense 256x256 v2 refit above --
-# supersedes the 2026-09-17 identity placeholder now that real per-node data
-# for this exact (noActivation=1/RTL/force_dsp) regime exists. See
-# finn_cost_model.md.
-_FORCED_DSP_LUT_FACTOR = _S12_DENSE_256_V2_FORCED_LUT_FACTOR
-_FORCED_DSP_BRAM_FACTOR = _S12_DENSE_256_V2_FORCED_BRAM_FACTOR
+# SUPERSEDED (2026-09-28, same day): per-node data (real PE/SIMD/MH/MW fed
+# into the ACTUAL cost functions, not an aggregate bundle total) showed this
+# single bundle-level factor was compensating for the wrong things --
+# mvu_lut alone was already accurate (real/raw ratio 0.998 across every
+# avg_bits group sampled), so the 0.6145 correction was really masking (a) an
+# under-derated _SWU_LUT_DERATE (see below, now fixed directly) and (b) the
+# per_layer-internal standalone-threshold estimate's `thr_pe` assumption
+# never matching real hardware (the folding-propagation bug fixed earlier
+# this session in the three 256x256 build scripts -- see finn_milp.md).
+# Applying 0.6145 on top of the now-separately-fixed sub-formulas would
+# double-correct. Reverted to identity below; MILP/calibration.csv has the
+# full per-component breakdown that led to this reversal.
+
+# ACTIVE default (2026-09-28): identity. Each sub-formula (mvu_lut, SWU,
+# threshold) is now calibrated individually where real per-node data exists
+# and supports it -- this bundle-level slot is for whatever residual bias
+# remains AFTER those, and current evidence doesn't show one. Revisit once a
+# build with the thr_pe-propagation fix deployed lands (see
+# MILP/calibration.csv's "threshold_lut" row: the current threshold refit is
+# PE=1-only, real hardware has never yet built a PE>1 standalone threshold,
+# so the formula's PE-scaling behavior remains completely unvalidated).
+_FORCED_DSP_LUT_FACTOR = 1.0
+_FORCED_DSP_BRAM_FACTOR = 1.0
 _FORCED_DSP_LUT_AFFINE = (1.0, 0.0)
 _FORCED_DSP_BRAM_AFFINE = (1.0, 0.0)
 
@@ -108,19 +125,43 @@ def forced_dsp_bram_total(raw_total_bram18k: float, n_partitions: int) -> float:
 
 
 # ---- RAM style / impl style ----
-# "distributed" (LUTRAM) not modeled for the weight tile -- see finn_cost_model.md.
-RamStyle = Literal["block", "ultra"]
+# "distributed" (LUTRAM) not modeled for the weight tile as its OWN resource
+# (no LUTRAM cost is ever added) -- but see _WM_BRAM_AUTO_MIN_WMEM/
+# _WM_BRAM_AUTO_MIN_MEM_WIDTH below: "auto" IS now modeled to the extent that
+# it correctly predicts ZERO BRAM for the small weight tiles FINN's own
+# auto-resType picker routes to LUTRAM instead.
+RamStyle = Literal["block", "ultra", "auto"]
 RAM_STYLE_BLOCK: RamStyle = "block"
 RAM_STYLE_ULTRA: RamStyle = "ultra"
+RAM_STYLE_AUTO: RamStyle = "auto"
+
+# ---- MVAU/VVAU weight-memory BRAM, ram_style="auto" (2026-09-28) ----
+# FINN's own bram_estimation() (matrixvectoractivation.py) does NOT special-
+# case "auto" at all -- it estimates as if "block" unconditionally, and the
+# real BRAM-vs-LUTRAM choice is left entirely to Vivado's synthesis-time
+# inference (no FINN Python code implements or exposes that decision -- a
+# local FINN source checkout was searched directly to confirm this; there is
+# no lutram_estimation() anywhere in fpgadataflow/). So this threshold is
+# NOT ported from FINN source (nothing to port) -- it's fit empirically from
+# real per-node Vivado data: of 189 real MVAU_rtl/VVAU_hls nodes actually
+# built with ram_style="auto" (S12_dense_256 v1+v2 +
+# warmstart150ep_alpha025, combined), only 10 landed nonzero real BRAM, and
+# EVERY one of those 10 has wmem>=256 AND mem_width>=16 jointly; all other
+# 179 (including several at wmem up to 288 when mem_width was smaller) are
+# exactly 0. This is a small sample right at the boundary (only 10 nonzero
+# points, none far past the threshold) -- revisit with more data before
+# trusting it far above these values. See MILP/calibration.csv.
+_WM_BRAM_AUTO_MIN_WMEM = 256
+_WM_BRAM_AUTO_MIN_MEM_WIDTH = 16
 
 ImplStyle = Literal["hls", "rtl"]
 IMPL_STYLE_HLS: ImplStyle = "hls"
 IMPL_STYLE_RTL: ImplStyle = "rtl"
 
 # ---- Standalone Thresholding_rtl empirical cost (see finn_cost_model.md) ----
-_THR_RTL_LUT_BASE_PER_PE = 70.6827
-_THR_RTL_LUT_PER_NUMSTEP_PE = 0.1065
-_THR_RTL_BRAM18_PER_PE_NUMSTEP = 0.011444
+_THR_RTL_LUT_BASE_PER_PE = 68.1953
+_THR_RTL_LUT_PER_NUMSTEP_PE = 0.1095
+_THR_RTL_BRAM18_PER_PE_NUMSTEP = 0.013378
 _THR_RTL_URAM_PER_PE_NUMSTEP = _THR_RTL_BRAM18_PER_PE_NUMSTEP * (18_432 / 294_912)  # derived, dead path -- ultra FAILS synthesis
 _THR_RTL_LUTRAM_PER_PE_NUMSTEP = _THR_RTL_BRAM18_PER_PE_NUMSTEP * (18_432 / 64)  # derived, real but unexercised
 
@@ -236,7 +277,7 @@ def _finn_buffer_uram18(buffer_width: int, buffer_depth: int) -> int:
     return int(cascade_depth * cascade_width)
 
 
-_SWU_LUT_DERATE = 0.755  # OLS-through-origin, n=43 real SWU nodes -- see finn_cost_model.md
+_SWU_LUT_DERATE = 0.9951  # OLS-through-origin, n=51 real SWU nodes (S12 dense 256x256 v1+v2), R^2=0.970 -- see finn_cost_model.md / MILP/calibration.csv
 
 
 # ---- SWU (sliding window unit) ----
@@ -345,6 +386,59 @@ def stream_node_cost(kind: str, layer: LayerGeometry, pe: int = 1) -> dict:
     }
 
 
+# ---- StreamingDataWidthConverter (DWC) ----
+# NOT in this file's dataflow-graph vocabulary as an ILP-priced node yet --
+# FINN inserts these automatically wherever two adjacent nodes' folded stream
+# widths don't match, and neither finn_milp.py's dataflow graph nor
+# layer_topology.py currently models that adjacency/insertion decision. This
+# is the cost FORMULA only (real FINN source, ported verbatim from
+# StreamingDataWidthConverter.lut_estimation() in
+# finn/src/finn/custom_op/fpgadataflow/streamingdatawidthconverter.py -- no
+# bram_estimation/uram_estimation/dsp override exists there either, matching
+# every real DWC row in the calibration data: real_BRAM18/BRAM36/URAM/DSP are
+# all 0). See finn_cost_model.md for the real-data fit.
+_DWC_LUT_FACTOR = 0.8697  # real/raw, S12 dense 256x256 v1+v2, n=258 real DWC nodes.
+# CAUTION, unlike every other factor in this file: per-node fit quality is
+# weak (uncentered R^2=0.15-0.17, median per-node abs error ~85-89%) -- FINN's
+# own lut_estimation() barely tracks real per-node DWC LUT at all. This
+# aggregate ratio is only trustworthy for a TOTAL-budget-level check (errors
+# partly cancel in the sum); do not use dwc_cost() for any per-node decision.
+# See MILP/calibration.csv.
+
+
+def dwc_cost(in_width: int, out_width: int) -> dict:
+    """LUT of a StreamingDataWidthConverter_rtl converting an `in_width`-bit
+    stream to `out_width` bits (both AXI-stream widths in bits, i.e.
+    PE*SIMD*(weight_bits or act_bits) of each side's own node -- NOT PE/SIMD
+    alone). Raw formula is FINN's own shift-register-based estimate (assumes
+    an intermediate width = lcm(in_width, out_width)); real Vivado data
+    shows real/raw is asymmetric between widening and narrowing conversions
+    (see finn_cost_model.md), so `_DWC_LUT_FACTOR` is a single aggregate
+    correction, same caveat as every other flat factor in this file."""
+    minw, maxw = min(in_width, out_width), max(in_width, out_width)
+    intw = abs(maxw * minw) // math.gcd(maxw, minw)
+    cnt_luts, cset_luts = 0, 0
+    if in_width != intw:
+        cnt_luts += abs(math.ceil(math.log(in_width / intw, 2)))
+        cset_luts += intw
+    if intw != out_width:
+        cnt_luts += abs(math.ceil(math.log(intw / out_width, 2)))
+        cset_luts += out_width
+    raw_lut = cnt_luts + cset_luts
+    return {
+        "total_pe": 0, "total_simd_lanes": 0,
+        "swu_bram18": 0, "wm_bram18": 0, "wm_uram18": 0, "thr_bram18": 0, "thr_uram18": 0,
+        "swu_lut": 0, "mvu_lut": 0, "thr_lut": 0, "mp_lut": 0,
+        "total_lut": raw_lut * _DWC_LUT_FACTOR, "mvu_dsp": 0, "total_dsp": 0,
+        # cycles: NOT modeled -- FINN's own get_exp_cycles for this op isn't
+        # overridden in streamingdatawidthconverter.py either (inherits
+        # whatever HWCustomOp's generic default is), and no real per-node
+        # cycle measurement exists yet. 0 here is a placeholder, not a
+        # verified estimate -- do not use this field until it's grounded.
+        "cycles": 0,
+    }
+
+
 # ---- Per-layer cost (general PE/SIMD) ----
 
 def conv_cost_pe_simd(
@@ -381,6 +475,13 @@ def conv_cost_pe_simd(
     if ram_style == RAM_STYLE_ULTRA:
         wm_bram18 = 0
         wm_uram18 = math.ceil(mem_width / 72) * math.ceil(omega / 4096)
+    elif ram_style == RAM_STYLE_AUTO and not (omega >= _WM_BRAM_AUTO_MIN_WMEM and mem_width >= _WM_BRAM_AUTO_MIN_MEM_WIDTH):
+        # small enough that real hardware goes to LUTRAM instead -- see
+        # _WM_BRAM_AUTO_MIN_WMEM's own comment. LUTRAM itself still isn't
+        # priced as its own resource (real_LUTRAM is not modeled), this only
+        # stops wrongly predicting BRAM that FINN never actually allocates.
+        wm_bram18 = 0
+        wm_uram18 = 0
     else:
         wm_bram18 = _finn_wm_bram18(omega, mem_width, depthwise)
         wm_uram18 = 0
@@ -550,10 +651,20 @@ def layer_cost_pe_simd_auto_ram(
 ) -> dict:
     """Like layer_cost_pe_simd, but picks ram_style per-layer (whichever of
     wm_bram18/wm_uram18 is smaller) instead of taking it as a fixed input --
-    the standing "auto" convention for cost-model estimates (2026-09-15)."""
+    the standing "auto" convention for cost-model estimates (2026-09-15).
+
+    2026-09-28: also tries RAM_STYLE_AUTO (real FINN's actual weight-tile
+    ram_style default, not "block" -- see _WM_BRAM_AUTO_MIN_WMEM). Below the
+    empirical size threshold this correctly predicts 0 BRAM (LUTRAM, real
+    hardware's own choice for small memories); at/above it, "auto" behaves
+    identically to "block" (same branch in conv_cost_pe_simd), so this never
+    makes the choice worse than the old block-vs-ultra comparison, only
+    better for the small-memory case "block" used to always overcount."""
     block = layer_cost_pe_simd(layer, weight_bits, act_bits, pe, simd, ram_style=RAM_STYLE_BLOCK, force_dsp=force_dsp, **kw)
     if layer.op_type == "MaxPool2d":
         return block
+    auto = layer_cost_pe_simd(layer, weight_bits, act_bits, pe, simd, ram_style=RAM_STYLE_AUTO, force_dsp=force_dsp, **kw)
     ultra = layer_cost_pe_simd(layer, weight_bits, act_bits, pe, simd, ram_style=RAM_STYLE_ULTRA, force_dsp=force_dsp, **kw)
-    chosen = ultra if ultra["wm_uram18"] < block["wm_bram18"] else block
-    return {**chosen, "ram_style_chosen": "ultra" if chosen is ultra else "block"}
+    candidates = {"block": block, "auto": auto, "ultra": ultra}
+    best_name = min(candidates, key=lambda k: candidates[k]["wm_bram18"] + candidates[k]["wm_uram18"])
+    return {**candidates[best_name], "ram_style_chosen": best_name}

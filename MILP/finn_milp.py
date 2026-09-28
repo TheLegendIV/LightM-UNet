@@ -34,8 +34,8 @@ import torch  # noqa: F401
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from block_utils import enumerate_blocks, path_to_block_map  # noqa: E402
 from finn_cost_model import (  # noqa: E402
-    IMPL_STYLE_HLS, IMPL_STYLE_RTL, RAM_STYLE_BLOCK, RAM_STYLE_ULTRA, LayerGeometry, calibrated_bram18k,
-    calibrated_lut, divisors, layer_cost_pe_simd, max_pe, max_simd, threshold_node_cost,
+    IMPL_STYLE_HLS, IMPL_STYLE_RTL, RAM_STYLE_AUTO, RAM_STYLE_BLOCK, RAM_STYLE_ULTRA, LayerGeometry,
+    calibrated_bram18k, calibrated_lut, divisors, layer_cost_pe_simd, max_pe, max_simd, threshold_node_cost,
     FOLDABLE_STREAM_KINDS, STREAM_NODE_KINDS, stream_node_cost,
 )
 from layer_topology import (  # noqa: E402
@@ -291,10 +291,10 @@ def extra_node_options(node: ExtraNode, force_dsp: bool) -> list[tuple[tuple, di
         for pe in ([1] if FORCE_SERIAL else divisors(max_pe(g))):
             for simd in ([1] if FORCE_SERIAL else divisors(max_simd(g))):
                 cost = layer_cost_pe_simd(
-                    g, w, a, pe, simd, RAM_STYLE_BLOCK, swu_ram_style="distributed",
+                    g, w, a, pe, simd, RAM_STYLE_AUTO, swu_ram_style="distributed",
                     **{**rtl_kwargs, "no_activation": False},
                 )
-                options.append(((g.name, pe, simd, "block", VARIANT_RTL_DSP_NOACT1, w, a), cost))
+                options.append(((g.name, pe, simd, "auto", VARIANT_RTL_DSP_NOACT1, w, a), cost))
     else:
         raise ValueError(f"unknown extra node kind {kind!r}")
     return options
@@ -392,9 +392,15 @@ def solve_joint_perlayer(
         for pe, simd, ram_style, variant in folds:
             variant_kwargs = _variant_cost_kwargs(variant, force_dsp)
             for w, a in candidate_pairs:
-                # MVAU weights hard-fixed to block, SWU buffer to distributed (what real hardware does).
+                # MVAU weights: "auto" (2026-09-28, was hard-fixed to "block"
+                # -- that comment's "what real hardware does" claim was
+                # itself wrong, per real per-node data: 189 real MVAU_rtl/
+                # VVAU_hls nodes actually built with ram_style="auto", of
+                # which 179 landed 0 real BRAM (LUTRAM), not "block"'s
+                # always-nonzero prediction -- see finn_cost_model.py's
+                # _WM_BRAM_AUTO_MIN_WMEM). SWU buffer stays distributed.
                 cost = layer_cost_pe_simd(
-                    layer, w, a, pe, simd, RAM_STYLE_BLOCK,
+                    layer, w, a, pe, simd, RAM_STYLE_AUTO,
                     swu_ram_style="distributed", thr_ram_style=ram_style, **variant_kwargs,
                 )
                 key = (layer.name, pe, simd, ram_style, variant, w, a)
