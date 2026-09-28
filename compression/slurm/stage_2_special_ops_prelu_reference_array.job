@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=stage_1_naive_baseline_prelu_upsample_conv
+#SBATCH --job-name=stage_2_special_ops_prelu_reference
 #SBATCH --partition=gpu_mig
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -7,70 +7,52 @@
 #SBATCH --gpus=1
 #SBATCH --mem=32G
 #SBATCH --time=04:00:00
-#SBATCH --array=0-3
+#SBATCH --array=0-1
 #SBATCH --output=logs/%x_%a_%j.out
 #SBATCH --error=logs/%x_%a_%j.err
 
 set -e
 
-# Stage 1_naive_baseline_prelu_upsample_conv -- third point on Stage 1's
-# activation/decoder grid, alongside archive/stage_1_naive_baseline_array.job
-# (ReLU + upsample_conv) and stage_1_naive_baseline_prelu_maxunpool_array.job
-# (PReLU + max_unpool). This array isolates PReLU alone: same bilinear
-# upsample_conv decoder as the original ReLU curve, only
-# ENET_USE_PRELU=1 changes. Answers whether Stage 2's "+PReLU wins" result
-# (measured as a single-op flip off the U4 reference) holds across the whole
-# width grid, and does so without the max_unpool decoder's indices/patch-size
-# coupling confounding the activation comparison.
+# Stage 2_special_ops_prelu_reference -- re-run of the two remaining
+# archive/stage_2_special_ops_array.job probes (no_dilated, no_asymmetric),
+# but referenced against PReLU + upsample_conv at U4
+# (nnUNetTrainerENet_2_special_ops_prelu) instead of the original ReLU + U4
+# reference -- keeps the thesis's ablation story consistent with the
+# ENet-paper-native activation (PReLU) rather than mixing a ReLU-referenced
+# ablation into a narrative that otherwise treats PReLU as the carried-
+# forward choice from here on (see nas_stages.py stage_2's own note on the
+# ops_ablation.png reference marker).
 #
-# Unlike stage_1_naive_baseline_prelu_maxunpool_array.job (which dropped its
-# own Baseline task since Stage 0 already has a full-width PReLU+max_unpool
-# anchor to borrow), no full-width PReLU+upsample_conv point exists anywhere
-# in results.csv -- so this array keeps its own Baseline task, using the same
-# 5-tuple, f_i-included form as the original ReLU+upsample_conv curve's own
-# Baseline (archive/stage_1_naive_baseline_array.job), not Stage 0's 6-tuple
-# split-stage2/3 paper form:
-#   0: Baseline -- CHANNELS=16,64,128,64,16
-#   1: U2       -- CHANNELS=8,32,64,32,8
-#   2: U8       -- CHANNELS=4,8,16,8,4
-#   3: U16      -- CHANNELS=4,4,8,4,4
+# The third original probe (max_unpool) is deliberately NOT re-run here --
+# nnUNetTrainerENet_1_naive_baseline_prelu_maxunpool_U4 (from
+# stage_1_naive_baseline_prelu_maxunpool_array.job) is already EXACTLY this
+# probe: same CHANNELS=4,16,32,16,4, dilated=1/asymmetric=1/strided=1/dsc=0/
+# context_pattern=default/prelu=1 as the PReLU+upsample_conv reference,
+# decoder_type flipped to max_unpool, dice=0.590484. Confirmed by diffing
+# both rows' ops_flags -- re-training it here would be a duplicate row under
+# a different config_name for no reason.
 #
-# U4 deliberately excluded from this array -- it's already in results.csv as
-# nnUNetTrainerENet_2_special_ops_prelu (Stage 2's "+PReLU" probe): same
-# CHANNELS=4,16,32,16,4, decoder_type=upsample_conv, use_prelu=1,
-# dilated/asymmetric/strided=1, dsc=0 as this array would produce. Only
-# difference is that row predates the ENET_SEED=0 convention (unseeded, like
-# the rest of the original Stage 1/2 arrays) -- not worth re-training just to
-# seed it. Stage 1's harvest (nas_stages.py) should point at that existing
-# config_name for this curve's U4 point rather than expecting a
-# "1_naive_baseline_prelu_upsample_conv_U4" row.
+# Each task below flips exactly ONE knob off nnUNetTrainerENet_2_special_ops_
+# prelu's own settings (CHANNELS=4,16,32,16,4, BOTTLENECKS=4,8,8,2,1,
+# DECODER_TYPE=upsample_conv, USE_PRELU=1, strided=1, dsc=0,
+# context_pattern=default, dilated=1, asymmetric=1):
+#   0: no_dilated    -- USE_DILATED 1->0
+#   1: no_asymmetric -- USE_ASYMMETRIC 1->0
 #
-# Everything else stays at the same ENet-paper-native values as both sibling
-# curves: dilated/asymmetric/strided=1, dsc=0, context_pattern=default,
-# bottlenecks=4,8,8,2,1.
-#
-# Writes to a DISTINCT stage/config_name ("1_naive_baseline_prelu_upsample_
-# conv") so this does NOT overwrite/collide with either sibling curve's rows
-# in compression/results.csv.
-#
-# ENET_SEED=0 set explicitly, same as the prelu_maxunpool array (see that
-# job's own comment on the original stage_1/stage_2 arrays being unseeded).
+# ENET_SEED=0 set explicitly (the original stage_2_special_ops_array.job
+# predates that convention and was unseeded -- these two new runs at least
+# are reproducible).
 
 DATASET_ID=509
 DATASET_NAME="Dataset509_ARCADE_1x1_4c"
 
-CONFIG_NAMES=(Baseline U2 U8 U16)
+# name, use_dilated, use_asymmetric
+NAMES=(no_dilated no_asymmetric)
+USE_DILATED=(0 1)
+USE_ASYMMETRIC=(1 0)
+
 TASK_ID=${SLURM_ARRAY_TASK_ID}
-CONFIG_NAME="${CONFIG_NAMES[$TASK_ID]}"
-
-case "$CONFIG_NAME" in
-  Baseline) CHANNELS="16,64,128,64,16" ;;
-  U2)       CHANNELS="8,32,64,32,8" ;;
-  U8)       CHANNELS="4,8,16,8,4" ;;
-  U16)      CHANNELS="4,4,8,4,4" ;;
-esac
-
-RUN_NAME="1_naive_baseline_prelu_upsample_conv_${CONFIG_NAME}"
+RUN_NAME="2_special_ops_prelu_${NAMES[$TASK_ID]}"
 TRAINER_CLASS="nnUNetTrainerENet"
 
 mkdir -p logs
@@ -99,16 +81,17 @@ export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
 export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
 export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
 
-# -- ENet trainer knobs -- PReLU + upsample_conv (bilinear) ------------------
-export ENET_CHANNELS="${CHANNELS}"
+# -- ENet trainer knobs -- PReLU+upsample_conv U4 reference, one flag flipped
+# per task -----------------------------------------------------------------
+export ENET_CHANNELS="4,16,32,16,4"
 export ENET_BOTTLENECKS="4,8,8,2,1"
 export ENET_DECODER_TYPE="upsample_conv"
 export ENET_CONTEXT_PATTERN="default"
-export ENET_USE_DILATED=1
-export ENET_USE_ASYMMETRIC=1
 export ENET_USE_STRIDED=1
 export ENET_USE_DSC=0
 export ENET_USE_PRELU=1
+export ENET_USE_DILATED="${USE_DILATED[$TASK_ID]}"
+export ENET_USE_ASYMMETRIC="${USE_ASYMMETRIC[$TASK_ID]}"
 export ENET_SEED=0
 export ENET_EPOCHS=150
 export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
@@ -117,8 +100,7 @@ echo "=== Job info ==="
 echo "Host: $(hostname)"
 echo "Date: $(date)"
 echo "Array task: ${TASK_ID} -> ${RUN_NAME}"
-echo "ENET_CHANNELS=${ENET_CHANNELS} ENET_BOTTLENECKS=${ENET_BOTTLENECKS}"
-echo "ENET_DECODER_TYPE=${ENET_DECODER_TYPE} ENET_USE_PRELU=${ENET_USE_PRELU} ENET_SEED=${ENET_SEED}"
+echo "ENET_USE_DILATED=${ENET_USE_DILATED} ENET_USE_ASYMMETRIC=${ENET_USE_ASYMMETRIC} ENET_USE_PRELU=${ENET_USE_PRELU}"
 echo "Output folder: ${ENET_OUTPUT_FOLDER}"
 
 echo "=== GPU info ==="
@@ -153,7 +135,7 @@ echo "=== Collecting results into compression/results.csv ==="
 cd "$HOME/LightM-UNet"
 python compression/collect_results.py \
     --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
-    --stage 1_naive_baseline_prelu_upsample_conv \
+    --stage 2_special_ops_prelu \
     --dataset-name "${DATASET_NAME}" \
     --dataset-id "${DATASET_ID}" \
     --channels "${ENET_CHANNELS}" \
