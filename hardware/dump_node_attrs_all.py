@@ -26,21 +26,9 @@ OP_TYPES = (
     # extra_by_kind's residual_add/skip_quant/out_act/add/dup entries).
     "AddStreams_hls", "DuplicateStreams_hls", "StreamingConcat_hls",
     "UpsampleNearestNeighbour_hls", "StreamingMaxPool_hls",
-    # StreamingDataWidthConverter -- NOT in finn_milp.py's dataflow graph/cost
-    # model vocabulary AT ALL (FINN inserts these automatically wherever
-    # adjacent nodes' folded stream widths don't match; the ILP never places
-    # or prices them). Found via this v2 build's own
-    # finn_deployment_output_v2_.../report/estimate_layer_resources.json
-    # (FINN's own res_estimation analytical estimate, not real Vivado data):
-    # ~205 real DWC instances, individually small (~8-50 LUT each per that
-    # estimate) but the single largest node-kind bucket in that report by
-    # total LUT -- bigger than Thresholding or FIFO. Added here so the next
-    # real Vivado-hierarchy CSV regeneration captures it; whether/how to add
-    # a DWC cost term to finn_milp.py itself is a separate, bigger decision
-    # (see finn_milp.md's own "Not modeled: FIFOs, data-width converters..."
-    # line -- this was already a known, named gap, just not yet quantified
-    # against real per-node data).
+    # DWC and FMPadding -- also previously excluded, same reason as above
     "StreamingDataWidthConverter_hls", "StreamingDataWidthConverter_rtl",
+    "FMPadding_hls", "FMPadding_rtl", "FMPadding_Pixel_hls",
 )
 
 # union of every nodeattr key any of the above op types might expose
@@ -52,6 +40,10 @@ ATTR_KEYS = (
     "IFMChannels", "IFMDim", "OFMDim", "ConvKernelDim", "Stride", "Dilation",
     "depthwise", "parallel_window",
     "depth", "impl_style", "dataType", "folded_shape",
+    # DWC
+    "shape", "inWidth", "outWidth",
+    # FMPadding / FMPadding_Pixel
+    "ImgDim", "Padding", "inputDataType", "numInputVectors",
 )
 
 

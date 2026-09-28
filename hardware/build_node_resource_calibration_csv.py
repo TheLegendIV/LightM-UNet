@@ -65,6 +65,10 @@ STREAM_KIND_BY_OP_TYPE = {
     "StreamingDataWidthConverter_rtl": "DWC",
 }
 STREAM_TYPES = tuple(STREAM_KIND_BY_OP_TYPE)
+# DWC and FMPadding -- same previously-excluded-from-dump_node_attrs_all.py
+# gap as the stream nodes above, just noticed later.
+DWC_TYPES = ("StreamingDataWidthConverter_hls", "StreamingDataWidthConverter_rtl")
+FMPADDING_TYPES = ("FMPadding_hls", "FMPadding_rtl", "FMPadding_Pixel_hls")
 
 HEADER = [
     "partition", "node_name", "op_type", "node_kind",
@@ -76,6 +80,7 @@ HEADER = [
     "ConvKernelDim_h", "ConvKernelDim_w", "Stride_h", "Stride_w", "Dilation_h", "Dilation_w",
     "depthwise", "parallel_window",
     "dataType", "bits", "depth", "folded_shape", "impl_style",
+    "shape", "inWidth", "outWidth", "Padding", "numInputVectors",
     "real_LUT", "real_LUTRAM", "real_SRL", "real_FF",
     "real_BRAM36", "real_BRAM18", "real_URAM", "real_DSP",
 ]
@@ -220,6 +225,21 @@ def build_row(partition, node, hier):
         row.update({
             "node_kind": STREAM_KIND_BY_OP_TYPE[op_type], "PE": a.get("PE"),
             "NumChannels": a.get("NumChannels"),
+        })
+    elif op_type in DWC_TYPES:
+        row.update({
+            "node_kind": "DWC", "dataType": a.get("dataType"), "bits": dtype_bits(a.get("dataType")),
+            "shape": to_str(a.get("shape")), "inWidth": a.get("inWidth"), "outWidth": a.get("outWidth"),
+        })
+    elif op_type in FMPADDING_TYPES:
+        img = dim2(a.get("ImgDim"))
+        row.update({
+            "node_kind": "FMPadding", "SIMD": a.get("SIMD"), "NumChannels": a.get("NumChannels"),
+            "IFMDim_h": img[0], "IFMDim_w": img[1],
+            "Padding": to_str(a.get("Padding")) if op_type != "FMPadding_Pixel_hls" else None,
+            "Stride_h": dim2(a.get("Stride"))[0] if op_type == "FMPadding_Pixel_hls" else None,
+            "Stride_w": dim2(a.get("Stride"))[1] if op_type == "FMPadding_Pixel_hls" else None,
+            "numInputVectors": a.get("numInputVectors"),
         })
     else:
         row["node_kind"] = op_type
