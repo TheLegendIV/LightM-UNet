@@ -14,12 +14,16 @@ set -e
 
 # Continued training for 12_dense_relu_nearest_upsample
 # (nnUNetTrainerENet_12_dense_relu_nearest_upsample, stage
-# "12_dense_relu_nearest_upsample", see stage_12_dense_relu_nearest_upsample.job's
-# own header -- the decoder-resize-kernel-axis sibling of 12_dense_relu
-# (upsample_conv) and 12_dense_relu_nearest_conv_upsample (nearest_conv_
-# upsample), same channels/bottleneck depth/dense_dilation context pattern,
-# the ONLY decoder-axis change being a parameter-free F.interpolate(nearest)
-# in up4/up5 instead of bilinear or nearest+trainable-resize-conv) -- ANOTHER
+# "12_dense_relu_nearest_upsample", best EMA pseudo dice=0.7496,
+# best_epoch=139/150 -- still climbing right up to the end of its first
+# 150-epoch schedule, not yet plateaued, same "still improving" situation
+# stage_12_dense_relu_warmstart150ep.job / stage_12_dense_relu_nearest_conv_
+# upsample_warmstart150ep.job were built for, see those jobs' own headers)
+# -- the decoder-resize-kernel-axis sibling of 12_dense_relu (upsample_conv)
+# and 12_dense_relu_nearest_conv_upsample (nearest_conv_upsample), same
+# channels/bottleneck depth/dense_dilation context pattern, the ONLY
+# decoder-axis change being a parameter-free F.interpolate(nearest) in
+# up4/up5 instead of bilinear or nearest+trainable-resize-conv) -- ANOTHER
 # full 150-epoch PolyLR schedule, warm-started from that checkpoint via
 # nnU-Net's own native `-pretrained_weights` flag
 # (enet/nnunetv2/run/load_pretrained_weights.py -- a plain name+shape
