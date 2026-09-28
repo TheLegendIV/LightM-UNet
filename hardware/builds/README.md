@@ -54,7 +54,17 @@ When a job is retired, `git mv` its folder into
   shape/partitioning/DSP-forcing/URAM-budget logic is channel-width
   agnostic) — only `CHANNELS`, checkpoint/bits-file paths, and the dedicated
   `finn_build_tmp/S12_dense_nn_upsample_256_w8_16_v2/` build dir differ.
-
+- **`12_dense_relu_nearest_conv_upsample_256_w8_16_v4`** — w8/16 width point,
+  its OWN dedicated QAT checkpoint (NOT a reuse of `..._w8_16_v2`'s export —
+  an earlier "pure new solve" assumption was corrected), fine-tuned via
+  `compression/slurm/qat_12_dense_relu_nearest_conv_upsample_256_w8_16_v4.job`
+  against the v4 MILP solve (`MILP/artifacts/S12_dense_nn_upsample_256_w8_16_v4/`,
+  `--hard-bram-fraction 0.2 --target-fps 200 --optimize-downstream-rate 2.5`).
+  Has its own `finn_export_..._w8_16_v4_trained.py`,
+  `finn_hawq_dump_conv_order_..._w8_16_v4.py`,
+  `finn_hawq_preamble_..._w8_16_v4_trained_256x256.py`, and
+  `finn_ooc_..._v4_256x256.py` (dedicated `finn_build_tmp/.../w8_16_v4/`
+  build dir) — no artifacts shared with `..._w8_16_v2`.
 This folder was emptied out on 2026-09-26 (see
 `hardware/archive/pre_builds_refactor_20260926/` for the other 2 build
 families that stayed archived: `12_dense_relu_warmstart150ep_alpha025` and
