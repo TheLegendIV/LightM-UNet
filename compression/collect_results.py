@@ -32,6 +32,7 @@ import shutil
 import subprocess
 import sys
 import time
+import warnings
 from pathlib import Path
 
 try:
@@ -409,7 +410,18 @@ def upsert_row(row: dict) -> None:
             if RESULTS_CSV.exists():
                 existing = pd.read_csv(RESULTS_CSV)
                 existing = existing[existing["config_name"] != row["config_name"]]
-                combined = pd.concat([existing, pd.DataFrame([row])], ignore_index=True)
+                # existing (read fresh from CSV text every call) almost always has
+                # at least one column that's all-NaN across every row so far (e.g.
+                # bops for a quant_bits=32 sweep, or epochs before a checkpoint_final
+                # exists) -- pandas infers that as float64 regardless of the
+                # column's real meaning, then warns when the new row's own value
+                # for that same column has a different dtype. Harmless here: this
+                # DataFrame is never used for anything but an immediate to_csv, so
+                # there's no in-memory computation that the future dtype-inference
+                # change would actually affect.
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", category=FutureWarning)
+                    combined = pd.concat([existing, pd.DataFrame([row])], ignore_index=True)
             else:
                 combined = pd.DataFrame([row], columns=RESULTS_COLUMNS)
             last_error = None
