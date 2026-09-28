@@ -1,55 +1,54 @@
 #!/bin/bash
-#SBATCH --job-name=stage_group2_literature_benchmark
-#SBATCH --partition=gpu_mig
+#SBATCH --job-name=stage_group2_mamba_a100
+#SBATCH --partition=gpu_a100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gpus=1
 #SBATCH --mem=32G
 #SBATCH --time=03:00:00
-#SBATCH --array=0-3
+#SBATCH --array=0-1
 #SBATCH --output=logs/%x_%a_%j.out
 #SBATCH --error=logs/%x_%a_%j.err
 
 set -e
 
-# Group 2 (literature benchmark on ARCADE, external reference) -- all at
-# 4-class ARCADE (Dataset509_ARCADE_1x1_4c, 512x512), 150 epochs, fixed
-# seed. 3h/submission -- resumable via the same checkpoint_final/
-# checkpoint_latest self-healing + `--c` continue pattern as
-# stage_group1_enet_family_array.job / stage_erfnet_u4.job (only archives
-# once the real 150-epoch schedule is complete; resubmit the array to keep
-# making progress otherwise).
+# lightmunet/lmunet split out of stage_group2_literature_benchmark_array.job
+# (originally tasks 2/3 there) -- both crashed with CUDA out-of-memory on
+# that array's gpu_mig partition BEFORE saving any checkpoint:
+#   lmunet:      OOM inside PVMamba's Mamba call (nnunetv2/nets/LMUNet.py's
+#                SequenceMamba/PVMamba forward chain).
+#   lightmunet:  OOM inside mamba_ssm's mamba_simple.py in_proj matmul,
+#                reached via nnunetv2/nets/LightMUNet.py's own
+#                `self.mamba(x_norm)` call (LightMUNet.py:50).
+# Root cause (same for both): LMUNet.py's SequenceMamba/PVMamba explicitly
+# upcast fp16 activations to fp32 before calling Mamba (LMUNet.py:53-54,
+# 84-85) -- mamba_ssm's own kernels require fp32 regardless -- which defeats
+# nnU-Net's default fp16 AMP memory savings specifically inside every Mamba
+# call, of which both architectures run several concurrently (LightMUNet:
+# one per encoder/decoder stage; LMUNet: PVMamba in 3 encoder stages, 2
+# decoder stages, EdgeFeatureExtraction x2 + its own fuse stage, and one per
+# scale in MMSC's EdgeFeatureFusion). Neither job overrode its
+# trainer's own *_BATCH_SIZE env hook (LIGHTMUNET_BATCH_SIZE/LMUNET_BATCH_SIZE,
+# both already wired in nnUNetTrainerLightMUNet.py/nnUNetTrainerLMUNet.py), so
+# each inherited nnU-Net's plan-auto-configured batch size -- sized for
+# PlainConvUNet's much cheaper memory profile, not Mamba's -- and the
+# gpu_mig partition's MIG-sliced GPU (~19.75 GiB per both tracebacks' own
+# reported totals, a slice of an A100, not a full card) had no headroom left
+# to absorb the mismatch (both traces show ~19.2-19.3 GiB already allocated
+# when a routine <=150 MiB allocation failed).
 #
-# NONE of these four are wired into compression/collect_results.py's
-# --model-class choices yet (enet/erfnet/mobilenetv2/mobilenetv3 only) --
-# every task here trains + checkpoints + archives but SKIPS
-# collect_results.py (deliberate: "train now, collect later").
+# Fix applied here: move both onto a full (non-MIG) gpu_a100 node instead of
+# tuning batch size down -- everything else (trainer classes, env-var names,
+# channel overrides, resume/self-healing logic) is unchanged from the
+# original array.
 #
-# LightM-UNet and LM-UNet (formerly tasks 2/3 here) were moved out to
-# stage_group2_mamba_a100_array.job: both crashed with CUDA out-of-memory on
-# this array's gpu_mig partition before saving any checkpoint (Mamba forces
-# fp32 under nnU-Net's fp16 AMP training, and this array's MIG-sliced GPU had
-# no memory headroom left once combined with a batch size auto-configured
-# for PlainConvUNet's much cheaper profile) -- see that job's own header
-# comment for the full diagnosis. The remaining four tasks here are
-# unaffected (no Mamba blocks) and keep their original array positions'
-# semantics, just renumbered:
-#
-#   0: nnUNetv2 (plain) -- the real, unmodified self-configuring nnU-Net
-#      baseline (PlainConvUNet). Uses the new nnUNetTrainerPlainSeeded
-#      (adds only PLAIN_EPOCHS/PLAIN_SEED/etc. hooks, build_network_
-#      architecture untouched) since the base nnUNetTrainer class itself
-#      has no such hooks -- everything else here subclasses from it.
-#   1: ResNet101-nnUNetv2 (torchvision ResNet101 encoder + this repo's own
-#      decoder). Uses the *pretrained* variant (nnUNetTrainerTVResNet101UNet,
-#      ImageNet weights) -- confirmed reachable/downloadable from this
-#      cluster's network in the lightmunet_dev smoke test.
-#   2: BSCNet (mmcv/mmseg stripped, backbone verbatim + this repo's own
-#      FCNHead-shaped decode head, no auxiliary/deep-supervision heads).
-#   3: UNext (full, NOT the smaller UNext_S -- verified 1.472M params
-#      matches the literature survey's "UNeXt-S" entry, which was actually
-#      measured on this larger config).
+#   0: LightM-UNet (official Mamba-UNet). Same nnUNetTrainerLightMUNet /
+#      LIGHTMUNET_* config as stage_group2_literature_benchmark_array.job's
+#      former task 2.
+#   1: LM-UNet (Xu et al. 2026 reimplementation). Same nnUNetTrainerLMUNet /
+#      LMUNET_* config (channels 12,20,32,44,64,72) as
+#      stage_group2_literature_benchmark_array.job's former task 3.
 
 DATASET_ID=509
 DATASET_NAME="Dataset509_ARCADE_1x1_4c"
@@ -86,32 +85,19 @@ export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
 # -- Per-task config ------------------------------------------------------------
 case "$TASK_ID" in
   0)
-    RUN_NAME="nnunetv2_plain"
-    TRAINER_CLASS="nnUNetTrainerPlainSeeded"
-    SEED_VAR="PLAIN_SEED"
-    EPOCHS_VAR="PLAIN_EPOCHS"
-    OUTFOLDER_VAR="PLAIN_OUTPUT_FOLDER"
+    RUN_NAME="lightmunet"
+    TRAINER_CLASS="nnUNetTrainerLightMUNet"
+    SEED_VAR="LIGHTMUNET_SEED"
+    EPOCHS_VAR="LIGHTMUNET_EPOCHS"
+    OUTFOLDER_VAR="LIGHTMUNET_OUTPUT_FOLDER"
     ;;
   1)
-    RUN_NAME="resnet101_pretrained"
-    TRAINER_CLASS="nnUNetTrainerTVResNet101UNet"
-    SEED_VAR="RESNET101_SEED"
-    EPOCHS_VAR="RESNET101_EPOCHS"
-    OUTFOLDER_VAR="RESNET101_OUTPUT_FOLDER"
-    ;;
-  2)
-    RUN_NAME="bscnet"
-    TRAINER_CLASS="nnUNetTrainerBSCNet"
-    SEED_VAR="BSCNET_SEED"
-    EPOCHS_VAR="BSCNET_EPOCHS"
-    OUTFOLDER_VAR="BSCNET_OUTPUT_FOLDER"
-    ;;
-  3)
-    RUN_NAME="unext"
-    TRAINER_CLASS="nnUNetTrainerUNeXtS"
-    SEED_VAR="UNEXTS_SEED"
-    EPOCHS_VAR="UNEXTS_EPOCHS"
-    OUTFOLDER_VAR="UNEXTS_OUTPUT_FOLDER"
+    RUN_NAME="lmunet"
+    TRAINER_CLASS="nnUNetTrainerLMUNet"
+    SEED_VAR="LMUNET_SEED"
+    EPOCHS_VAR="LMUNET_EPOCHS"
+    OUTFOLDER_VAR="LMUNET_OUTPUT_FOLDER"
+    export LMUNET_CHANNELS="12,20,32,44,64,72"
     ;;
 esac
 
