@@ -15,7 +15,7 @@ def count_params(model: torch.nn.Module) -> tuple[int, int]:
 
 
 def count_flops(
-    model: torch.nn.Module, in_channels: int, input_hw: tuple[int, int]
+    model: torch.nn.Module, in_channels: int, input_hw: tuple[int, int], device: str = "cpu"
 ) -> tuple[float, float] | tuple[None, None]:
     """Returns (macs, flops). FLOPs = 2*MACs, the usual multiply-accumulate
     convention.
@@ -50,8 +50,15 @@ def count_flops(
     own conv_transpose_cost: the zero-insertion adjustment it applies for a
     transposed conv only changes SWU/BRAM buffer sizing (which depends on
     input width), never the MAC/cycle formulas, which depend only on
-    (cin, cout, kh, kw, hout, wout) read from the real output tensor."""
-    model = model.eval()
+    (cin, cout, kh, kw, hout, wout) read from the real output tensor.
+
+    `device` defaults to "cpu" (unchanged behavior for every existing
+    caller). Pass "cuda" for architectures whose forward pass isn't
+    CPU-capable at all -- e.g. LightMUNet/LMUNet's mamba_ssm blocks, whose
+    causal_conv1d CUDA kernel has no CPU fallback (see AGENTS.md's mamba
+    sharp edges) -- the Conv2d hooks above only care that forward()
+    completes, not which device it ran on."""
+    model = model.to(device).eval()
     hooks = []
     total_macs = 0.0
 
@@ -72,7 +79,7 @@ def count_flops(
         if isinstance(module, (torch.nn.Conv2d, torch.nn.ConvTranspose2d)):
             hooks.append(module.register_forward_hook(make_hook()))
 
-    dummy = torch.zeros(1, in_channels, *input_hw)
+    dummy = torch.zeros(1, in_channels, *input_hw, device=device)
     try:
         with torch.no_grad():
             model(dummy)
@@ -92,7 +99,7 @@ def _to_pair(value) -> tuple[int, int]:
     return int(value), int(value)
 
 
-def count_buffer_elements(model: torch.nn.Module, in_channels: int, input_hw: tuple[int, int]) -> dict:
+def count_buffer_elements(model: torch.nn.Module, in_channels: int, input_hw: tuple[int, int], device: str = "cpu") -> dict:
     """FINN sliding-window-generator (SWG) line-buffer memory estimate, in
     activation elements (not bits -- multiply by the eventual FINN
     activation bitwidth for a BRAM estimate; deliberately unitless here
@@ -126,8 +133,11 @@ def count_buffer_elements(model: torch.nn.Module, in_channels: int, input_hw: tu
     pattern, out of scope for this estimate -- and are reported in
     "excluded_modules" (only ones actually invoked in the traced forward
     pass) rather than silently dropped.
+
+    `device` -- see count_flops's own docstring (same "cpu" default, same
+    reason to override it).
     """
-    model = model.eval()
+    model = model.to(device).eval()
     hooks = []
     records: list[tuple[str, int]] = []
     excluded: list[str] = []
@@ -158,7 +168,7 @@ def count_buffer_elements(model: torch.nn.Module, in_channels: int, input_hw: tu
         elif isinstance(module, torch.nn.ConvTranspose2d):
             hooks.append(module.register_forward_hook(make_excluded_hook(name)))
 
-    dummy = torch.zeros(1, in_channels, *input_hw)
+    dummy = torch.zeros(1, in_channels, *input_hw, device=device)
     try:
         with torch.no_grad():
             model(dummy)

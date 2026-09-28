@@ -51,7 +51,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from nnunetv2.nets.ENet import ENet, apply_block_pruning  # noqa: E402
 from nnunetv2.nets.ERFNet import ERFNet  # noqa: E402
 from nnunetv2.nets.MobileNetV2 import MobileNetV2  # noqa: E402
-from nnunetv2.nets.MobileNetV3 import MobileNetV3  # noqa: E402
+from nnunetv2.nets.MobileNetV3 import (  # noqa: E402
+    MobileNetV3,
+    _LARGE_HEAD1_CHANNELS,
+    _LARGE_SETTING,
+    _SMALL_HEAD1_CHANNELS,
+    _SMALL_HEAD2_CHANNELS,
+    _SMALL_SETTING,
+)
 from nnunetv2.nets.QuantENet import QuantENet  # noqa: E402
 from nnunetv2.nets.SegNet import SegNet, SegNetBasic  # noqa: E402
 from nnunetv2.nets.TVResNet101UNet import TVResNet101UNet  # noqa: E402
@@ -88,6 +95,13 @@ def parse_tuple5(value: str, name: str) -> tuple[int, ...]:
     parts = tuple(int(x.strip()) for x in value.split(",") if x.strip())
     if len(parts) != 5:
         raise ValueError(f"--{name} must have exactly 5 comma-separated integers, got {value!r}.")
+    return parts
+
+
+def parse_tuple6(value: str, name: str) -> tuple[int, ...]:
+    parts = tuple(int(x.strip()) for x in value.split(",") if x.strip())
+    if len(parts) != 6:
+        raise ValueError(f"--{name} must have exactly 6 comma-separated integers, got {value!r}.")
     return parts
 
 
@@ -409,7 +423,9 @@ def main() -> None:
                          help="Informational only (not consumed by this script -- kept for parity with "
                               "the training job's own DATASET_ID, same convention as --trainer-class).")
     parser.add_argument("--trainer-class", default="nnUNetTrainerENet", help="Informational only (not used for inference -- see run_inference's docstring). Kept for parity with the training job's -tr flag.")
-    parser.add_argument("--model-class", default="enet", choices=["enet", "erfnet", "mobilenetv2", "mobilenetv3"],
+    parser.add_argument("--model-class", default="enet",
+                         choices=["enet", "erfnet", "mobilenetv2", "mobilenetv3", "segnet", "plain", "resnet101",
+                                  "bscnet", "unext", "lightmunet", "lmunet"],
                          help="Which nn.Module to build for FLOPs/params/buffer-element counting -- 'enet' "
                               "(default) builds ENet with every --use-*/--context-pattern/... flag below; "
                               "'erfnet' builds ERFNet.py's own ERFNet instead (ignores every ENet-specific "
@@ -418,19 +434,55 @@ def main() -> None:
                               "own depth is --erfnet-stage1-depth/--erfnet-context-depth/--erfnet-decoder-depth "
                               "instead); 'mobilenetv2'/'mobilenetv3' build MobileNetV2.py's/MobileNetV3.py's own "
                               "real (t,c,n,s)/15-block architecture instead (ignores --channels/--bottlenecks "
-                              "entirely -- width is --mobilenet-width-mult, the real paper's own scaling knob). "
-                              "Only 'enet' supports --quant-bits != 32 (none of the others have a Quant* "
-                              "counterpart in this repo yet).")
+                              "entirely -- width is --mobilenet-width-mult, the real paper's own scaling knob; "
+                              "--mobilenet-variant large/small selects MobileNetV3's own base config, mirroring "
+                              "nnUNetTrainerMobileNetV3's MOBILENET_VARIANT env var); 'segnet' builds SegNet.py's "
+                              "SegNetBasic (--segnet-variant basic, default) or the full VGG16-topology SegNet "
+                              "(--segnet-variant full), mirroring nnUNetTrainerSegNet's SEGNET_VARIANT; 'plain' "
+                              "builds the real self-configuring nnU-Net baseline (PlainConvUNet) straight off "
+                              "nnUNetPlans.json via the base nnUNetTrainer.build_network_architecture, same as "
+                              "nnUNetTrainerPlainSeeded (ignores --channels/--bottlenecks/every ENet-specific "
+                              "flag entirely -- architecture comes from the plans file, not from any flag here); "
+                              "'resnet101' builds TVResNet101UNet.py's torchvision-ResNet101-encoder U-Net "
+                              "(--in-channels/--out-channels only -- ImageNet pretraining doesn't change the "
+                              "param count, so this always builds with encoder_weights=None to avoid a network "
+                              "fetch); 'bscnet' builds BSCNet.py's BSCNet (--bscnet-planes/--bscnet-head-planes, "
+                              "mirroring nnUNetTrainerBSCNet's BSCNET_PLANES/BSCNET_HEAD_PLANES); 'unext' builds "
+                              "UNeXtS.py's UNextS (img_size taken from --input-hw's first value, matching "
+                              "nnUNetTrainerUNeXtS's own configuration_manager.patch_size[0] use); 'lightmunet' "
+                              "builds LightMUNet.py's LightMUNet at nnUNetTrainerLightMUNet's own hardcoded "
+                              "init_filters=16/blocks_down=(1,2,2,4)/blocks_up=(1,1,1); 'lmunet' builds "
+                              "LMUNet.py's LMUNet (--lmunet-channels/--lmunet-edge-channels, mirroring "
+                              "nnUNetTrainerLMUNet's LMUNET_CHANNELS/LMUNET_EDGE_CHANNELS). Only 'enet' supports "
+                              "--quant-bits != 32 (none of the others have a Quant* counterpart in this repo "
+                              "yet); none of the new non-ENet classes support --pruned-blocks either.")
     parser.add_argument("--erfnet-stage1-depth", type=int, default=5, help="ERFNet.py's own stage1_depth (default: the real architecture's own 5). Only used with --model-class erfnet.")
     parser.add_argument("--erfnet-context-depth", type=int, default=8, help="ERFNet.py's own context_depth (default: the real architecture's own 8). Only used with --model-class erfnet.")
     parser.add_argument("--erfnet-decoder-depth", type=int, default=2, help="ERFNet.py's own decoder_depth (default: the real architecture's own 2). Only used with --model-class erfnet.")
     parser.add_argument("--mobilenet-width-mult", type=float, default=1.0, help="MobileNetV2.py's/MobileNetV3.py's own width_mult (default: the real base 1.0 architecture). Only used with --model-class mobilenetv2/mobilenetv3.")
-    parser.add_argument("--mobilenet-decoder", default="convtranspose", choices=["convtranspose", "raspp"],
-                         help="MobileNetV2.py's own `decoder` kwarg -- 'convtranspose' (default) is this repo's "
-                              "own 5-stage learned-upsample decoder, 'raspp' is the paper's own Sec 6.3 R-ASPP "
-                              "head (output_stride=16 + 1x1-conv/global-pool branches on the 320ch feature, no "
-                              "learned decoder stages). Only used with --model-class mobilenetv2 -- MobileNetV3.py "
-                              "has no such kwarg, so this raises if passed alongside --model-class mobilenetv3.")
+    parser.add_argument("--mobilenet-variant", default="large", choices=["large", "small"],
+                         help="MobileNetV3.py's own base config -- 'large' (default) or 'small', mirroring "
+                              "nnUNetTrainerMobileNetV3's MOBILENET_VARIANT env var. Only used with "
+                              "--model-class mobilenetv3 (mobilenetv2 has only one paper config).")
+    parser.add_argument("--mobilenet-decoder", default="convtranspose", choices=["convtranspose", "raspp", "lraspp"],
+                         help="MobileNetV2.py's/MobileNetV3.py's own `decoder` kwarg -- 'convtranspose' (default) "
+                              "is this repo's own 5-stage learned-upsample decoder (both model classes); 'raspp' "
+                              "is MobileNetV2's paper Sec 6.3 R-ASPP head (output_stride=16 + 1x1-conv/global-pool "
+                              "branches on the 320ch feature, mobilenetv2-only); 'lraspp' is MobileNetV3's paper "
+                              "Sec 6.4 Lite R-ASPP head (RF2 tail-channel-halving + dilation-held OS=16, "
+                              "mobilenetv3-only). Raises if 'raspp' is passed with --model-class mobilenetv3 or "
+                              "'lraspp' is passed with --model-class mobilenetv2.")
+    parser.add_argument("--segnet-variant", default="basic", choices=["basic", "full"],
+                         help="SegNet.py's own variant -- 'basic' (default) is SegNetBasic (Sec 3.1's 4-stage, "
+                              "constant-64-channel, 7x7-kernel ablation variant), 'full' is the 13-stage "
+                              "VGG16-topology SegNet. Mirrors nnUNetTrainerSegNet's SEGNET_VARIANT env var. "
+                              "Only used with --model-class segnet.")
+    parser.add_argument("--bscnet-planes", type=int, default=32, help="BSCNet.py's own backbone `planes` width (default: nnUNetTrainerBSCNet's own BSCNET_PLANES default). Only used with --model-class bscnet.")
+    parser.add_argument("--bscnet-head-planes", type=int, default=64, help="BSCNet.py's own decode-head `head_planes` width (default: nnUNetTrainerBSCNet's own BSCNET_HEAD_PLANES default). Only used with --model-class bscnet.")
+    parser.add_argument("--lmunet-channels", default="12,20,32,44,64,72",
+                         help="LMUNet.py's own 6-value encoder channel schedule, comma-separated (default: "
+                              "nnUNetTrainerLMUNet's own LMUNET_CHANNELS default). Only used with --model-class lmunet.")
+    parser.add_argument("--lmunet-edge-channels", type=int, default=20, help="LMUNet.py's own EdgeFeatureExtraction width (default: nnUNetTrainerLMUNet's own LMUNET_EDGE_CHANNELS default). Only used with --model-class lmunet.")
     parser.add_argument("--stage", required=True, help="e.g. stage1, stage1b, stage2, early_probe.")
     parser.add_argument("--channels", required=True, type=parse_channels)
     parser.add_argument("--bottlenecks", default="4,8,8,2,1", type=lambda v: parse_tuple5(v, "bottlenecks"))
@@ -528,17 +580,121 @@ def main() -> None:
             raise ValueError(f"--model-class {args.model_class} only supports --quant-bits 32 -- no Quant* counterpart in this repo yet.")
         if args.pruned_blocks:
             raise ValueError(f"--pruned-blocks is ENet-specific -- not supported with --model-class {args.model_class}.")
-        if args.model_class == "mobilenetv3" and args.mobilenet_decoder != "convtranspose":
-            raise ValueError("--mobilenet-decoder is mobilenetv2-specific -- MobileNetV3.py has no `decoder` kwarg.")
-        model_cls = MobileNetV2 if args.model_class == "mobilenetv2" else MobileNetV3
-        model_kwargs = dict(
+        if args.model_class == "mobilenetv2" and args.mobilenet_decoder == "lraspp":
+            raise ValueError("--mobilenet-decoder lraspp is mobilenetv3-specific -- MobileNetV2.py's own decoder kwarg only accepts 'convtranspose'/'raspp'.")
+        if args.model_class == "mobilenetv3" and args.mobilenet_decoder == "raspp":
+            raise ValueError("--mobilenet-decoder raspp is mobilenetv2-specific -- MobileNetV3.py's own decoder kwarg only accepts 'convtranspose'/'lraspp'.")
+        if args.model_class == "mobilenetv2":
+            fp32_model = MobileNetV2(
+                in_channels=args.in_channels,
+                out_channels=args.out_channels,
+                width_mult=args.mobilenet_width_mult,
+                decoder=args.mobilenet_decoder,
+            )
+        else:
+            # mirrors nnUNetTrainerMobileNetV3.build_network_architecture's own
+            # MOBILENET_VARIANT switch -- 'large'/'small' pick the real base
+            # (t,c,n,s) schedule + head1/head2 widths, see MobileNetV3.py.
+            if args.mobilenet_variant == "small":
+                variant_kwargs = dict(setting=_SMALL_SETTING, head1_channels=_SMALL_HEAD1_CHANNELS,
+                                       head2_channels=_SMALL_HEAD2_CHANNELS)
+            else:
+                variant_kwargs = dict(setting=_LARGE_SETTING, head1_channels=_LARGE_HEAD1_CHANNELS,
+                                       head2_channels=1280)
+            fp32_model = MobileNetV3(
+                in_channels=args.in_channels,
+                out_channels=args.out_channels,
+                width_mult=args.mobilenet_width_mult,
+                decoder=args.mobilenet_decoder,
+                **variant_kwargs,
+            )
+    elif args.model_class == "segnet":
+        if args.quant_bits != 32:
+            raise ValueError("--model-class segnet only supports --quant-bits 32 -- SegNet has no Quant* counterpart in this repo yet.")
+        if args.pruned_blocks:
+            raise ValueError("--pruned-blocks is ENet-specific -- not supported with --model-class segnet.")
+        # mirrors nnUNetTrainerSegNet.build_network_architecture's own
+        # SEGNET_VARIANT switch.
+        if args.segnet_variant == "basic":
+            fp32_model = SegNetBasic(in_channels=args.in_channels, out_channels=args.out_channels)
+        else:
+            fp32_model = SegNet(in_channels=args.in_channels, out_channels=args.out_channels)
+    elif args.model_class == "plain":
+        if args.quant_bits != 32:
+            raise ValueError("--model-class plain only supports --quant-bits 32 -- no Quant* counterpart in this repo yet.")
+        if args.pruned_blocks:
+            raise ValueError("--pruned-blocks is ENet-specific -- not supported with --model-class plain.")
+        # The real self-configuring nnU-Net baseline (PlainConvUNet) --
+        # nnUNetTrainerPlainSeeded doesn't override build_network_architecture
+        # at all, so the architecture comes straight from nnUNetPlans.json via
+        # the base nnUNetTrainer's own get_network_from_plans, not from any
+        # --channels/--bottlenecks/etc. flag here.
+        plans_path = NNUNET_PREPROCESSED / dataset_name / f"{args.plans_name}.json"
+        with open(plans_path) as f:
+            plans_manager = PlansManager(json.load(f))
+        with open(NNUNET_RAW / dataset_name / "dataset.json") as f:
+            full_dataset_json = json.load(f)
+        configuration_manager = plans_manager.get_configuration(args.configuration)
+        fp32_model = _PlainNNUNetTrainer.build_network_architecture(
+            plans_manager, full_dataset_json, configuration_manager, args.in_channels, enable_deep_supervision=False,
+        )
+    elif args.model_class == "resnet101":
+        if args.quant_bits != 32:
+            raise ValueError("--model-class resnet101 only supports --quant-bits 32 -- no Quant* counterpart in this repo yet.")
+        if args.pruned_blocks:
+            raise ValueError("--pruned-blocks is ENet-specific -- not supported with --model-class resnet101.")
+        # encoder_weights=None regardless of what the checkpoint was actually
+        # trained from: ImageNet pretraining only changes initial weight
+        # VALUES, not the architecture/param count, and this avoids a network
+        # fetch just to count FLOPs/params.
+        fp32_model = TVResNet101UNet(in_channels=args.in_channels, out_channels=args.out_channels, encoder_weights=None)
+    elif args.model_class == "bscnet":
+        if args.quant_bits != 32:
+            raise ValueError("--model-class bscnet only supports --quant-bits 32 -- no Quant* counterpart in this repo yet.")
+        if args.pruned_blocks:
+            raise ValueError("--pruned-blocks is ENet-specific -- not supported with --model-class bscnet.")
+        fp32_model = BSCNet(
+            in_channels=args.in_channels,
+            num_classes=args.out_channels,
+            planes=args.bscnet_planes,
+            head_planes=args.bscnet_head_planes,
+        )
+    elif args.model_class == "unext":
+        if args.quant_bits != 32:
+            raise ValueError("--model-class unext only supports --quant-bits 32 -- no Quant* counterpart in this repo yet.")
+        if args.pruned_blocks:
+            raise ValueError("--pruned-blocks is ENet-specific -- not supported with --model-class unext.")
+        # img_size mirrors nnUNetTrainerUNeXtS's own
+        # configuration_manager.patch_size[0] use -- both dims of --input-hw
+        # are expected equal for this dataset's own 512x512 objective.
+        fp32_model = UNextS(num_classes=args.out_channels, input_channels=args.in_channels, img_size=args.input_hw[0])
+    elif args.model_class == "lightmunet":
+        if args.quant_bits != 32:
+            raise ValueError("--model-class lightmunet only supports --quant-bits 32 -- no Quant* counterpart in this repo yet.")
+        if args.pruned_blocks:
+            raise ValueError("--pruned-blocks is ENet-specific -- not supported with --model-class lightmunet.")
+        # mirrors nnUNetTrainerLightMUNet.build_network_architecture's own
+        # hardcoded init_filters/blocks_down/blocks_up (no env-var override
+        # exists for these upstream either).
+        fp32_model = LightMUNet(
+            spatial_dims=2,
+            init_filters=16,
             in_channels=args.in_channels,
             out_channels=args.out_channels,
-            width_mult=args.mobilenet_width_mult,
+            blocks_down=(1, 2, 2, 4),
+            blocks_up=(1, 1, 1),
         )
-        if args.model_class == "mobilenetv2":
-            model_kwargs["decoder"] = args.mobilenet_decoder
-        fp32_model = model_cls(**model_kwargs)
+    elif args.model_class == "lmunet":
+        if args.quant_bits != 32:
+            raise ValueError("--model-class lmunet only supports --quant-bits 32 -- no Quant* counterpart in this repo yet.")
+        if args.pruned_blocks:
+            raise ValueError("--pruned-blocks is ENet-specific -- not supported with --model-class lmunet.")
+        fp32_model = LMUNet(
+            in_channels=args.in_channels,
+            out_channels=args.out_channels,
+            channels=parse_tuple6(args.lmunet_channels, "lmunet-channels"),
+            edge_channels=args.lmunet_edge_channels,
+        )
     else:
         # FLOPs/MACs always come from the plain FP32 ENet: thop silently
         # undercounts a QuantENet by ~40x (doesn't recognize Brevitas's quant
@@ -584,8 +740,21 @@ def main() -> None:
     # reference them), so a second forward pass on the same model afterward
     # crashes those stale hooks with AttributeError. Running the buffer pass
     # first keeps it on a hook-free model.
-    mem_elements = count_buffer_elements(fp32_model, args.in_channels, tuple(args.input_hw))["total"]
-    macs, flops = count_flops(fp32_model, args.in_channels, tuple(args.input_hw))
+    #
+    # lightmunet/lmunet's mamba_ssm blocks have no CPU forward path at all
+    # (causal_conv1d's CUDA kernel is the only backend installed -- see
+    # AGENTS.md's mamba sharp edges) -- every other model class here stays on
+    # CPU (the counting hooks only care that forward() completes, not which
+    # device it ran on, and CPU keeps this script runnable on a GPU-less
+    # host/node for those architectures).
+    count_device = "cuda" if args.model_class in ("lightmunet", "lmunet") else "cpu"
+    if count_device == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError(
+            f"--model-class {args.model_class} requires a CUDA device to even run a forward pass "
+            "(mamba_ssm's causal_conv1d kernel has no CPU fallback) -- none is available here."
+        )
+    mem_elements = count_buffer_elements(fp32_model, args.in_channels, tuple(args.input_hw), device=count_device)["total"]
+    macs, flops = count_flops(fp32_model, args.in_channels, tuple(args.input_hw), device=count_device)
 
     if args.quant_bits == 32:
         total_params, _ = count_params(fp32_model)
@@ -672,6 +841,47 @@ def main() -> None:
         f2, f3 = f23, f23
     else:
         f_i, f1, f2, f3, f4, f5 = args.channels
+    if args.model_class == "erfnet":
+        ops_flags_str = (
+            f"model_class=erfnet,erfnet_stage1_depth={args.erfnet_stage1_depth},"
+            f"erfnet_context_depth={args.erfnet_context_depth},erfnet_decoder_depth={args.erfnet_decoder_depth}"
+        )
+    elif args.model_class in ("mobilenetv2", "mobilenetv3"):
+        ops_flags_str = f"model_class={args.model_class},mobilenet_width_mult={args.mobilenet_width_mult},mobilenet_decoder={args.mobilenet_decoder}"
+        if args.model_class == "mobilenetv3":
+            ops_flags_str += f",mobilenet_variant={args.mobilenet_variant}"
+    elif args.model_class == "segnet":
+        ops_flags_str = f"model_class=segnet,segnet_variant={args.segnet_variant}"
+    elif args.model_class == "plain":
+        ops_flags_str = f"model_class=plain,plans_name={args.plans_name}"
+    elif args.model_class == "resnet101":
+        ops_flags_str = "model_class=resnet101,encoder_weights=None(param-count-only)"
+    elif args.model_class == "bscnet":
+        ops_flags_str = f"model_class=bscnet,bscnet_planes={args.bscnet_planes},bscnet_head_planes={args.bscnet_head_planes}"
+    elif args.model_class == "unext":
+        ops_flags_str = f"model_class=unext,unext_img_size={args.input_hw[0]}"
+    elif args.model_class == "lightmunet":
+        ops_flags_str = "model_class=lightmunet,init_filters=16,blocks_down=1-2-2-4,blocks_up=1-1-1"
+    elif args.model_class == "lmunet":
+        ops_flags_str = f"model_class=lmunet,lmunet_channels={args.lmunet_channels},lmunet_edge_channels={args.lmunet_edge_channels}"
+    else:
+        ops_flags_str = (
+            f"dilated={args.use_dilated},asymmetric={args.use_asymmetric},strided={args.use_strided},dsc={args.use_dsc},context_pattern={args.context_pattern},prelu="
+            + ("n/a(quant-forces-relu)" if args.quant_bits != 32 else str(args.use_prelu))
+            + ",prelu_variant="
+            + ("n/a(quant-forces-relu)" if args.quant_bits != 32 else args.prelu_variant)
+            + f",leaky_slope={args.leaky_slope},leaky_slope_map={args.leaky_slope_map}"
+            + f",shallow_dilation={args.shallow_dilation},separable_dilated={args.separable_dilated}"
+            + f",merge_dilated_pairs={args.merge_dilated_pairs},dsc_dilated_only={args.dsc_dilated_only}"
+            + f",double_projections={args.double_projections},two_block_skip={args.two_block_skip}"
+            + f",dsc_no_projection={args.dsc_no_projection},shallow_dilation_wide={args.shallow_dilation_wide}"
+            + f",shallow_dilation_dense={args.shallow_dilation_dense}"
+            + f",dsc_no_projection_context_only={args.dsc_no_projection_context_only},reg_bookend_dsc={args.reg_bookend_dsc}"
+            + f",merge_reg_boundary={args.merge_reg_boundary}"
+            + f",dsc_separable={args.dsc_separable}"
+            + f",pruned_blocks={args.pruned_blocks}"
+        )
+
     row = {
         "config_name": args.config_name if args.config_name else args.net_name,
         "stage": args.stage,
@@ -685,30 +895,7 @@ def main() -> None:
         # reference model built above for FLOPs counting, not the actual
         # trained network, so stamping it here for quant rows would silently
         # misrepresent the real architecture.
-        "ops_flags": (
-            (
-                f"model_class=erfnet,erfnet_stage1_depth={args.erfnet_stage1_depth},"
-                f"erfnet_context_depth={args.erfnet_context_depth},erfnet_decoder_depth={args.erfnet_decoder_depth}"
-            ) if args.model_class == "erfnet" else (
-                f"model_class={args.model_class},mobilenet_width_mult={args.mobilenet_width_mult}"
-                + (f",mobilenet_decoder={args.mobilenet_decoder}" if args.model_class == "mobilenetv2" else "")
-            ) if args.model_class in ("mobilenetv2", "mobilenetv3") else (
-                f"dilated={args.use_dilated},asymmetric={args.use_asymmetric},strided={args.use_strided},dsc={args.use_dsc},context_pattern={args.context_pattern},prelu="
-                + ("n/a(quant-forces-relu)" if args.quant_bits != 32 else str(args.use_prelu))
-                + ",prelu_variant="
-                + ("n/a(quant-forces-relu)" if args.quant_bits != 32 else args.prelu_variant)
-                + f",leaky_slope={args.leaky_slope},leaky_slope_map={args.leaky_slope_map}"
-                + f",shallow_dilation={args.shallow_dilation},separable_dilated={args.separable_dilated}"
-                + f",merge_dilated_pairs={args.merge_dilated_pairs},dsc_dilated_only={args.dsc_dilated_only}"
-                + f",double_projections={args.double_projections},two_block_skip={args.two_block_skip}"
-                + f",dsc_no_projection={args.dsc_no_projection},shallow_dilation_wide={args.shallow_dilation_wide}"
-                + f",shallow_dilation_dense={args.shallow_dilation_dense}"
-                + f",dsc_no_projection_context_only={args.dsc_no_projection_context_only},reg_bookend_dsc={args.reg_bookend_dsc}"
-                + f",merge_reg_boundary={args.merge_reg_boundary}"
-                + f",dsc_separable={args.dsc_separable}"
-                + f",pruned_blocks={args.pruned_blocks}"
-            )
-        ),
+        "ops_flags": ops_flags_str,
         "quant_bits": args.quant_bits,
         "params": total_params,
         "flops": flops,
