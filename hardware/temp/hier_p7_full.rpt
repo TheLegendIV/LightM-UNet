@@ -1,0 +1,177 @@
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+----------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2022.2 (lin64) Build 3671981 Fri Oct 14 04:59:54 MDT 2022
+| Date         : Mon Sep 28 13:06:41 2026
+| Host         : finn_dev_thelegendiv running 64-bit Ubuntu 22.04.1 LTS
+| Command      : report_utilization -hierarchical -hierarchical_depth 3 -file /tmp/hier_p7_full.rpt
+| Design       : GenericPartition_7_wrapper
+| Device       : xczu7ev-ffvc1156-2-e
+| Speed File   : -2
+| Design State : Routed
+----------------------------------------------------------------------------------------------------
+
+Utilization Design Information
+
+Table of Contents
+-----------------
+1. Utilization by Hierarchy
+
+1. Utilization by Hierarchy
+---------------------------
+
++----------------------------------------------------------+---------------------------------------------------------------------------+------------+------------+---------+------+------+--------+--------+------+------------+
+|                         Instance                         |                                   Module                                  | Total LUTs | Logic LUTs | LUTRAMs | SRLs |  FFs | RAMB36 | RAMB18 | URAM | DSP Blocks |
++----------------------------------------------------------+---------------------------------------------------------------------------+------------+------------+---------+------+------+--------+--------+------+------------+
+| GenericPartition_7_wrapper                               |                                                                     (top) |       5808 |       4863 |     318 |  627 | 6356 |     97 |     11 |   11 |         30 |
+|   (GenericPartition_7_wrapper)                           |                                                                     (top) |          0 |          0 |       0 |    0 |    0 |      0 |      0 |    0 |          0 |
+|   GenericPartition_7_i                                   |                                                        GenericPartition_7 |       5808 |       4863 |     318 |  627 | 6356 |     97 |     11 |   11 |         30 |
+|     GenericPartition_7_AddStreams_hls_0                  |                  GenericPartition_7_GenericPartition_7_AddStreams_hls_0_0 |         66 |         66 |       0 |    0 |   93 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                          AddStreams_hls_0 |         66 |         66 |       0 |    0 |   93 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_ChannelwiseOp_hls_0               |               GenericPartition_7_GenericPartition_7_ChannelwiseOp_hls_0_0 |        108 |        108 |       0 |    0 |  184 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                       ChannelwiseOp_hls_0 |        108 |        108 |       0 |    0 |  184 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_ConvolutionInputGenerator_rtl_0   |   GenericPartition_7_GenericPartition_7_ConvolutionInputGenerator_rtl_0_0 |        278 |        228 |      50 |    0 |  107 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                           ConvolutionInputGenerator_rtl_0 |        278 |        228 |      50 |    0 |  107 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_ConvolutionInputGenerator_rtl_1   |   GenericPartition_7_GenericPartition_7_ConvolutionInputGenerator_rtl_1_0 |        411 |        271 |     140 |    0 |  127 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                           ConvolutionInputGenerator_rtl_1 |        411 |        271 |     140 |    0 |  127 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_DuplicateStreams_hls_0            |            GenericPartition_7_GenericPartition_7_DuplicateStreams_hls_0_0 |         61 |         61 |       0 |    0 |   76 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                    DuplicateStreams_hls_0 |         61 |         61 |       0 |    0 |   76 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_FMPadding_Pixel_hls_0             |             GenericPartition_7_GenericPartition_7_FMPadding_Pixel_hls_0_0 |        263 |        263 |       0 |    0 |  140 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                     FMPadding_Pixel_hls_0 |        263 |        263 |       0 |    0 |  140 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_FMPadding_rtl_0                   |                   GenericPartition_7_GenericPartition_7_FMPadding_rtl_0_0 |         53 |         53 |       0 |    0 |   35 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                           FMPadding_rtl_0 |         53 |         53 |       0 |    0 |   35 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_FMPadding_rtl_1                   |                   GenericPartition_7_GenericPartition_7_FMPadding_rtl_1_0 |         65 |         65 |       0 |    0 |   69 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                           FMPadding_rtl_1 |         65 |         65 |       0 |    0 |   69 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_MVAU_rtl_0                        |                                  GenericPartition_7_MVAU_rtl_0_imp_19EX8F |         45 |         41 |       4 |    0 |   88 |      0 |      0 |    0 |          2 |
+|       GenericPartition_7_MVAU_rtl_0                      |                        GenericPartition_7_GenericPartition_7_MVAU_rtl_0_0 |         40 |         40 |       0 |    0 |   76 |      0 |      0 |    0 |          2 |
+|       GenericPartition_7_MVAU_rtl_0_wstrm                |                  GenericPartition_7_GenericPartition_7_MVAU_rtl_0_wstrm_0 |          5 |          1 |       4 |    0 |   12 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_MVAU_rtl_1                        |                                 GenericPartition_7_MVAU_rtl_1_imp_1MNQEW7 |         35 |         29 |       6 |    0 |   81 |      0 |      0 |    0 |          1 |
+|       GenericPartition_7_MVAU_rtl_1                      |                        GenericPartition_7_GenericPartition_7_MVAU_rtl_1_0 |         31 |         27 |       4 |    0 |   71 |      0 |      0 |    0 |          1 |
+|       GenericPartition_7_MVAU_rtl_1_wstrm                |                  GenericPartition_7_GenericPartition_7_MVAU_rtl_1_wstrm_0 |          4 |          2 |       2 |    0 |   10 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_MVAU_rtl_2                        |                                  GenericPartition_7_MVAU_rtl_2_imp_V58AXA |        326 |        208 |     118 |    0 |  313 |      0 |      0 |    0 |         16 |
+|       GenericPartition_7_MVAU_rtl_2                      |                        GenericPartition_7_GenericPartition_7_MVAU_rtl_2_0 |        261 |        205 |      56 |    0 |  181 |      0 |      0 |    0 |         16 |
+|       GenericPartition_7_MVAU_rtl_2_wstrm                |                  GenericPartition_7_GenericPartition_7_MVAU_rtl_2_wstrm_0 |         65 |          3 |      62 |    0 |  132 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingDataWidthConverter_rtl_0 | GenericPartition_7_GenericPartition_7_StreamingDataWidthConverter_rtl_0_0 |         10 |         10 |       0 |    0 |   21 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                         StreamingDataWidthConverter_rtl_0 |         10 |         10 |       0 |    0 |   21 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingDataWidthConverter_rtl_1 | GenericPartition_7_GenericPartition_7_StreamingDataWidthConverter_rtl_1_0 |         16 |         16 |       0 |    0 |   86 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                         StreamingDataWidthConverter_rtl_1 |         16 |         16 |       0 |    0 |   86 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingDataWidthConverter_rtl_2 | GenericPartition_7_GenericPartition_7_StreamingDataWidthConverter_rtl_2_0 |         10 |         10 |       0 |    0 |   34 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                         StreamingDataWidthConverter_rtl_2 |         10 |         10 |       0 |    0 |   34 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingDataWidthConverter_rtl_3 | GenericPartition_7_GenericPartition_7_StreamingDataWidthConverter_rtl_3_0 |         29 |         29 |       0 |    0 |  124 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                         StreamingDataWidthConverter_rtl_3 |         29 |         29 |       0 |    0 |  124 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_0               |               GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_0_0 |         16 |         16 |       0 |    0 |   23 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                       StreamingFIFO_rtl_0 |         16 |         16 |       0 |    0 |   23 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_1               |               GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_1_0 |         15 |         15 |       0 |    0 |   21 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                       StreamingFIFO_rtl_1 |         15 |         15 |       0 |    0 |   21 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_10              |              GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_10_0 |         25 |         25 |       0 |    0 |   39 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                       StreamingFIFO_rtl_7 |         25 |         25 |       0 |    0 |   39 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_11              |                       GenericPartition_7_StreamingFIFO_rtl_11_imp_144NZB7 |         83 |         83 |       0 |    0 |   79 |      8 |      0 |    0 |          0 |
+|       fifo                                               |                                                 GenericPartition_7_fifo_3 |         83 |         83 |       0 |    0 |   79 |      8 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_12              |                        GenericPartition_7_StreamingFIFO_rtl_12_imp_EF37L6 |         70 |         70 |       0 |    0 |   67 |      0 |      0 |    1 |          0 |
+|       fifo                                               |                                                 GenericPartition_7_fifo_4 |         70 |         70 |       0 |    0 |   67 |      0 |      0 |    1 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_13              |                       GenericPartition_7_StreamingFIFO_rtl_13_imp_1RA96R6 |         82 |         82 |       0 |    0 |   79 |      8 |      0 |    0 |          0 |
+|       fifo                                               |                                                 GenericPartition_7_fifo_5 |         82 |         82 |       0 |    0 |   79 |      8 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_14              |                       GenericPartition_7_StreamingFIFO_rtl_14_imp_1CBQRZT |         67 |         67 |       0 |    0 |   63 |      0 |      0 |    1 |          0 |
+|       fifo                                               |                                                 GenericPartition_7_fifo_6 |         67 |         67 |       0 |    0 |   63 |      0 |      0 |    1 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_15              |              GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_15_0 |        108 |         52 |       0 |   56 |   22 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                   GenericPartition_7_StreamingFIFO_rtl_15 |        108 |         52 |       0 |   56 |   22 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_16              |                       GenericPartition_7_StreamingFIFO_rtl_16_imp_1ONRV7S |         98 |         98 |       0 |    0 |   83 |      0 |      0 |    4 |          0 |
+|       fifo                                               |                                                 GenericPartition_7_fifo_7 |         98 |         98 |       0 |    0 |   83 |      0 |      0 |    4 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_17              |                        GenericPartition_7_StreamingFIFO_rtl_17_imp_3QQN4G |         68 |         68 |       0 |    0 |   63 |      0 |      0 |    1 |          0 |
+|       fifo                                               |                                                 GenericPartition_7_fifo_8 |         68 |         68 |       0 |    0 |   63 |      0 |      0 |    1 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_18              |              GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_18_0 |         26 |         26 |       0 |    0 |   40 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                   GenericPartition_7_StreamingFIFO_rtl_18 |         26 |         26 |       0 |    0 |   40 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_19              |              GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_19_0 |         15 |         15 |       0 |    0 |   21 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                      StreamingFIFO_rtl_10 |         15 |         15 |       0 |    0 |   21 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_2               |               GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_2_0 |         12 |         12 |       0 |    0 |   17 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                       StreamingFIFO_rtl_2 |         12 |         12 |       0 |    0 |   17 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_20              |              GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_20_0 |         78 |         78 |       0 |    0 |  149 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                      StreamingFIFO_rtl_11 |         78 |         78 |       0 |    0 |  149 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_21              |              GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_21_0 |         25 |         25 |       0 |    0 |   41 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                      StreamingFIFO_rtl_12 |         25 |         25 |       0 |    0 |   41 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_22              |              GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_22_0 |         12 |         12 |       0 |    0 |   17 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                      StreamingFIFO_rtl_13 |         12 |         12 |       0 |    0 |   17 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_23              |              GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_23_0 |         20 |         20 |       0 |    0 |   29 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                      StreamingFIFO_rtl_14 |         20 |         20 |       0 |    0 |   29 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_24              |              GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_24_0 |         14 |         14 |       0 |    0 |   21 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                      StreamingFIFO_rtl_15 |         14 |         14 |       0 |    0 |   21 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_25              |              GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_25_0 |         16 |         16 |       0 |    0 |   23 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                      StreamingFIFO_rtl_16 |         16 |         16 |       0 |    0 |   23 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_26              |              GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_26_0 |         15 |         15 |       0 |    0 |   21 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                      StreamingFIFO_rtl_17 |         15 |         15 |       0 |    0 |   21 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_27              |                       GenericPartition_7_StreamingFIFO_rtl_27_imp_196GML6 |         82 |         82 |       0 |    0 |   79 |      8 |      0 |    0 |          0 |
+|       fifo                                               |                                                 GenericPartition_7_fifo_9 |         82 |         82 |       0 |    0 |   79 |      8 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_28              |                       GenericPartition_7_StreamingFIFO_rtl_28_imp_1QIF990 |        104 |        104 |       0 |    0 |   75 |      4 |      0 |    0 |          0 |
+|       fifo                                               |                                                GenericPartition_7_fifo_10 |        104 |        104 |       0 |    0 |   75 |      4 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_29              |                        GenericPartition_7_StreamingFIFO_rtl_29_imp_F600Y4 |         86 |         86 |       0 |    0 |   67 |      1 |      0 |    0 |          0 |
+|       fifo                                               |                                                GenericPartition_7_fifo_11 |         86 |         86 |       0 |    0 |   67 |      1 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_3               |                        GenericPartition_7_StreamingFIFO_rtl_3_imp_10LAM4R |         86 |         86 |       0 |    0 |   73 |      0 |      0 |    1 |          0 |
+|       fifo                                               |                                                 GenericPartition_7_fifo_0 |         86 |         86 |       0 |    0 |   73 |      0 |      0 |    1 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_30              |                       GenericPartition_7_StreamingFIFO_rtl_30_imp_139XV13 |         81 |         81 |       0 |    0 |   63 |      0 |      1 |    0 |          0 |
+|       fifo                                               |                                                GenericPartition_7_fifo_12 |         81 |         81 |       0 |    0 |   63 |      0 |      1 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_31              |                        GenericPartition_7_StreamingFIFO_rtl_31_imp_P3BQ4V |         71 |         71 |       0 |    0 |   59 |      0 |      1 |    0 |          0 |
+|       fifo                                               |                                                GenericPartition_7_fifo_13 |         71 |         71 |       0 |    0 |   59 |      0 |      1 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_32              |              GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_32_0 |         92 |         44 |       0 |   48 |   20 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                   GenericPartition_7_StreamingFIFO_rtl_32 |         92 |         44 |       0 |   48 |   20 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_33              |              GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_33_0 |         79 |         49 |       0 |   30 |   20 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                   GenericPartition_7_StreamingFIFO_rtl_33 |         79 |         49 |       0 |   30 |   20 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_34              |              GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_34_0 |         12 |         12 |       0 |    0 |   17 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                      StreamingFIFO_rtl_19 |         12 |         12 |       0 |    0 |   17 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_35              |              GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_35_0 |        148 |         52 |       0 |   96 |   37 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                      StreamingFIFO_rtl_20 |        148 |         52 |       0 |   96 |   37 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_36              |                        GenericPartition_7_StreamingFIFO_rtl_36_imp_4J0E9W |         72 |         72 |       0 |    0 |   83 |      0 |      0 |    1 |          0 |
+|       fifo                                               |                                                GenericPartition_7_fifo_14 |         72 |         72 |       0 |    0 |   83 |      0 |      0 |    1 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_37              |              GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_37_0 |        228 |         84 |       0 |  144 |   38 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                   GenericPartition_7_StreamingFIFO_rtl_37 |        228 |         84 |       0 |  144 |   38 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_38              |              GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_38_0 |         31 |         31 |       0 |    0 |   53 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                      StreamingFIFO_rtl_22 |         31 |         31 |       0 |    0 |   53 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_39              |                        GenericPartition_7_StreamingFIFO_rtl_39_imp_N9468A |        206 |        206 |       0 |    0 |  148 |     43 |      0 |    0 |          0 |
+|       fifo                                               |                                                GenericPartition_7_fifo_15 |        206 |        206 |       0 |    0 |  148 |     43 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_4               |               GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_4_0 |         13 |         13 |       0 |    0 |   17 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                       StreamingFIFO_rtl_4 |         13 |         13 |       0 |    0 |   17 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_40              |                        GenericPartition_7_StreamingFIFO_rtl_40_imp_U6N1S4 |        113 |        113 |       0 |    0 |   71 |     21 |      1 |    0 |          0 |
+|       fifo                                               |                                                GenericPartition_7_fifo_16 |        113 |        113 |       0 |    0 |   71 |     21 |      1 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_41              |                       GenericPartition_7_StreamingFIFO_rtl_41_imp_1FXLQJG |         72 |         72 |       0 |    0 |   59 |      3 |      0 |    0 |          0 |
+|       fifo                                               |                                                GenericPartition_7_fifo_17 |         72 |         72 |       0 |    0 |   59 |      3 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_42              |                        GenericPartition_7_StreamingFIFO_rtl_42_imp_6SMD6D |         68 |         68 |       0 |    0 |   55 |      1 |      1 |    0 |          0 |
+|       fifo                                               |                                                GenericPartition_7_fifo_18 |         68 |         68 |       0 |    0 |   55 |      1 |      1 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_43              |              GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_43_0 |        213 |        117 |       0 |   96 |  107 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                   GenericPartition_7_StreamingFIFO_rtl_43 |        213 |        117 |       0 |   96 |  107 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_44              |              GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_44_0 |         23 |         23 |       0 |    0 |   39 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                      StreamingFIFO_rtl_24 |         23 |         23 |       0 |    0 |   39 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_45              |              GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_45_0 |         25 |         25 |       0 |    0 |   41 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                      StreamingFIFO_rtl_25 |         25 |         25 |       0 |    0 |   41 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_5               |                         GenericPartition_7_StreamingFIFO_rtl_5_imp_8E1AC8 |         79 |         79 |       0 |    0 |   71 |      0 |      0 |    1 |          0 |
+|       fifo                                               |                                                 GenericPartition_7_fifo_1 |         79 |         79 |       0 |    0 |   71 |      0 |      0 |    1 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_6               |                        GenericPartition_7_StreamingFIFO_rtl_6_imp_1GK0O4X |         70 |         70 |       0 |    0 |   65 |      0 |      0 |    1 |          0 |
+|       fifo                                               |                                                 GenericPartition_7_fifo_2 |         70 |         70 |       0 |    0 |   65 |      0 |      0 |    1 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_7               |               GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_7_0 |         20 |         20 |       0 |    0 |   29 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                                       StreamingFIFO_rtl_5 |         20 |         20 |       0 |    0 |   29 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_8               |               GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_8_0 |         92 |         44 |       0 |   48 |   20 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                    GenericPartition_7_StreamingFIFO_rtl_8 |         92 |         44 |       0 |   48 |   20 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_StreamingFIFO_rtl_9               |               GenericPartition_7_GenericPartition_7_StreamingFIFO_rtl_9_0 |         63 |         39 |       0 |   24 |   19 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                    GenericPartition_7_StreamingFIFO_rtl_9 |         63 |         39 |       0 |   24 |   19 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_Thresholding_rtl_0                |                GenericPartition_7_GenericPartition_7_Thresholding_rtl_0_0 |         78 |         67 |       0 |   11 |  291 |      0 |      3 |    0 |          0 |
+|       inst                                               |                                            Thresholding_rtl_0_axi_wrapper |         78 |         67 |       0 |   11 |  291 |      0 |      3 |    0 |          0 |
+|     GenericPartition_7_Thresholding_rtl_1                |                GenericPartition_7_GenericPartition_7_Thresholding_rtl_1_0 |         56 |         45 |       0 |   11 |  130 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                            Thresholding_rtl_1_axi_wrapper |         56 |         45 |       0 |   11 |  130 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_Thresholding_rtl_2                |                GenericPartition_7_GenericPartition_7_Thresholding_rtl_2_0 |         56 |         40 |       0 |   16 |  167 |      0 |      2 |    0 |          0 |
+|       inst                                               |                                            Thresholding_rtl_2_axi_wrapper |         56 |         40 |       0 |   16 |  167 |      0 |      2 |    0 |          0 |
+|     GenericPartition_7_Thresholding_rtl_3                |                GenericPartition_7_GenericPartition_7_Thresholding_rtl_3_0 |        144 |        135 |       0 |    9 |  423 |      0 |      2 |    0 |          0 |
+|       (GenericPartition_7_Thresholding_rtl_3)            |                GenericPartition_7_GenericPartition_7_Thresholding_rtl_3_0 |          0 |          0 |       0 |    0 |    0 |      0 |      1 |    0 |          0 |
+|       inst                                               |                                            Thresholding_rtl_3_axi_wrapper |        144 |        135 |       0 |    9 |  423 |      0 |      1 |    0 |          0 |
+|     GenericPartition_7_Thresholding_rtl_4                |                GenericPartition_7_GenericPartition_7_Thresholding_rtl_4_0 |        131 |        124 |       0 |    7 |  332 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                            Thresholding_rtl_4_axi_wrapper |        131 |        124 |       0 |    7 |  332 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_Thresholding_rtl_5                |                GenericPartition_7_GenericPartition_7_Thresholding_rtl_5_0 |        248 |        239 |       0 |    9 |  417 |      0 |      0 |    0 |          0 |
+|       (GenericPartition_7_Thresholding_rtl_5)            |                GenericPartition_7_GenericPartition_7_Thresholding_rtl_5_0 |        112 |        112 |       0 |    0 |    0 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                            Thresholding_rtl_5_axi_wrapper |        136 |        127 |       0 |    9 |  417 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_Thresholding_rtl_6                |                GenericPartition_7_GenericPartition_7_Thresholding_rtl_6_0 |         79 |         68 |       0 |   11 |  276 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                            Thresholding_rtl_6_axi_wrapper |         79 |         68 |       0 |   11 |  276 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_Thresholding_rtl_7                |                GenericPartition_7_GenericPartition_7_Thresholding_rtl_7_0 |         57 |         46 |       0 |   11 |  130 |      0 |      0 |    0 |          0 |
+|       inst                                               |                                            Thresholding_rtl_7_axi_wrapper |         57 |         46 |       0 |   11 |  130 |      0 |      0 |    0 |          0 |
+|     GenericPartition_7_VVAU_hls_0                        |                                 GenericPartition_7_VVAU_hls_0_imp_1TEQCV4 |        132 |        132 |       0 |    0 |  269 |      0 |      0 |    0 |         11 |
+|       GenericPartition_7_VVAU_hls_0                      |                        GenericPartition_7_GenericPartition_7_VVAU_hls_0_0 |        132 |        132 |       0 |    0 |  267 |      0 |      0 |    0 |         11 |
+|       GenericPartition_7_VVAU_hls_0_wstrm                |                  GenericPartition_7_GenericPartition_7_VVAU_hls_0_wstrm_0 |          0 |          0 |       0 |    0 |    2 |      0 |      0 |    0 |          0 |
++----------------------------------------------------------+---------------------------------------------------------------------------+------------+------------+---------+------+------+--------+--------+------+------------+
+* Note: The sum of lower-level cells may be larger than their parent cells total, due to cross-hierarchy LUT combining
+
+
