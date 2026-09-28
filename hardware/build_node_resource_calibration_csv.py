@@ -45,6 +45,20 @@ MVAU_VVAU_TYPES = ("MVAU_hls", "MVAU_rtl", "VVAU_hls", "VVAU_rtl")
 THRESH_TYPES = ("Thresholding_hls", "Thresholding_rtl")
 SWU_TYPES = ("ConvolutionInputGenerator_hls", "ConvolutionInputGenerator_rtl")
 FIFO_TYPES = ("StreamingFIFO_hls", "StreamingFIFO_rtl")
+# join/stream nodes -- finn_milp.py's "extra_nodes" (add/dup/concat/upsample/
+# maxpool kinds), previously never dumped by dump_node_attrs_all.py at all, so
+# these never appeared in any calibration CSV despite being real hardware
+# nodes the ILP prices (~48% of the modeled LUT budget on the S12-dense-256
+# v2 build came from exactly this category -- residual_add/skip_quant/
+# out_act/add/dup in _diagnostics.extra_by_kind).
+STREAM_KIND_BY_OP_TYPE = {
+    "AddStreams_hls": "AddStreams",
+    "DuplicateStreams_hls": "DuplicateStreams",
+    "StreamingConcat_hls": "Concat",
+    "UpsampleNearestNeighbour_hls": "Upsample",
+    "StreamingMaxPool_hls": "MaxPool",
+}
+STREAM_TYPES = tuple(STREAM_KIND_BY_OP_TYPE)
 
 HEADER = [
     "partition", "node_name", "op_type", "node_kind",
@@ -195,6 +209,11 @@ def build_row(partition, node, hier):
             "node_kind": "FIFO", "dataType": a.get("dataType"), "bits": dtype_bits(a.get("dataType")),
             "depth": a.get("depth"), "folded_shape": to_str(a.get("folded_shape")),
             "impl_style": a.get("impl_style"),
+        })
+    elif op_type in STREAM_TYPES:
+        row.update({
+            "node_kind": STREAM_KIND_BY_OP_TYPE[op_type], "PE": a.get("PE"),
+            "NumChannels": a.get("NumChannels"),
         })
     else:
         row["node_kind"] = op_type

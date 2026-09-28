@@ -19,6 +19,13 @@ OP_TYPES = (
     "Thresholding_hls", "Thresholding_rtl",
     "ConvolutionInputGenerator_hls", "ConvolutionInputGenerator_rtl",
     "StreamingFIFO_hls", "StreamingFIFO_rtl",
+    # join/stream nodes (finn_milp.py's "extra_nodes": add/dup/concat/upsample/
+    # maxpool) -- previously excluded here, so they never appeared in any
+    # mvau_lut_calibration_dataset_*.csv despite being ~48% of this repo's own
+    # modeled LUT budget for the S12-dense-256 v2 build (see _diagnostics.
+    # extra_by_kind's residual_add/skip_quant/out_act/add/dup entries).
+    "AddStreams_hls", "DuplicateStreams_hls", "StreamingConcat_hls",
+    "UpsampleNearestNeighbour_hls", "StreamingMaxPool_hls",
 )
 
 # union of every nodeattr key any of the above op types might expose

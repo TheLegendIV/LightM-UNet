@@ -363,6 +363,25 @@ def build_partition_folding_config(preamble_dir, partition_idx, sdp_node_name, p
         print(f"[partition {partition_idx}]  {node.name:30s} {node.op_type:12s} <- {logical_name:25s} "
               f"[{json_key}] PE={safe_pe} SIMD={safe_simd}{note}")
 
+        # standalone Thresholding (noActivation=1 forced pre-partitioning)
+        # gets its PE straight from this same entry's own "thr_pe" -- solved
+        # jointly with pe/simd in the same ILP run, no fixup/clamping needed.
+        # Ported from the 512x512 bridge (finn_ooc_..._512x512.py) -- this
+        # script previously counted thresh_node only for the n_thresh
+        # diagnostic and never actually folded it, leaving every standalone
+        # Thresholding_rtl node at FINN's own auto-folding default (PE=1)
+        # regardless of what the ILP solved.
+        thr_pe = compute_entry.get("thr_pe")
+        if thr_pe is not None and thresh_node is not None:
+            thr_config = {"PE": thr_pe}
+            thr_ram_style = compute_entry.get("thr_ram_style")
+            if thr_ram_style == "distributed":
+                thr_config["depth_trigger_bram"] = THRESH_DISTRIBUTED_BRAM_TRIGGER
+            folding_config[thresh_node.name] = thr_config
+            thr_extra = "".join(f" {k}={v}" for k, v in thr_config.items() if k != "PE")
+            print(f"[partition {partition_idx}]  {thresh_node.name:30s} {thresh_node.op_type:12s} <- {logical_name:25s} "
+                  f"[{json_key}] (thr_pe) PE={thr_pe}{thr_extra}")
+
     print(f"[partition {partition_idx}] {len(unmatched)} unmatched logical names: {unmatched}")
     return folding_config, len(unmatched)
 
