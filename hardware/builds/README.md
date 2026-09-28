@@ -41,6 +41,19 @@ When a job is retired, `git mv` its folder into
   `outputs/` subfolder (NOT the shared/deprecated
   `hardware/outputs/finn_exports/` — that top-level dir is being phased
   out in favor of per-job `outputs/`).
+- **`12_dense_relu_nearest_conv_upsample_256_w8_16_v2`** — w8/16 width
+  point of the same architecture (`CHANNELS=(4, 8, 16, 8, 4)` instead of
+  `(4, 16, 32, 16, 4)`; see `MILP/configs/config_12_dense_relu_nearest_
+  conv_upsample_256_w8_16.py`), checkpoint
+  `nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_nearest_conv_upsample_256_w8_16_perlayer_..._w8_16_v3`
+  (also fine-tuned DIRECTLY on `LayerQuantEnetFINN`), MILP solve under
+  `MILP/artifacts/S12_dense_nn_upsample_256_w8_16_v2/`
+  (`--optimize-downstream-rate 2.25`, matching what the `_v3` QAT job
+  actually trained against). Every pipeline-stage script is otherwise
+  byte-for-byte structurally identical to `..._256_v2`'s (architecture
+  shape/partitioning/DSP-forcing/URAM-budget logic is channel-width
+  agnostic) — only `CHANNELS`, checkpoint/bits-file paths, and the dedicated
+  `finn_build_tmp/S12_dense_nn_upsample_256_w8_16_v2/` build dir differ.
 
 This folder was emptied out on 2026-09-26 (see
 `hardware/archive/pre_builds_refactor_20260926/` for the other 2 build
