@@ -531,6 +531,59 @@ still being included — a fit using only the two new builds would have been
 PE=1-only and blind to the formula's PE-scaling assumption entirely. See
 `MILP/calibration.csv`.
 
+**Cutoff added — `_THR_RTL_BRAM_MIN_CHANNELS_NUMSTEP` (2026-09-28, later
+still)**: every prior BRAM refit above applied its rate to EVERY threshold
+node unconditionally. Real data (`v2`/`w8_16_v4`, 340 real threshold rows —
+both still exhibit the PE=1 folding-propagation bug above, so PE contributes
+no signal here either) shows roughly half of all real threshold nodes
+synthesize with **zero** BRAM AND zero LUTRAM (87/170 v2, 78/170 v4
+nonzero — the rest genuinely zero, Vivado infers no dedicated memory at all
+for small-enough thresholds), mirroring the already-modeled analogous case
+for MVAU weight memory (`_WM_BRAM_AUTO_MIN_WMEM`/`_MIN_MEM_WIDTH`). This
+plausibly explains why the BRAM error flips sign between builds (-26.7% v2
+vs +47.4% v4 under the old unconditional rate): different real threshold-
+size mixes land on different sides of an unmodeled boundary.
+
+`hardware/fit_threshold_bram_cutoff.py` searched `PE*numSteps`,
+`NumChannels*numSteps`, and `PE*NumChannels*numSteps` as candidate 1-D
+classifiers (decision-stump scan for the misclassification-minimizing
+threshold). `PE*numSteps` is **useless** here — PE=1 for every row, so it
+collapses to `numSteps`-only, which does NOT separate the two populations at
+all (v2's `numSteps=255` bucket alone has both zero and nonzero rows).
+`NumChannels*numSteps` won: cutoff=1020, 85/340 misclassified (25.0%,
+44 false-positive/41 false-negative) — a real signal, **not** a clean
+zero-counterexample boundary like `_WM_BRAM_AUTO_MIN_WMEM` had (small,
+unambiguous sample there vs. genuine overlap here). Refitting
+`_THR_RTL_BRAM18_PER_PE_NUMSTEP` on the 168 above-cutoff rows only (1-term
+OLS through origin) gives **0.014636** (up from 0.013378), R²=0.6309 (lower
+than the old blended 0.753 fit — a smaller, noisier subset, and the old R²
+was computed against a 430-row set spanning 3 datasets, not just these two),
+median abs error 25.4%.
+
+Per-build aggregate threshold-BRAM error, old unconditional rate vs new
+cutoff+refit: v2 -26.7%→-29.2% (slightly worse), v4 +47.4%→+22.5% (nearly
+halved). Net: total absolute error across both builds improved, but the
+sign flip is **not** closed — v2 still under-predicts, v4 still
+over-predicts, just by less. Marked `applied_partial` in
+`MILP/calibration.csv`, not `resolved` — this is a genuine, data-backed
+improvement, not a fully-solved gap.
+
+Physical grounding (not ported, only motivating): `Thresholding_rtl`'s real
+memory placement is controlled by `depth_trigger_bram`/`depth_trigger_uram`
+(see `hardware/temp/thresholding_rtl.py`'s `get_memory_estimate()`), not a
+`ram_style` enum — but this repo's own build scripts set
+`depth_trigger_bram` to a fixed value (e.g.
+`hardware/builds/12_dense_relu_nearest_conv_upsample_512/finn_ooc_..._v1_512x512.py:446`),
+so FINN's own internal decision boundary isn't directly recoverable from
+that value alone; the cutoff above is reverse-engineered from real
+post-synthesis data, same epistemic status as `_WM_BRAM_AUTO_MIN_WMEM`'s own
+"no port possible" note. `dump_node_attrs_all.py` doesn't currently capture
+`depth_trigger_bram`/`depth_trigger_uram` at all (it requests a generic
+`ram_style` that doesn't exist for this op type) — fixed for future builds
+only (see that script's own `ATTR_KEYS`; no existing dataset benefits
+retroactively, since re-dumping needs the original partition ONNX, not just
+the already-exported `*_full.csv`).
+
 ### `_THR_RTL_URAM_PER_PE_NUMSTEP` — derived, not fit
 
 `real_URAM==0` for all 168/168 Thresholding_rtl nodes in the training data
@@ -955,7 +1008,7 @@ FINN-R constants (`MVAU_hls`/`VVAU_hls.lut_estimation()`): `c0=300, c1=1.1`.
 (or embedded weights <= 128 words) — neither is selectable here
 (block/ultra), so 0.
 
-### RTL LUT derating, `_RTL_MVU_LUT_DERATE = 0.4868`
+### RTL LUT derating, avg_bits-dependent (`_RTL_MVU_LUT_DERATE_BITS`/`_FACTORS`)
 
 `MVAU_rtl.lut_estimation()` is literally `return 0` in FINN v1.0.0-alpha —
 there is no real RTL LUT model, so the HLS formula above is used as a
@@ -989,6 +1042,53 @@ this repo targets xczu7ev); the non-depthwise `impl_style="hls"+use_dsp=False`
 structurally different regime (MVAU_hls.lut_estimation() is a real formula,
 unlike MVAU_rtl's `return 0`, so there was never a reason to assume the
 same bias applies).
+
+**Refit — avg_bits-dependent (2026-09-28, later still)**: 0.4868 was fit and
+only ever validated against a single dataset (warmstart150ep, avg_bits mean
+5.64). A held-out check feeding two OTHER real builds' own per-node PE/SIMD/
+bits into `conv_cost_pe_simd` (via `hardware/compare_model_vs_real_resources_from_dataset.py`)
+found real MVAU LUT error swinging from -9.0% (`S12_dense_nn_upsample_256_v2`,
+avg_bits mean 4.53) to +72.4% (`12_dense_relu_nearest_conv_upsample_256_w8_16_v4`,
+avg_bits mean 6.69) under the SAME flat 0.4868 — and a third build
+(`12_dense_relu_nearest_conv_upsample_256` "v1", avg_bits mean 7.58, not
+previously checked at all) turned out to be off by +69.7%, similarly large
+to v4. The pattern: flat 0.4868 is only accurate near its own fit dataset's
+avg_bits (~5.6); builds with a higher avg_bits mix are badly over-predicted.
+
+Refit (`hardware/fit_rtl_mvu_lut_derate.py`) pools all 4 real RTL/
+noActivation=1 datasets available (v1 n=48, v2 n=88, v4 n=88, warmstart150ep
+n=88 — VVAU_hls rows excluded from all, see above; total **n=312**, pooled
+avg_bits range **[3.5, 8.0]**, each build occupying a visibly different part
+of that range, not redundant samples). 2-term OLS through origin (matching
+this file's existing convention): `real_LUT ≈ a·(avg_bits·raw_mvu_lut) +
+b·raw_mvu_lut` ⇒ `derate(avg_bits) = a·avg_bits + b`, giving `a=-0.084902,
+b=0.967590`, **R²(uncentered)=0.9664**, median abs per-node error 18.6%.
+Applied via `_interpolate_derating()` — the same two-anchor linear
+interpolation the HLS auto-resType path already uses — evaluated at the
+fitted line's own endpoints: `_RTL_MVU_LUT_DERATE_BITS = (3.5, 8.0)`,
+`_RTL_MVU_LUT_DERATE_FACTORS = (0.6704, 0.2884)`. `_interpolate_derating`
+gained an optional `anchor_bits` param (defaults to the existing
+`_LUT_ANCHOR_BITS` global) so the HLS auto-resType caller is unaffected.
+
+Per-build aggregate MVAU-only LUT error, old flat 0.4868 vs new
+avg_bits-interpolated derate: v1 +69.7%→+12.4%, v2 -9.0%→+10.9%,
+v4 +72.4%→+40.1%, warmstart150ep -0.1%→-0.2%. The full-network aggregate
+check (`compare_model_vs_real_resources_from_dataset.py`, ALL modelled node
+kinds, not MVAU-only) shows v2 total LUT +3.0%→+13.5%, v4 +25.0%→+16.2% —
+the two builds' errors, previously 22 points apart, now sit within 3 points
+of each other. Net effect: the fit doesn't drive every build's LUT error to
+zero (v4 in particular still carries a +40% MVAU-only residual the linear
+avg_bits term alone doesn't close — some other confound, not yet identified,
+remains), but it converts a previously **unpredictable, sign-flipping** bias
+into a smaller, consistently-signed one, which is what makes calibration
+trustworthy going forward.
+
+**Known limitation**: this fit pools every real RTL/noActivation=1 dataset
+that currently exists — there is no held-out set left to validate it
+against. Treat the next new real build (a v5, or
+`12_dense_relu_nearest_conv_upsample_256_w8_16_v2`/`_512` once synthesized —
+both exist as build scripts but have no `results/` dir yet) as the first
+genuine holdout check, not an assumed-correct extrapolation.
 
 ### HLS LUT-mult derating, `_HLS_MVU_LUT_MULT_DERATE = 0.7402` (2026-09-18)
 

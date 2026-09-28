@@ -44,6 +44,15 @@ ATTR_KEYS = (
     "shape", "inWidth", "outWidth",
     # FMPadding / FMPadding_Pixel
     "ImgDim", "Padding", "inputDataType", "numInputVectors",
+    # Thresholding_rtl's real memory-style control -- NOT the generic "ram_style"
+    # above (that key doesn't exist for this op type, silently dropped by the
+    # per-key try/except below). See MILP/finn_milp.md "RAM_STYLES and URAM
+    # (history)" and MILP/finn_cost_model.py's _THR_RTL_LUTRAM_PER_PE_NUMSTEP
+    # section -- real build scripts set thr_config["depth_trigger_bram"].
+    # Additive/forward-looking only: doesn't affect any existing dataset (every
+    # real Thresholding row checked so far has real_LUTRAM==0 regardless), only
+    # future regenerated dumps (a v5, or w8_16_v2/_512 once synthesized).
+    "depth_trigger_bram", "depth_trigger_uram",
 )
 
 

@@ -75,7 +75,7 @@ HEADER = [
     "MH", "MW", "PE", "SIMD",
     "weightDataType", "inputDataType", "outputDataType", "weight_bits", "act_bits",
     "resType", "ram_style", "mem_mode",
-    "NumChannels", "numSteps",
+    "NumChannels", "numSteps", "depth_trigger_bram", "depth_trigger_uram",
     "IFMChannels", "IFMDim_h", "IFMDim_w", "OFMDim_h", "OFMDim_w",
     "ConvKernelDim_h", "ConvKernelDim_w", "Stride_h", "Stride_w", "Dilation_h", "Dilation_w",
     "depthwise", "parallel_window",
@@ -204,7 +204,8 @@ def build_row(partition, node, hier):
                     "MH": mh, "MW": mw, "PE": a.get("PE"), "SIMD": a.get("SIMD")})
     elif op_type in THRESH_TYPES:
         row.update({"node_kind": "Thresholding", "PE": a.get("PE"),
-                    "NumChannels": a.get("NumChannels"), "numSteps": a.get("numSteps")})
+                    "NumChannels": a.get("NumChannels"), "numSteps": a.get("numSteps"),
+                    "depth_trigger_bram": a.get("depth_trigger_bram"), "depth_trigger_uram": a.get("depth_trigger_uram")})
     elif op_type in SWU_TYPES:
         ifm, ofm = dim2(a.get("IFMDim")), dim2(a.get("OFMDim"))
         kdim, stride, dil = dim2(a.get("ConvKernelDim")), dim2(a.get("Stride")), dim2(a.get("Dilation"))

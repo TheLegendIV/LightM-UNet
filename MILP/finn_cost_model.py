@@ -22,9 +22,27 @@ _LUT_ANCHOR_BITS = (3.5245744425797163, 8)
 _LUT_ANCHOR_FACTORS = (22_436 / 18_352.4, 830_689 / 100_996)
 _BRAM_ANCHOR_FACTORS = (22 / 171, 906 / 1_495)
 
+# ---- RTL MVU LUT derating (conv_cost_pe_simd, impl_style=="rtl") ----
+# avg_bits-dependent replacement for the old flat _RTL_MVU_LUT_DERATE=0.4868 --
+# see finn_cost_model.md "RTL LUT derating" for the refit provenance (4 real
+# datasets pooled, n=312, R^2=0.9664). Endpoints of the fitted OLS line
+# real_LUT ~= a*(avg_bits*raw_mvu_lut) + b*raw_mvu_lut (a=-0.084902, b=0.967590),
+# evaluated via the same _interpolate_derating() the HLS auto-resType path
+# already uses, since the fit is linear in avg_bits -- 2-anchor interpolation
+# between the line's own endpoints reproduces it exactly for any avg_bits in
+# range, with the existing clamp-outside-range behavior for free.
+# TODO: no held-out dataset remains for this fit (all 4 available real
+# RTL/noActivation=1 builds -- v1, v2, v4, warmstart150ep -- went into it).
+# Treat the next new real build (v5, or w8_16_v2/_512 once synthesized) as
+# the first genuine holdout check before trusting this further.
+_RTL_MVU_LUT_DERATE_BITS = (3.5, 8.0)
+_RTL_MVU_LUT_DERATE_FACTORS = (0.6704, 0.2884)
 
-def _interpolate_derating(avg_bits: float, anchor_factors: tuple[float, float]) -> float:
-    lo_bits, hi_bits = _LUT_ANCHOR_BITS
+
+def _interpolate_derating(
+    avg_bits: float, anchor_factors: tuple[float, float], anchor_bits: tuple[float, float] | None = None,
+) -> float:
+    lo_bits, hi_bits = anchor_bits if anchor_bits is not None else _LUT_ANCHOR_BITS
     lo_factor, hi_factor = anchor_factors
     clamped = max(lo_bits, min(hi_bits, avg_bits))
     t = (clamped - lo_bits) / (hi_bits - lo_bits)
@@ -161,7 +179,14 @@ IMPL_STYLE_RTL: ImplStyle = "rtl"
 # ---- Standalone Thresholding_rtl empirical cost (see finn_cost_model.md) ----
 _THR_RTL_LUT_BASE_PER_PE = 68.1953
 _THR_RTL_LUT_PER_NUMSTEP_PE = 0.1095
-_THR_RTL_BRAM18_PER_PE_NUMSTEP = 0.013378
+# Below this real channels*numSteps, Vivado infers NO dedicated BRAM at all
+# (pure comparator/register logic) -- refit 2026-XX-XX on 340 real v2+v4
+# threshold rows (165/340 nonzero-BRAM); NOT a clean zero-counterexample
+# boundary like _WM_BRAM_AUTO_MIN_WMEM (85/340 misclassified at this cutoff,
+# real PE is degenerate at 1 in both builds so a pure numSteps-only cutoff
+# doesn't separate the populations at all) -- see finn_cost_model.md.
+_THR_RTL_BRAM_MIN_CHANNELS_NUMSTEP = 1020.0
+_THR_RTL_BRAM18_PER_PE_NUMSTEP = 0.014636  # refit on the above-cutoff subset only, see finn_cost_model.md
 _THR_RTL_URAM_PER_PE_NUMSTEP = _THR_RTL_BRAM18_PER_PE_NUMSTEP * (18_432 / 294_912)  # derived, dead path -- ultra FAILS synthesis
 _THR_RTL_LUTRAM_PER_PE_NUMSTEP = _THR_RTL_BRAM18_PER_PE_NUMSTEP * (18_432 / 64)  # derived, real but unexercised
 
@@ -325,17 +350,23 @@ def _finn_swu(
     return swu_lut, swu_bram18, swu_uram18, int(swu_cycles)
 
 
-def _thresholding_rtl_cost(pe: int, output_bits: int, ram_style: str = "block") -> tuple[float, float, float]:
+def _thresholding_rtl_cost(
+    pe: int, output_bits: int, channels: int, ram_style: str = "block",
+) -> tuple[float, float, float]:
     """(lut, bram18, uram18) of the standalone Thresholding_rtl node that follows
     this layer's MVAU/VVAU under noActivation=1 -- see finn_cost_model.md for the
     real-data basis. ram_style="ultra" is DEAD (real Vivado synthesis fails, URAM
-    can't be ROM) -- kept for provenance only, no live caller should pass it."""
+    can't be ROM) -- kept for provenance only, no live caller should pass it.
+    `channels`: below _THR_RTL_BRAM_MIN_CHANNELS_NUMSTEP (channels*num_steps),
+    real Vivado infers no dedicated BRAM at all -- see that constant's comment."""
     num_steps = 2 ** output_bits - 1
     lut = pe * (_THR_RTL_LUT_BASE_PER_PE + _THR_RTL_LUT_PER_NUMSTEP_PE * num_steps)
     if ram_style == "ultra":
         return lut, 0.0, _THR_RTL_URAM_PER_PE_NUMSTEP * pe * num_steps
     if ram_style == "distributed":
         return lut + _THR_RTL_LUTRAM_PER_PE_NUMSTEP * pe * num_steps, 0.0, 0.0
+    if channels * num_steps < _THR_RTL_BRAM_MIN_CHANNELS_NUMSTEP:
+        return lut, 0.0, 0.0
     bram18 = _THR_RTL_BRAM18_PER_PE_NUMSTEP * pe * num_steps
     return lut, bram18, 0.0
 
@@ -346,7 +377,7 @@ def threshold_node_cost(layer: LayerGeometry, act_bits: int, pe: int, ram_style:
     finn_cost_model.md "Residual-join thresholds"). Same empirical per-node
     formula as a conv's own standalone threshold; cycles = pixels *
     ceil(channels / PE) (per-channel compare, no reduction axis)."""
-    thr_lut, thr_bram18, thr_uram18 = _thresholding_rtl_cost(pe, act_bits, ram_style=ram_style)
+    thr_lut, thr_bram18, thr_uram18 = _thresholding_rtl_cost(pe, act_bits, layer.cout, ram_style=ram_style)
     cycles = layer.hout * layer.wout * math.ceil(layer.cout / pe)
     return {
         "total_pe": pe, "total_simd_lanes": 0,
@@ -506,9 +537,8 @@ def conv_cost_pe_simd(
     c0, c1 = 300, 1.1
     mvu_lut = c0 + c1 * M * P * (mult_luts + addertree_luts + acc_luts + thr_luts_fused + comp_luts_fused)
 
-    _RTL_MVU_LUT_DERATE = 0.4868
     if impl_style == IMPL_STYLE_RTL:
-        mvu_lut *= _RTL_MVU_LUT_DERATE
+        mvu_lut *= _interpolate_derating((W + A) / 2, _RTL_MVU_LUT_DERATE_FACTORS, anchor_bits=_RTL_MVU_LUT_DERATE_BITS)
 
     _HLS_MVU_LUT_MULT_DERATE = 0.7402
     if impl_style == IMPL_STYLE_HLS and not use_dsp:
@@ -518,7 +548,7 @@ def conv_cost_pe_simd(
     # PE_thr >= P*Q/mw (and PE_thr | NumChannels) to keep up with the MVAU.
     if no_activation:
         thr_pe = next(d for d in divisors(layer.cout) if d * mw >= P * Q)
-        thr_lut, thr_bram18, thr_uram18 = _thresholding_rtl_cost(thr_pe, A, ram_style=thr_ram_style)
+        thr_lut, thr_bram18, thr_uram18 = _thresholding_rtl_cost(thr_pe, A, layer.cout, ram_style=thr_ram_style)
     else:
         thr_pe, thr_lut, thr_bram18, thr_uram18 = 0, 0.0, 0.0, 0
     total_lut = swu_lut + mvu_lut + thr_lut

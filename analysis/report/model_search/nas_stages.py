@@ -136,6 +136,17 @@ STAGES: dict[str, dict] = {
             "nnUNetTrainerENet_1_naive_baseline_prelu_maxunpool_U4",
             "nnUNetTrainerENet_1_naive_baseline_prelu_maxunpool_U8",
             "nnUNetTrainerENet_1_naive_baseline_prelu_maxunpool_U16",
+            # Third companion curve: PReLU + upsample_conv (isolates PReLU
+            # alone, no max_unpool indices/patch-size coupling) -- from
+            # compression/slurm/stage_1_naive_baseline_prelu_upsample_conv_array.job.
+            # U4 deliberately absent here: nnUNetTrainerENet_2_special_ops_prelu
+            # (Stage 2's own "+PReLU" probe) is already exactly this point
+            # (same channels/flags), borrowed at plot time instead of
+            # duplicating the row under a new config_name.
+            "nnUNetTrainerENet_1_naive_baseline_prelu_upsample_conv_Baseline",
+            "nnUNetTrainerENet_1_naive_baseline_prelu_upsample_conv_U2",
+            "nnUNetTrainerENet_1_naive_baseline_prelu_upsample_conv_U8",
+            "nnUNetTrainerENet_1_naive_baseline_prelu_upsample_conv_U16",
         ],
         "labels": {
             "nnUNetTrainerENet_1_naive_baseline_Baseline": "ENet Original",
@@ -147,32 +158,53 @@ STAGES: dict[str, dict] = {
             "nnUNetTrainerENet_1_naive_baseline_prelu_maxunpool_U4": "U4 (PReLU+maxunpool)",
             "nnUNetTrainerENet_1_naive_baseline_prelu_maxunpool_U8": "U8 (PReLU+maxunpool)",
             "nnUNetTrainerENet_1_naive_baseline_prelu_maxunpool_U16": "U16 (PReLU+maxunpool)",
+            "nnUNetTrainerENet_1_naive_baseline_prelu_upsample_conv_Baseline": "Baseline (PReLU+upsample_conv)",
+            "nnUNetTrainerENet_1_naive_baseline_prelu_upsample_conv_U2": "U2 (PReLU+upsample_conv)",
+            "nnUNetTrainerENet_1_naive_baseline_prelu_upsample_conv_U8": "U8 (PReLU+upsample_conv)",
+            "nnUNetTrainerENet_1_naive_baseline_prelu_upsample_conv_U16": "U16 (PReLU+upsample_conv)",
         },
         "known_gaps": [],
     },
     "stage_2": {
         "title": "Single-op ablation at U4",
         "description": (
-            "Each probe flips exactly one flag off Stage 1's U4 row "
+            "First flip: PReLU on, off Stage 1's ReLU U4 row "
             "(dilated=1,asymmetric=1,strided=1,dsc=0,"
-            "context_pattern=default,prelu=0): PReLU on, max_unpool "
-            "decoder, dilation off, asymmetric-factorization off."
+            "context_pattern=default,prelu=0) -- PReLU wins. Every "
+            "subsequent probe (dilation off, asymmetric-factorization off) "
+            "is then referenced against that PReLU + upsample_conv U4 point "
+            "(nnUNetTrainerENet_2_special_ops_prelu) instead of the ReLU "
+            "row, so the whole ablation stays internally consistent with "
+            "the activation this thesis actually carries forward and "
+            "matches ENet-paper-native PReLU. -dilation/-asymmetric are "
+            "from compression/slurm/stage_2_special_ops_prelu_reference_"
+            "array.job. The decoder (max_unpool) probe is NOT repeated here "
+            "-- it's already covered by Stage 1's own PReLU+max_unpool "
+            "curve (nnUNetTrainerENet_1_naive_baseline_prelu_maxunpool_U4 "
+            "is the matching U4 point on that curve)."
         ),
         "config_names": [
-            "nnUNetTrainerENet_1_naive_baseline_U4",  # reference, not a probe
-            "nnUNetTrainerENet_2_special_ops_prelu",
-            "nnUNetTrainerENet_2_special_ops_maxunpool",
-            "nnUNetTrainerENet_2_special_ops_no_dilated",
-            "nnUNetTrainerENet_2_special_ops_no_asymmetric",
+            "nnUNetTrainerENet_2_special_ops_prelu",  # reference: PReLU + upsample_conv
+            "nnUNetTrainerENet_2_special_ops_prelu_no_dilated",
+            "nnUNetTrainerENet_2_special_ops_prelu_no_asymmetric",
         ],
         "labels": {
-            "nnUNetTrainerENet_1_naive_baseline_U4": "U4 (reference)",
-            "nnUNetTrainerENet_2_special_ops_prelu": "+PReLU",
-            "nnUNetTrainerENet_2_special_ops_maxunpool": "+max_unpool",
-            "nnUNetTrainerENet_2_special_ops_no_dilated": "-dilation",
-            "nnUNetTrainerENet_2_special_ops_no_asymmetric": "-asymmetric",
+            "nnUNetTrainerENet_2_special_ops_prelu": "Reference",
+            "nnUNetTrainerENet_2_special_ops_prelu_no_dilated": "Without dilation",
+            "nnUNetTrainerENet_2_special_ops_prelu_no_asymmetric": "Without asymmetric",
         },
         "known_gaps": [],
+        "excluded_note": (
+            "The max_unpool decoder probe is deliberately absent from this "
+            "stage -- see Stage 1's own PReLU+max_unpool curve instead "
+            "(nnUNetTrainerENet_1_naive_baseline_prelu_maxunpool_U4 is the "
+            "matching U4 point). The original ReLU-referenced max_unpool/"
+            "no_dilated/no_asymmetric probes (nnUNetTrainerENet_2_special_"
+            "ops_maxunpool/no_dilated/no_asymmetric) are also superseded "
+            "here by their PReLU-referenced counterparts and not plotted -- "
+            "they remain in results.csv (raw stage 2_special_ops) for "
+            "reference."
+        ),
     },
     "stage_3": {
         "title": "Context-block topology search under PReLU",

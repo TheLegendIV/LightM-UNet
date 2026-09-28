@@ -259,7 +259,7 @@ def export_dataflow_onnx(result: dict, path: Path) -> None:
 
     diag = result["_diagnostics"]
     summary = (
-        f"status={result['status']} alpha={result['alpha']} | LUT {diag['lut_pct_of_budget']:.1f}% "
+        f"status={result['status']} | LUT {diag['lut_pct_of_budget']:.1f}% "
         f"BRAM {diag['bram_pct_of_budget']:.1f}% DSP {diag['dsp_pct_of_budget']:.1f}% | "
         f"total_cycles={diag['total_cycles']:.0f} | slowest node cycles={max_cycles:.0f}"
     )

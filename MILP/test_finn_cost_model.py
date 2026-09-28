@@ -96,8 +96,10 @@ class ConvCostPeSimdProbeTest(unittest.TestCase):
         the best-validated LUT term -- real/predicted ranged 0.74-1.30
         across these exact 7 nodes when this factor was fit. Asserts a
         looser 0.5-2.0x band: tight enough to catch a real regression (e.g.
-        forgetting to apply _RTL_MVU_LUT_DERATE), loose enough not to break
-        on ordinary refit noise."""
+        forgetting to apply the RTL derate -- avg_bits-dependent since
+        2026-09-28, see _RTL_MVU_LUT_DERATE_BITS/_FACTORS in
+        finn_cost_model.py), loose enough not to break on ordinary refit
+        noise."""
         for name, r in self.results.items():
             with self.subTest(layer=name):
                 ratio = r["real_lut"] / r["cost"]["mvu_lut"]

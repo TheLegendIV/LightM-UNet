@@ -36,13 +36,19 @@ extra dataflow node (see "Dataflow graph"):
 
 **Objective**
 ```
-minimize  alpha * (1/n_layers) * Σ y · sens_norm
-        + (1 - alpha) * (1/n_hardware_nodes) * Σ z · cycles_norm
+minimize  (1/n_layers) * Σ y · sens_norm
 ```
-`sens_norm` / `cycles_norm` are global min-max normalizations to [0, 1] so
-`alpha` is a meaningful single dial despite the quantities differing by orders
-of magnitude. `n_hardware_nodes = n_layers + n_extra_nodes`: the latency
-term is a mean over every hardware node.
+Accuracy-only: `sens_norm` is a global min-max normalization of raw HAWQ
+sensitivity to [0, 1]. The folding variables `z` carry **no objective
+weight at all** — every fold/variant/ram_style choice that satisfies the
+hard constraints below is equally optimal, so the solved `pe`/`simd` is a
+free (solver-arbitrary) pick among the feasible set, not a speed decision.
+There used to be an `alpha` dial trading this off against a mean-cycles
+term (`alpha=1.0` = this objective, `alpha=0.0` = pure cycles); it was
+removed 2026-09-28 (see "History") because every real run used `alpha=1.0`
+anyway — this file's own worked example at `--max-latency-ms` below was
+already describing that fixed point. If a genuinely speed-weighted solve is
+ever needed again, reintroduce the dial rather than repurposing this one.
 
 **Constraints**
 - One `(w, a)` per layer; `--pin-bits-file` pins it (TEST-ONLY).
@@ -64,9 +70,10 @@ term is a mean over every hardware node.
   Note this is a **sum** of per-node frame cycles (a latency proxy that
   over-counts parallel branches), not a throughput bound.
 
-With `alpha=1.0` plus `--max-latency-ms`, the solve is an epsilon-constraint
-formulation: best accuracy proxy subject to the latency cap — the convention
-for the deployed S12 runs.
+With `--max-latency-ms` (and/or `--target-fps`), the solve is an
+epsilon-constraint formulation: best accuracy proxy subject to the latency/
+throughput cap(s) — the convention for the deployed S12 runs, and now the
+solver's only mode (see "History").
 
 ## Sensitivity
 
@@ -316,7 +323,6 @@ Every run so far passed `--force-dsp`, which masked this.
 | `--config` | `MILP/configs/config_*.py`, injected into module globals. No default config. |
 | `--sensitivity-file` | `layer_sensitivity_*.json`. Must cover every conv layer (MaxPool may be absent). |
 | `--candidate-bits` | e.g. `4,6,8`. |
-| `--alpha` | 1.0 = sensitivity only, 0.0 = cycles only. |
 | `--hard-{lut,bram,dsp,uram}-fraction` | hard caps, default 1.0. URAM is inert. |
 | `--force-dsp` | forced-DSP calibration factors (`finn_cost_model.md`; currently identity) instead of the auto-resType avg_bits table. |
 | `--target-fps` | throughput target: every node ≤ `clock_mhz·1e6/target_fps` cycles (the physically meaningful rate constraint for a dataflow pipeline). |
@@ -326,7 +332,7 @@ Every run so far passed `--force-dsp`, which masked this.
 | `--allow-lut-mult` | enables `hls_lut_noact0`. |
 | `--require-simd-ge-pe` | drops conv folds with PE>SIMD — a zero-fit fix for the real PE>SIMD LUT blowup (36% of rows, 70.7% of real LUT). Never empties a fold set (PE=1 always pairs with max SIMD). Threshold nodes are unaffected. |
 | `--time-limit` / `--gap-rel` | CBC limits (default 1800 s, 2%). |
-| `--pin-bits-file` | TEST-ONLY: pin `y` to a `layer_bits_*.json`; alpha then has no effect. |
+| `--pin-bits-file` | TEST-ONLY: pin `y` to a `layer_bits_*.json`, skipping the bit-choice search; folding is still solved. |
 
 ## Outputs
 
@@ -382,9 +388,10 @@ Next to `--out-file`:
   fairly closely for this architecture's shallow (1-vs-3-node) diamonds; kept
   as a diagnostic rather than promoted to a constraint since it wasn't shown
   to be a real problem here, not because it can't be elsewhere.
-- `summary.csv` + `run_args.json` — one row per alpha (upserted), shared args
-  (incl. `branch_imbalance_n_diamonds`/`_median_ratio`/`_max_ratio`); warns
-  when an alpha was run with different shared args.
+- `summary.csv` + `run_args.json` — one row, written (overwritten) fresh each
+  run (incl. `branch_imbalance_n_diamonds`/`_median_ratio`/`_max_ratio`); no
+  sweep dimension since `alpha` was removed (see "History") — a new run in
+  the same `--out-file` directory simply replaces the prior one.
 
 Regenerate the pruning report / ONNX / `_diagnostics.branch_imbalance` for an
 existing result (also writes `branch_imbalance` back into `--result` itself,
@@ -445,3 +452,19 @@ cost model's calibration, not a certified hardware guarantee.
   prediction never captured. See `finn_cost_model.md`'s new `RAM_STYLE_AUTO`
   section for the empirical threshold (`_WM_BRAM_AUTO_MIN_WMEM`/
   `_WM_BRAM_AUTO_MIN_MEM_WIDTH`) this relies on.
+- 2026-09-28 (later still): `alpha` removed. Every deployed run already used
+  `alpha=1.0` (see the removed `--max-latency-ms` epsilon-constraint note
+  above), which zeroed the folding variables' objective weight entirely —
+  the folding a solve landed on was therefore always a solver-arbitrary tie
+  among feasible options, not a real speed decision, and inspecting a
+  solved `S12_dense_nn_upsample_256_w8_16_v4` (`--hard-lut-fraction 0.5
+  --hard-bram-fraction 0.2 --hard-dsp-fraction 0.9 --target-fps 200`) showed
+  exactly that: PE=1 on 78/90 conv/pool layers and all 81 threshold nodes,
+  LUT/BRAM pinned at their 50%/20% caps (spent on bit-width) while DSP sat at
+  38.8% of a 90% allowance. Objective is now `mean(sens_norm)` only; `z`
+  never appears in it. CLI `--alpha` removed; `solve_joint_perlayer` no
+  longer takes an `alpha` argument; result dicts (top-level and
+  `_diagnostics`) no longer have an `alpha` key; `summary.csv`/
+  `run_args.json` write a single row per run instead of upserting one row
+  per alpha (`_update_sweep_summary` renamed `_write_run_summary`). Hard
+  resource/throughput/rate-coherence/latency constraints are unchanged.

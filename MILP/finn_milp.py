@@ -2,9 +2,11 @@
 
 Chooses, per layer, (weight_bits, act_bits) and (PE, SIMD, ram_style, variant),
 plus PE/ram_style for every residual-join threshold node, minimizing
-    alpha * mean(normalized HAWQ sensitivity) + (1 - alpha) * mean(normalized cycles)
-under hard LUT / BRAM_18K / DSP / URAM budgets on xczu7ev and an optional
-latency cap. Solved with CBC (pulp).
+    mean(normalized HAWQ sensitivity)
+under hard LUT / BRAM_18K / DSP / URAM budgets on xczu7ev and the optional
+throughput / rate-coherence / latency constraints. Accuracy-only objective --
+folding is otherwise a free choice among options that satisfy those hard
+constraints (see finn_milp.md "Formulation"). Solved with CBC (pulp).
 
 AGENTS: read MILP/finn_milp.md before changing this file, and update it with
 any behavior change -- it holds the formulation, the rationale and evidence
@@ -14,7 +16,7 @@ Cost formulas live in finn_cost_model.py (+ finn_cost_model.md).
 Usage:
     python MILP/finn_milp.py --config config_12_dense_relu_nearest_conv_upsample \\
         --sensitivity-file MILP/artifacts/layer_sensitivity_12_dense_relu_nearest_conv_upsample.json \\
-        --candidate-bits 4,6,8 --alpha 1.0 --force-dsp \\
+        --candidate-bits 4,6,8 --force-dsp \\
         --hard-lut-fraction 0.5 --hard-bram-fraction 0.5 --hard-dsp-fraction 0.9 --max-latency-ms 200 \\
         --out-file MILP/artifacts/<dir>/layer_bits_folding_<...>.json
 """
@@ -320,7 +322,7 @@ def candidate_folds(layer: LayerGeometry) -> list[tuple[int, int, str, str]]:
 
 
 def _normalize(values: dict[tuple, float]) -> dict[tuple, float]:
-    """Min-max scale to [0, 1] so sensitivity and cycles are comparable under alpha."""
+    """Min-max scale to [0, 1] (sensitivity, so layers with different raw magnitudes compare fairly)."""
     vals = values.values()
     lo, hi = min(vals), max(vals)
     span = hi - lo
@@ -339,7 +341,7 @@ def _act_sensitivity_sources(name: str, predecessor_map: dict[str, list[str]] | 
 
 
 def solve_joint_perlayer(
-    sensitivity: dict, geometries: list[LayerGeometry], alpha: float,
+    sensitivity: dict, geometries: list[LayerGeometry],
     hard_lut_fraction: float, hard_bram_fraction: float,
     time_limit: int, gap_rel: float, max_cycles: float | None = None,
     pinned_bits: dict[str, tuple[int, int]] | None = None,
@@ -454,7 +456,6 @@ def solve_joint_perlayer(
             layer_cycle_terms[name].append((z[key], raw_cycles[key]))
             extra_keys[name].append(key)
 
-    cycles_norm = _normalize(raw_cycles)
     layer_cycles_expr: dict[str, pulp.LpAffineExpression] = {
         name: pulp.lpSum(zvar * cyc for zvar, cyc in terms) for name, terms in layer_cycle_terms.items()
     }
@@ -600,13 +601,13 @@ def solve_joint_perlayer(
         for name, expr in layer_cycles_expr.items():
             prob += expr <= max_node_cycles, f"throughput_{name}"
 
-    # ---- Objective: alpha * mean(sens_norm over layers) + (1 - alpha) * mean(cycles_norm over hardware nodes) ----
+    # ---- Objective: mean(sens_norm over layers) -- accuracy-only. Folding (z) does not
+    # appear in the objective at all; it is a free choice among whatever options satisfy
+    # the hard resource/throughput/rate-coherence constraints above. ----
     sensitivity_term = (1.0 / n_layers) * pulp.lpSum(
         y[(name, w, a)] * sens_norm[(name, w, a)] for name in layer_names for w, a in candidate_pairs
     )
-    n_hardware_nodes = n_layers + len(extra_nodes)
-    latency_term = (1.0 / n_hardware_nodes) * pulp.lpSum(z[k] * cycles_norm[k] for k in z)
-    prob += alpha * sensitivity_term + (1 - alpha) * latency_term
+    prob += sensitivity_term
 
     # ---- Solve and extract ----
     status = prob.solve(pulp.PULP_CBC_CMD(msg=0, timeLimit=time_limit, gapRel=gap_rel))
@@ -624,10 +625,9 @@ def solve_joint_perlayer(
     if status_name != "Optimal":
         return {
             "status": status_name,
-            "alpha": alpha,
             "layer_weight_bits": {}, "layer_act_bits": {}, "per_layer": {}, "extra_nodes": {},
             "_diagnostics": {
-                "alpha": alpha, "candidate_bits": list(CANDIDATE_BITS), "n_layers": n_layers,
+                "candidate_bits": list(CANDIDATE_BITS), "n_layers": n_layers,
                 "n_extra_nodes": len(extra_nodes),
                 "n_binary_vars": n_binary_vars, "n_constraints": n_constraints,
                 "hard_lut_fraction": hard_lut_fraction, "hard_bram_fraction": hard_bram_fraction,
@@ -726,13 +726,12 @@ def solve_joint_perlayer(
 
     return {
         "status": status_name,
-        "alpha": alpha,
         "layer_weight_bits": layer_weight_bits,
         "layer_act_bits": layer_act_bits,
         "per_layer": per_layer,
         "extra_nodes": extra_out,
         "_diagnostics": {
-            "alpha": alpha, "candidate_bits": list(CANDIDATE_BITS), "n_layers": n_layers,
+            "candidate_bits": list(CANDIDATE_BITS), "n_layers": n_layers,
             "n_binary_vars": n_binary_vars, "n_constraints": n_constraints,
             "n_extra_nodes": len(extra_nodes), "extra_lut_calibrated": extra_lut,
             "extra_bram18k_calibrated": extra_bram, "extra_cycles": extra_cycles, "extra_by_kind": extra_by_kind,
@@ -757,8 +756,9 @@ def solve_joint_perlayer(
                     "hard <= XCZU7EV constraints here (not a soft penalty). ram_style selects the SWU's own line-"
                     "buffer memory (2026-09-17: MVAU's own weight-memory ram_style is hard-fixed to block, ultra "
                     "disabled -- real hardware never used it, see candidate_folds' own docstring). Objective = "
-                    "alpha*mean(sens_norm) + (1-alpha)*mean(cycles_norm), both mean-normalized by the SAME "
-                    "n_layers. GUARANTEED to fit the requested hard budget(s) under this cost model's own "
+                    "mean(sens_norm) over layers, accuracy-only -- folding (z) carries no objective weight at all "
+                    "and is a free choice among whatever options satisfy the hard resource/throughput/rate-"
+                    "coherence constraints. GUARANTEED to fit the requested hard budget(s) under this cost model's own "
                     "calibration -- a steering signal at that calibration, not a certified hardware guarantee. "
                     "Coarser than nnunetv2.nets.LayerQuantENet's own full per-quantizer-site deployment schema -- "
                     "see module docstring's SCOPE BOUNDARY.",
@@ -766,10 +766,10 @@ def solve_joint_perlayer(
     }
 
 
-# ---- Sweep summary (summary.csv + run_args.json, one row per alpha) ----
+# ---- Run summary (summary.csv + run_args.json, one row -- no alpha, no sweep dimension) ----
 
 _SUMMARY_FIELDS = [
-    "alpha", "status", "avg_weight_bits", "avg_act_bits",
+    "status", "avg_weight_bits", "avg_act_bits",
     "lut_pct_of_budget", "bram_pct_of_budget", "dsp_pct_of_budget",
     "total_dsp", "total_cycles", "clock_mhz", "latency_ms", "target_fps", "fps", "bottleneck_node",
     "n_binary_vars", "n_layers", "n_zero_sensitivity_layers", "zero_sensitivity_layers",
@@ -777,10 +777,10 @@ _SUMMARY_FIELDS = [
 ]
 
 
-def _update_sweep_summary(
+def _write_run_summary(
     out_dir: Path, args: argparse.Namespace, result: dict, zero_sensitivity_layers: list[str],
 ) -> None:
-    """Upsert this alpha's row; warn if shared args differ from earlier alphas."""
+    """Write this run's single-row summary.csv + run_args.json (overwrites any prior run in out_dir)."""
     diag = result["_diagnostics"]
     weight_bits, act_bits = result.get("layer_weight_bits", {}), result.get("layer_act_bits", {})
     avg_weight_bits = sum(weight_bits.values()) / len(weight_bits) if weight_bits else float("nan")
@@ -789,7 +789,7 @@ def _update_sweep_summary(
     latency_ms = total_cycles / (args.clock_mhz * 1000) if total_cycles is not None else float("nan")
 
     row = {
-        "alpha": args.alpha, "status": result["status"],
+        "status": result["status"],
         "avg_weight_bits": avg_weight_bits, "avg_act_bits": avg_act_bits,
         "lut_pct_of_budget": diag.get("lut_pct_of_budget"), "bram_pct_of_budget": diag.get("bram_pct_of_budget"),
         "dsp_pct_of_budget": diag.get("dsp_pct_of_budget"), "total_dsp": diag.get("total_dsp"),
@@ -805,17 +805,11 @@ def _update_sweep_summary(
     }
 
     summary_path = out_dir / "summary.csv"
-    rows = []
-    if summary_path.exists():
-        with open(summary_path, newline="") as f:
-            rows = [r for r in csv.DictReader(f) if float(r["alpha"]) != args.alpha]
-    rows.append(row)
-    rows.sort(key=lambda r: float(r["alpha"]))
     with open(summary_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=_SUMMARY_FIELDS, restval="")
         writer.writeheader()
-        writer.writerows(rows)
-    print(f"Updated {summary_path} ({len(rows)} alpha rows).")
+        writer.writerow(row)
+    print(f"Wrote {summary_path}.")
 
     run_args_path = out_dir / "run_args.json"
     shared_args = {
@@ -829,16 +823,6 @@ def _update_sweep_summary(
         "allow-lut-mult": ALLOW_LUT_MULT,
         "time-limit": args.time_limit, "gap-rel": args.gap_rel,
     }
-    existing_alphas = []
-    if run_args_path.exists():
-        existing = json.loads(run_args_path.read_text())
-        existing_alphas = existing.get("alphas", [])
-        prior_shared = existing.get("shared_args", {})
-        mismatched = {k: (prior_shared[k], v) for k, v in shared_args.items() if k in prior_shared and prior_shared[k] != v}
-        if mismatched:
-            print(f"WARNING: {run_args_path} was last written with DIFFERENT shared args for other alpha(s) in "
-                  f"this sweep: {mismatched} -- overwriting shared_args with THIS run's values; the sweep may "
-                  f"now be inconsistent across alphas (mixed hard caps/config/etc).")
     run_args = {
         "pipeline": [
             "MILP/layer_sensitivity.py --candidate-bits ...",
@@ -847,14 +831,13 @@ def _update_sweep_summary(
             "MILP/expand_layer_bits.py",
         ],
         "shared_args": shared_args,
-        "alphas": sorted(set(existing_alphas) | {args.alpha}),
         "granularity": "layer",
-        "notes": f"Per-layer joint bits+folding MILP for {args.config}, hard LUT/BRAM/DSP caps "
-                 f"{args.hard_lut_fraction}/{args.hard_bram_fraction}/{args.hard_dsp_fraction} under "
-                 f"force_dsp={args.force_dsp}. See summary.csv for per-alpha results.",
+        "notes": f"Per-layer accuracy-only MILP (no alpha -- see finn_milp.md) for {args.config}, hard LUT/BRAM/DSP "
+                 f"caps {args.hard_lut_fraction}/{args.hard_bram_fraction}/{args.hard_dsp_fraction} under "
+                 f"force_dsp={args.force_dsp}. See summary.csv for this run's result.",
     }
     run_args_path.write_text(json.dumps(run_args, indent=2))
-    print(f"Updated {run_args_path}.")
+    print(f"Wrote {run_args_path}.")
 
 
 # ---- CLI (flag rationale: finn_milp.md "CLI flags") ----
@@ -866,8 +849,6 @@ def main() -> None:
                          help="layer_sensitivity_*.json from layer_sensitivity.py.")
     parser.add_argument("--candidate-bits", type=str, default=None,
                          help="Comma-separated bit-width candidates (e.g. '4,6,8'); overrides CANDIDATE_BITS.")
-    parser.add_argument("--alpha", type=float, required=True,
-                         help="1.0 = sensitivity only, 0.0 = cycles only.")
     parser.add_argument("--hard-lut-fraction", type=float, default=1.0, help="Hard cap as a fraction of device LUT.")
     parser.add_argument("--hard-bram-fraction", type=float, default=1.0, help="Hard cap as a fraction of device BRAM_18K.")
     parser.add_argument("--hard-dsp-fraction", type=float, default=1.0, help="Hard cap as a fraction of device DSP.")
@@ -889,7 +870,7 @@ def main() -> None:
     parser.add_argument("--time-limit", type=int, default=1800, help="CBC time limit in seconds.")
     parser.add_argument("--gap-rel", type=float, default=0.02, help="CBC relative optimality gap.")
     parser.add_argument("--pin-bits-file", type=Path, default=None,
-                         help="TEST-ONLY: pin y to a layer_bits_*.json (alpha then has no effect).")
+                         help="TEST-ONLY: pin y to a layer_bits_*.json (skips the bit-choice search; folding is still solved).")
     parser.add_argument("--out-file", type=Path, required=True)
     args = parser.parse_args()
 
@@ -1000,7 +981,7 @@ def main() -> None:
         pinned_bits = {
             name: (pin_source["layer_weight_bits"][name], pin_source["layer_act_bits"][name]) for name in layer_names
         }
-        print(f"--pin-bits-file: y pinned to {args.pin_bits_file} for all {len(layer_names)} layers (alpha ignored).")
+        print(f"--pin-bits-file: y pinned to {args.pin_bits_file} for all {len(layer_names)} layers.")
 
     max_node_cycles = None
     if args.target_fps is not None:
@@ -1015,7 +996,7 @@ def main() -> None:
               f"(hard constraint).")
 
     result = solve_joint_perlayer(
-        sensitivity, geometries, args.alpha, args.hard_lut_fraction, args.hard_bram_fraction,
+        sensitivity, geometries, args.hard_lut_fraction, args.hard_bram_fraction,
         args.time_limit, args.gap_rel, max_cycles=max_cycles, pinned_bits=pinned_bits,
         predecessor_map=predecessor_map, force_dsp=args.force_dsp, require_simd_ge_pe=args.require_simd_ge_pe,
         hard_dsp_fraction=args.hard_dsp_fraction, hard_uram_fraction=args.hard_uram_fraction,
@@ -1062,7 +1043,7 @@ def main() -> None:
 
     for path in write_outputs(result, args.out_file, sensitivity, zero_sensitivity_layers):
         print(f"Wrote {path}")
-    _update_sweep_summary(args.out_file.parent, args, result, zero_sensitivity_layers)
+    _write_run_summary(args.out_file.parent, args, result, zero_sensitivity_layers)
 
 
 if __name__ == "__main__":
