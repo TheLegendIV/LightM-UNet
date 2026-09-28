@@ -1,0 +1,58 @@
+
+This is the configuration used by this training:
+Configuration name: 2d
+ {'data_identifier': 'nnUNetPlans_2d', 'preprocessor_name': 'DefaultPreprocessor', 'batch_size': 12, 'patch_size': [512, 512], 'median_image_size_in_voxels': [512.0, 512.0], 'spacing': [1.0, 1.0], 'normalization_schemes': ['ZScoreNormalization'], 'use_mask_for_norm': [False], 'UNet_class_name': 'PlainConvUNet', 'UNet_base_num_features': 32, 'n_conv_per_stage_encoder': [2, 2, 2, 2, 2, 2, 2, 2], 'n_conv_per_stage_decoder': [2, 2, 2, 2, 2, 2, 2], 'num_pool_per_axis': [7, 7], 'pool_op_kernel_sizes': [[1, 1], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2]], 'conv_kernel_sizes': [[3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3]], 'unet_max_num_features': 512, 'resampling_fn_data': 'resample_data_or_seg_to_shape', 'resampling_fn_seg': 'resample_data_or_seg_to_shape', 'resampling_fn_data_kwargs': {'is_seg': False, 'order': 3, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_seg_kwargs': {'is_seg': True, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_probabilities': 'resample_data_or_seg_to_shape', 'resampling_fn_probabilities_kwargs': {'is_seg': False, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'batch_dice': True} 
+ 
+These are the global plan.json settings:
+ {'dataset_name': 'Dataset509_ARCADE_1x1_4c', 'plans_name': 'nnUNetPlans', 'original_median_spacing_after_transp': [999.0, 1.0, 1.0], 'original_median_shape_after_transp': [1, 512, 512], 'image_reader_writer': 'NaturalImage2DIO', 'transpose_forward': [0, 1, 2], 'transpose_backward': [0, 1, 2], 'experiment_planner_used': 'ExperimentPlanner', 'label_manager': 'LabelManager', 'foreground_intensity_properties_per_channel': {'0': {'max': 255.0, 'mean': 97.36139678955078, 'median': 94.0, 'min': 0.0, 'percentile_00_5': 31.0, 'percentile_99_5': 185.0, 'std': 31.739503860473633}}} 
+ 
+2026-09-28 05:38:26.337770: unpacking dataset... 
+2026-09-28 05:38:30.351246: unpacking done... 
+2026-09-28 05:38:30.351684: do_dummy_2d_data_aug: False 
+2026-09-28 05:38:30.358144: Using splits from existing split file: /gpfs/home1/yhussein/LightM-UNet/data/nnUNet_preprocessed/Dataset509_ARCADE_1x1_4c/splits_final.json 
+2026-09-28 05:38:30.359593: The split file contains 1 splits. 
+2026-09-28 05:38:30.359665: Desired fold for training: 0 
+2026-09-28 05:38:30.359718: This split has 1000 training and 200 validation cases. 
+2026-09-28 05:38:30.397722: Unable to plot network architecture: 
+2026-09-28 05:38:30.397835: No module named 'IPython' 
+2026-09-28 05:38:30.414727:  
+2026-09-28 05:38:30.414843: Epoch 0 
+2026-09-28 05:38:30.414965: Current learning rate: 0.0001 
+2026-09-28 05:41:59.762541: train_loss 1.5581 
+2026-09-28 05:41:59.762858: val_loss 1.2491 
+2026-09-28 05:41:59.762990: Pseudo dice [0.0491, 0.0, 0.0118, 0.0009] 
+2026-09-28 05:41:59.763109: Epoch time: 209.35 s 
+2026-09-28 05:41:59.763205: Yayy! New best EMA pseudo Dice: 0.0154 
+2026-09-28 05:42:00.916050:  
+2026-09-28 05:42:00.916242: Epoch 1 
+2026-09-28 05:42:00.916369: Current learning rate: 0.0001 
+2026-09-28 05:45:27.751800: train_loss 1.062 
+2026-09-28 05:45:27.752078: val_loss 0.8776 
+2026-09-28 05:45:27.752199: Pseudo dice [0.0038, 0.0, 0.0163, 0.0] 
+2026-09-28 05:45:27.752304: Epoch time: 206.84 s 
+2026-09-28 05:45:29.082409:  
+2026-09-28 05:45:29.082596: Epoch 2 
+2026-09-28 05:45:29.082721: Current learning rate: 0.0001 
+2026-09-28 05:48:55.913002: train_loss 0.7065 
+2026-09-28 05:48:55.913268: val_loss 0.5641 
+2026-09-28 05:48:55.913391: Pseudo dice [0.0917, 0.0, 0.0, 0.0] 
+2026-09-28 05:48:55.913488: Epoch time: 206.83 s 
+2026-09-28 05:48:57.112532:  
+2026-09-28 05:48:57.112731: Epoch 3 
+2026-09-28 05:48:57.112865: Current learning rate: 0.0001 
+2026-09-28 05:52:24.080545: train_loss 0.4567 
+2026-09-28 05:52:24.080819: val_loss 0.375 
+2026-09-28 05:52:24.080940: Pseudo dice [0.141, 0.0, 0.0, 0.0] 
+2026-09-28 05:52:24.082467: Epoch time: 206.97 s 
+2026-09-28 05:52:24.082573: Yayy! New best EMA pseudo Dice: 0.0173 
+2026-09-28 05:52:25.353142:  
+2026-09-28 05:52:25.353323: Epoch 4 
+2026-09-28 05:52:25.353446: Current learning rate: 0.0001 
+2026-09-28 05:55:52.169862: train_loss 0.3049 
+2026-09-28 05:55:52.170131: val_loss 0.2575 
+2026-09-28 05:55:52.170251: Pseudo dice [0.1263, 0.0, 0.0, 0.0] 
+2026-09-28 05:55:52.170350: Epoch time: 206.82 s 
+2026-09-28 05:55:52.170430: Yayy! New best EMA pseudo Dice: 0.0187 
+2026-09-28 05:55:53.456911:  
+2026-09-28 05:55:53.457093: Epoch 5 
+2026-09-28 05:55:53.457214: Current learning rate: 0.0001 
