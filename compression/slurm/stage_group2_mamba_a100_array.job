@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --gpus=1
 #SBATCH --mem=32G
-#SBATCH --time=03:00:00
+#SBATCH --time=10:00:00
 #SBATCH --array=0-1
 #SBATCH --output=logs/%x_%a_%j.out
 #SBATCH --error=logs/%x_%a_%j.err
@@ -49,6 +49,32 @@ set -e
 #   1: LM-UNet (Xu et al. 2026 reimplementation). Same nnUNetTrainerLMUNet /
 #      LMUNET_* config (channels 12,20,32,44,64,72) as
 #      stage_group2_literature_benchmark_array.job's former task 3.
+#
+# --time bumped 03:00:00 -> 10:00:00 on 2026-09-28, after the original 3h
+# budget (copied from the other group1/group2 arrays, never epoch-count-
+# calibrated for Mamba specifically) turned out to only cover ~50/~43 epochs
+# before SLURM killed each task -- measured straight from each task's own
+# training_log's real "Epoch time" lines: lightmunet ~207s/epoch, lmunet
+# ~249s/epoch (both notably slower than the non-Mamba nets' per-epoch cost,
+# consistent with mamba_ssm's own CUDA kernel overhead). At that rate,
+# lightmunet's remaining 150-50=100 epochs need ~5.75h and lmunet's
+# remaining 150-43=107 epochs need ~7.40h -- 10h covers the slower of the
+# two (lmunet) plus final-validation + SLURM/env startup overhead with
+# margin to spare, so a single resubmission should reach epoch 150 cleanly
+# via this job's own --c self-healing instead of needing yet another
+# resubmit.
+#
+# Also fixed the same day: the self-healing EXISTING_CHECKPOINT check below
+# only ever looked for checkpoint_final.pth/checkpoint_latest.pth -- but
+# nnU-Net only writes checkpoint_latest.pth every save_every=50 epochs
+# (nnUNetTrainer.py's own self.save_every), so a task killed before its
+# first 50-epoch mark (lmunet, at ~43) has ONLY checkpoint_best.pth on disk.
+# The old check would have found neither file, silently taken the "fresh
+# start" branch, and discarded all progress -- even though
+# maybe_load_checkpoint() in run_training.py already falls back to
+# checkpoint_best.pth for --c on its own. Added the same
+# checkpoint_best.pth fallback here so the bash-level check matches nnU-Net's
+# own resume logic and --c actually gets passed in this situation.
 
 DATASET_ID=509
 DATASET_NAME="Dataset509_ARCADE_1x1_4c"
@@ -145,6 +171,14 @@ if [ -f "${OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
     EXISTING_CHECKPOINT="${OUTPUT_FOLDER}/checkpoint_final.pth"
 elif [ -f "${OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
     EXISTING_CHECKPOINT="${OUTPUT_FOLDER}/checkpoint_latest.pth"
+elif [ -f "${OUTPUT_FOLDER}/checkpoint_best.pth" ]; then
+    # A task killed before its first save_every=50-epoch mark (nnUNetTrainer.py's
+    # own self.save_every) never gets a checkpoint_latest.pth at all -- only
+    # checkpoint_best.pth exists. Without this fallback the check below would
+    # find nothing and silently restart from scratch, discarding real
+    # progress -- matches run_training.py's own maybe_load_checkpoint, which
+    # already falls back final -> latest -> best for --c.
+    EXISTING_CHECKPOINT="${OUTPUT_FOLDER}/checkpoint_best.pth"
 fi
 
 if [ -z "$EXISTING_CHECKPOINT" ]; then
