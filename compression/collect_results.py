@@ -169,6 +169,14 @@ def run_inference(
     merge_reg_boundary: bool = False,
     dsc_separable: bool = False,
     pruned_blocks: str | None = None,
+    mobilenet_width_mult: float = 1.0,
+    mobilenet_decoder: str = "convtranspose",
+    mobilenet_variant: str = "large",
+    segnet_variant: str = "basic",
+    bscnet_planes: int = 32,
+    bscnet_head_planes: int = 64,
+    lmunet_channels: str = "12,20,32,44,64,72",
+    lmunet_edge_channels: int = 20,
 ) -> Path:
     """Uses `nnUNetv2_predict_from_modelfolder` (-m <exact folder>), NOT
     plain `nnUNetv2_predict` (-tr/-p/-c/-d): the latter's folder resolution
@@ -230,6 +238,26 @@ def run_inference(
         # (see nnUNetPredictor.initialize_from_trained_model_folder) -- not
         # passed as a CLI flag, same as every other ENET_* knob.
         env["ENET_QUANT_BITS"] = str(quant_bits)
+
+    # nnUNetv2_predict_from_modelfolder runs in its OWN subprocess: it
+    # re-derives the architecture from the checkpoint's stored trainer_name
+    # via that trainer's own build_network_architecture, completely
+    # disconnected from this script's in-process fp32_model (built above,
+    # only for FLOPs/params counting) -- so every non-default architecture
+    # knob has to be re-supplied here as the SAME env var its trainer reads,
+    # or the subprocess silently builds the wrong network and load_state_dict
+    # fails with a shape/key mismatch against the real checkpoint. Set
+    # unconditionally -- harmless no-ops for whichever trainer doesn't read
+    # them (e.g. MOBILENET_* is ignored by nnUNetTrainerSegNet and vice
+    # versa).
+    env["MOBILENET_WIDTH_MULT"] = str(mobilenet_width_mult)
+    env["MOBILENET_DECODER"] = mobilenet_decoder
+    env["MOBILENET_VARIANT"] = mobilenet_variant
+    env["SEGNET_VARIANT"] = segnet_variant
+    env["BSCNET_PLANES"] = str(bscnet_planes)
+    env["BSCNET_HEAD_PLANES"] = str(bscnet_head_planes)
+    env["LMUNET_CHANNELS"] = lmunet_channels
+    env["LMUNET_EDGE_CHANNELS"] = str(lmunet_edge_channels)
 
     command = [
         shutil.which("nnUNetv2_predict_from_modelfolder") or "nnUNetv2_predict_from_modelfolder",
@@ -821,6 +849,14 @@ def main() -> None:
             merge_reg_boundary=bool(args.merge_reg_boundary),
             dsc_separable=bool(args.dsc_separable),
             pruned_blocks=args.pruned_blocks,
+            mobilenet_width_mult=args.mobilenet_width_mult,
+            mobilenet_decoder=args.mobilenet_decoder,
+            mobilenet_variant=args.mobilenet_variant,
+            segnet_variant=args.segnet_variant,
+            bscnet_planes=args.bscnet_planes,
+            bscnet_head_planes=args.bscnet_head_planes,
+            lmunet_channels=args.lmunet_channels,
+            lmunet_edge_channels=args.lmunet_edge_channels,
         )
     labels_ts_dir = NNUNET_RAW / dataset_name / "labelsTs"
     eval_metrics = compute_eval_metrics(labels_ts_dir, prediction_dir, dataset_name)
