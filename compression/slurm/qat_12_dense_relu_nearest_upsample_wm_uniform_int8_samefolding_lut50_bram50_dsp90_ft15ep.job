@@ -23,10 +23,11 @@ set -e
 # So there is no "own-fold" bit assignment to fine-tune here.
 #
 # This job instead uses the SAMEFOLDING baseline (MILP/utils/
-# uniform_bits_same_folding.py): the mixed-precision solve's own fold,
-# forced to uniform (8,8) bits. That combination is DELIBERATELY
-# over-budget as a hardware design (LUT 51.8%/BRAM 74.6%, vs. the 50%
-# caps both sibling jobs respect) -- fine-tuned anyway, on request, purely
+# uniform_bits_same_folding.py): the "_wm" (warmstart150ep checkpoint)
+# mixed-precision solve's own fold, forced to uniform (8,8) bits. That
+# combination is DELIBERATELY over-budget as a hardware design (LUT
+# 52.6%/BRAM 73.4%, vs. the 50% caps both sibling jobs respect) -- fine-tuned
+# anyway, on request, purely
 # as an ACCURACY reference point for "what would uniform INT8 buy if
 # resource budget were not a constraint at all", not a resource-realizable
 # design. Do not compare this run's resource numbers against the mixed/
@@ -94,7 +95,7 @@ echo "CALIBRATION_SEED=${CALIBRATION_SEED}"
 FP32_CHECKPOINT="$nnUNet_results/${DATASET_NAME}/${FP32_SOURCE_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
 echo "=== Checking FP32 source checkpoint exists ==="
 if [ ! -f "$FP32_CHECKPOINT" ]; then
-    echo "ERROR: FP32 source checkpoint not found: $FP32_CHECKPOINT -- run stage_12_dense_relu_nearest_upsample.job first." >&2
+    echo "ERROR: FP32 source checkpoint not found: $FP32_CHECKPOINT -- run stage_12_dense_relu_nearest_upsample_warmstart150ep.job first." >&2
     exit 1
 fi
 

@@ -12,26 +12,24 @@
 
 set -e
 
-# QAT fine-tune for the UNIFORM INT4 baseline -- SAMEFOLDING framing
+# QAT fine-tune for the UNIFORM INT6 baseline -- SAMEFOLDING framing only
 # (isolates bit-allocation alone, holding hardware structure fixed): the
-# mixed-precision solve's own (pe, simd, ram_style, variant) fold, kept
-# UNCHANGED, with every layer's bits forced to uniform (4,4) via
-# MILP/utils/uniform_bits_same_folding.py. LUT 46.3%/BRAM 18.5% (vs. the
-# mixed solve's own 49.7%/49.8% at the same fold) -- undershoots the budget,
-# as expected (see that job's own header for why: a fold chosen assuming
-# some layers would need only 4/6/8-bit headroom becomes cheaper, not more
-# expensive, when forced down to uniform 6-bit everywhere).
+# "_wm" (warmstart150ep checkpoint) mixed-precision solve's own (pe, simd,
+# ram_style, variant) fold, kept UNCHANGED, with every layer's bits forced
+# to uniform (6,6) via MILP/utils/uniform_bits_same_folding.py. LUT
+# 45.7%/BRAM 20.0% (vs. the mixed solve's own 49.9%/49.9% at the same fold)
+# -- undershoots the budget, as expected (see the mixed sibling job's own
+# header for why: a fold chosen assuming some layers would need only 8-bit
+# headroom becomes cheaper, not more expensive, when forced down to uniform
+# 6-bit everywhere).
 #
-# Sibling to qat_..._uniform_int6_ownfold_..._ft15ep.job (a fresh MILP solve
-# at --candidate-bits 4 letting the solver pick ITS OWN best fold, answering
-# a different question -- see that job's own header). Both jobs fine-tune
-# the SAME uniform-INT4 bit assignment in different senses: this one holds
-# the mixed solve's fold fixed (isolates "does bit allocation alone matter,
-# at a shared hardware structure"); the own-fold sibling lets folding
-# re-optimize too (isolates "what's the best achievable uniform-INT4
-# design"). Since QAT accuracy depends only on bits, not fold, THIS job's
-# accuracy result should be identical to its own-fold sibling's -- reporting
-# both surfaces that invariant directly rather than asserting it.
+# Unlike the base (non-"_wm") checkpoint's own uniform-INT6 comparison, this
+# "_wm" family has ONLY the samefolding framing prepared -- no dedicated
+# own-fold MILP solve (--candidate-bits 6, letting the solver pick its own
+# best fold) has been run for this checkpoint. Accuracy from this job still
+# only depends on bits, not fold, so it remains a valid uniform-INT6
+# accuracy reference point on its own; it just isn't paired with an
+# own-fold sibling the way the base checkpoint's is.
 #
 # See MILP/artifacts/S12_dense_nearest_upsample_wm_v1_uniform_samefolding/
 # layer_bits_folding_uniform_int6_samefolding.json's own _diagnostics for the
@@ -97,7 +95,7 @@ echo "CALIBRATION_SEED=${CALIBRATION_SEED}"
 FP32_CHECKPOINT="$nnUNet_results/${DATASET_NAME}/${FP32_SOURCE_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
 echo "=== Checking FP32 source checkpoint exists ==="
 if [ ! -f "$FP32_CHECKPOINT" ]; then
-    echo "ERROR: FP32 source checkpoint not found: $FP32_CHECKPOINT -- run stage_12_dense_relu_nearest_upsample.job first." >&2
+    echo "ERROR: FP32 source checkpoint not found: $FP32_CHECKPOINT -- run stage_12_dense_relu_nearest_upsample_warmstart150ep.job first." >&2
     exit 1
 fi
 

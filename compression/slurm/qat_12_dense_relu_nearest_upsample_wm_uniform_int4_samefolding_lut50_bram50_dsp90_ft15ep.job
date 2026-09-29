@@ -95,7 +95,7 @@ echo "CALIBRATION_SEED=${CALIBRATION_SEED}"
 FP32_CHECKPOINT="$nnUNet_results/${DATASET_NAME}/${FP32_SOURCE_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
 echo "=== Checking FP32 source checkpoint exists ==="
 if [ ! -f "$FP32_CHECKPOINT" ]; then
-    echo "ERROR: FP32 source checkpoint not found: $FP32_CHECKPOINT -- run stage_12_dense_relu_nearest_upsample.job first." >&2
+    echo "ERROR: FP32 source checkpoint not found: $FP32_CHECKPOINT -- run stage_12_dense_relu_nearest_upsample_warmstart150ep.job first." >&2
     exit 1
 fi
 
