@@ -182,6 +182,76 @@ def compute_branch_imbalance_report(result: dict) -> dict:
     }
 
 
+def compute_chain_rate_imbalance_report(result: dict) -> dict:
+    """Achieved chain-coherence ratio, computed from the SOLVED result: for
+    every node L with at least one real descendant, `max(rate[D] for D
+    reachable from L) / rate[L]`, with `rate[n] = cycles[n] / (C*H*W of n's
+    own output)`. This is exactly the quantity `--dsr-ratio` bounds via
+    `max_downstream_rate` at solve time (finn_milp.py) -- computed here
+    post-solve so it can be tracked even when `--dsr-ratio` itself is NOT
+    set (unconstrained), the same role `compute_branch_imbalance_report`
+    plays for `--pbi-ratio`. Lets a sweep ask "how does chain-coherence's
+    own achieved ratio move when only `--pbi-ratio` is tightened, with
+    `--dsr-ratio` left off" without needing `--dsr-ratio` enabled at all."""
+    edges = result["dataflow_graph"]["edges"]
+    shapes = result["dataflow_graph"]["shapes"]
+    nodes = _collect_nodes(result)
+    cycles = {name: n["cycles"] for name, n in nodes.items()}
+
+    rate: dict[str, float] = {}
+    for name in cycles:
+        shape = shapes.get(name)
+        if shape is None:
+            continue
+        cout, hout, wout = shape
+        volume = cout * hout * wout
+        rate[name] = cycles[name] / volume if volume else 0.0
+
+    successors: dict[str, list[str]] = defaultdict(list)
+    for name, preds in edges.items():
+        if name not in rate:
+            continue
+        for p in preds:
+            if p in rate:
+                successors[p].append(name)
+
+    memo: dict[str, float] = {}
+
+    def worst_descendant_rate(node: str) -> float:
+        """Transitive max rate over every node reachable from `node`, memoized
+        (the dataflow graph is a DAG, so plain recursion terminates; the
+        cycle-guard placeholder is defensive only)."""
+        if node in memo:
+            return memo[node]
+        memo[node] = 0.0
+        best = 0.0
+        for child in successors.get(node, []):
+            best = max(best, rate[child], worst_descendant_rate(child))
+        memo[node] = best
+        return best
+
+    entries = []
+    for name in rate:
+        if not successors.get(name) or rate[name] <= 0:
+            continue
+        worst = worst_descendant_rate(name)
+        entries.append({
+            "node": name, "ratio": worst / rate[name],
+            "own_rate": rate[name], "worst_downstream_rate": worst,
+        })
+    entries.sort(key=lambda e: -e["ratio"])
+    ratios = [e["ratio"] for e in entries]
+    return {
+        "note": "max(rate[D] over every descendant D of L) / rate[L], per node L with a real "
+                "descendant. Diagnostic only -- see this function's own docstring for scope/limits.",
+        "n_nodes": len(entries),
+        "median_ratio": statistics.median(ratios) if ratios else None,
+        "mean_ratio": statistics.mean(ratios) if ratios else None,
+        "max_ratio": max(ratios) if ratios else None,
+        "worst_nodes": entries[:10],
+    }
+
+
 def _topological_order(names: set[str], edges: dict[str, list[str]]) -> list[str]:
     indegree = {n: sum(p in names for p in edges.get(n, [])) for n in names}
     successors: dict[str, list[str]] = defaultdict(list)
@@ -264,6 +334,7 @@ def write_outputs(result: dict, out_file: Path, sensitivity: dict, zero_sensitiv
     pruning_path = out_file.parent / f"pruning_{stem}.json"
     onnx_path = out_file.parent / "final_output.onnx"
     result["_diagnostics"].setdefault("branch_imbalance", compute_branch_imbalance_report(result))
+    result["_diagnostics"].setdefault("chain_rate_imbalance", compute_chain_rate_imbalance_report(result))
     pruning_path.write_text(json.dumps(build_pruning_report(result, sensitivity, zero_sensitivity_layers), indent=2))
     export_dataflow_onnx(result, onnx_path)
     return [pruning_path, onnx_path]
@@ -294,12 +365,18 @@ def main() -> None:
               f"median={bi['median_ratio']:.2f}x max={bi['max_ratio']:.2f}x")
     else:
         print("Branch imbalance (diagnostic): no simple 2-branch diamonds found.")
+    cri = result["_diagnostics"]["chain_rate_imbalance"]
+    if cri["n_nodes"]:
+        print(f"Chain-rate imbalance (diagnostic, {cri['n_nodes']} nodes with a descendant): "
+              f"median={cri['median_ratio']:.2f}x max={cri['max_ratio']:.2f}x")
+    else:
+        print("Chain-rate imbalance (diagnostic): no node with a real descendant found.")
 
-    # Regenerating an older artifact (solved before this diagnostic existed) computes
-    # branch_imbalance in memory only -- persist it back so --result's own _diagnostics
-    # stays a complete record, same as a fresh finn_milp.py solve would have written.
+    # Regenerating an older artifact (solved before these diagnostics existed) computes
+    # them in memory only -- persist back so --result's own _diagnostics stays a
+    # complete record, same as a fresh finn_milp.py solve would have written.
     args.result.write_text(json.dumps(result, indent=2))
-    print(f"Updated {args.result} with _diagnostics.branch_imbalance.")
+    print(f"Updated {args.result} with _diagnostics.branch_imbalance/chain_rate_imbalance.")
 
 
 if __name__ == "__main__":

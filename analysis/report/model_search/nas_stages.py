@@ -398,6 +398,30 @@ STAGES: dict[str, dict] = {
         },
         "known_gaps": [],
     },
+    "final_results": {
+        "title": "Final results summary",
+        "description": (
+            "Not a NAS-narrative stage in its own right (Stages 4-7's own "
+            "notebook sections were retired once this summary landed) -- "
+            "the three points that matter for the thesis's own bottom "
+            "line, spanning the full search end-to-end: the ENet-paper "
+            "naive-compression starting point, the Stage-3 topology "
+            "winner under its ORIGINAL PReLU + bilinear decoder, and the "
+            "actual FINN-legal S12 dense variant (ReLU + nearest-neighbor "
+            "+ trainable resize-conv) carried into the hardware pipeline."
+        ),
+        "config_names": [
+            "nnUNetTrainerENet_enet_original_prelu_maxunpool_4c",
+            "nnUNetTrainerENet_4_8_dense_dilation",
+            "nnUNetTrainerENet_12_dense_relu_nearest_conv_upsample",
+        ],
+        "labels": {
+            "nnUNetTrainerENet_enet_original_prelu_maxunpool_4c": "ENet naive baseline (PReLU + MaxUnpool)",
+            "nnUNetTrainerENet_4_8_dense_dilation": "S12 dense (PReLU + Bilinear)",
+            "nnUNetTrainerENet_12_dense_relu_nearest_conv_upsample": "S12 dense, FINN-compatible (ReLU + Nearest Neighbor)",
+        },
+        "known_gaps": [],
+    },
 }
 
 EXCLUDED_FAMILIES_NOTE = """\

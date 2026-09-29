@@ -50,7 +50,9 @@ PACKAGE_ROOT = REPO_ROOT / "enet"
 sys.path.insert(0, str(PACKAGE_ROOT))
 from nnunetv2.nets.ENet import ENet  # noqa: E402
 from expand_layer_bits import resolve_act_sources  # noqa: E402
-from milp_outputs import write_outputs, compute_branch_imbalance_report  # noqa: E402
+from milp_outputs import (  # noqa: E402
+    write_outputs, compute_branch_imbalance_report, compute_chain_rate_imbalance_report,
+)
 
 # ---- Device, search space, CLI-set globals (see finn_milp.md "Constants") ----
 
@@ -1057,6 +1059,7 @@ def main() -> None:
     }
     if result["status"] == "Optimal":
         result["_diagnostics"]["branch_imbalance"] = compute_branch_imbalance_report(result)
+        result["_diagnostics"]["chain_rate_imbalance"] = compute_chain_rate_imbalance_report(result)
 
     args.out_file.parent.mkdir(parents=True, exist_ok=True)
     with open(args.out_file, "w") as f:
@@ -1081,6 +1084,10 @@ def main() -> None:
     print(f"Branch imbalance (diagnostic, {bi['n_diamonds']} fork/join diamonds): "
           f"median={bi['median_ratio']:.2f}x max={bi['max_ratio']:.2f}x" if bi["n_diamonds"] else
           "Branch imbalance (diagnostic): no simple 2-branch diamonds found.")
+    cri = diag["chain_rate_imbalance"]
+    print(f"Chain-rate imbalance (diagnostic, {cri['n_nodes']} nodes with a descendant): "
+          f"median={cri['median_ratio']:.2f}x max={cri['max_ratio']:.2f}x" if cri["n_nodes"] else
+          "Chain-rate imbalance (diagnostic): no node with a real descendant found.")
     for kind, agg in diag["extra_by_kind"].items():
         print(f"  {kind:13s} x{agg['n']:3d}: LUT {agg['lut_calibrated']:8.0f}  BRAM_18K {agg['bram18k_calibrated']:6.1f}  "
               f"DSP {agg['dsp']:4.0f}  cycles {agg['cycles']:10.0f}")

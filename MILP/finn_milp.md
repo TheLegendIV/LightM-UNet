@@ -429,14 +429,31 @@ Next to `--out-file`:
   confirmed real: the `down2` maxpool/conv fork stayed at 1.8x under
   `--pbi-ratio 1.5` while every other (foldable) diamond tracked down to
   1.5x exactly.
+- `_diagnostics.chain_rate_imbalance` (`milp_outputs.compute_chain_rate_imbalance_report`,
+  added 2026-09-29) — the achieved-value counterpart to `branch_imbalance`,
+  but for chain coherence: `max(rate[D] for every descendant D of L) /
+  rate[L]` per node L with a real descendant — exactly what `--dsr-ratio`
+  bounds via `max_downstream_rate` at solve time, computed here post-solve so
+  it can be tracked even when `--dsr-ratio` itself is off. Exists
+  specifically so a sweep can ask "does tightening `--pbi-ratio` alone move
+  chain coherence's own natural ratio" without needing `--dsr-ratio` enabled
+  at all (the mirror question to what `branch_imbalance` already answered for
+  `--pbi-ratio`). Same exemption caveat as `branch_imbalance`: a fixed-cycle
+  node (no folding freedom — e.g. `up4.upsample`) is exempt from the enforced
+  constraint's OWN outer bound, so it can show a very large ratio (confirmed
+  real: `up4.upsample` at 24.0x under `--dsr-ratio 1.5`, while every
+  constrained node tracked down to 1.5x) that stays large regardless of how
+  tight `--dsr-ratio` gets — report `median_ratio` as the primary signal for
+  a sweep, not `max_ratio`, for exactly this reason.
 - `summary.csv` + `run_args.json` — one row, written (overwritten) fresh each
   run (incl. `branch_imbalance_n_diamonds`/`_median_ratio`/`_max_ratio`); no
   sweep dimension since `alpha` was removed (see "History") — a new run in
   the same `--out-file` directory simply replaces the prior one.
 
-Regenerate the pruning report / ONNX / `_diagnostics.branch_imbalance` for an
-existing result (also writes `branch_imbalance` back into `--result` itself,
-so an older artifact solved before this diagnostic existed gets it too):
+Regenerate the pruning report / ONNX / `_diagnostics.branch_imbalance` /
+`_diagnostics.chain_rate_imbalance` for an existing result (also writes both
+back into `--result` itself, so an older artifact solved before these
+diagnostics existed gets them too):
 `python MILP/milp_outputs.py --result <json> --sensitivity-file <json>`.
 
 ## Scope boundary
@@ -538,3 +555,12 @@ cost model's calibration, not a certified hardware guarantee.
   both branches (previously unresponsive to the ratio value at all); a
   fixed-cycle diamond (`down2`'s maxpool/conv fork) correctly stays exempt
   and reports its own natural 1.8x, unaffected.
+- 2026-09-29 (later still): added `_diagnostics.chain_rate_imbalance`
+  (`milp_outputs.compute_chain_rate_imbalance_report`) — the achieved-value
+  counterpart to `branch_imbalance`, but for chain coherence, so a
+  cross-sensitivity sweep can track "how does `--dsr-ratio`'s own natural
+  ratio move when only `--pbi-ratio` is tightened" the same way
+  `branch_imbalance` already let a sweep track the mirror question for
+  `--pbi-ratio`. Wired into `write_outputs` (regeneration path) and
+  `finn_milp.py`'s own post-solve diagnostics block alongside
+  `branch_imbalance`.
