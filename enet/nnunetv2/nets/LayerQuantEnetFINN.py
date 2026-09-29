@@ -267,6 +267,12 @@ class FINNUpsamplingBottleneck(nn.Module):
       from_pretrained's name+shape matching, same as main_proj/reduce/up/
       expand -- unlike the frozen upsample_conv substitutes, this is not an
       approximation at all.
+    - "nearest_upsample" (2026-09-29): same real, parameter-free
+      nn.Upsample(nearest) as "nearest_conv_upsample" -- no substitution
+      needed, same reasoning -- but with NO skip_resize_conv afterward at
+      all, mirroring the real LayerQuantENet(decoder_type="nearest_upsample")
+      block exactly (main_up feeds straight into residual_add). Not an
+      approximation either: every op transferred is real.
 
     reduce/up/expand/residual_add/out_act are the real per-site ops (same
     site names as the real block) regardless of decoder_type."""
@@ -276,11 +282,12 @@ class FINNUpsamplingBottleneck(nn.Module):
         internal_ratio: int = 4, decoder_type: str = "upsample_conv",
     ):
         super().__init__()
-        if decoder_type not in ("upsample_conv", "nearest_conv_upsample"):
+        if decoder_type not in ("upsample_conv", "nearest_conv_upsample", "nearest_upsample"):
             raise NotImplementedError(
                 "FINNUpsamplingBottleneck only implements 'upsample_conv' (frozen nearest+depthwise "
-                "bilinear-equivalent substitute) and 'nearest_conv_upsample' (real nn.Upsample(nearest) "
-                f"+ real skip_resize_conv) -- got {decoder_type!r}."
+                "bilinear-equivalent substitute), 'nearest_conv_upsample' (real nn.Upsample(nearest) + real "
+                "skip_resize_conv), and 'nearest_upsample' (real nn.Upsample(nearest), no skip_resize_conv) "
+                f"-- got {decoder_type!r}."
             )
         self.decoder_type = decoder_type
         internal_channels = max(1, in_channels // internal_ratio)
@@ -303,11 +310,15 @@ class FINNUpsamplingBottleneck(nn.Module):
         # residual_add's width is just a reasonable, generously-precise default,
         # not a site-matched choice.
         self.main_act = qnn.QuantIdentity(bit_width=act_bits["residual_add"], act_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
-        if decoder_type == "nearest_conv_upsample":
+        if decoder_type in ("nearest_conv_upsample", "nearest_upsample"):
             self.main_up = nn.Upsample(scale_factor=2, mode="nearest")
-            self.skip_resize_conv = nn.Sequential(
-                _quant_conv2d(out_channels, out_channels, weight_bits["skip_resize_conv.0"], kernel_size=3, padding=1),
-                nn.BatchNorm2d(out_channels), _quant_act(act_bits["skip_resize_conv.2"]),
+            self.skip_resize_conv = (
+                nn.Sequential(
+                    _quant_conv2d(out_channels, out_channels, weight_bits["skip_resize_conv.0"], kernel_size=3, padding=1),
+                    nn.BatchNorm2d(out_channels), _quant_act(act_bits["skip_resize_conv.2"]),
+                )
+                if decoder_type == "nearest_conv_upsample"
+                else None
             )
         else:
             self.main_up = _nearest_depthwise_bilinear_kernel(out_channels)
@@ -451,7 +462,9 @@ class LayerQuantEnetFINN(nn.Module):
         source checkpoint used decoder_type="nearest_conv_upsample" (same site
         names/shapes as LayerQuantUpsamplingBottleneck's own skip_resize_conv --
         see module docstring point 2b, not a substitute, so it transfers exactly
-        like main_proj does). Left uninitialized (by design, same as
+        like main_proj does; under "nearest_upsample" there is no
+        skip_resize_conv submodule on either side, so this key simply never
+        appears in either state dict -- nothing special to do). Left uninitialized (by design, same as
         LayerQuantENet's own from_pretrained): every Brevitas quantizer's own
         scaling_impl buffer (no FP32 counterpart to transfer), plus the
         substitute-block params that are already fixed/frozen at construction

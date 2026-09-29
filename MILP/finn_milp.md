@@ -32,7 +32,7 @@ extra dataflow node (see "Dataflow graph"):
   here, evaluated by `finn_cost_model.layer_cost_pe_simd` at that exact point.
 - `z[node, pe, simd, ram_style, variant, w, bits]` — the same, for an extra
   node, over that node's own legal options (`extra_node_options`).
-- `max_downstream_rate[node]` — continuous, only with `--optimize-downstream-rate`.
+- `max_downstream_rate[node]` — continuous, only with `--dsr-ratio`.
 
 **Objective**
 ```
@@ -56,7 +56,7 @@ ever needed again, reintroduce the dial rather than repurposing this one.
   at the chosen bits.
 - Extra nodes: exactly one option each; threshold bits with sources tied to
   `max(sources)` (below).
-- Optional rate coherence (`--optimize-downstream-rate`, below).
+- Optional rate coherence (`--pbi-ratio` / `--dsr-ratio`, below).
 - Hard budgets, always enforced (not soft penalties):
   `Σ z·LUT ≤ f_lut·230,400`, `Σ z·BRAM18 ≤ f_bram·624`,
   `Σ z·DSP ≤ f_dsp·1,728`, `Σ z·URAM ≤ f_uram·96` (xczu7ev-ffvc1156-2-e).
@@ -185,28 +185,45 @@ Notes and evidence:
   4,592 LUT and ~247 BRAM18-eq unpriced before 2026-09-26 — older solves
   under-report BRAM badly (the deployed `bram20` plan reported 124 BRAM18).
 
-## Rate coherence (`--optimize-downstream-rate RATIO`)
+## Rate coherence: `--pbi-ratio RATIO` (join balance) and `--dsr-ratio RATIO` (chain coherence)
 
-One ratio drives two constraint families on the dataflow graph (so threshold
-nodes and ordinary residual joins are included):
+Two independent constraint families on the dataflow graph (so threshold
+nodes and ordinary residual joins are included), each gated by its own flag.
+**2026-09-29:** split back into two flags from a single merged
+`--optimize-downstream-rate` that drove both at once (itself a 2026-09-26
+merge of two separately-named flags — see History) — a user-facing sweep
+needed to hold one mechanism fixed while varying the other, which a single
+shared ratio can't express. `pbi_ratio`/`dsr_ratio` (the internal parameter
+names) each default to `None` (off); either, both, or neither may be set.
 
-1. **Join balance.** For every join (node with ≥2 predecessors, deduped by
-   predecessor set), every ordered pair of branches:
-   `cycles[i] ≤ ratio · cycles[j]`. Symmetric — siblings have no inherent
-   order. Fixed-cycle branches (MaxPool, concat, upsample — one cycle value
-   whatever the option) are exempt: balancing a foldable node against one only
-   forces over-folding.
-2. **Chain coherence.** `rate[L] ≤ ratio · rate[D]` for every descendant D of
-   L, with `rate = cycles / (C·H·W of the node's own output)` so nodes are
-   comparable across resolution changes. Only the "producer outruns consumer"
-   direction is constrained — a slow producer only starves a FIFO (throughput
-   loss), a fast one fills it (depth risk).
+1. **`--pbi-ratio` — join balance (parallel branch imbalance).** For every
+   join (node with ≥2 predecessors, deduped by predecessor set), every
+   ordered pair of branches: `cycles[i] ≤ ratio · cycles[j]`. Symmetric —
+   siblings have no inherent order. Fixed-cycle branches (MaxPool, concat,
+   upsample — one cycle value whatever the option) are exempt: balancing a
+   foldable node against one only forces over-folding.
+2. **`--dsr-ratio` — chain coherence (downstream rate).** `rate[D] ≤ ratio ·
+   rate[L]` for every descendant D of an ancestor L, with
+   `rate = cycles / (C·H·W of the node's own output)` so nodes are
+   comparable across resolution changes. Only the "producer outruns
+   consumer" direction is constrained — a slow producer only starves a FIFO
+   (throughput loss), a fast one fills it (depth risk): D's rate (however
+   slow) is capped relative to L's, so L can't be more than `ratio`× faster,
+   per output element, than anything reachable downstream of it.
+   (**Corrected 2026-09-29** — an earlier revision of this doc stated the
+   inequality with L and D on the opposite sides, `rate[L] ≤ ratio ·
+   rate[D]`; re-tracing it against the toy 3-node example below shows that
+   direction is vacuous for the exact compounding-mismatch case this feature
+   exists to catch, while `rate[D] ≤ ratio · rate[L]` is the one the
+   `max_downstream_rate` encoding below actually enforces and that correctly
+   rejects that example.)
 
 Why all descendants, not just neighbors: FIFO depth is driven by the
 total-cycles-per-frame mismatch between producer and consumer, and
 backpressure from a slow node several hops downstream propagates upstream
-through every FIFO. A fork needs no special case — independent constraints to
-each branch's descendants are exactly `rate[F] ≤ ratio · min(branches)`.
+through every FIFO. A fork needs no special case — independent constraints
+from each branch B back to the fork F are exactly `rate[B] ≤ ratio ·
+rate[F]`, applied per branch.
 
 Encoding: all-pairs is O(n²) (≈14k dense constraints with threshold nodes), so
 it uses `max_downstream_rate[L] ≥ rate[c]` and `≥ max_downstream_rate[c]` for
@@ -242,10 +259,14 @@ above, already fixed before this session's chain-coherence work started.)
 
 Neither family prices the FIFO itself; they only exclude badly skewed plans.
 
-History: `--max-join-imbalance-ratio` (join-only, separate flag) was folded
-into this flag on 2026-09-26. Before the dataflow graph existed, the
-conv-only predecessor map's one-branch-point cap hid every ordinary chained
-RegularBottleneck join — only UpsamplingBottleneck joins were visible.
+History: `--max-join-imbalance-ratio` (join-only, separate flag) and an
+unnamed chain-coherence flag were folded into one shared
+`--optimize-downstream-rate` on 2026-09-26, then **split back into
+`--pbi-ratio` and `--dsr-ratio` on 2026-09-29** so the two mechanisms can be
+swept independently again (see top of this section). Before the dataflow
+graph existed, the conv-only predecessor map's one-branch-point cap hid
+every ordinary chained RegularBottleneck join — only UpsamplingBottleneck
+joins were visible.
 
 ## Constants
 
@@ -327,7 +348,7 @@ Every run so far passed `--force-dsp`, which masked this.
 | `--force-dsp` | forced-DSP calibration factors (`finn_cost_model.md`; currently identity) instead of the auto-resType avg_bits table. |
 | `--target-fps` | throughput target: every node ≤ `clock_mhz·1e6/target_fps` cycles (the physically meaningful rate constraint for a dataflow pipeline). |
 | `--max-latency-ms` / `--clock-mhz` | hard cap on the sum of cycles — a sequential-execution proxy, not the pipeline's real latency (see "Formulation"). The builds run at 100 MHz. |
-| `--optimize-downstream-rate` | see Rate coherence. |
+| `--dsr-ratio` / `--pbi-ratio` | see Rate coherence; independent flags, either/both/neither may be set. |
 | `--force-serial` | PE=SIMD=1 everywhere, thresholds included. |
 | `--allow-lut-mult` | enables `hls_lut_noact0`. |
 | `--require-simd-ge-pe` | drops conv folds with PE>SIMD — a zero-fit fix for the real PE>SIMD LUT blowup (36% of rows, 70.7% of real LUT). Never empties a fold set (PE=1 always pairs with max SIMD). Threshold nodes are unaffected. |
@@ -365,8 +386,8 @@ Next to `--out-file`:
   domain `finn_milp`, attributes `pe`, `simd`, bits, `cycles`,
   `ii_cycles_per_pixel` (cycles / output pixels, NOT channel-normalized),
   `rate_elems_per_cycle`, `chain_rate_cycles_per_elem` (cycles / (C·H·W) —
-  channel-normalized, exactly `--optimize-downstream-rate`'s own `rate_expr`,
-  directly checkable node-by-node against `ratio · slowest-descendant-value`),
+  channel-normalized, exactly `--dsr-ratio`'s own `rate_expr`, directly
+  checkable node-by-node against `ratio · slowest-descendant-value`),
   `pct_of_slowest_node`, `is_slowest_node`, LUT, BRAM, DSP, URAM, and (convs)
   `mvu_cycles` / `swu_cycles` / `thr_pe`. The graph doc_string carries the run
   summary. Written unconditionally on every Optimal solve, into the same
@@ -468,3 +489,13 @@ cost model's calibration, not a certified hardware guarantee.
   `run_args.json` write a single row per run instead of upserting one row
   per alpha (`_update_sweep_summary` renamed `_write_run_summary`). Hard
   resource/throughput/rate-coherence/latency constraints are unchanged.
+- 2026-09-29: `--optimize-downstream-rate` split back into `--dsr-ratio`
+  (chain coherence, `dsr_ratio` parameter) and `--pbi-ratio` (join balance,
+  `pbi_ratio` parameter) so the two mechanisms can be held fixed
+  independently while sweeping the other — a real experiment design need
+  the single merged flag couldn't express. Each defaults to `None`
+  (off); either, both, or neither may be set; `topology` (predecessor_map/
+  dataflow_map) is resolved once and shared by both gated blocks. Also
+  corrected this doc's chain-coherence formula, which had L and D on the
+  wrong sides of the inequality (see "Rate coherence" above) — the code's
+  actual behavior did not change, only the documentation of it.

@@ -350,7 +350,8 @@ def solve_joint_perlayer(
     require_simd_ge_pe: bool = False,
     hard_dsp_fraction: float = 1.0,
     hard_uram_fraction: float = 1.0,
-    optimize_downstream_rate: float | None = None,
+    dsr_ratio: float | None = None,
+    pbi_ratio: float | None = None,
     max_node_cycles: float | None = None,
     extra_nodes: list[ExtraNode] = (),
     dataflow_map: dict[str, list[str]] | None = None,
@@ -506,17 +507,20 @@ def solve_joint_perlayer(
             prob += node_at_least <= pulp.lpSum(sources_at_least), f"thr_bits_le_{name}_{level}"
             n_extra_constraints += len(sources_at_least) + 1
 
-    # Rate coherence (--optimize-downstream-rate), on the dataflow graph.
+    # Rate coherence: --pbi-ratio (join balance) and --dsr-ratio (chain coherence) are
+    # independent constraint families on the dataflow graph -- each gated on its own flag
+    # (split 2026-09-29 from the single --optimize-downstream-rate that drove both; see
+    # finn_milp.md "Rate coherence" for why they were merged, then split again).
     topology = dataflow_map if dataflow_map is not None else predecessor_map
     fixed_cycle_names = {name for name, terms in layer_cycle_terms.items() if len({c for _, c in terms}) == 1}
     n_join_constraints = 0
     n_chain_rate_constraints = 0
-    if optimize_downstream_rate is not None:
-        if topology is None:
-            raise ValueError("optimize_downstream_rate needs a predecessor_map or dataflow_map.")
+    if (pbi_ratio is not None or dsr_ratio is not None) and topology is None:
+        raise ValueError("pbi_ratio/dsr_ratio needs a predecessor_map or dataflow_map.")
 
-        # Join balance: sibling branches within ratio, both ways (fixed-cycle nodes -- pools,
-        # concat, upsample -- exempt: nothing to fold on that side).
+    if pbi_ratio is not None:
+        # Join balance (parallel branch imbalance): sibling branches within ratio, both ways
+        # (fixed-cycle nodes -- pools, concat, upsample -- exempt: nothing to fold on that side).
         unique_joins = {
             tuple(sorted(preds)) for preds in topology.values()
             if len(preds) >= 2 and all(p in layer_cycles_expr for p in preds)
@@ -528,10 +532,11 @@ def solve_joint_perlayer(
                     if branch_i == branch_j:
                         continue
                     prob += (
-                        layer_cycles_expr[branch_i] <= optimize_downstream_rate * layer_cycles_expr[branch_j]
-                    ), f"join_balance_{branch_i}_vs_{branch_j}"
+                        layer_cycles_expr[branch_i] <= pbi_ratio * layer_cycles_expr[branch_j]
+                    ), f"pbi_ratio_{branch_i}_vs_{branch_j}"
                     n_join_constraints += 1
 
+    if dsr_ratio is not None:
         # Chain: rate[L] <= ratio * rate[D] for every descendant D, in O(edges) via
         # max_downstream_rate (the SLOWEST/bottleneck descendant rate) bounded BELOW (so it
         # can't be deflated). rate = cycles / outputs. Constraining L against the slowest thing
@@ -580,7 +585,7 @@ def solve_joint_perlayer(
             if name in fixed_cycle_names:
                 continue
             prob += (
-                max_downstream_rate[name] <= optimize_downstream_rate * rate_expr[name]
+                max_downstream_rate[name] <= dsr_ratio * rate_expr[name]
             ), f"downstream_rate_{name}"
             n_chain_rate_constraints += 1
 
@@ -634,7 +639,7 @@ def solve_joint_perlayer(
                 "hard_dsp_fraction": hard_dsp_fraction, "hard_uram_fraction": hard_uram_fraction,
                 "max_cycles": max_cycles, "max_node_cycles": max_node_cycles,
                 "throughput_floor_violations": throughput_floor_violations,
-                "optimize_downstream_rate": optimize_downstream_rate, "n_join_constraints": n_join_constraints,
+                "dsr_ratio": dsr_ratio, "pbi_ratio": pbi_ratio, "n_join_constraints": n_join_constraints,
                 "n_chain_rate_constraints": n_chain_rate_constraints,
                 "solver_time_limit_s": time_limit, "solver_gap_rel": gap_rel, "force_serial": FORCE_SERIAL,
                 "force_dsp": force_dsp, "require_simd_ge_pe": require_simd_ge_pe, "allow_lut_mult": ALLOW_LUT_MULT,
@@ -645,7 +650,8 @@ def solve_joint_perlayer(
                         + (f" and max_cycles={max_cycles:.0f}" if max_cycles is not None else "")
                         + (f" and max_node_cycles={max_node_cycles:.0f} (nodes that cannot reach it even fully "
                            f"folded: {throughput_floor_violations or 'none'})" if max_node_cycles is not None else "")
-                        + (f" and optimize_downstream_rate={optimize_downstream_rate}" if optimize_downstream_rate is not None else "")
+                        + (f" and dsr_ratio={dsr_ratio}" if dsr_ratio is not None else "")
+                        + (f" and pbi_ratio={pbi_ratio}" if pbi_ratio is not None else "")
                         + " at all.",
             },
         }
@@ -747,7 +753,7 @@ def solve_joint_perlayer(
             "hard_dsp_fraction": hard_dsp_fraction, "hard_uram_fraction": hard_uram_fraction,
             "max_cycles": max_cycles, "max_node_cycles": max_node_cycles,
             "bottleneck_node": bottleneck_node, "bottleneck_cycles": node_cycles[bottleneck_node],
-            "optimize_downstream_rate": optimize_downstream_rate, "n_join_constraints": n_join_constraints,
+            "dsr_ratio": dsr_ratio, "pbi_ratio": pbi_ratio, "n_join_constraints": n_join_constraints,
             "n_chain_rate_constraints": n_chain_rate_constraints,
             "solver_time_limit_s": time_limit, "solver_gap_rel": gap_rel, "force_serial": FORCE_SERIAL,
             "force_dsp": force_dsp, "require_simd_ge_pe": require_simd_ge_pe, "allow_lut_mult": ALLOW_LUT_MULT,
@@ -818,7 +824,7 @@ def _write_run_summary(
         "hard-lut-fraction": args.hard_lut_fraction, "hard-bram-fraction": args.hard_bram_fraction,
         "hard-dsp-fraction": args.hard_dsp_fraction, "hard-uram-fraction": args.hard_uram_fraction, "force-dsp": args.force_dsp,
         "max-latency-ms": args.max_latency_ms, "clock-mhz": args.clock_mhz, "target-fps": args.target_fps,
-        "optimize-downstream-rate": args.optimize_downstream_rate,
+        "dsr-ratio": args.dsr_ratio, "pbi-ratio": args.pbi_ratio,
         "force-serial": FORCE_SERIAL, "require-simd-ge-pe": args.require_simd_ge_pe,
         "allow-lut-mult": ALLOW_LUT_MULT,
         "time-limit": args.time_limit, "gap-rel": args.gap_rel,
@@ -838,6 +844,52 @@ def _write_run_summary(
     }
     run_args_path.write_text(json.dumps(run_args, indent=2))
     print(f"Wrote {run_args_path}.")
+
+
+def build_model_and_graph() -> tuple[
+    torch.nn.Module, list[LayerGeometry], list["ExtraNode"], dict[str, list[str]] | None, dict[str, list[str]],
+    dict[str, str],
+]:
+    """Builds the ENet model from the currently-loaded config globals and traces its
+    full layer geometry + extra-node dataflow graph -- the shared setup used by both
+    the ILP solve (main(), below) and MILP/utils/uniform_bits_same_folding.py's
+    fixed-fold baseline (which needs the same real extra-node geometries/options to
+    price thresholds/streams consistently with a real solve, not just per_layer convs).
+    Extracted 2026-09-29 so the two never silently diverge on node-kind-detection
+    logic. Returns (model, geometries, extra_nodes, predecessor_map, dataflow_map,
+    node_kinds); predecessor_map is None if it couldn't be traced (non-fatal
+    upstream)."""
+    model = ENet(
+        in_channels=IN_CHANNELS, out_channels=OUT_CHANNELS, channels=CHANNELS,
+        bottlenecks_per_stage=BOTTLENECKS_PER_STAGE, decoder_type=DECODER_TYPE,
+        use_asymmetric=USE_ASYMMETRIC, context_pattern=CONTEXT_PATTERN,
+        separable_dilated=SEPARABLE_DILATED, use_prelu=globals().get("USE_PRELU", True), prelu_variant=PRELU_VARIANT,
+        use_dsc=globals().get("USE_DSC", False), dsc_no_projection=globals().get("DSC_NO_PROJECTION", False),
+        dsc_no_projection_context_only=globals().get("DSC_NO_PROJECTION_CONTEXT_ONLY", False),
+        reg_bookend_dsc=globals().get("REG_BOOKEND_DSC", False),
+        dsc_separable=globals().get("DSC_SEPARABLE", False),
+    )
+    geometries, _block_names = trace_layer_geometry(model, INPUT_HW, IN_CHANNELS)
+
+    # Conv-only predecessor map: drives act-sensitivity sources and deployed bits.
+    # Non-fatal -- falls back to self-indexed act sensitivity.
+    try:
+        predecessor_map = compute_predecessor_map(model)
+    except Exception as error:
+        predecessor_map = None
+        print(f"WARNING: could not compute a predecessor map ({type(error).__name__}: {error}) -- falling back "
+              f"to self-indexed act sensitivity for EVERY layer.")
+
+    # Real FINN dataflow graph incl. every node with no conv/pool module. Callers
+    # should treat a failure here as fatal -- skipping them would silently
+    # under-price every solve/re-evaluation.
+    dataflow_map, node_kinds = compute_dataflow_graph(model)
+    act_shapes = trace_activation_shapes(model, INPUT_HW, IN_CHANNELS)
+    insert_skip_pads(dataflow_map, node_kinds, geometries, act_shapes)
+    extra_nodes = build_extra_nodes(
+        dataflow_map, node_kinds, act_shapes, geometries, predecessor_map or {}, (IN_CHANNELS, *INPUT_HW),
+    )
+    return model, geometries, extra_nodes, predecessor_map, dataflow_map, node_kinds
 
 
 # ---- CLI (flag rationale: finn_milp.md "CLI flags") ----
@@ -861,8 +913,12 @@ def main() -> None:
     parser.add_argument("--max-latency-ms", type=float, default=None,
                          help="Hard cap on the sum of cycles, as ms at --clock-mhz.")
     parser.add_argument("--clock-mhz", type=float, default=100.0, help="Clock for --max-latency-ms (default 100).")
-    parser.add_argument("--optimize-downstream-rate", type=float, default=None,
-                         help="Ratio for join-balance + downstream-rate coherence constraints (off by default).")
+    parser.add_argument("--dsr-ratio", type=float, default=None,
+                         help="Downstream-rate ratio: chain-coherence constraint bounding a node's rate against "
+                              "the slowest rate anywhere in its downstream subtree (off by default).")
+    parser.add_argument("--pbi-ratio", type=float, default=None,
+                         help="Parallel-branch-imbalance ratio: join-balance constraint bounding sibling branches' "
+                              "cycle counts against each other at every fork/join (off by default).")
     parser.add_argument("--force-serial", action="store_true", help="Restrict every node to PE=SIMD=1.")
     parser.add_argument("--allow-lut-mult", action="store_true",
                          help="Also allow the hls_lut_noact0 variant (LUT multipliers, fused activation).")
@@ -910,40 +966,15 @@ def main() -> None:
               f"exactly 0.0 under fp16 deployment -- consider pruning them instead (ENet.py's "
               f"apply_block_pruning / ENET_PRUNED_BLOCKS): {zero_sensitivity_layers}")
 
-    model = ENet(
-        in_channels=IN_CHANNELS, out_channels=OUT_CHANNELS, channels=CHANNELS,
-        bottlenecks_per_stage=BOTTLENECKS_PER_STAGE, decoder_type=DECODER_TYPE,
-        use_asymmetric=USE_ASYMMETRIC, context_pattern=CONTEXT_PATTERN,
-        separable_dilated=SEPARABLE_DILATED, use_prelu=globals().get("USE_PRELU", True), prelu_variant=PRELU_VARIANT,
-        use_dsc=globals().get("USE_DSC", False), dsc_no_projection=globals().get("DSC_NO_PROJECTION", False),
-        dsc_no_projection_context_only=globals().get("DSC_NO_PROJECTION_CONTEXT_ONLY", False),
-        reg_bookend_dsc=globals().get("REG_BOOKEND_DSC", False),
-        dsc_separable=globals().get("DSC_SEPARABLE", False),
-    )
-    geometries, _block_names = trace_layer_geometry(model, INPUT_HW, IN_CHANNELS)
+    model, geometries, extra_nodes, predecessor_map, dataflow_map, node_kinds = build_model_and_graph()
     layer_names = tuple(g.name for g in geometries)
 
-    # Conv-only predecessor map: drives act-sensitivity sources and deployed bits.
-    # Non-fatal -- falls back to self-indexed act sensitivity.
-    try:
-        predecessor_map = compute_predecessor_map(model)
+    if predecessor_map is not None:
         n_resolved = sum(1 for name in layer_names if predecessor_map.get(name))
         print(f"Predecessor map: {n_resolved}/{len(layer_names)} layers have a real, traced predecessor "
               f"(the rest are the network's own first layer(s), with no real predecessor to fall back to "
               f"anything but self-sensitivity).")
-    except Exception as error:
-        predecessor_map = None
-        print(f"WARNING: could not compute a predecessor map ({type(error).__name__}: {error}) -- falling back "
-              f"to self-indexed act sensitivity for EVERY layer.")
 
-    # Real FINN dataflow graph incl. every node with no conv/pool module. Fatal on
-    # failure: skipping them would silently under-price every solve.
-    dataflow_map, node_kinds = compute_dataflow_graph(model)
-    act_shapes = trace_activation_shapes(model, INPUT_HW, IN_CHANNELS)
-    insert_skip_pads(dataflow_map, node_kinds, geometries, act_shapes)
-    extra_nodes = build_extra_nodes(
-        dataflow_map, node_kinds, act_shapes, geometries, predecessor_map or {}, (IN_CHANNELS, *INPUT_HW),
-    )
     kind_counts = {kind: sum(n.kind == kind for n in extra_nodes) for kind in dict.fromkeys(n.kind for n in extra_nodes)}
     print(f"Extra dataflow nodes: {len(extra_nodes)} {kind_counts}.")
 
@@ -1000,7 +1031,7 @@ def main() -> None:
         args.time_limit, args.gap_rel, max_cycles=max_cycles, pinned_bits=pinned_bits,
         predecessor_map=predecessor_map, force_dsp=args.force_dsp, require_simd_ge_pe=args.require_simd_ge_pe,
         hard_dsp_fraction=args.hard_dsp_fraction, hard_uram_fraction=args.hard_uram_fraction,
-        optimize_downstream_rate=args.optimize_downstream_rate, max_node_cycles=max_node_cycles,
+        dsr_ratio=args.dsr_ratio, pbi_ratio=args.pbi_ratio, max_node_cycles=max_node_cycles,
         extra_nodes=extra_nodes, dataflow_map=dataflow_map,
     )
     hardware_nodes = [*geometries, *(node.geom for node in extra_nodes)]

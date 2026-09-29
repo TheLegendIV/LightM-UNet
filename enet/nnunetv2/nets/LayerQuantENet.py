@@ -382,19 +382,24 @@ class LayerQuantUpsamplingBottleneck(nn.Module):
     3x3 QuantConv2d + BatchNorm2d + quantized activation (the "resize-
     convolution" anti-checkerboard pattern) -- same shape/placement as
     ENet.py's own skip_resize_conv, just with per-site (weight_bits,
-    act_bits) instead of a single scalar pair. "upsample_conv" (the
-    default) is unaffected -- bare bilinear resize, no conv after it,
-    byte-identical to before this addition."""
+    act_bits) instead of a single scalar pair. decoder_type="nearest_upsample"
+    (2026-09-29) is the same nearest-mode resize with NO conv/BN/act
+    afterward at all -- mirrors ENet.py's own "nearest_upsample" exactly
+    (isolates the resize KERNEL as the only change vs. "upsample_conv",
+    no learned params added anywhere). "upsample_conv" (the default) is
+    unaffected -- bare bilinear resize, no conv after it, byte-identical to
+    before this addition."""
 
     def __init__(
         self, in_channels: int, out_channels: int, weight_bits: dict[str, int], act_bits: dict[str, int],
         internal_ratio: int = 4, decoder_type: str = "upsample_conv",
     ):
         super().__init__()
-        if decoder_type not in ("upsample_conv", "nearest_conv_upsample"):
+        if decoder_type not in ("upsample_conv", "nearest_conv_upsample", "nearest_upsample"):
             raise NotImplementedError(
-                "LayerQuantUpsamplingBottleneck only implements 'upsample_conv' (bilinear, no conv after) "
-                f"and 'nearest_conv_upsample' (nearest + 3x3 conv+BN+act) -- got {decoder_type!r}."
+                "LayerQuantUpsamplingBottleneck only implements 'upsample_conv' (bilinear, no conv after), "
+                "'nearest_conv_upsample' (nearest + 3x3 conv+BN+act), and 'nearest_upsample' (bare nearest, "
+                f"no conv after) -- got {decoder_type!r}."
             )
         self.decoder_type = decoder_type
         internal_channels = max(1, in_channels // internal_ratio)
@@ -431,7 +436,7 @@ class LayerQuantUpsamplingBottleneck(nn.Module):
     def forward(self, x: torch.Tensor, output_size: torch.Size, indices: torch.Tensor | None = None) -> torch.Tensor:
         main = self.main_proj(x)
         if indices is None:
-            mode = "nearest" if self.decoder_type == "nearest_conv_upsample" else "bilinear"
+            mode = "nearest" if self.decoder_type in ("nearest_conv_upsample", "nearest_upsample") else "bilinear"
             main = F.interpolate(main, size=output_size[2:], mode=mode, align_corners=False if mode == "bilinear" else None)
             if self.skip_resize_conv is not None:
                 main = self.skip_resize_conv(main)
@@ -746,12 +751,12 @@ class LayerQuantENet(nn.Module):
         trainable_slope: bool = True,
     ):
         super().__init__()
-        if decoder_type not in ("upsample_conv", "nearest_conv_upsample"):
+        if decoder_type not in ("upsample_conv", "nearest_conv_upsample", "nearest_upsample"):
             raise NotImplementedError(
                 "LayerQuantENet's forward() only implements the upsample_conv (bilinear, no pooling-"
-                "indices plumbing -- same scope CombinedQuantENet already has) and nearest_conv_upsample "
-                f"(nearest + 3x3 conv+BN+act, see LayerQuantUpsamplingBottleneck) decoder paths -- got "
-                f"{decoder_type!r}."
+                "indices plumbing -- same scope CombinedQuantENet already has), nearest_conv_upsample "
+                "(nearest + 3x3 conv+BN+act), and nearest_upsample (bare nearest, no conv after) decoder "
+                f"paths (see LayerQuantUpsamplingBottleneck) -- got {decoder_type!r}."
             )
         if dsc_no_projection_context_only and not dsc_no_projection:
             raise ValueError("dsc_no_projection_context_only narrows dsc_no_projection's scope -- meaningless without dsc_no_projection=True itself.")
