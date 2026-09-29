@@ -197,11 +197,29 @@ shared ratio can't express. `pbi_ratio`/`dsr_ratio` (the internal parameter
 names) each default to `None` (off); either, both, or neither may be set.
 
 1. **`--pbi-ratio` — join balance (parallel branch imbalance).** For every
-   join (node with ≥2 predecessors, deduped by predecessor set), every
-   ordered pair of branches: `cycles[i] ≤ ratio · cycles[j]`. Symmetric —
-   siblings have no inherent order. Fixed-cycle branches (MaxPool, concat,
-   upsample — one cycle value whatever the option) are exempt: balancing a
-   foldable node against one only forces over-folding.
+   simple 2-branch diamond (fork → {branch A, branch B} → join,
+   `find_fork_join_diamonds` in `layer_topology.py`), both ways:
+   `sum(cycles over branch A) ≤ ratio · sum(cycles over branch B)`. A
+   "branch" is every node from the join's direct predecessor back to (not
+   including) the nearest fork — the WHOLE path, not just that one direct
+   predecessor. Symmetric — siblings have no inherent order. A diamond is
+   exempt only if NEITHER branch has any real folding freedom at all
+   (every node on that branch is fixed-cycle — MaxPool, concat, upsample —
+   so it can't respond to a rebalancing constraint).
+   (**Corrected 2026-09-29** — the original implementation compared only
+   the single node immediately before a join, e.g. `skip_quant` vs.
+   `expand.0` at a residual add, ignoring every node earlier on the longer
+   branch (`reduce`, `conv`). This misses a branch that's individually
+   rate-compliant node-by-node but simply has more pipeline stages than its
+   sibling — confirmed empirically: forcing the old single-node check to an
+   exact 1.0 ratio left the real cumulative diamond ratio completely
+   unchanged, 1.8x, on the `nearest_upsample` architecture, because the
+   3-stage main branch's earlier nodes were never compared against
+   anything. The diagnostic-only `milp_outputs.compute_branch_imbalance_report`
+   already computed this same cumulative-sum quantity — this promotes it
+   from a diagnostic to the actual enforced constraint, and both now share
+   `find_fork_join_diamonds` so they can never diverge on what counts as a
+   diamond again.)
 2. **`--dsr-ratio` — chain coherence (downstream rate).** `rate[D] ≤ ratio ·
    rate[L]` for every descendant D of an ancestor L, with
    `rate = cycles / (C·H·W of the node's own output)` so nodes are
@@ -394,21 +412,23 @@ Next to `--out-file`:
   directory as the other per-run outputs (always named `final_output.onnx`,
   not stem-derived — one file per run directory).
 - `_diagnostics.branch_imbalance` (`milp_outputs.compute_branch_imbalance_report`)
-  — DIAGNOSTIC ONLY, not a solved constraint: cumulative fork-to-join cycle-
-  SUM ratio (`max(branch sum)/min(branch sum)`) for every simple 2-branch
-  diamond (`dup -> {branch A, branch B} -> join`, both branches sharing the
-  same nearest fan-out>=2 ancestor). Distinct from both join-balance (compares
-  only the single node immediately before the join) and chain-coherence
-  (per-node rate vs. its worst reachable descendant) — neither catches a
-  branch that's individually rate-compliant node-by-node but simply has more
-  pipeline stages than its sibling. Does NOT capture sliding-window/buffer
-  FILL LATENCY (e.g. ConvolutionInputGenerator needing to buffer several image
-  rows before its first output) — only sums each node's own steady-state
-  `cycles`. 2026-09-26: checked on `S12_dense_nn_upsample_256_v2` (ratio=1.5,
-  28 diamonds) — median 1.62x, max 1.80x, tracking the chain-coherence ratio
-  fairly closely for this architecture's shallow (1-vs-3-node) diamonds; kept
-  as a diagnostic rather than promoted to a constraint since it wasn't shown
-  to be a real problem here, not because it can't be elsewhere.
+  — cumulative fork-to-join cycle-SUM ratio (`max(branch sum)/min(branch
+  sum)`) for every simple 2-branch diamond (`find_fork_join_diamonds` in
+  `layer_topology.py`: fork → {branch A, branch B} → join, both branches
+  sharing the same nearest fan-out≥2 ancestor). **2026-09-29: this is now
+  exactly what `--pbi-ratio` enforces pre-solve** (previously it was
+  diagnostic-only, tracking a *different*, weaker single-node join-balance
+  check — see "Rate coherence" above for why that was corrected). Still
+  reported post-solve here as a real achieved-value check, and still doesn't
+  capture sliding-window/buffer FILL LATENCY (e.g. ConvolutionInputGenerator
+  needing to buffer several image rows before its first output) — only sums
+  each node's own steady-state `cycles`, a latency proxy for a pipelined
+  design, not an exact fill-latency model. A diamond can still show a ratio
+  above the enforced `--pbi-ratio` if neither of its branches has any real
+  folding freedom (exempt from the constraint, see "Rate coherence") —
+  confirmed real: the `down2` maxpool/conv fork stayed at 1.8x under
+  `--pbi-ratio 1.5` while every other (foldable) diamond tracked down to
+  1.5x exactly.
 - `summary.csv` + `run_args.json` — one row, written (overwritten) fresh each
   run (incl. `branch_imbalance_n_diamonds`/`_median_ratio`/`_max_ratio`); no
   sweep dimension since `alpha` was removed (see "History") — a new run in
@@ -499,3 +519,22 @@ cost model's calibration, not a certified hardware guarantee.
   corrected this doc's chain-coherence formula, which had L and D on the
   wrong sides of the inequality (see "Rate coherence" above) — the code's
   actual behavior did not change, only the documentation of it.
+- 2026-09-29 (later): `--pbi-ratio`'s join-balance constraint corrected to
+  compare cumulative fork-to-join branch SUMS instead of only the single
+  node immediately before a join. Found while sweeping `--pbi-ratio` to its
+  tightest possible value (1.0, exact single-node equality) on the
+  `nearest_upsample` architecture and observing zero effect on
+  `milp_outputs.compute_branch_imbalance_report`'s own cumulative ratio
+  (stuck at 1.8x throughout) — the old constraint was structurally blind to
+  a branch having more pipeline stages than its sibling (here: `skip_quant`,
+  1 op, vs. `reduce`→`conv`→`expand`, 3 ops, feeding the same residual add),
+  since it never looked at any node but the last one on each side. Fixed by
+  promoting `compute_branch_imbalance_report`'s own diamond-detection and
+  cumulative-sum logic from a diagnostic into the real constraint, via a new
+  shared `find_fork_join_diamonds` (`layer_topology.py`) so the enforced
+  constraint and the post-solve report can never diverge on what counts as a
+  diamond again. Confirmed the fix: `--pbi-ratio 1.5` now yields a real
+  diamond ratio of exactly 1.5x wherever a diamond has folding freedom on
+  both branches (previously unresponsive to the ratio value at all); a
+  fixed-cycle diamond (`down2`'s maxpool/conv fork) correctly stays exempt
+  and reports its own natural 1.8x, unaffected.

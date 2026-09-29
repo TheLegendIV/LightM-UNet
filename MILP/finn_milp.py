@@ -42,7 +42,7 @@ from finn_cost_model import (  # noqa: E402
 )
 from layer_topology import (  # noqa: E402
     ACT_SUFFIX, CONCAT_SUFFIX, OUT_ACT_SUFFIX, SKIP_PAD_SUFFIX, SKIP_QUANT_SUFFIX, compute_dataflow_graph,
-    compute_predecessor_map,
+    compute_predecessor_map, find_fork_join_diamonds,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -519,22 +519,35 @@ def solve_joint_perlayer(
         raise ValueError("pbi_ratio/dsr_ratio needs a predecessor_map or dataflow_map.")
 
     if pbi_ratio is not None:
-        # Join balance (parallel branch imbalance): sibling branches within ratio, both ways
-        # (fixed-cycle nodes -- pools, concat, upsample -- exempt: nothing to fold on that side).
-        unique_joins = {
-            tuple(sorted(preds)) for preds in topology.values()
-            if len(preds) >= 2 and all(p in layer_cycles_expr for p in preds)
-        }
-        for branches in unique_joins:
-            foldable_branches = [b for b in branches if b not in fixed_cycle_names]
-            for branch_i in foldable_branches:
-                for branch_j in foldable_branches:
-                    if branch_i == branch_j:
-                        continue
-                    prob += (
-                        layer_cycles_expr[branch_i] <= pbi_ratio * layer_cycles_expr[branch_j]
-                    ), f"pbi_ratio_{branch_i}_vs_{branch_j}"
-                    n_join_constraints += 1
+        # Parallel branch imbalance: cumulative fork-to-join cycle-SUM ratio for every
+        # simple 2-branch diamond, both ways (find_fork_join_diamonds, shared with
+        # milp_outputs.compute_branch_imbalance_report's post-solve report so the two
+        # can never diverge on what counts as a diamond). A branch is every node from
+        # the join's direct predecessor back to (not including) the nearest fork --
+        # NOT just that single direct predecessor. Corrected 2026-09-29: the previous
+        # version only ever compared the single node immediately before a join (e.g.
+        # skip_quant vs. expand.0 at a residual add), which misses a branch that's
+        # individually rate-compliant node-by-node but simply has more pipeline
+        # stages than its sibling (here: a 1-op skip_quant branch vs. a 3-op
+        # reduce->conv->expand branch feeding the SAME add) -- confirmed empirically:
+        # forcing the old single-node check to an exact 1.0 ratio left the real
+        # cumulative diamond ratio completely unchanged (1.8x, this architecture's
+        # nearest_upsample config). A diamond is skipped only if NEITHER branch has
+        # any real folding freedom at all (mirrors the old exemption's spirit --
+        # fixed-cycle nodes can't respond to a rebalancing constraint -- applied per
+        # whole branch instead of per single node).
+        for d in find_fork_join_diamonds(topology):
+            branch_a = [n for n in d["branch_a"] if n in layer_cycles_expr]
+            branch_b = [n for n in d["branch_b"] if n in layer_cycles_expr]
+            if not branch_a or not branch_b:
+                continue
+            if all(n in fixed_cycle_names for n in branch_a) or all(n in fixed_cycle_names for n in branch_b):
+                continue
+            sum_a = pulp.lpSum(layer_cycles_expr[n] for n in branch_a)
+            sum_b = pulp.lpSum(layer_cycles_expr[n] for n in branch_b)
+            prob += sum_a <= pbi_ratio * sum_b, f"pbi_ratio_{d['join']}_a_le_b"
+            prob += sum_b <= pbi_ratio * sum_a, f"pbi_ratio_{d['join']}_b_le_a"
+            n_join_constraints += 2
 
     if dsr_ratio is not None:
         # Chain: rate[L] <= ratio * rate[D] for every descendant D, in O(edges) via

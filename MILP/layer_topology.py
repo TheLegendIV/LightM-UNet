@@ -353,3 +353,56 @@ def compute_dataflow_graph(model: nn.Module) -> tuple[dict[str, list[str]], dict
         for user in users:
             dataflow[user] = [dup if p == producer else p for p in dataflow[user]]
     return dataflow, kinds
+
+
+def find_fork_join_diamonds(edges: dict[str, list[str]]) -> list[dict]:
+    """Every simple 2-branch diamond (fork -> {branch A path, branch B path}
+    -> join) in a dataflow graph given as {node: [predecessors]}. A "branch
+    path" is every node from the join's direct predecessor (inclusive) back
+    to, but NOT including, the fork -- found by walking backward through
+    single-predecessor nodes until hitting a node with >=2 successors (the
+    fork itself, shared by both branches, contributes to neither branch's own
+    sum). A join with exactly 2 predecessors whose backward walks converge on
+    the SAME fork is a simple diamond; walks that hit a dead end (0 or >=2
+    predecessors) before finding a fork, or that converge on DIFFERENT forks
+    (nested/overlapping diamonds), are skipped.
+
+    Returns [{"join": str, "fork": str, "branch_a": [str, ...], "branch_b":
+    [str, ...]}, ...] -- pure graph structure, no cycle/cost values. Shared by
+    finn_milp.py's enforced `--pbi-ratio` constraint (pre-solve: sums
+    `layer_cycles_expr` over each branch) and
+    milp_outputs.compute_branch_imbalance_report (post-solve diagnostic: sums
+    real solved cycles) so the two can never silently diverge on what counts
+    as a diamond -- promoted from a milp_outputs.py-only diagnostic to a real
+    constraint on 2026-09-29 once the single-immediate-node comparison it
+    replaced was shown to miss a branch that's individually rate-compliant
+    node-by-node but simply has more pipeline stages than its sibling (e.g. a
+    1-op skip_quant branch vs. a 3-op reduce->conv->expand branch feeding the
+    same residual add)."""
+    fanout: dict[str, int] = {}
+    for preds in edges.values():
+        for p in preds:
+            fanout[p] = fanout.get(p, 0) + 1
+
+    def branch_path_and_fork(start: str) -> tuple[list[str], str | None]:
+        path, node = [start], start
+        for _ in range(len(edges) + 1):
+            preds = edges.get(node, [])
+            if len(preds) != 1:
+                return path, None
+            p = preds[0]
+            if fanout.get(p, 0) >= 2:
+                return path, p
+            path.append(p)
+            node = p
+        return path, None
+
+    diamonds = []
+    for join, preds in edges.items():
+        if len(preds) != 2:
+            continue
+        (path_a, fork_a), (path_b, fork_b) = branch_path_and_fork(preds[0]), branch_path_and_fork(preds[1])
+        if fork_a is None or fork_a != fork_b:
+            continue  # not a simple 2-branch diamond (dead end, or nested/overlapping forks)
+        diamonds.append({"join": join, "fork": fork_a, "branch_a": path_a, "branch_b": path_b})
+    return diamonds
