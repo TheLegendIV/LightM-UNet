@@ -29,8 +29,8 @@ import math
 import re
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-TEMP = HERE / "temp"
+HERE = Path(__file__).resolve().parent.parent
+TEMP = HERE / "archive" / "20261001_refactor" / "temp"
 
 DTYPE_BITS_RE = re.compile(r"(\d+)$")
 

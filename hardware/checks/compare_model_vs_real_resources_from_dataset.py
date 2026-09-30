@@ -80,7 +80,7 @@ import csv
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "MILP"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "MILP"))
 from finn_cost_model import (  # noqa: E402
     LayerGeometry, calibrated_bram18k, calibrated_lut, conv_cost_pe_simd, stream_node_cost,
     _finn_swu, _THR_RTL_LUT_BASE_PER_PE, _THR_RTL_LUT_PER_NUMSTEP_PE, _THR_RTL_BRAM18_PER_PE_NUMSTEP,

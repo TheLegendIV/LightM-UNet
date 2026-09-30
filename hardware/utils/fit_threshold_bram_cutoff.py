@@ -42,11 +42,11 @@ import sys
 from datetime import date
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "MILP"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "MILP"))
 from finn_cost_model import _THR_RTL_BRAM18_PER_PE_NUMSTEP as LIVE_RATE  # noqa: E402
 from finn_cost_model import _THR_RTL_BRAM_MIN_CHANNELS_NUMSTEP as LIVE_CUTOFF  # noqa: E402
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 CALIBRATION_CSV = REPO_ROOT / "MILP" / "calibration.csv"
 
 DATASETS = {

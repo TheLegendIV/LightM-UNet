@@ -15,9 +15,16 @@ that step either.
 Run inside the FINN container:
     docker exec -e HOME=/tmp/home_dir <container> python3 \\
         /home/thelegendiv/finn/notebooks/enet/finn_ooc_partition2_trained.py \\
-        <hawq_preamble_output_dir> <tag> [<bridged_folding_config.json>]
+        <hawq_preamble_output_dir> <tag> [<bridged_folding_config.json>] \\
+        [--target-fps F] [--mvau-wwidth-max N]
+
+--target-fps/--mvau-wwidth-max override cfg_stitched_ip_partitioned_8way's own
+defaults -- used for the FINN-only autofold CONTROL variant (target_fps=305.17,
+mvau_wwidth_max=80, matching MILP/artifacts/S12_dense_dsr_ablation_v1/
+run_ablation.sh) so it is a fair comparison against the MILP-folded builds.
 """
 
+import argparse
 import math
 import os
 import sys
@@ -28,12 +35,22 @@ import numpy as np
 
 sys.path.insert(0, "/home/thelegendiv/finn/notebooks/enet")
 
-if len(sys.argv) < 3:
-    print("Usage: finn_ooc_partition2_trained.py <hawq_preamble_output_dir> <tag> [<bridged_folding_config.json>]")
+_parser = argparse.ArgumentParser(add_help=False)
+_parser.add_argument("preamble_dir")
+_parser.add_argument("tag")
+_parser.add_argument("folding_config", nargs="?", default=None)
+_parser.add_argument("--target-fps", type=float, default=None)
+_parser.add_argument("--mvau-wwidth-max", type=int, default=None)
+_args, _unknown = _parser.parse_known_args(sys.argv[1:])
+if _args.preamble_dir is None or _args.tag is None:
+    print("Usage: finn_ooc_partition2_trained.py <hawq_preamble_output_dir> <tag> [<bridged_folding_config.json>] "
+          "[--target-fps F] [--mvau-wwidth-max N]")
     sys.exit(1)
-HAWQ_PREAMBLE_DIR = sys.argv[1]
-TAG = sys.argv[2]
-BRIDGED_FOLDING_CONFIG = sys.argv[3] if len(sys.argv) > 3 else None
+HAWQ_PREAMBLE_DIR = _args.preamble_dir
+TAG = _args.tag
+BRIDGED_FOLDING_CONFIG = _args.folding_config
+TARGET_FPS_OVERRIDE = _args.target_fps
+MVAU_WWIDTH_MAX_OVERRIDE = _args.mvau_wwidth_max
 
 from qonnx.core.datatype import DataType  # noqa: E402
 from qonnx.core.modelwrapper import ModelWrapper  # noqa: E402
@@ -210,15 +227,19 @@ if __name__ == "__main__":
     # after the expensive FIFO-autosizing rtlsim step. impl_style="vivado"
     # FIFOs cap at depth 32768 -- without splitting, CreateStitchedIP crashes
     # on any FIFO sized above that.
-    cfg = dataclasses.replace(base.cfg_stitched_ip_partitioned_8way, output_dir=OUTPUT_DIR)
-    if os.environ.get("ARMS_TARGET_FPS"):  # optional override (arms B/C experiment); default = cfg's own 250
-        cfg = dataclasses.replace(cfg, target_fps=float(os.environ["ARMS_TARGET_FPS"]))
-        print(f"target_fps overridden to {cfg.target_fps} via ARMS_TARGET_FPS")
+    cfg_overrides = {"output_dir": OUTPUT_DIR}
+    if TARGET_FPS_OVERRIDE is not None:
+        cfg_overrides["target_fps"] = TARGET_FPS_OVERRIDE
+    if MVAU_WWIDTH_MAX_OVERRIDE is not None:
+        cfg_overrides["mvau_wwidth_max"] = MVAU_WWIDTH_MAX_OVERRIDE
+    cfg = dataclasses.replace(base.cfg_stitched_ip_partitioned_8way, **cfg_overrides)
 
     print(f"Tag               : {TAG}")
     print(f"Fold mode         : {fold_suffix}")
     print(f"Source checkpoint : {SOURCE_CKPT}")
     print(f"Folding config    : {BRIDGED_FOLDING_CONFIG}")
+    print(f"target_fps        : {cfg.target_fps}")
+    print(f"mvau_wwidth_max   : {cfg.mvau_wwidth_max}")
     print(f"Output dir        : {OUTPUT_DIR}")
 
     flat_model = ModelWrapper(SOURCE_CKPT)

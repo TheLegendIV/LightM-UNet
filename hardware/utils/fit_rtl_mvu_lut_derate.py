@@ -59,12 +59,12 @@ import sys
 from datetime import date
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "MILP"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "MILP"))
 from finn_cost_model import (  # noqa: E402
     LayerGeometry, conv_cost_pe_simd, _interpolate_derating, _RTL_MVU_LUT_DERATE_BITS, _RTL_MVU_LUT_DERATE_FACTORS,
 )
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 CALIBRATION_CSV = REPO_ROOT / "MILP" / "calibration.csv"
 
 DATASETS = {
