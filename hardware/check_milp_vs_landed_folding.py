@@ -83,16 +83,30 @@ def find_offset(layers: list, landed: list[dict]) -> int:
     def score(off):
         return sum((e["pe"], e["simd"], e["mvu_cycles"]) == (r["pe"], r["simd"], r["cycles"])
                    for (_, e), r in zip(layers[off:], landed))
-    return max(range(len(layers) - len(landed) + 1), key=score)
+    candidates = range(len(layers) - len(landed) + 1)
+    best = max(candidates, key=score)
+    tied = [off for off in candidates if score(off) == score(best)]
+    if len(tied) > 1:
+        print(f"WARNING: find_offset is ambiguous -- {len(tied)} offsets tie on (PE,SIMD,mvu_cycles) match count "
+              f"(starts: {[layers[o][0] for o in tied]}). Picking the first ({layers[tied[0]][0]!r}) -- pass "
+              "--start-layer explicitly if this is wrong (e.g. symmetric-compute architectures alias different "
+              "partitions onto identical PE/SIMD/cycles).")
+    return best
 
 
-def check(milp_json: str, onnx_path: str) -> list[str]:
+def check(milp_json: str, onnx_path: str, start_layer: str | None = None) -> list[str]:
     per_layer = json.load(open(milp_json))["per_layer"]
     landed = landed_mvaus(onnx.load(onnx_path))
     layers = milp_mvau_layers(per_layer)
     if len(landed) > len(layers):
         return [f"landed graph has {len(landed)} MVAUs but MILP only has {len(layers)} MVAU-type layers"]
-    off = find_offset(layers, landed)
+    if start_layer is not None:
+        names = [name for name, _ in layers]
+        if start_layer not in names:
+            return [f"--start-layer {start_layer!r} not found among MILP MVAU-type layers: {names}"]
+        off = names.index(start_layer)
+    else:
+        off = find_offset(layers, landed)
     print(f"{len(landed)} landed MVAUs matched against MILP layers starting at {layers[off][0]!r}")
     problems = []
     for (name, e), r in zip(layers[off:], landed):
@@ -122,8 +136,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("milp_json", help="MILP layer_bits_folding_<tag>.json")
     ap.add_argument("onnx_path", help="FINN partition .onnx (post specialize/folding)")
+    ap.add_argument("--start-layer", default=None,
+                     help="MILP per_layer key the landed graph's first MVAU corresponds to. Overrides the "
+                          "auto offset-finder -- needed when two partitions have identical (PE,SIMD,mvu_cycles) "
+                          "(e.g. symmetric-compute-per-stage architectures), which makes find_offset ambiguous.")
     args = ap.parse_args()
-    problems = check(args.milp_json, args.onnx_path)
+    problems = check(args.milp_json, args.onnx_path, args.start_layer)
     for p in problems:
         print("MISMATCH", p)
     print(f"{len(problems)} mismatch(es)" if problems else "OK: landed folding matches MILP")

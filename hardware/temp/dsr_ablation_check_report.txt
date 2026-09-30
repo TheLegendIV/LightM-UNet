@@ -1,0 +1,32 @@
+﻿=== dsr_off ===
+15 landed MVAUs matched against MILP layers starting at 'stage2.0.reduce.0'
+MISMATCH stage2.3.conv -> ConvolutionInputGenerator_rtl_3: SWU cycles MILP 77890 != landed 79938
+1 mismatch(es)
+=== dsrmin_1x ===
+15 landed MVAUs matched against MILP layers starting at 'stage2.0.reduce.0'
+MISMATCH stage2.0.conv -> ConvolutionInputGenerator_rtl_0: SWU cycles MILP 4098 != landed 4626
+MISMATCH stage2.1.conv -> ConvolutionInputGenerator_rtl_1: SWU cycles MILP 4098 != landed 5186
+MISMATCH stage2.2.conv -> ConvolutionInputGenerator_rtl_2: SWU cycles MILP 4098 != landed 6402
+MISMATCH stage2.3.conv -> ConvolutionInputGenerator_rtl_3: SWU cycles MILP 4098 != landed 9218
+MISMATCH stage2.4.conv -> ConvolutionInputGenerator_rtl_4: SWU cycles MILP 4098 != landed 4626
+5 mismatch(es)
+=== dsrmin_2x ===
+15 landed MVAUs matched against MILP layers starting at 'stage2.0.reduce.0'
+MISMATCH stage2.0.conv -> ConvolutionInputGenerator_rtl_0: SWU cycles MILP 4098 != landed 4626
+MISMATCH stage2.1.conv -> ConvolutionInputGenerator_rtl_1: SWU cycles MILP 4098 != landed 5186
+MISMATCH stage2.2.conv -> ConvolutionInputGenerator_rtl_2: SWU cycles MILP 4098 != landed 6402
+MISMATCH stage2.3.conv -> ConvolutionInputGenerator_rtl_3: SWU cycles MILP 4098 != landed 9218
+MISMATCH stage2.4.conv -> ConvolutionInputGenerator_rtl_4: SWU cycles MILP 4098 != landed 4626
+5 mismatch(es)
+=== dsrmin_4x ===
+15 landed MVAUs matched against MILP layers starting at 'stage2.0.reduce.0'
+MISMATCH stage2.0.conv -> ConvolutionInputGenerator_rtl_0: SWU cycles MILP 4098 != landed 4626
+MISMATCH stage2.1.conv -> ConvolutionInputGenerator_rtl_1: SWU cycles MILP 4098 != landed 5186
+MISMATCH stage2.2.conv -> ConvolutionInputGenerator_rtl_2: SWU cycles MILP 4098 != landed 6402
+MISMATCH stage2.3.conv -> ConvolutionInputGenerator_rtl_3: SWU cycles MILP 4098 != landed 9218
+MISMATCH stage2.4.conv -> ConvolutionInputGenerator_rtl_4: SWU cycles MILP 4098 != landed 4626
+5 mismatch(es)
+=== dsrmin_8x ===
+15 landed MVAUs matched against MILP layers starting at 'stage2.0.reduce.0'
+MISMATCH stage2.3.conv -> ConvolutionInputGenerator_rtl_3: SWU cycles MILP 155780 != landed 159876
+1 mismatch(es)
