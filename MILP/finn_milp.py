@@ -799,6 +799,10 @@ def solve_joint_perlayer(
             "hard_dsp_fraction": hard_dsp_fraction, "hard_uram_fraction": hard_uram_fraction,
             "max_cycles": max_cycles, "max_node_cycles": max_node_cycles,
             "bottleneck_node": bottleneck_node, "bottleneck_cycles": node_cycles[bottleneck_node],
+            # the accuracy objective of the chosen bits: raw = sum over layers of (w-sens + a-sens),
+            # norm_mean = mean of the normalized values the ILP actually minimizes.
+            "sensitivity_raw_sum": sum(raw_sensitivity[(n, layer_weight_bits[n], layer_act_bits[n])] for n in layer_names),
+            "sensitivity_norm_mean": sum(sens_norm[(n, layer_weight_bits[n], layer_act_bits[n])] for n in layer_names) / n_layers,
             "dsr_ratio": dsr_ratio, "pbi_ratio": pbi_ratio, "n_join_constraints": n_join_constraints,
             "n_chain_rate_constraints": n_chain_rate_constraints,
             "solver_time_limit_s": time_limit, "solver_gap_rel": gap_rel, "force_serial": FORCE_SERIAL,
@@ -829,6 +833,8 @@ _SUMMARY_FIELDS = [
     "dsr_ratio_setting", "pbi_ratio_setting",
     "dsr_n_nodes", "dsr_median", "dsr_mean", "dsr_max", "dsr_worst_node",
     "dsr_foldable_n_nodes", "dsr_foldable_median", "dsr_foldable_max", "dsr_foldable_worst_node",
+    "sensitivity_raw_sum", "sensitivity_norm_mean", "lexicographic",
+    "stage1_lut_pct", "stage1_bram_pct", "stage1_dsp_pct", "stage1_sensitivity_raw_sum",
 ]
 
 
@@ -868,6 +874,12 @@ def _write_run_summary(
         "dsr_foldable_n_nodes": dsr.get("foldable_n_nodes"), "dsr_foldable_median": dsr.get("foldable_median_ratio"),
         "dsr_foldable_max": dsr.get("foldable_max_ratio"),
         "dsr_foldable_worst_node": dsr.get("foldable_worst_node"),
+        "sensitivity_raw_sum": diag.get("sensitivity_raw_sum"), "sensitivity_norm_mean": diag.get("sensitivity_norm_mean"),
+        "lexicographic": bool(diag.get("lexicographic")),
+        "stage1_lut_pct": diag.get("lexicographic", {}).get("stage1_lut_pct"),
+        "stage1_bram_pct": diag.get("lexicographic", {}).get("stage1_bram_pct"),
+        "stage1_dsp_pct": diag.get("lexicographic", {}).get("stage1_dsp_pct"),
+        "stage1_sensitivity_raw_sum": diag.get("lexicographic", {}).get("stage1_sensitivity_raw_sum"),
     }
 
     summary_path = out_dir / "summary.csv"
@@ -886,6 +898,7 @@ def _write_run_summary(
         "max-latency-ms": args.max_latency_ms, "clock-mhz": args.clock_mhz, "target-fps": args.target_fps,
         "dsr-ratio": args.dsr_ratio, "pbi-ratio": args.pbi_ratio,
         "mvau-wwidth-max": args.mvau_wwidth_max, "min-resources": args.min_resources,
+        "lexicographic": args.lexicographic,
         "force-serial": FORCE_SERIAL, "require-simd-ge-pe": args.require_simd_ge_pe,
         "allow-lut-mult": ALLOW_LUT_MULT,
         "time-limit": args.time_limit, "gap-rel": args.gap_rel,
@@ -984,6 +997,11 @@ def main() -> None:
                          help="Hard cap on weight_bits * SIMD of every dense layer's fold (FINN SetFolding's "
                               "mvau_wwidth_max quantity). Pass the SAME value to FINN's build config so the MILP "
                               "and FINN auto-fold are compared under one width limit. Off by default.")
+    parser.add_argument("--lexicographic", action="store_true",
+                         help="Two passes with the SAME constraints. Pass 1: accuracy objective (sets the bits and a "
+                              "resource roof = its own LUT/BRAM/DSP use). Pass 2: bits pinned to pass 1 (epsilon 0), "
+                              "LUT/BRAM/DSP capped at pass 1's use, objective = --min-resources. Pass 2 only chooses "
+                              "folding. Writes pass 1 next to the output as stage1_<out-file name>.")
     parser.add_argument("--min-resources", action="store_true",
                          help="Objective = equal-weight mean of LUT/BRAM_18K/DSP fractions of the board instead of "
                               "accuracy. For FIXED bits (one --candidate-bits value or --pin-bits-file): picks the "
@@ -1107,6 +1125,37 @@ def main() -> None:
         min_resources=args.min_resources, mvau_wwidth_max=args.mvau_wwidth_max,
         extra_nodes=extra_nodes, dataflow_map=dataflow_map,
     )
+    if args.lexicographic:
+        if args.min_resources or args.pin_bits_file is not None:
+            raise SystemExit("--lexicographic already does its own pinning and min-resources; drop --min-resources/--pin-bits-file.")
+        if result["status"] == "Optimal":
+            d1 = result["_diagnostics"]
+            stage1 = {k: result[k] for k in ("status", "layer_weight_bits", "layer_act_bits", "per_layer", "extra_nodes", "_diagnostics")}
+            stage1_path = args.out_file.parent / f"stage1_{args.out_file.name}"
+            args.out_file.parent.mkdir(parents=True, exist_ok=True)
+            stage1_path.write_text(json.dumps(stage1, indent=2))
+            print(f"--lexicographic: pass 1 (accuracy) Optimal -> {stage1_path}; pass 2 pins its bits and minimizes resources "
+                  f"under roof LUT {d1['lut_pct_of_budget']:.2f}% BRAM {d1['bram_pct_of_budget']:.2f}% DSP {d1['dsp_pct_of_budget']:.2f}%.")
+            roof = 1.0 + 1e-6  # float slack: pass 1's own fold must stay feasible
+            pinned2 = {n: (result["layer_weight_bits"][n], result["layer_act_bits"][n]) for n in layer_names}
+            result = solve_joint_perlayer(
+                sensitivity, geometries, d1["lut_pct_of_budget"] / 100 * roof, d1["bram_pct_of_budget"] / 100 * roof,
+                args.time_limit, args.gap_rel, max_cycles=max_cycles, pinned_bits=pinned2,
+                predecessor_map=predecessor_map, force_dsp=args.force_dsp, require_simd_ge_pe=args.require_simd_ge_pe,
+                hard_dsp_fraction=d1["dsp_pct_of_budget"] / 100 * roof, hard_uram_fraction=args.hard_uram_fraction,
+                dsr_ratio=args.dsr_ratio, pbi_ratio=args.pbi_ratio, max_node_cycles=max_node_cycles,
+                min_resources=True, mvau_wwidth_max=args.mvau_wwidth_max,
+                extra_nodes=extra_nodes, dataflow_map=dataflow_map,
+            )
+            if result["status"] == "Optimal":
+                result["_diagnostics"]["lexicographic"] = {
+                    "stage1_lut_pct": d1["lut_pct_of_budget"], "stage1_bram_pct": d1["bram_pct_of_budget"],
+                    "stage1_dsp_pct": d1["dsp_pct_of_budget"], "stage1_sensitivity_raw_sum": d1["sensitivity_raw_sum"],
+                    "stage1_bottleneck_node": d1["bottleneck_node"], "stage1_file": stage1_path.name,
+                }
+            else:
+                print("WARNING: --lexicographic pass 2 is not Optimal although pass 1's own fold satisfies it -- "
+                      "solver gap/time limit; result is the pass-2 status.")
     hardware_nodes = [*geometries, *(node.geom for node in extra_nodes)]
     result["dataflow_graph"] = {
         "input": [IN_CHANNELS, *INPUT_HW],

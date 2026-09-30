@@ -1,0 +1,30 @@
+Overriding CANDIDATE_BITS to (4, 6, 8) (from --candidate-bits).
+Predecessor map: 86/88 layers have a real, traced predecessor (the rest are the network's own first layer(s), with no real predecessor to fall back to anything but self-sensitivity).
+Extra dataflow nodes: 143 {'input_quant': 1, 'concat': 1, 'act': 1, 'upsample': 2, 'out_act': 27, 'residual_add': 27, 'skip_quant': 27, 'add': 27, 'dup': 28, 'pad_mvau': 2}.
+Note: ['down1.pool', 'down2.pool', 'initial.pool'] have no sensitivity entry (MaxPool2d, no weight, never HAWQ-measured) -- given a fixed raw sensitivity of 0.0 for every (w,a), see module docstring.
+Traced 88 layers (per-layer granularity, no block grouping). candidate_bits=(4, 6, 8) -> 9 (w,a) pairs. y: 792 binaries, z: 39843 binaries (40635 total). Solving (time_limit=900s, gap_rel=0.005)...
+--target-fps 305.17 @ 100.0MHz -> every node <= 327686 cycles (hard constraint).
+--lexicographic: pass 1 (accuracy) Optimal -> MILP/artifacts/S12_dense_arms_bc_v1/lex_dsr2_fps305/stage1_layer_bits_folding_lex_dsr2_fps305.json; pass 2 pins its bits and minimizes resources under roof LUT 69.64% BRAM 53.68% DSP 63.37%.
+Wrote MILP/artifacts/S12_dense_arms_bc_v1/lex_dsr2_fps305/layer_bits_folding_lex_dsr2_fps305.json
+ILP status: Optimal
+LUT used (calibrated): 159842 (69.4% of 230400 budget) -- GUARANTEED (hard constraint).
+BRAM_18K used (calibrated): 264 (42.3% of 624 budget) -- GUARANTEED (hard constraint).
+DSP used: 707 (40.9% of 1728 budget) -- GUARANTEED (hard constraint).
+Bottleneck: initial.pool at 327680 cycles/frame -> 305.2 FPS @ 100.0MHz
+Total cycles (sum over nodes): 38985739
+Branch imbalance (diagnostic, 28 fork/join diamonds): median=3.00x max=3.00x
+Chain-rate imbalance (diagnostic, 230 nodes with a descendant): median=2.00x max=32.00x
+  input_quant   x  1: LUT       96  BRAM_18K    0.0  DSP    0  cycles     262144
+  concat        x  1: LUT        0  BRAM_18K    0.0  DSP    0  cycles      65536
+  act           x  1: LUT     1171  BRAM_18K    0.0  DSP    0  cycles     262144
+  upsample      x  2: LUT        0  BRAM_18K    0.0  DSP    0  cycles      81920
+  out_act       x 27: LUT    18561  BRAM_18K   22.4  DSP    0  cycles    4849664
+  residual_add  x 27: LUT    26242  BRAM_18K   18.7  DSP    0  cycles    4849664
+  skip_quant    x 27: LUT    29467  BRAM_18K    7.5  DSP    0  cycles    4849664
+  add           x 27: LUT     3537  BRAM_18K    0.0  DSP    0  cycles    4849664
+  dup           x 28: LUT     3220  BRAM_18K    0.0  DSP    0  cycles    5111808
+  pad_mvau      x  2: LUT      479  BRAM_18K    0.0  DSP    6  cycles     524288
+Wrote MILP/artifacts/S12_dense_arms_bc_v1/lex_dsr2_fps305/pruning_layer_bits_folding_lex_dsr2_fps305.json
+Wrote MILP/artifacts/S12_dense_arms_bc_v1/lex_dsr2_fps305/final_output.onnx
+Wrote MILP/artifacts/S12_dense_arms_bc_v1/lex_dsr2_fps305/summary.csv.
+Wrote MILP/artifacts/S12_dense_arms_bc_v1/lex_dsr2_fps305/run_args.json.
