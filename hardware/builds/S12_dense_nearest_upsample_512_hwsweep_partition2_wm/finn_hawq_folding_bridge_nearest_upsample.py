@@ -30,6 +30,7 @@ completed for the same tag:
         <hawq_preamble_output_dir> <layer_bits_folding_<tag>.json>
 """
 import json
+import math
 import os
 import sys
 
@@ -327,9 +328,22 @@ def main():
             fmpad_node, swu_node = find_dense_swu_fmpad(kernel_model, node)
             if swu_node is not None:
                 simd_swu = compute_entry["simd_swu"]
-                folding_config[swu_node.name] = {"SIMD": simd_swu}
+                swu_cfg = {"SIMD": simd_swu}
+                if swu_node.op_type == "ConvolutionInputGenerator_rtl":
+                    # finn_cost_model.conv_cost_pe_simd: parallel_window iff MVAU SIMD > cin (then
+                    # simd_swu = cin, swu_cycles = hin*win*cin/simd_swu + 2); else simd_swu = gcd(SIMD, cin).
+                    # FINN leaves parallel_window=0 unless told, which prices the SWU ~K*K times slower.
+                    ifm_ch = getCustomOp(swu_node).get_nodeattr("IFMChannels")
+                    parallel_window = 1 if simd > ifm_ch else 0
+                    swu_cfg["parallel_window"] = parallel_window
+                    expected = ifm_ch if parallel_window else math.gcd(simd, ifm_ch)
+                    if expected != simd_swu:
+                        print(f"WARNING {swu_node.name}: MILP simd_swu={simd_swu} but cost-model rule gives {expected} "
+                              f"(MVAU SIMD={simd}, IFMChannels={ifm_ch})")
+                folding_config[swu_node.name] = swu_cfg
                 n_dense_swu += 1
-                print(f"{swu_node.name:30s} {swu_node.op_type:12s} {'(SWU, simd_swu)':25s} {'':25s} {'':>4s} {simd_swu:5d}")
+                extra = "".join(f" {k}={v}" for k, v in swu_cfg.items() if k != "SIMD")
+                print(f"{swu_node.name:30s} {swu_node.op_type:12s} {'(SWU, simd_swu)':25s} {'':25s} {'':>4s} {simd_swu:5d}{extra}")
                 if fmpad_node is not None:
                     folding_config[fmpad_node.name] = {"SIMD": simd_swu}
                     print(f"{fmpad_node.name:30s} {fmpad_node.op_type:12s} {'(FMPadding, simd_swu)':25s} {'':25s} {'':>4s} {simd_swu:5d}")

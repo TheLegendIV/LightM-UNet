@@ -4,7 +4,7 @@ Compares MILP/finn_milp.py's layer_bits_folding_<tag>.json ("per_layer") against
 a FINN partition checkpoint (e.g. post_fifo_autosize_checkpoints/
 partition*_<tag>_milpfold_prefifo_autosize.onnx). Per MVAU node (in graph order):
   - PE, SIMD, cycles_estimate  vs MILP pe, simd, mvu_cycles
-  - preceding SWU (if any) SIMD vs MILP simd_swu
+  - preceding SWU (if any) SIMD vs MILP simd_swu, parallel_window, and cycles vs MILP swu_cycles
   - following standalone Thresholding PE vs MILP thr_pe (when the MILP sets it)
 Exits 1 on any mismatch. The MILP layer window is found automatically: the
 partition is a contiguous run of the MILP's MVAU-type layers, so the offset
@@ -68,6 +68,8 @@ def landed_mvaus(model) -> list[dict]:
             "node": n.name, "pe": a.get("PE"), "simd": a.get("SIMD"), "cycles": a.get("cycles_estimate"),
             "swu": swu.name if swu else None, "swu_simd": _attrs(swu).get("SIMD") if swu else None,
             "swu_cycles": _attrs(swu).get("cycles_estimate") if swu else None,
+            "swu_pw": _attrs(swu).get("parallel_window") if swu else None,
+            "swu_ifm_ch": _attrs(swu).get("IFMChannels") if swu else None,
             "thr": thr.name if thr else None, "thr_pe": _attrs(thr).get("PE") if thr else None,
         })
     return records
@@ -101,6 +103,16 @@ def check(milp_json: str, onnx_path: str) -> list[str]:
         if r["swu"] is not None and e.get("simd_swu") is not None and r["swu_simd"] != e["simd_swu"]:
             problems.append(f"{name} -> {r['swu']}: SWU SIMD MILP {e['simd_swu']} != landed {r['swu_simd']} "
                             f"(landed SWU cycles {r['swu_cycles']}, MILP swu_cycles {e.get('swu_cycles')})")
+        if r["swu"] is not None and e.get("swu_cycles"):
+            # MILP's SWU model is ported from FINN's get_exp_cycles: parallel_window iff MVAU SIMD > cin.
+            # (finn_cost_model.conv_cost_pe_simd: parallel_window = MVAU SIMD > cin)
+            want_pw = r["swu_ifm_ch"] is not None and e["simd"] > r["swu_ifm_ch"]
+            if r["swu_pw"] is not None and bool(r["swu_pw"]) != want_pw:
+                problems.append(f"{name} -> {r['swu']}: SWU parallel_window landed {r['swu_pw']} but MILP prices it "
+                                f"for {'parallel' if want_pw else 'non-parallel'} window (MVAU SIMD {e['simd']}, "
+                                f"IFMChannels {r['swu_ifm_ch']})")
+            if abs(r["swu_cycles"] - e["swu_cycles"]) > 0.01 * e["swu_cycles"] + 4:
+                problems.append(f"{name} -> {r['swu']}: SWU cycles MILP {e['swu_cycles']} != landed {r['swu_cycles']}")
         if r["thr"] is not None and e.get("thr_pe") is not None and r["thr_pe"] != e["thr_pe"]:
             problems.append(f"{name} -> {r['thr']}: Thresholding PE MILP {e['thr_pe']} != landed {r['thr_pe']}")
     return problems
