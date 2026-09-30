@@ -4,9 +4,9 @@ Extra dataflow nodes: 143 {'input_quant': 1, 'concat': 1, 'act': 1, 'upsample': 
 Note: ['down1.pool', 'down2.pool', 'initial.pool'] have no sensitivity entry (MaxPool2d, no weight, never HAWQ-measured) -- given a fixed raw sensitivity of 0.0 for every (w,a), see module docstring.
 Traced 88 layers (per-layer granularity, no block grouping). candidate_bits=(4,) -> 1 (w,a) pairs. y: 88 binaries, z: 4427 binaries (4515 total). Solving (time_limit=600s, gap_rel=0.001)...
 --target-fps 305.17 @ 100.0MHz -> every node <= 327686 cycles (hard constraint).
-Wrote MILP/artifacts/S12_dense_dsr_ablation_v1/fps305/dsrmin_1x/layer_bits_folding_dsrmin_1x.json
+Wrote MILP/artifacts/S12_dense_dsr_ablation_v1/dsrmin_1x/layer_bits_folding_dsrmin_1x.json
 ILP status: Optimal
-LUT used (calibrated): 149798 (65.0% of 230400 budget) -- GUARANTEED (hard constraint).
+LUT used (calibrated): 150163 (65.2% of 230400 budget) -- GUARANTEED (hard constraint).
 BRAM_18K used (calibrated): 10 (1.6% of 624 budget) -- GUARANTEED (hard constraint).
 DSP used: 1320 (76.4% of 1728 budget) -- GUARANTEED (hard constraint).
 Bottleneck: initial.pool at 327680 cycles/frame -> 305.2 FPS @ 100.0MHz
@@ -23,7 +23,7 @@ Chain-rate imbalance (diagnostic, 230 nodes with a descendant): median=1.02x max
   add           x 27: LUT     3537  BRAM_18K    0.0  DSP    0  cycles    4849664
   dup           x 28: LUT     3220  BRAM_18K    0.0  DSP    0  cycles    5111808
   pad_mvau      x  2: LUT      574  BRAM_18K    0.0  DSP   10  cycles     393216
-Wrote MILP/artifacts/S12_dense_dsr_ablation_v1/fps305/dsrmin_1x/pruning_layer_bits_folding_dsrmin_1x.json
-Wrote MILP/artifacts/S12_dense_dsr_ablation_v1/fps305/dsrmin_1x/final_output.onnx
-Wrote MILP/artifacts/S12_dense_dsr_ablation_v1/fps305/dsrmin_1x/summary.csv.
-Wrote MILP/artifacts/S12_dense_dsr_ablation_v1/fps305/dsrmin_1x/run_args.json.
+Wrote MILP/artifacts/S12_dense_dsr_ablation_v1/dsrmin_1x/pruning_layer_bits_folding_dsrmin_1x.json
+Wrote MILP/artifacts/S12_dense_dsr_ablation_v1/dsrmin_1x/final_output.onnx
+Wrote MILP/artifacts/S12_dense_dsr_ablation_v1/dsrmin_1x/summary.csv.
+Wrote MILP/artifacts/S12_dense_dsr_ablation_v1/dsrmin_1x/run_args.json.

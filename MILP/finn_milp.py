@@ -358,6 +358,7 @@ def solve_joint_perlayer(
     extra_nodes: list[ExtraNode] = (),
     dataflow_map: dict[str, list[str]] | None = None,
     min_resources: bool = False,
+    mvau_wwidth_max: int | None = None,
 ) -> dict:
     """Build and solve the MILP. Formulation: finn_milp.md "Formulation"."""
     candidate_pairs = tuple((w, a) for w in CANDIDATE_BITS for a in CANDIDATE_BITS)
@@ -459,6 +460,19 @@ def solve_joint_perlayer(
             z[key] = pulp.LpVariable(f"z_{name}_{pe}_{simd}_{ram_style}_{variant}_{w}_{bits}", cat=pulp.LpBinary)
             layer_cycle_terms[name].append((z[key], raw_cycles[key]))
             extra_keys[name].append(key)
+
+    # --mvau-wwidth-max: same quantity FINN's SetFolding compares to its own mvau_wwidth_max -- per-PE
+    # weight-stream width = weight_bits * SIMD. Here it is a HARD cap on every dense layer's fold
+    # (FINN's own check is softer: it is skipped once a SIMD step already meets the cycle target).
+    n_wwidth_blocked = 0
+    if mvau_wwidth_max is not None:
+        pool_layers = {g.name for g in geometries if g.op_type == "MaxPool2d"}
+        for key in z:
+            if key[0] in layer_names and key[0] not in pool_layers and len(key) == 7 and key[6] is not None:
+                _, _, simd_k, _, _, w_k, _ = key
+                if w_k * simd_k > mvau_wwidth_max:
+                    z[key].upBound = 0
+                    n_wwidth_blocked += 1
 
     layer_cycles_expr: dict[str, pulp.LpAffineExpression] = {
         name: pulp.lpSum(zvar * cyc for zvar, cyc in terms) for name, terms in layer_cycle_terms.items()
@@ -662,7 +676,7 @@ def solve_joint_perlayer(
                 "candidate_bits": list(CANDIDATE_BITS), "n_layers": n_layers,
                 "n_extra_nodes": len(extra_nodes),
                 "n_binary_vars": n_binary_vars, "n_constraints": n_constraints,
-                "min_resources": min_resources,
+                "min_resources": min_resources, "mvau_wwidth_max": mvau_wwidth_max,
                 "hard_lut_fraction": hard_lut_fraction, "hard_bram_fraction": hard_bram_fraction,
                 "hard_dsp_fraction": hard_dsp_fraction, "hard_uram_fraction": hard_uram_fraction,
                 "max_cycles": max_cycles, "max_node_cycles": max_node_cycles,
@@ -767,7 +781,8 @@ def solve_joint_perlayer(
         "_diagnostics": {
             "candidate_bits": list(CANDIDATE_BITS), "n_layers": n_layers,
             "n_binary_vars": n_binary_vars, "n_constraints": n_constraints,
-            "min_resources": min_resources,
+            "min_resources": min_resources, "mvau_wwidth_max": mvau_wwidth_max,
+            "n_wwidth_blocked_folds": n_wwidth_blocked,
             # exempt from --dsr-ratio (one cycle value whatever the fold); used for the foldable-only DSR stats
             "fixed_cycle_nodes": sorted(fixed_cycle_names),
             "n_extra_nodes": len(extra_nodes), "extra_lut_calibrated": extra_lut,
@@ -870,6 +885,7 @@ def _write_run_summary(
         "hard-dsp-fraction": args.hard_dsp_fraction, "hard-uram-fraction": args.hard_uram_fraction, "force-dsp": args.force_dsp,
         "max-latency-ms": args.max_latency_ms, "clock-mhz": args.clock_mhz, "target-fps": args.target_fps,
         "dsr-ratio": args.dsr_ratio, "pbi-ratio": args.pbi_ratio,
+        "mvau-wwidth-max": args.mvau_wwidth_max, "min-resources": args.min_resources,
         "force-serial": FORCE_SERIAL, "require-simd-ge-pe": args.require_simd_ge_pe,
         "allow-lut-mult": ALLOW_LUT_MULT,
         "time-limit": args.time_limit, "gap-rel": args.gap_rel,
@@ -964,6 +980,10 @@ def main() -> None:
     parser.add_argument("--pbi-ratio", type=float, default=None,
                          help="DEPRECATED (kept so old runs reproduce): parallel-branch-imbalance join-balance "
                               "constraint. Never engaged by default; PBI is only reported in summary.csv.")
+    parser.add_argument("--mvau-wwidth-max", type=int, default=None,
+                         help="Hard cap on weight_bits * SIMD of every dense layer's fold (FINN SetFolding's "
+                              "mvau_wwidth_max quantity). Pass the SAME value to FINN's build config so the MILP "
+                              "and FINN auto-fold are compared under one width limit. Off by default.")
     parser.add_argument("--min-resources", action="store_true",
                          help="Objective = equal-weight mean of LUT/BRAM_18K/DSP fractions of the board instead of "
                               "accuracy. For FIXED bits (one --candidate-bits value or --pin-bits-file): picks the "
@@ -1084,7 +1104,7 @@ def main() -> None:
         predecessor_map=predecessor_map, force_dsp=args.force_dsp, require_simd_ge_pe=args.require_simd_ge_pe,
         hard_dsp_fraction=args.hard_dsp_fraction, hard_uram_fraction=args.hard_uram_fraction,
         dsr_ratio=args.dsr_ratio, pbi_ratio=args.pbi_ratio, max_node_cycles=max_node_cycles,
-        min_resources=args.min_resources,
+        min_resources=args.min_resources, mvau_wwidth_max=args.mvau_wwidth_max,
         extra_nodes=extra_nodes, dataflow_map=dataflow_map,
     )
     hardware_nodes = [*geometries, *(node.geom for node in extra_nodes)]
