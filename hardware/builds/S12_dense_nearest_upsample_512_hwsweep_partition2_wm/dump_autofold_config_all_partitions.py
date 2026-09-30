@@ -77,6 +77,10 @@ for idx, sdp_node in enumerate(sdp_nodes):
 
     kernel_model = step_target_fps_parallelization(kernel_model, cfg)
 
+    out_onnx = os.path.join(OUTPUT_DIR, f"partition{idx}_{TAG}_autofold_targetfps.onnx")
+    kernel_model.save(out_onnx)
+    print(f"Saved post-target_fps_parallelization checkpoint: {out_onnx}")
+
     config = {"Defaults": {}}
     for node in kernel_model.graph.node:
         if not is_fpgadataflow_node(node):
