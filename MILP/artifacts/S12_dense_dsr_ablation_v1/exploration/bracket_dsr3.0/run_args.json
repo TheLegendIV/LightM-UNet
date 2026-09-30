@@ -1,0 +1,29 @@
+{
+  "pipeline": [
+    "MILP/layer_sensitivity.py --candidate-bits ...",
+    "MILP/finn_milp.py --candidate-bits ... --hard-lut-fraction ... --hard-bram-fraction ... --hard-dsp-fraction ... --force-dsp",
+    "MILP/expand_layer_bits.py"
+  ],
+  "shared_args": {
+    "config": "config_12_dense_relu_nearest_upsample_wm",
+    "sensitivity-file": "MILP/artifacts/layer_sensitivity_12_dense_relu_nearest_upsample_wm.json",
+    "candidate-bits": "4",
+    "hard-lut-fraction": 1.0,
+    "hard-bram-fraction": 1.0,
+    "hard-dsp-fraction": 1.0,
+    "hard-uram-fraction": 1.0,
+    "force-dsp": true,
+    "max-latency-ms": null,
+    "clock-mhz": 100.0,
+    "target-fps": 250.0,
+    "dsr-ratio": 3.0,
+    "pbi-ratio": null,
+    "force-serial": false,
+    "require-simd-ge-pe": false,
+    "allow-lut-mult": false,
+    "time-limit": 600,
+    "gap-rel": 0.02
+  },
+  "granularity": "layer",
+  "notes": "Per-layer accuracy-only MILP (no alpha -- see finn_milp.md) for config_12_dense_relu_nearest_upsample_wm, hard LUT/BRAM/DSP caps 1.0/1.0/1.0 under force_dsp=True. See summary.csv for this run's result."
+}

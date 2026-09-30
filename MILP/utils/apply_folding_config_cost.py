@@ -206,6 +206,11 @@ def price_node(node: onnx.NodeProto, attrs: dict, folding_override: dict, force_
     if op.startswith("ConvolutionInputGenerator"):
         simd = fo.get("SIMD", attrs["SIMD"])
         return "swu", _price_swu(attrs, simd)
+    if op.startswith("FMPadding_Pixel"):
+        # Zero-insertion pad before a nearest-upsample conv: no LUT model (same gap as FMPadding),
+        # cycles taken from FINN's own estimate on the node.
+        return "fmpadding_pixel", {"lut": None, "bram18": 0, "uram18": 0, "dsp": 0,
+                                   "cycles": attrs.get("cycles_estimate")}
     if op.startswith("FMPadding"):
         simd = fo.get("SIMD", attrs["SIMD"])
         return "fmpadding", _price_fmpadding(attrs, simd)

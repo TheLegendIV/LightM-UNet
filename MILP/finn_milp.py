@@ -357,6 +357,7 @@ def solve_joint_perlayer(
     max_node_cycles: float | None = None,
     extra_nodes: list[ExtraNode] = (),
     dataflow_map: dict[str, list[str]] | None = None,
+    min_resources: bool = False,
 ) -> dict:
     """Build and solve the MILP. Formulation: finn_milp.md "Formulation"."""
     candidate_pairs = tuple((w, a) for w in CANDIDATE_BITS for a in CANDIDATE_BITS)
@@ -627,7 +628,18 @@ def solve_joint_perlayer(
     sensitivity_term = (1.0 / n_layers) * pulp.lpSum(
         y[(name, w, a)] * sens_norm[(name, w, a)] for name in layer_names for w, a in candidate_pairs
     )
-    prob += sensitivity_term
+    if min_resources:
+        # --min-resources: replace the accuracy objective by the equal-weight mean of the
+        # LUT / BRAM_18K / DSP fractions of the board (same raw_* the hard caps use). Meant for FIXED
+        # bits (single --candidate-bits value or --pin-bits-file): it picks the cheapest fold among
+        # the ties, so runs that differ only in a constraint (e.g. --dsr-ratio) stay comparable.
+        prob += (1.0 / 3.0) * (
+            pulp.lpSum(z[k] * raw_lut[k] for k in z) / XCZU7EV["LUT"]
+            + pulp.lpSum(z[k] * raw_bram[k] for k in z) / XCZU7EV["BRAM_18K"]
+            + pulp.lpSum(z[k] * raw_dsp[k] for k in z) / XCZU7EV["DSP"]
+        )
+    else:
+        prob += sensitivity_term
 
     # ---- Solve and extract ----
     status = prob.solve(pulp.PULP_CBC_CMD(msg=0, timeLimit=time_limit, gapRel=gap_rel))
@@ -650,6 +662,7 @@ def solve_joint_perlayer(
                 "candidate_bits": list(CANDIDATE_BITS), "n_layers": n_layers,
                 "n_extra_nodes": len(extra_nodes),
                 "n_binary_vars": n_binary_vars, "n_constraints": n_constraints,
+                "min_resources": min_resources,
                 "hard_lut_fraction": hard_lut_fraction, "hard_bram_fraction": hard_bram_fraction,
                 "hard_dsp_fraction": hard_dsp_fraction, "hard_uram_fraction": hard_uram_fraction,
                 "max_cycles": max_cycles, "max_node_cycles": max_node_cycles,
@@ -754,6 +767,9 @@ def solve_joint_perlayer(
         "_diagnostics": {
             "candidate_bits": list(CANDIDATE_BITS), "n_layers": n_layers,
             "n_binary_vars": n_binary_vars, "n_constraints": n_constraints,
+            "min_resources": min_resources,
+            # exempt from --dsr-ratio (one cycle value whatever the fold); used for the foldable-only DSR stats
+            "fixed_cycle_nodes": sorted(fixed_cycle_names),
             "n_extra_nodes": len(extra_nodes), "extra_lut_calibrated": extra_lut,
             "extra_bram18k_calibrated": extra_bram, "extra_cycles": extra_cycles, "extra_by_kind": extra_by_kind,
             "total_lut_calibrated": total_lut, "xczu7ev_lut_budget": XCZU7EV["LUT"],
@@ -797,6 +813,7 @@ _SUMMARY_FIELDS = [
     "branch_imbalance_n_diamonds", "branch_imbalance_median_ratio", "branch_imbalance_max_ratio",
     "dsr_ratio_setting", "pbi_ratio_setting",
     "dsr_n_nodes", "dsr_median", "dsr_mean", "dsr_max", "dsr_worst_node",
+    "dsr_foldable_n_nodes", "dsr_foldable_median", "dsr_foldable_max", "dsr_foldable_worst_node",
 ]
 
 
@@ -831,6 +848,11 @@ def _write_run_summary(
         "dsr_n_nodes": dsr.get("n_nodes"), "dsr_median": dsr.get("median_ratio"),
         "dsr_mean": dsr.get("mean_ratio"), "dsr_max": dsr.get("max_ratio"),
         "dsr_worst_node": (dsr.get("worst_nodes") or [{}])[0].get("node"),
+        # Same quantity --dsr-ratio bounds: fixed-cycle nodes (pools, upsample, concat) exempt as
+        # constrained nodes and as descendants' own rate. dsr_foldable_max <= --dsr-ratio when set.
+        "dsr_foldable_n_nodes": dsr.get("foldable_n_nodes"), "dsr_foldable_median": dsr.get("foldable_median_ratio"),
+        "dsr_foldable_max": dsr.get("foldable_max_ratio"),
+        "dsr_foldable_worst_node": dsr.get("foldable_worst_node"),
     }
 
     summary_path = out_dir / "summary.csv"
@@ -940,8 +962,12 @@ def main() -> None:
                          help="Downstream-rate ratio: chain-coherence constraint bounding a node's rate against "
                               "the slowest rate anywhere in its downstream subtree (off by default).")
     parser.add_argument("--pbi-ratio", type=float, default=None,
-                         help="Parallel-branch-imbalance ratio: join-balance constraint bounding sibling branches' "
-                              "cycle counts against each other at every fork/join (off by default).")
+                         help="DEPRECATED (kept so old runs reproduce): parallel-branch-imbalance join-balance "
+                              "constraint. Never engaged by default; PBI is only reported in summary.csv.")
+    parser.add_argument("--min-resources", action="store_true",
+                         help="Objective = equal-weight mean of LUT/BRAM_18K/DSP fractions of the board instead of "
+                              "accuracy. For FIXED bits (one --candidate-bits value or --pin-bits-file): picks the "
+                              "cheapest fold so runs differing only in a constraint (e.g. --dsr-ratio) are comparable.")
     parser.add_argument("--force-serial", action="store_true", help="Restrict every node to PE=SIMD=1.")
     parser.add_argument("--allow-lut-mult", action="store_true",
                          help="Also allow the hls_lut_noact0 variant (LUT multipliers, fused activation).")
@@ -954,6 +980,9 @@ def main() -> None:
     args = parser.parse_args()
 
     load_config(args.config)
+
+    if args.pbi_ratio is not None:
+        print("WARNING: --pbi-ratio is DEPRECATED (kept only so old runs reproduce); PBI is normally just reported.")
 
     if args.candidate_bits is not None:
         global CANDIDATE_BITS
@@ -1055,6 +1084,7 @@ def main() -> None:
         predecessor_map=predecessor_map, force_dsp=args.force_dsp, require_simd_ge_pe=args.require_simd_ge_pe,
         hard_dsp_fraction=args.hard_dsp_fraction, hard_uram_fraction=args.hard_uram_fraction,
         dsr_ratio=args.dsr_ratio, pbi_ratio=args.pbi_ratio, max_node_cycles=max_node_cycles,
+        min_resources=args.min_resources,
         extra_nodes=extra_nodes, dataflow_map=dataflow_map,
     )
     hardware_nodes = [*geometries, *(node.geom for node in extra_nodes)]
@@ -1067,7 +1097,8 @@ def main() -> None:
     }
     if result["status"] == "Optimal":
         result["_diagnostics"]["branch_imbalance"] = compute_branch_imbalance_report(result)
-        result["_diagnostics"]["chain_rate_imbalance"] = compute_chain_rate_imbalance_report(result)
+        result["_diagnostics"]["chain_rate_imbalance"] = compute_chain_rate_imbalance_report(
+            result, result["_diagnostics"].get("fixed_cycle_nodes"))
 
     args.out_file.parent.mkdir(parents=True, exist_ok=True)
     with open(args.out_file, "w") as f:

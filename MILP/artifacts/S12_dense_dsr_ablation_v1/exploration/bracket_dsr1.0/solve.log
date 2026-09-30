@@ -1,0 +1,9 @@
+Overriding CANDIDATE_BITS to (4,) (from --candidate-bits).
+Predecessor map: 86/88 layers have a real, traced predecessor (the rest are the network's own first layer(s), with no real predecessor to fall back to anything but self-sensitivity).
+Extra dataflow nodes: 143 {'input_quant': 1, 'concat': 1, 'act': 1, 'upsample': 2, 'out_act': 27, 'residual_add': 27, 'skip_quant': 27, 'add': 27, 'dup': 28, 'pad_mvau': 2}.
+Note: ['down1.pool', 'down2.pool', 'initial.pool'] have no sensitivity entry (MaxPool2d, no weight, never HAWQ-measured) -- given a fixed raw sensitivity of 0.0 for every (w,a), see module docstring.
+Traced 88 layers (per-layer granularity, no block grouping). candidate_bits=(4,) -> 1 (w,a) pairs. y: 88 binaries, z: 4427 binaries (4515 total). Solving (time_limit=600s, gap_rel=0.02)...
+--target-fps 250.0 @ 100.0MHz -> every node <= 400000 cycles (hard constraint).
+Wrote MILP/artifacts/S12_dense_dsr_ablation_v1/bracket_dsr1.0/layer_bits_folding_bracket_dsr1.0.json
+ILP status: Infeasible
+No joint per-layer (bits, folding) assignment satisfies the requested hard budget(s) -- see MILP/artifacts/S12_dense_dsr_ablation_v1/bracket_dsr1.0/layer_bits_folding_bracket_dsr1.0.json's own _diagnostics.note.

@@ -564,3 +564,4 @@ cost model's calibration, not a certified hardware guarantee.
   `--pbi-ratio`. Wired into `write_outputs` (regeneration path) and
   `finn_milp.py`'s own post-solve diagnostics block alongside
   `branch_imbalance`.
+- 2026-09-30: `--min-resources` added (objective = equal-weight mean of LUT/BRAM_18K/DSP board fractions; for FIXED bits, e.g. one `--candidate-bits` value, so runs differing only in a constraint like `--dsr-ratio` compare on the cheapest fold, not an arbitrary tie). `--pbi-ratio` DEPRECATED (kept for reproducing old runs; PBI is only reported). `summary.csv` gained `dsr_ratio_setting`, `pbi_ratio_setting`, `dsr_*` (all nodes) and `dsr_foldable_*` (fixed-cycle nodes exempt = exactly what `--dsr-ratio` bounds; `dsr_foldable_max <= --dsr-ratio`). Min feasible DSR is found by bracketing/bisecting `--dsr-ratio` (feasibility is monotone; a native min-DSR objective would be bilinear). See artifacts/S12_dense_dsr_ablation_v1.

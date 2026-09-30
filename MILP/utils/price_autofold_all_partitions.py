@@ -15,10 +15,19 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections import Counter
 from pathlib import Path
 
+import onnx
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from apply_folding_config_cost import XCZU7EV, estimate  # noqa: E402
+from apply_folding_config_cost import XCZU7EV, estimate, price_node, _node_attrs  # noqa: E402
+
+
+def unpriced_ops(graph: Path) -> Counter:
+    """Op types in the graph that price_node() skips (their LUT/BRAM/DSP is NOT in the totals)."""
+    return Counter(n.op_type for n in onnx.load(str(graph)).graph.node
+                   if not n.op_type.startswith('StreamingFIFO') and price_node(n, _node_attrs(n), {}, True)[0] is None)
 
 N_PARTITIONS = 8
 
@@ -33,7 +42,7 @@ def main() -> int:
     args = ap.parse_args()
 
     overrides = {int(k): Path(v) for k, v in (o.split("=", 1) for o in args.onnx_override)}
-    missing, per_part = [], []
+    missing, per_part, skipped = [], [], {}
     for n in range(N_PARTITIONS):
         cfg = args.dir / f"autofold_config_partition{n}.json"
         graph = overrides.get(n, args.dir / f"autofold_partition{n}.onnx")
@@ -41,6 +50,7 @@ def main() -> int:
             missing.append(n)
             continue
         per_part.append((n, estimate(graph, cfg, True, args.clock_mhz)))
+        skipped[n] = unpriced_ops(graph)
     if missing and not args.partial:
         print(f"ERROR: partition(s) {missing} missing config or .onnx in {args.dir} (use --partial to skip).")
         return 1
@@ -51,6 +61,9 @@ def main() -> int:
     for n, r in per_part:
         print(f"{n:>4d} {r['total_lut']:>9.0f} {r['total_bram18']:>8.1f} {r['total_dsp']:>6.0f} "
               f"{r['bottleneck_name']:<28s} {r['bottleneck_cycles']:>10.0f} {r['fps']:>8.1f}")
+    print("\nNot priced by the cost model (excluded from totals):")
+    for n, c in skipped.items():
+        print(f"  partition {n}: {dict(c)}")
     label = f"PARTIAL (missing partitions {missing})" if missing else "WHOLE NETWORK"
     print(f"\n{label}: LUT {tot['total_lut']:.0f}  BRAM18 {tot['total_bram18']:.1f}  DSP {tot['total_dsp']:.0f}  "
           f"URAM {tot['total_uram18']:.1f}")

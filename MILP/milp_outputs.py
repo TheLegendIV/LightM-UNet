@@ -182,7 +182,7 @@ def compute_branch_imbalance_report(result: dict) -> dict:
     }
 
 
-def compute_chain_rate_imbalance_report(result: dict) -> dict:
+def compute_chain_rate_imbalance_report(result: dict, fixed_cycle_nodes=None) -> dict:
     """Achieved chain-coherence ratio, computed from the SOLVED result: for
     every node L with at least one real descendant, `max(rate[D] for D
     reachable from L) / rate[L]`, with `rate[n] = cycles[n] / (C*H*W of n's
@@ -241,7 +241,40 @@ def compute_chain_rate_imbalance_report(result: dict) -> dict:
         })
     entries.sort(key=lambda e: -e["ratio"])
     ratios = [e["ratio"] for e in entries]
+
+    # Foldable-only variant = exactly what finn_milp.py's --dsr-ratio bounds: fixed-cycle nodes are
+    # not constrained themselves and contribute no rate as descendants, but still relay their own
+    # descendants. Needs the solver's own fixed-cycle set (result["_diagnostics"]["fixed_cycle_nodes"]).
+    foldable = {}
+    if fixed_cycle_nodes is not None:
+        fixed = set(fixed_cycle_nodes)
+        memo_f: dict[str, float] = {}
+
+        def worst_foldable(node: str) -> float:
+            if node in memo_f:
+                return memo_f[node]
+            memo_f[node] = 0.0
+            best = 0.0
+            for child in successors.get(node, []):
+                best = max(best, 0.0 if child in fixed else rate[child], worst_foldable(child))
+            memo_f[node] = best
+            return best
+
+        fold_entries = []
+        for name in rate:
+            if name in fixed or not successors.get(name) or rate[name] <= 0:
+                continue
+            fold_entries.append({"node": name, "ratio": worst_foldable(name) / rate[name]})
+        fold_entries.sort(key=lambda e: -e["ratio"])
+        fr = [e["ratio"] for e in fold_entries]
+        foldable = {
+            "foldable_n_nodes": len(fr),
+            "foldable_median_ratio": statistics.median(fr) if fr else None,
+            "foldable_max_ratio": max(fr) if fr else None,
+            "foldable_worst_node": fold_entries[0]["node"] if fold_entries else None,
+        }
     return {
+        **foldable,
         "note": "max(rate[D] over every descendant D of L) / rate[L], per node L with a real "
                 "descendant. Diagnostic only -- see this function's own docstring for scope/limits.",
         "n_nodes": len(entries),

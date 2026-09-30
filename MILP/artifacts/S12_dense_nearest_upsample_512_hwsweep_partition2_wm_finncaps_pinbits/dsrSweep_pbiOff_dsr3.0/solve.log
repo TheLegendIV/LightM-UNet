@@ -1,0 +1,10 @@
+Overriding CANDIDATE_BITS to (4, 6, 8) (from --candidate-bits).
+Predecessor map: 86/88 layers have a real, traced predecessor (the rest are the network's own first layer(s), with no real predecessor to fall back to anything but self-sensitivity).
+Extra dataflow nodes: 143 {'input_quant': 1, 'concat': 1, 'act': 1, 'upsample': 2, 'out_act': 27, 'residual_add': 27, 'skip_quant': 27, 'add': 27, 'dup': 28, 'pad_mvau': 2}.
+Note: ['down1.pool', 'down2.pool', 'initial.pool'] have no sensitivity entry (MaxPool2d, no weight, never HAWQ-measured) -- given a fixed raw sensitivity of 0.0 for every (w,a), see module docstring.
+Traced 88 layers (per-layer granularity, no block grouping). candidate_bits=(4, 6, 8) -> 9 (w,a) pairs. y: 792 binaries, z: 39843 binaries (40635 total). Solving (time_limit=600s, gap_rel=0.02)...
+--pin-bits-file: y pinned to MILP/artifacts/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/baseline_both_off/layer_bits_folding_baseline_both_off.json for all 88 layers.
+--target-fps 190.7 @ 100.0MHz -> every node <= 524384 cycles (hard constraint).
+Wrote MILP/artifacts/S12_dense_nearest_upsample_512_hwsweep_partition2_wm_finncaps_pinbits/dsrSweep_pbiOff_dsr3.0/layer_bits_folding_dsrSweep_pbiOff_dsr3.0.json
+ILP status: Infeasible
+No joint per-layer (bits, folding) assignment satisfies the requested hard budget(s) -- see MILP/artifacts/S12_dense_nearest_upsample_512_hwsweep_partition2_wm_finncaps_pinbits/dsrSweep_pbiOff_dsr3.0/layer_bits_folding_dsrSweep_pbiOff_dsr3.0.json's own _diagnostics.note.
