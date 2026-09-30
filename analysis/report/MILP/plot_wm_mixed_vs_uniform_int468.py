@@ -40,7 +40,7 @@ import csv
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "compression" / "analysis" / "qat_results"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "compression" / "analysis" / "qat_results"))
 from plot_forcedsp_lut70_alpha_sweep import (  # noqa: E402
     INK, SECONDARY_INK, SURFACE, ALPHA_COLORS, REPO_ROOT, _style_axes,
 )
@@ -171,8 +171,7 @@ def main() -> int:
             print(f"  {key!s:>6}: dice={dice[key]:.4f}  LUT%={RESOURCE_PCT['lut'][key]:.2f}  "
                   f"BRAM%={RESOURCE_PCT['bram'][key]:.2f}  DSP%={RESOURCE_PCT['dsp'][key]:.2f}")
 
-    title = ("alpha=1.0 ILP Allocation vs. Naive Uniform Quantization (INT4/INT6/INT8) "
-              "on the Warm-Started Checkpoint")
+    title = "ILP-Chosen Mixed Quantization vs. Naive Uniform Quantization at Various Bit Widths"
     plot_one("lut", "LUT Consumption (%)", title, dice, fp32_dice, OUT_LUT)
     plot_one("bram", "BRAM18K Consumption (%)", title, dice, fp32_dice, OUT_BRAM)
     plot_one("dsp", "DSP Consumption (%)", title, dice, fp32_dice, OUT_DSP)

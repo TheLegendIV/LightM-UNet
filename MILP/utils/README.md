@@ -8,6 +8,7 @@ Maintained and runnable; each imports the core modules from `MILP/`.
 | `scan_fork_join_mismatch.py` | Ranks cycle imbalance at every fork/join of a solved plan, with a predicted FIFO depth. |
 | `compute_receptive_field.py` | Receptive field of a config's architecture. |
 | `uniform_bits_same_folding.py` | Naive baseline (PIPELINE stage 6b): keeps a solve's folding, forces uniform bits, recomputes cost. |
+| `apply_folding_config_cost.py` | Prices a real onnx checkpoint's own nodes (optionally overridden by a FINN-style `folding_config.json`, e.g. an auto-fold output finn_milp.py never produced) with finn_cost_model.py, for LUT/BRAM/DSP/cycles/FPS comparable against FINN's own measured `cycles_estimate`. No architecture config or MILP solve needed -- reads geometry/datatypes straight off the graph. |
 
 For how a solve's folding/cycles look per node, prefer the `final_output.onnx`
 that `finn_milp.py` now writes next to every result (see `../finn_milp.md`).

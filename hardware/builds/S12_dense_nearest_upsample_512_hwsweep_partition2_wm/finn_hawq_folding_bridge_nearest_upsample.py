@@ -199,6 +199,25 @@ def find_preceding_swu_fmpad(all_nodes, name_to_idx, vvau_node):
     return fmpad_node, swu_node
 
 
+def find_dense_swu_fmpad(kernel_model, mvau_node):
+    """Walk producers upstream of a dense MVAU, skipping width converters, to
+    find its (FMPadding or None, SWU) pair. Returns (None, None) when the MVAU
+    has no SWU (1x1 conv). Dense convs need this because FINN leaves SWU SIMD
+    at 1 unless it is set explicitly (finn_milp models it as simd_swu)."""
+    def producer(node):
+        p = kernel_model.find_producer(node.input[0])
+        while p is not None and p.op_type.startswith("StreamingDataWidthConverter"):
+            p = kernel_model.find_producer(p.input[0])
+        return p
+    swu = producer(mvau_node)
+    if swu is None or swu.op_type not in SWU_OP_TYPES:
+        return None, None
+    fmpad = producer(swu)
+    if fmpad is not None and fmpad.op_type not in FMPAD_OP_TYPES:
+        fmpad = None
+    return fmpad, swu
+
+
 def find_following_thresholding(kernel_model, weight_node):
     """standalone Thresholding_hls/_rtl node directly consuming this MVAU/
     VVAU's output (noActivation=1 forced pre-partitioning, so activation is
@@ -279,6 +298,7 @@ def main():
     print(f"{'FINN node':30s} {'op_type':12s} {'logical name':25s} {'json key':25s} {'PE':>4s} {'SIMD':>5s}")
     unmatched = []
     n_swu_fmpad = 0
+    n_dense_swu = 0
     n_thresh = 0
     for node, logical_name in zip(weight_nodes, logical_names):
         entry, json_key = resolve_folding_entry(logical_name, per_layer)
@@ -299,6 +319,20 @@ def main():
             n_swu_fmpad += 1
             print(f"{swu_node.name:30s} {swu_node.op_type:12s} {'(SWU, coupled)':25s} {'':25s} {'':>4s} {pe:5d}")
             print(f"{fmpad_node.name:30s} {fmpad_node.op_type:12s} {'(FMPadding, coupled)':25s} {'':25s} {'':>4s} {pe:5d}")
+
+        elif compute_entry.get("simd_swu") is not None and node.op_type.startswith("MVAU"):
+            # Dense conv: MILP solves the SWU SIMD (simd_swu) separately from the MVAU SIMD.
+            # Without this, FINN leaves SWU SIMD=1 and the SWU cycle count (~300k for stage2
+            # convs) becomes the partition bottleneck, regardless of the MILP folding.
+            fmpad_node, swu_node = find_dense_swu_fmpad(kernel_model, node)
+            if swu_node is not None:
+                simd_swu = compute_entry["simd_swu"]
+                folding_config[swu_node.name] = {"SIMD": simd_swu}
+                n_dense_swu += 1
+                print(f"{swu_node.name:30s} {swu_node.op_type:12s} {'(SWU, simd_swu)':25s} {'':25s} {'':>4s} {simd_swu:5d}")
+                if fmpad_node is not None:
+                    folding_config[fmpad_node.name] = {"SIMD": simd_swu}
+                    print(f"{fmpad_node.name:30s} {fmpad_node.op_type:12s} {'(FMPadding, simd_swu)':25s} {'':25s} {'':>4s} {simd_swu:5d}")
 
         # standalone Thresholding (noActivation=1 forced pre-partitioning)
         # gets its PE straight from this same entry's own "thr_pe" -- solved
@@ -322,6 +356,8 @@ def main():
         print(f"\nWARNING: {len(unmatched)} logical names had no folding json entry: {unmatched}")
     if n_swu_fmpad:
         print(f"Bridged {n_swu_fmpad} FMPadding+SWU pair(s) for depthwise VVAU slots")
+    if n_dense_swu:
+        print(f"Bridged {n_dense_swu} SWU node(s) for dense MVAU convs via simd_swu")
     if n_thresh:
         print(f"Bridged {n_thresh} standalone Thresholding node(s) via thr_pe")
 

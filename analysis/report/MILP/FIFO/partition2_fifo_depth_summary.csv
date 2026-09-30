@@ -1,0 +1,7 @@
+tag,dsr_ratio,pbi_ratio,n_fifos,total,mean,median,min,max,range,total_bits,bram18k_est,bram18k_theoretical_min,bottleneck_cycles,bottleneck_op,bottleneck_name,fps
+both_off,,,96,938961,9780.84375,2.0,2,294912,294910,7802614,583,424,2359296,MVAU_rtl,MVAU_rtl_10,42.385525173611114
+dsr1.5,1.5,,105,309532,2947.9238095238097,2,2,131072,131070,2779332,350,151,319752,ConvolutionInputGenerator_rtl,ConvolutionInputGenerator_rtl_3,312.74237534088917
+dsr3.0,3.0,,109,309608,2840.440366972477,2,2,131072,131070,2780400,350,151,319752,ConvolutionInputGenerator_rtl,ConvolutionInputGenerator_rtl_3,312.74237534088917
+dsr5.0,5.0,,109,309641,2840.743119266055,2,2,131072,131070,2781364,357,151,319752,ConvolutionInputGenerator_rtl,ConvolutionInputGenerator_rtl_3,312.74237534088917
+pbi1.5,,1.5,110,309672,2815.2,2.0,2,131072,131070,2782114,361,151,319752,ConvolutionInputGenerator_rtl,ConvolutionInputGenerator_rtl_3,312.74237534088917
+autofold_control,,,96,358712,3736.5833333333335,2.0,2,131072,131070,5144068,391,280,393216,MVAU_rtl,MVAU_rtl_1,254.31315104166666
