@@ -27,8 +27,10 @@ Run inside the FINN container, AFTER finn_hawq_preamble_trained.py has
 completed for the same tag:
     docker exec -e HOME=/tmp/home_dir <container> python3 \\
         /home/thelegendiv/finn/notebooks/enet/finn_hawq_folding_bridge_nearest_upsample.py \\
-        <hawq_preamble_output_dir> <layer_bits_folding_<tag>.json>
+        <hawq_preamble_output_dir> <layer_bits_folding_<tag>.json> [<out_config.json>]
+Env ARMS_TARGET_FPS overrides the build config's target_fps (default 250).
 """
+import dataclasses
 import json
 import math
 import os
@@ -242,6 +244,9 @@ def main():
 
     flat_model = ModelWrapper(source_ckpt)
     cfg = base.cfg_stitched_ip_partitioned_8way
+    if os.environ.get("ARMS_TARGET_FPS"):  # optional override (arms B/C experiment); default = cfg's own 250
+        cfg = dataclasses.replace(cfg, target_fps=float(os.environ["ARMS_TARGET_FPS"]))
+        print(f"target_fps overridden to {cfg.target_fps} via ARMS_TARGET_FPS")
 
     print("Running step_create_dataflow_partition_multi (re-split, deterministic)...")
     parent_model = step_create_dataflow_partition_multi(flat_model, cfg)
@@ -375,7 +380,8 @@ def main():
     if n_thresh:
         print(f"Bridged {n_thresh} standalone Thresholding node(s) via thr_pe")
 
-    out_path = os.path.join(preamble_dir, "hawq_folding_config_partition2.json")
+    # optional 3rd CLI arg: output path (lets several MILP foldings share one preamble dir)
+    out_path = sys.argv[3] if len(sys.argv) > 3 else os.path.join(preamble_dir, "hawq_folding_config_partition2.json")
     with open(out_path, "w") as f:
         json.dump(folding_config, f, indent=2)
     print(f"\nSaved bridged folding config ({len(folding_config) - 1} node entries): {out_path}")

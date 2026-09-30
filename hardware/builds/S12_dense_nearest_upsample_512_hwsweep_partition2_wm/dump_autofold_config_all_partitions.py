@@ -51,6 +51,9 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 assert os.path.exists(SOURCE_CKPT), f"missing {SOURCE_CKPT}"
 
 cfg = base.cfg_stitched_ip_partitioned_8way
+import dataclasses as _dc  # noqa: E402
+if os.environ.get("ARMS_TARGET_FPS"):  # optional override (arms B/C experiment)
+    cfg = _dc.replace(cfg, target_fps=float(os.environ["ARMS_TARGET_FPS"]))
 print(f"Tag         : {TAG}")
 print(f"target_fps  : {cfg.target_fps}")
 print(f"Source ckpt : {SOURCE_CKPT}")

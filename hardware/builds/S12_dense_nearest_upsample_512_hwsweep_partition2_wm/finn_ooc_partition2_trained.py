@@ -211,6 +211,9 @@ if __name__ == "__main__":
     # FIFOs cap at depth 32768 -- without splitting, CreateStitchedIP crashes
     # on any FIFO sized above that.
     cfg = dataclasses.replace(base.cfg_stitched_ip_partitioned_8way, output_dir=OUTPUT_DIR)
+    if os.environ.get("ARMS_TARGET_FPS"):  # optional override (arms B/C experiment); default = cfg's own 250
+        cfg = dataclasses.replace(cfg, target_fps=float(os.environ["ARMS_TARGET_FPS"]))
+        print(f"target_fps overridden to {cfg.target_fps} via ARMS_TARGET_FPS")
 
     print(f"Tag               : {TAG}")
     print(f"Fold mode         : {fold_suffix}")
