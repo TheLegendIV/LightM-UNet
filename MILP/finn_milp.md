@@ -446,7 +446,7 @@ Next to `--out-file`:
   tight `--dsr-ratio` gets — report `median_ratio` as the primary signal for
   a sweep, not `max_ratio`, for exactly this reason.
 - `summary.csv` + `run_args.json` — one row, written (overwritten) fresh each
-  run (incl. `branch_imbalance_n_diamonds`/`_median_ratio`/`_max_ratio`); no
+  run (incl. `branch_imbalance_n_diamonds`/`_median_ratio`/`_max_ratio`, the set `dsr_ratio_setting`/`pbi_ratio_setting`, and the measured DSR stats `dsr_n_nodes`/`dsr_median`/`dsr_mean`/`dsr_max`/`dsr_worst_node` from `chain_rate_imbalance`, filled even when `--dsr-ratio` is off); no
   sweep dimension since `alpha` was removed (see "History") — a new run in
   the same `--out-file` directory simply replaces the prior one.
 

@@ -795,6 +795,8 @@ _SUMMARY_FIELDS = [
     "total_dsp", "total_cycles", "clock_mhz", "latency_ms", "target_fps", "fps", "bottleneck_node",
     "n_binary_vars", "n_layers", "n_zero_sensitivity_layers", "zero_sensitivity_layers",
     "branch_imbalance_n_diamonds", "branch_imbalance_median_ratio", "branch_imbalance_max_ratio",
+    "dsr_ratio_setting", "pbi_ratio_setting",
+    "dsr_n_nodes", "dsr_median", "dsr_mean", "dsr_max", "dsr_worst_node",
 ]
 
 
@@ -809,6 +811,7 @@ def _write_run_summary(
     total_cycles = diag.get("total_cycles")
     latency_ms = total_cycles / (args.clock_mhz * 1000) if total_cycles is not None else float("nan")
 
+    dsr = diag.get("chain_rate_imbalance", {})
     row = {
         "status": result["status"],
         "avg_weight_bits": avg_weight_bits, "avg_act_bits": avg_act_bits,
@@ -823,6 +826,11 @@ def _write_run_summary(
         "branch_imbalance_n_diamonds": diag.get("branch_imbalance", {}).get("n_diamonds"),
         "branch_imbalance_median_ratio": diag.get("branch_imbalance", {}).get("median_ratio"),
         "branch_imbalance_max_ratio": diag.get("branch_imbalance", {}).get("max_ratio"),
+        # DSR = downstream-rate ratio (chain_rate_imbalance diagnostic): measured whether or not --dsr-ratio is set.
+        "dsr_ratio_setting": args.dsr_ratio, "pbi_ratio_setting": args.pbi_ratio,
+        "dsr_n_nodes": dsr.get("n_nodes"), "dsr_median": dsr.get("median_ratio"),
+        "dsr_mean": dsr.get("mean_ratio"), "dsr_max": dsr.get("max_ratio"),
+        "dsr_worst_node": (dsr.get("worst_nodes") or [{}])[0].get("node"),
     }
 
     summary_path = out_dir / "summary.csv"

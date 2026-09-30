@@ -96,4 +96,10 @@ for idx, sdp_node in enumerate(sdp_nodes):
         json.dump(config, f, indent=2)
     print(f"Wrote {len(config) - 1} node folding entries to {out_json}")
 
+    # Also keep the auto-folded partition graph itself: it carries every node's geometry/datatypes
+    # (config JSON has only PE/SIMD), which MILP/utils/price_autofold_all_partitions.py needs to price it.
+    out_onnx = os.path.join(OUTPUT_DIR, f"autofold_partition{idx}.onnx")
+    kernel_model.save(out_onnx)
+    print(f"Wrote auto-folded partition graph to {out_onnx}")
+
 print("\nDone -- all 8 partitions' auto-fold configs written.")
