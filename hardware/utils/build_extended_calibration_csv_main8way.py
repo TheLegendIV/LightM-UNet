@@ -16,8 +16,8 @@ import math
 import re
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-STAGE_DIR = HERE / "temp" / "rtl_mvau_8way_ext"
+HERE = Path(__file__).resolve().parent.parent
+STAGE_DIR = HERE / "archive" / "20261001_refactor" / "temp" / "rtl_mvau_8way_ext"
 OUT_DIR = HERE / "datasets"
 
 DTYPE_BITS_RE = re.compile(r"(\d+)$")

@@ -1,0 +1,80 @@
+"""S12-dense preamble (no Vivado): streamline -> rtl-mvau convert_to_hw
+(standalone Thresholding) -> 8-way stage partition tagging.
+
+Run inside the FINN container (onnx copied flat into notebooks/enet/):
+    docker exec -e HOME=/tmp/home_dir <c> bash -c 'cd /home/thelegendiv/finn/notebooks/enet && \\
+        python3 finn_s12_preamble.py <model_name_without_.onnx> --tag <tag>'
+Output: finn_deployment_outputs/<tag>_preamble_<timestamp>/
+"""
+import argparse
+import dataclasses
+import json
+import os
+import sys
+from datetime import datetime
+
+sys.path.insert(0, "/home/thelegendiv/finn/notebooks/enet")
+
+_parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+_parser.add_argument("model_name", help="onnx basename in notebooks/enet/ (without .onnx)")
+_parser.add_argument("--tag", required=True, help="output dir prefix, e.g. S12_dense_nearest_upsample_512_hwsweep_wm_dsr_off")
+_args = _parser.parse_args()
+
+# finn_enet_ip_build_partitioned_8way reads sys.argv[1]/[2] at import time.
+_real_argv, sys.argv = sys.argv, sys.argv[:1]
+import finn_enet_ip_build_partitioned_8way as base  # noqa: E402
+sys.argv = _real_argv
+
+import finn.builder.build_dataflow as build  # noqa: E402
+from qonnx.core.modelwrapper import ModelWrapper  # noqa: E402
+from qonnx.custom_op.registry import getCustomOp  # noqa: E402
+from finn_enet_convert_to_hw_rtl_mvau import step_enet_convert_to_hw_rtl_mvau  # noqa: E402
+from finn_s12_build_steps import check_dangling_nodes, install_relaxed_stage_boundaries  # noqa: E402
+
+install_relaxed_stage_boundaries()
+
+
+def main():
+    model_file = os.path.join(base.ENET_DIR, f"{_args.model_name}.onnx")
+    output_dir = os.path.join(
+        base.ENET_DIR, "finn_deployment_outputs",
+        f"{_args.tag}_preamble_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+    )
+    idx_convert = base.enet_ip_partitioned_8way_steps.index(base.step_enet_convert_to_hw)
+    idx_partition = base.enet_ip_partitioned_8way_steps.index(base.assign_stage_partition_ids_8way)
+    steps = list(base.enet_ip_partitioned_8way_steps[: idx_partition + 1])
+    steps[idx_convert] = step_enet_convert_to_hw_rtl_mvau
+    print("Steps to run:", [s if isinstance(s, str) else s.__name__ for s in steps])
+    cfg = dataclasses.replace(
+        base.cfg_stitched_ip_partitioned_8way,
+        output_dir=output_dir, steps=steps, generate_outputs=[], save_intermediate_models=True,
+    )
+
+    os.makedirs(output_dir, exist_ok=True)
+    print("MODEL_FILE=", model_file, flush=True)
+    print("OUTPUT_DIR=", output_dir, flush=True)
+    build.build_dataflow_cfg(model_file, cfg)
+
+    ckpt_dir = os.path.join(output_dir, "intermediate_models")
+    m = ModelWrapper(os.path.join(ckpt_dir, "step_enet_convert_to_hw_rtl_mvau.onnx"))
+    n_thresh = 0
+    for node in m.graph.node:
+        if node.op_type in ("MVAU", "VVAU"):
+            inst = getCustomOp(node)
+            print(f"{node.name:30s} {node.op_type:10s} noActivation={inst.get_nodeattr('noActivation')} "
+                  f"weightDataType={inst.get_nodeattr('weightDataType')}")
+        elif node.op_type == "Thresholding":
+            n_thresh += 1
+    print(f"standalone Thresholding nodes: {n_thresh}")
+
+    report = check_dangling_nodes(ModelWrapper(os.path.join(ckpt_dir, "assign_stage_partition_ids_8way.onnx")))
+    with open(os.path.join(ckpt_dir, "dangling_node_report.json"), "w") as f:
+        json.dump(report, f, indent=2)
+    print(f"dangling-node check: {report['n_dangling']} / {report['total_nodes']} nodes dangling")
+    for d in report["dangling_nodes"]:
+        print("  DANGLING:", d)
+    print("OUTPUT_DIR=", output_dir)
+
+
+if __name__ == "__main__":
+    main()

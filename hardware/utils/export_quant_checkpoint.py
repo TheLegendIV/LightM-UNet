@@ -35,13 +35,13 @@ from pathlib import Path
 
 import torch
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "enet"))
 from nnunetv2.nets.QuantENet import QuantENet  # noqa: E402
 
 DATASET_NAME = "Dataset501_ARCADE"
 NNUNET_RESULTS = REPO_ROOT / "data" / "nnUNet_results"
-OUT_DIR = Path(__file__).resolve().parent / "outputs" / "qonnx_exports"
+OUT_DIR = REPO_ROOT / "hardware" / "outputs" / "qonnx_exports"
 RESULTS_CSV = REPO_ROOT / "compression" / "results.csv"
 
 
