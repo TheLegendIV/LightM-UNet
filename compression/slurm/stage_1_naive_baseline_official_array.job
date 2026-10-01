@@ -1,0 +1,177 @@
+#!/bin/bash
+#SBATCH --job-name=stage_1_naive_baseline_official
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+#SBATCH --array=0-4
+#SBATCH --output=logs/%x_%a_%j.out
+#SBATCH --error=logs/%x_%a_%j.err
+
+set -e
+
+# Stage 1_naive_baseline_official -- naive channel-width sweep of ENet built
+# EXACTLY like the authors' released Torch code (ENet-training/train/models/
+# encoder.lua + decoder.lua), via ENet(official=True) (ENET_OFFICIAL=1).
+# Replaces the abandoned "decprelu" arrays: the released code is PReLU encoder
+# + ReLU decoder (the paper TEXT says PReLU decoder, the code does not), so
+# the activation split is already the default and is NOT what changes here.
+#
+# What ENET_OFFICIAL=1 changes vs. this repo's original ENet (all verified
+# against an independent PyTorch translation of the Lua: identical parameter
+# shapes, parameter counts and MACs at every width below):
+#   1. Upsampling bottlenecks (up4/up5): internal width = OUTPUT/4, not
+#      input/4 (decoder.lua: `internal = output / 4`).
+#   2. Their learned upsampling conv is a 3x3 stride-2 transposed conv
+#      (padding 1, output_padding 1), not 2x2 stride-2
+#      (SpatialFullConvolution(i, i, 3,3, 2,2, 1,1, 1,1)).
+#   3. No dropout anywhere in the decoder (up4, regular4, up5, regular5) --
+#      decoder.lua has none; ours had Dropout2d(0.1).
+#   4. Asymmetric 5x1 -> 1x5 pair has NO BN/activation in between (two bare
+#      back-to-back convs, then the block's single BN + PReLU); ours had an
+#      extra BN + PReLU between the two convs.
+#   5. Every BatchNorm uses eps=1e-3 (Torch SpatialBatchNormalization(c, 1e-3));
+#      PyTorch default is 1e-5.
+# NOT changed (deliberate): conv biases directly before a BatchNorm (the Lua
+# keeps them; they are mathematically cancelled by BN, so function is
+# identical -- we stay bias-free, which is also what FINN wants), and the
+# nnU-Net training recipe (loss/optimizer/schedule/augmentation), which is
+# not part of the network.
+#
+# Channel widths are the released network's 6-tuple form
+# (f_i, f1, f2, f3, f4, f5) -- baseline 16,64,128,128,64,16 -- and the same
+# U-series compression ratios as the original Stage 1 sweep, with f2==f3
+# (verified: identical network to the old 5-tuple spelling at every width).
+# Symmetric channels (f_i==f5, f1==f4) are required by the max_unpool decoder.
+#   0: Baseline -- CHANNELS=16,64,128,128,64,16   (the released ENet)
+#   1: U2       -- CHANNELS=8,32,64,64,32,8
+#   2: U4       -- CHANNELS=4,16,32,32,16,4
+#   3: U8       -- CHANNELS=4,8,16,16,8,4
+#   4: U16      -- CHANNELS=4,4,8,8,4,4
+#
+# Unchanged vs. the original sweep: dilated/asymmetric/strided=1, dsc=0,
+# context_pattern=default, bottlenecks=4,8,8,2,1 (= encoder.lua's 8 + 8
+# context blocks and decoder.lua's 2 + 1 regular blocks), 150 epochs,
+# ENET_SEED=0. Distinct stage/config_name ("1_naive_baseline_official_*") so
+# no existing row in compression/results.csv is overwritten; the old
+# non-official rows stay as the "this repo's variant" comparison.
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+
+CONFIG_NAMES=(Baseline U2 U4 U8 U16)
+TASK_ID=${SLURM_ARRAY_TASK_ID}
+CONFIG_NAME="${CONFIG_NAMES[$TASK_ID]}"
+
+case "$CONFIG_NAME" in
+  Baseline) CHANNELS="16,64,128,128,64,16" ;;
+  U2)       CHANNELS="8,32,64,64,32,8" ;;
+  U4)       CHANNELS="4,16,32,32,16,4" ;;
+  U8)       CHANNELS="4,8,16,16,8,4" ;;
+  U16)      CHANNELS="4,4,8,8,4,4" ;;
+esac
+
+RUN_NAME="1_naive_baseline_official_${CONFIG_NAME}"
+TRAINER_CLASS="nnUNetTrainerENet"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- ENet trainer knobs -- released-code ENet: PReLU enc / ReLU dec / MaxUnpool
+export ENET_CHANNELS="${CHANNELS}"
+export ENET_BOTTLENECKS="4,8,8,2,1"
+export ENET_DECODER_TYPE="max_unpool"
+export ENET_CONTEXT_PATTERN="default"
+export ENET_USE_DILATED=1
+export ENET_USE_ASYMMETRIC=1
+export ENET_USE_STRIDED=1
+export ENET_USE_DSC=0
+export ENET_USE_PRELU=1
+export ENET_OFFICIAL=1
+export ENET_SEED=0
+export ENET_EPOCHS=150
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Array task: ${TASK_ID} -> ${RUN_NAME}"
+echo "ENET_CHANNELS=${ENET_CHANNELS} ENET_BOTTLENECKS=${ENET_BOTTLENECKS}"
+echo "ENET_DECODER_TYPE=${ENET_DECODER_TYPE} ENET_USE_PRELU=${ENET_USE_PRELU} ENET_OFFICIAL=${ENET_OFFICIAL} ENET_SEED=${ENET_SEED}"
+echo "Output folder: ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Checking for an existing checkpoint for ${RUN_NAME} ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ] || [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_best.pth" ]; then
+    echo "Checkpoint already exists at ${ENET_OUTPUT_FOLDER} -- skipping training, going straight to collect_results.py."
+else
+    echo "=== Start training: ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+    echo "Training finished for ${RUN_NAME}."
+
+    echo "=== Archiving checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+fi
+
+echo "=== Collecting results into compression/results.csv ==="
+cd "$HOME/LightM-UNet"
+python compression/collect_results.py \
+    --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+    --stage 1_naive_baseline_official \
+    --dataset-name "${DATASET_NAME}" \
+    --dataset-id "${DATASET_ID}" \
+    --channels "${ENET_CHANNELS}" \
+    --bottlenecks "${ENET_BOTTLENECKS}" \
+    --decoder-type "${ENET_DECODER_TYPE}" \
+    --use-dilated "${ENET_USE_DILATED}" \
+    --use-asymmetric "${ENET_USE_ASYMMETRIC}" \
+    --use-strided "${ENET_USE_STRIDED}" \
+    --use-dsc "${ENET_USE_DSC}" \
+    --context-pattern "${ENET_CONTEXT_PATTERN}" \
+    --use-prelu "${ENET_USE_PRELU}" \
+    --official "${ENET_OFFICIAL}" \
+    --seed "${ENET_SEED}" \
+    --trainer-class "${TRAINER_CLASS}"
+
+echo "Done: ${RUN_NAME}."

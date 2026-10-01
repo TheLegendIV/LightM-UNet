@@ -116,7 +116,12 @@ WEIGHT_OP_TYPES = ("MVAU_hls", "MVAU_rtl", "VVAU_hls", "VVAU_rtl")
 SWU_OP_TYPES = ("ConvolutionInputGenerator_hls", "ConvolutionInputGenerator_rtl")
 FMPAD_OP_TYPES = ("FMPadding_hls", "FMPadding_rtl", "FMPadding_Pixel")
 THRESH_OP_TYPES = ("Thresholding_hls", "Thresholding_rtl")
+# Pinned Thresholding_rtl memory placement (thresholding.sv: stage depth >= trigger -> BRAM, else LUTRAM;
+# 0 = Vivado "auto"). MUST match MILP/finn_cost_model.py THR_DEPTH_TRIGGER_BRAM / THR_DEPTH_TRIGGER_DISTRIBUTED,
+# which is what the MILP priced: ram_style "block" -> 1024, "distributed" -> 999999 (everything LUTRAM).
+THRESH_BRAM_TRIGGER = 1024
 THRESH_DISTRIBUTED_BRAM_TRIGGER = 999999
+THRESH_TRIGGER_BY_STYLE = {"block": THRESH_BRAM_TRIGGER, "distributed": THRESH_DISTRIBUTED_BRAM_TRIGGER}
 
 CONV_ORDER_FILE = os.path.join(
     base.ENET_DIR, "quantEnet_12_dense_relu_nearest_upsample_dummy_int8_conv_order.json"
@@ -229,6 +234,93 @@ def find_following_thresholding(kernel_model, weight_node):
     consumer = kernel_model.find_consumer(weight_node.output[0])
     if consumer is not None and consumer.op_type in THRESH_OP_TYPES:
         return consumer
+    return None
+
+
+def find_join_thresholds(kernel_model, logical_names, prev_block=None):
+    """{Thresholding node name: (block, kind)} for the residual-join thresholds the MILP prices as
+    extra nodes `<block>.skip_quant|residual_add|out_act` (finn_cost_model.md "Residual-join
+    thresholds"). Matched structurally around each AddStreams:
+      residual_add = Thresholding consuming the add's output; out_act = the Thresholding consuming that;
+      skip_quant   = Thresholding feeding an add input whose producer is NOT an MVAU/VVAU (an MVAU-fed one
+                     is that conv's own thr, handled via find_following_thresholding).
+    Block names: the i-th AddStreams (graph order) closes the i-th `<block>.expand.0` logical name;
+    `prev_block` = the block whose join thresholds open the partition (see previous_block_name)."""
+    adds = [n for n in kernel_model.graph.node if n.op_type.startswith("AddStreams")]
+    blocks = [ln[: -len(".expand.0")] for ln in logical_names if ln.endswith(".expand.0")]
+    if len(adds) != len(blocks):
+        print(f"WARNING: {len(adds)} AddStreams vs {len(blocks)} expand.0 logical names in partition -- "
+              "join thresholds left on Vivado auto placement")
+        return {}
+
+    def is_thr(n):
+        return n is not None and n.op_type in THRESH_OP_TYPES
+
+    found = {}
+    # The partition opens with the PREVIOUS block's residual_add + out_act thresholds (their AddStreams is in
+    # the upstream partition): Thresholding nodes before the first Dup, fed by no node of this graph.
+    first_thr = next((n for n in kernel_model.graph.node if is_thr(n) and kernel_model.find_producer(n.input[0]) is None), None)
+    if first_thr is not None and prev_block is not None:
+        found[first_thr.name] = (prev_block, "residual_add")
+        nxt = kernel_model.find_consumer(first_thr.output[0])
+        if is_thr(nxt):
+            found[nxt.name] = (prev_block, "out_act")
+    for add, block in zip(adds, blocks):
+        res = kernel_model.find_consumer(add.output[0])
+        if is_thr(res):
+            found[res.name] = (block, "residual_add")
+            out = kernel_model.find_consumer(res.output[0])
+            if is_thr(out):
+                found[out.name] = (block, "out_act")
+        for inp in add.input:
+            prod = kernel_model.find_producer(inp)
+            if not is_thr(prod):
+                continue
+            prod_in = kernel_model.find_producer(prod.input[0])
+            if prod_in is None or prod_in.op_type not in WEIGHT_OP_TYPES:
+                found[prod.name] = (block, "skip_quant")
+    return found
+
+
+def check_join_bits(kernel_model, logical_names, extra_nodes, joins):
+    """Fail-fast guard that the exported network carries the bits the MILP priced for the residual joins
+    (finn_milp.py --tie-residual-bits <-> expand_layer_bits.py --tie-residual-bits <-> ENET_RESIDUAL_ADD_FOLLOWS_BITS=1;
+    without that env var at export the add stays Int8 whatever the MILP assumed). Checks, per matched join:
+      * Thresholding output bit width == extra_nodes[<block>.<kind>].act_bits
+      * both operands of each AddStreams have the same bit width (FINN v0.10.1 AddStreams has ONE inputDataType)
+    and warns when the MILP chose a join PE != 1 (not applied by this bridge). Returns the number of problems."""
+    problems = 0
+    for thr_name, (block, kind) in joins.items():
+        info = extra_nodes.get(f"{block}.{kind}")
+        if info is None:
+            continue
+        thr = next(n for n in kernel_model.graph.node if n.name == thr_name)
+        got = kernel_model.get_tensor_datatype(thr.output[0]).bitwidth()
+        if info.get("act_bits") is not None and got != info["act_bits"]:
+            problems += 1
+            print(f"ERROR {thr_name} ({block}.{kind}): exported output is {got}-bit, MILP priced {info['act_bits']}-bit -- "
+                  "was the network exported with ENET_RESIDUAL_ADD_FOLLOWS_BITS=1 and expand_layer_bits.py --tie-residual-bits?")
+        if info.get("pe", 1) != 1:
+            print(f"WARNING {block}.{kind}: MILP chose PE={info['pe']} but this bridge does not apply join PEs (stays at FINN's)")
+    adds = [n for n in kernel_model.graph.node if n.op_type.startswith("AddStreams")]
+    blocks = [ln[: -len(".expand.0")] for ln in logical_names if ln.endswith(".expand.0")]
+    for add, block in zip(adds, blocks):
+        widths = [kernel_model.get_tensor_datatype(i).bitwidth() for i in add.input]
+        want = (extra_nodes.get(f"{block}.skip_quant") or {}).get("act_bits")
+        if len(set(widths)) != 1 or (want is not None and widths[0] != want):
+            problems += 1
+            print(f"ERROR {add.name} ({block}): operand widths {widths}, MILP skip_quant/main bits {want} -- the two "
+                  "operands of the add must share one width (shared quantizer / single inputDataType)")
+    return problems
+
+
+def previous_block_name(first_logical_name):
+    """Block (`<block>` of `<block>.expand.0`) immediately before `first_logical_name` in the full conv order."""
+    with open(CONV_ORDER_FILE) as f:
+        names = [e["logical_name"] for e in json.load(f)]
+    for ln in reversed(names[: names.index(first_logical_name)]):
+        if ln.endswith(".expand.0"):
+            return ln[: -len(".expand.0")]
     return None
 
 
@@ -364,12 +456,35 @@ def main():
             if thresh_node is not None:
                 thr_config = {"PE": thr_pe}
                 thr_ram_style = compute_entry.get("thr_ram_style")
-                if thr_ram_style == "distributed":
-                    thr_config["depth_trigger_bram"] = THRESH_DISTRIBUTED_BRAM_TRIGGER
+                if thr_ram_style in THRESH_TRIGGER_BY_STYLE:
+                    thr_config["depth_trigger_bram"] = THRESH_TRIGGER_BY_STYLE[thr_ram_style]
                 folding_config[thresh_node.name] = thr_config
                 n_thresh += 1
                 thr_extra = "".join(f" {k}={v}" for k, v in thr_config.items() if k != "PE")
                 print(f"{thresh_node.name:30s} {thresh_node.op_type:12s} {'(thr_pe)':25s} {'':25s} {thr_pe:4d}{thr_extra}")
+
+    # residual-join thresholds: memory placement only (their MILP PE is not applied -- they stay at FINN's PE)
+    extra_nodes = folding_block.get("extra_nodes")
+    n_join = 0
+    if extra_nodes is None:
+        print("WARNING: folding json has no extra_nodes -- join thresholds left on Vivado auto placement")
+    else:
+        joins = find_join_thresholds(kernel_model, logical_names, previous_block_name(logical_names[0]))
+        n_bad = check_join_bits(kernel_model, logical_names, extra_nodes, joins)
+        if n_bad and os.environ.get("BRIDGE_ALLOW_JOIN_BITS_MISMATCH") != "1":
+            print(f"{n_bad} join-bit mismatch(es) -- aborting (set BRIDGE_ALLOW_JOIN_BITS_MISMATCH=1 to override).")
+            sys.exit(3)
+        for thr_name, (block, kind) in joins.items():
+            style = (extra_nodes.get(f"{block}.{kind}") or {}).get("ram_style")
+            if style not in THRESH_TRIGGER_BY_STYLE:
+                print(f"WARNING {thr_name}: no ram_style for {block}.{kind} in folding json (got {style!r}) -- left on auto")
+                continue
+            folding_config.setdefault(thr_name, {})["depth_trigger_bram"] = THRESH_TRIGGER_BY_STYLE[style]
+            n_join += 1
+            print(f"{thr_name:30s} Thresholding  {'(join ' + kind + ')':25s} {block:25s} ram_style={style} "
+                  f"depth_trigger_bram={THRESH_TRIGGER_BY_STYLE[style]}")
+    if n_join:
+        print(f"Pinned depth_trigger_bram on {n_join} residual-join Thresholding node(s)")
 
     if unmatched:
         print(f"\nWARNING: {len(unmatched)} logical names had no folding json entry: {unmatched}")

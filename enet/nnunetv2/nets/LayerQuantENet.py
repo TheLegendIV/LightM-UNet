@@ -63,12 +63,27 @@ from __future__ import annotations
 import collections
 from pathlib import Path
 
+import os
+
 import torch
 import torch.nn.functional as F
 from torch import nn
 
 import brevitas.nn as qnn
 from brevitas.quant import Int8ActPerTensorFloat, Int8WeightPerTensorFloat
+
+# Opt-in (ENET_RESIDUAL_ADD_FOLLOWS_BITS=1): QuantEltwiseAdd's input AND output quantizers really use act_bits["residual_add"].
+# Default (unset) keeps the legacy behavior, where the `bit_width=` kwarg is NOT routed to either quantizer
+# (verified with brevitas 0.12.1) and both stay Int8. The single input_quant instance is applied to both operands,
+# so skip and main share bit width AND scale. MILP counterpart: finn_milp.py --tie-residual-bits.
+RESIDUAL_ADD_FOLLOWS_BITS = os.environ.get("ENET_RESIDUAL_ADD_FOLLOWS_BITS", "0") == "1"
+
+
+def _residual_add_quant(bits: int) -> qnn.QuantEltwiseAdd:
+    if RESIDUAL_ADD_FOLLOWS_BITS:
+        q = Int8ActPerTensorFloat.let(bit_width=bits)
+        return qnn.QuantEltwiseAdd(input_quant=q, output_quant=q, return_quant_tensor=True)
+    return qnn.QuantEltwiseAdd(bit_width=bits, input_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
 
 from nnunetv2.nets.ENet import (
     CONTEXT_STAGE_PATTERN,
@@ -262,7 +277,7 @@ class LayerQuantRegularBottleneck(nn.Module):
         # See QuantRegularBottleneck.residual_add's own note (QuantENet.py) --
         # QuantEltwiseAdd shares one input_quant instance (learned scale)
         # across both operands by construction, already FINN-safe.
-        self.residual_add = qnn.QuantEltwiseAdd(bit_width=act_bits["residual_add"], input_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
+        self.residual_add = _residual_add_quant(act_bits["residual_add"])
         self.out_act = _act(channels, "out_act")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -292,7 +307,7 @@ class LayerQuantDSCNoProjectionBottleneck(nn.Module):
             nn.BatchNorm2d(channels),
         )
         self.dropout = nn.Dropout2d(p=dropout_p)
-        self.residual_add = qnn.QuantEltwiseAdd(bit_width=act_bits["residual_add"], input_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
+        self.residual_add = _residual_add_quant(act_bits["residual_add"])
         self.out_act = _quant_block_act(channels, act_bits["out_act"], negative_slope, trainable_slope=trainable_slope)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -346,7 +361,7 @@ class LayerQuantDownsamplingBottleneck(nn.Module):
             nn.BatchNorm2d(out_channels),
         )
         self.dropout = nn.Dropout2d(p=dropout_p)
-        self.residual_add = qnn.QuantEltwiseAdd(bit_width=act_bits["residual_add"], input_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
+        self.residual_add = _residual_add_quant(act_bits["residual_add"])
         self.out_act = _act(out_channels, "out_act")
         self.out_channels = out_channels
 
@@ -430,7 +445,7 @@ class LayerQuantUpsamplingBottleneck(nn.Module):
             nn.BatchNorm2d(out_channels),
         )
         self.dropout = nn.Dropout2d(p=0.1)
-        self.residual_add = qnn.QuantEltwiseAdd(bit_width=act_bits["residual_add"], input_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
+        self.residual_add = _residual_add_quant(act_bits["residual_add"])
         self.out_act = _quant_act(act_bits["out_act"])
 
     def forward(self, x: torch.Tensor, output_size: torch.Size, indices: torch.Tensor | None = None) -> torch.Tensor:

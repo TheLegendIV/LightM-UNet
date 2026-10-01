@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import unittest
 
-from finn_cost_model import LayerGeometry, conv_cost_pe_simd
+from finn_cost_model import LayerGeometry, _thresholding_rtl_cost, conv_cost_pe_simd
 
 W, A = 6, 6  # every real node in the probe is W6A6, force_dsp=True
 
@@ -195,6 +195,26 @@ class NoActivationVariantTest(unittest.TestCase):
             impl_style="hls", force_dsp=False, no_activation=False, ram_style_thresholds="distributed",
         )
         self.assertGreater(noact0_distributed["total_lut"], noact0_auto["total_lut"])
+
+
+class ThresholdingPlacementTest(unittest.TestCase):
+    """Pinned depth_trigger_bram=1024: 32 ch, PE=1, 8-bit out (stage depths 32..4096), INT10 thresholds."""
+
+    def test_block_puts_stages_ge_1024_in_bram(self):
+        lut, bram18, uram = _thresholding_rtl_cost(1, 8, 32, "block", in_bits=10)
+        self.assertEqual(bram18, 1 + 2 + 4)  # 18x1024 primitives for depth 1024/2048/4096
+        self.assertEqual(uram, 0)
+        # logic fit + LUTRAM for stages 32..512: ceil(d*10/64) = 5+10+20+40+80
+        self.assertAlmostEqual(lut, 68.1953 + 0.1095 * 255 + 155)
+
+    def test_distributed_is_all_lutram(self):
+        lut, bram18, _ = _thresholding_rtl_cost(1, 8, 32, "distributed", in_bits=10)
+        self.assertEqual(bram18, 0)
+        self.assertAlmostEqual(lut, 68.1953 + 0.1095 * 255 + 1275)  # 8160 thresholds * 10 bits / 64
+
+    def test_four_bit_output_never_reaches_bram(self):
+        _, bram18, _ = _thresholding_rtl_cost(1, 4, 32, "block", in_bits=12)
+        self.assertEqual(bram18, 0)  # deepest stage = 32*8 = 256 < 1024
 
 
 if __name__ == "__main__":

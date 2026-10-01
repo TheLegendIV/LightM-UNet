@@ -629,6 +629,7 @@ class RegularBottleneck(nn.Module):
         separable_dilated: bool = False,
         double_projections: bool = False,
         prelu_variant: PReluVariant = "standard",
+        asymmetric_inner_act: bool = True,
     ):
         super().__init__()
         internal_channels = max(1, channels // internal_ratio)
@@ -661,6 +662,11 @@ class RegularBottleneck(nn.Module):
                     "IS that factorization (at dilation=1). Disable use_asymmetric to use "
                     "separable_dilated."
                 )
+            # asymmetric_inner_act=True (default, every pre-existing config)
+            # puts a BN + activation BETWEEN the (k,1) and (1,k) convs.
+            # The authors' released encoder.lua has NO BN/activation between
+            # them (two bare back-to-back convs, then the block's single
+            # BN + PReLU) -- ENet(official=True) passes False here.
             self.conv = nn.Sequential(
                 nn.Conv2d(
                     internal_channels,
@@ -669,8 +675,14 @@ class RegularBottleneck(nn.Module):
                     padding=(padding, 0),
                     bias=False,
                 ),
-                nn.BatchNorm2d(internal_channels),
-                _activation(internal_channels, relu, prelu_variant, shared_act),
+                *(
+                    [
+                        nn.BatchNorm2d(internal_channels),
+                        _activation(internal_channels, relu, prelu_variant, shared_act),
+                    ]
+                    if asymmetric_inner_act
+                    else []
+                ),
                 nn.Conv2d(
                     internal_channels,
                     internal_channels,
@@ -826,13 +838,22 @@ class UpsamplingBottleneck(nn.Module):
         learned_skip_upsample: bool = False,
         skip_interp_mode: Literal["bilinear", "nearest"] = "bilinear",
         skip_resize_conv: bool = False,
+        official: bool = False,
+        dropout_p: float = 0.1,
     ):
         super().__init__()
-        internal_channels = max(1, in_channels // internal_ratio)
-        # Always None in practice: UpsamplingBottleneck is only ever built
-        # with relu=True (decoder), so _activation's `if relu:` branch wins
-        # before shared_act would matter -- threaded through anyway for
-        # signature consistency with the other bottleneck classes.
+        # official=True follows the authors' released decoder.lua: the
+        # bottleneck's internal width is OUTPUT/ratio (`internal = output / 4`),
+        # not input/ratio -- the decoder always narrows (128->64, 64->16), so
+        # input/ratio made ours 2x (up4) / 4x (up5) wider -- and the learned
+        # upsampling conv is a 3x3, stride-2 transposed conv (padding 1,
+        # output_padding 1; SpatialFullConvolution(i, i, 3,3, 2,2, 1,1, 1,1)),
+        # not our default 2x2/stride-2.
+        internal_channels = max(1, (out_channels if official else in_channels) // internal_ratio)
+        # None unless ENet(decoder_prelu=True) builds this with relu=False AND
+        # prelu_variant="nonneg_block" -- otherwise relu=True (the default
+        # decoder) makes _activation's `if relu:` branch win before shared_act
+        # matters. Threaded through for signature consistency either way.
         shared_act = NonNegativePReLU(1) if (prelu_variant == "nonneg_block" and not relu) else None
         # main_proj is NOT doubled by double_projections -- probe 4.5 scoped
         # this to the reduce/expand pair specifically (confirmed), not the
@@ -887,13 +908,19 @@ class UpsamplingBottleneck(nn.Module):
             else None
         )
         self.reduce = _reduce_proj(in_channels, internal_channels, relu, double_projections, prelu_variant, shared_act)
+        up_conv = (
+            nn.ConvTranspose2d(internal_channels, internal_channels, kernel_size=3, stride=2,
+                               padding=1, output_padding=1, bias=False)
+            if official
+            else nn.ConvTranspose2d(internal_channels, internal_channels, kernel_size=2, stride=2, bias=False)
+        )
         self.up = nn.Sequential(
-            nn.ConvTranspose2d(internal_channels, internal_channels, kernel_size=2, stride=2, bias=False),
+            up_conv,
             nn.BatchNorm2d(internal_channels),
             _activation(internal_channels, relu, prelu_variant, shared_act),
         )
         self.expand = _expand_proj(internal_channels, out_channels, relu, double_projections, prelu_variant, shared_act)
-        self.dropout = nn.Dropout2d(p=0.1)
+        self.dropout = nn.Dropout2d(p=dropout_p)
         self.out_act = _activation(out_channels, relu, prelu_variant, shared_act)
 
     def forward(
@@ -1188,8 +1215,43 @@ class ENet(nn.Module):
         reg_bookend_dsc: bool = False,
         merge_reg_boundary: bool = False,
         dsc_separable: bool = False,
+        decoder_prelu: bool = False,
+        official: bool = False,
+        official_decoder: bool = False,
+        official_bn_eps: bool = False,
     ):
         super().__init__()
+        # `official` = the WHOLE released network (validated below). The two
+        # finer flags apply just their piece to any other architecture (e.g.
+        # S12's ReLU / bilinear / dense_dilation net, which can't satisfy
+        # `official`'s max_unpool/PReLU/default-pattern requirements):
+        #   official_decoder -- up4/up5 internal width = out/4 (not in/4), 3x3
+        #                       stride-2 transposed conv, no decoder dropout.
+        #   official_bn_eps  -- every BatchNorm eps=1e-3 (not 1e-5).
+        # (The asymmetric-pair change only exists under `official`, since only
+        # the default context pattern has asymmetric slots.)
+        use_official_decoder = official or official_decoder
+        use_official_bn_eps = official or official_bn_eps
+        if decoder_prelu and not use_prelu:
+            raise ValueError(
+                "decoder_prelu=True only makes sense with use_prelu=True -- use_prelu=False already "
+                "collapses the whole network (encoder AND decoder) to plain ReLU."
+            )
+        if official:
+            # Faithful-to-the-released-code mode (ENet-training/train/models/
+            # {encoder,decoder}.lua). Only the width/channel knobs are meant to
+            # vary; everything below is what the released network IS, so any
+            # of these being off would silently mislabel a non-official run.
+            # (The DSC/probe flags are architecture probes -- keep them at
+            # their defaults.)
+            if decoder_type != "max_unpool":
+                raise ValueError(f"official=True requires decoder_type='max_unpool' (released decoder.lua), got {decoder_type!r}.")
+            if not use_prelu or decoder_prelu:
+                raise ValueError("official=True is PReLU encoder + ReLU decoder: needs use_prelu=True, decoder_prelu=False.")
+            if context_pattern != "default":
+                raise ValueError(f"official=True requires context_pattern='default' (encoder.lua's pattern), got {context_pattern!r}.")
+            if use_dsc or dsc_no_projection:
+                raise ValueError("official=True is incompatible with DSC variants.")
         valid_context_patterns = (
             "default", "sparse", "dense_dilation", "dense_dilation_half", "dense_dilation_a",
             "dense_dilation_lead1", "dense_dilation_reg_interleaved", "dense_dilation_reg_trailing",
@@ -1302,14 +1364,32 @@ class ENet(nn.Module):
         # anything but the default 4 so far.
         self.dsc_internal_ratio = dsc_internal_ratio
         self.context_pattern: ContextPattern = context_pattern
-        # Encoder activation: PReLU by default (paper-faithful, see
-        # RegularBottleneck/UpsamplingBottleneck's own `relu` flags, which
-        # already hardcode the decoder half -- regular4/regular5/up4/up5 --
-        # to plain ReLU regardless of this flag, matching the ENet paper's
-        # empirical PReLU-encoder/ReLU-decoder split). use_prelu=False
-        # switches the encoder to ReLU too, collapsing the whole network to
-        # a single activation, for section 1d's ablation of that split.
+        # Encoder activation: PReLU by default (see RegularBottleneck/
+        # UpsamplingBottleneck's own `relu` flags, which by default hardcode
+        # the decoder half -- regular4/regular5/up4/up5 -- to plain ReLU
+        # regardless of use_prelu). That ReLU decoder MATCHES the authors'
+        # released training code (ENet-training/train/models/decoder.lua:
+        # cudnn.ReLU everywhere; encoder.lua: nn.PReLU everywhere) but NOT the
+        # paper's text -- Sec. 3 ("Batch Normalization and PReLU between all
+        # convolutions") and Sec. 4/Fig. 3 (PReLU weights plotted across ~80
+        # modules, encoder/decoder border at the 67th) put PReLU in the
+        # decoder too. Default stays ReLU (= official code; also keeps every
+        # pre-existing config/checkpoint byte-identical). decoder_prelu=True
+        # is the paper-TEXT variant: decoder gets the same PReLU
+        # (prelu_variant) as the encoder.
+        # use_prelu=False switches the encoder to ReLU too, collapsing the
+        # whole network to a single activation, for section 1d's ablation.
         self.use_prelu = use_prelu
+        self.decoder_prelu = decoder_prelu
+        # `relu` flag handed to every decoder-half block below.
+        decoder_relu = not decoder_prelu
+        # See UpsamplingBottleneck / RegularBottleneck(asymmetric_inner_act)
+        # and the BN-eps loop at the end of __init__ for what official=True
+        # changes. The released decoder.lua has no dropout anywhere.
+        self.official = official
+        self.official_decoder = use_official_decoder
+        self.official_bn_eps = use_official_bn_eps
+        decoder_dropout = 0.0 if use_official_decoder else 0.1
         # "standard" (real learnable PReLU, default), "leaky" (fixed
         # LeakyReLU(0.01)), or "nonneg" (learnable PReLU clamped >= 0) --
         # see PReluVariant/_activation's own module-level comment. No-op
@@ -1394,31 +1474,42 @@ class ENet(nn.Module):
         learned_skip_upsample = decoder_type == "learned_upsample"
         skip_interp_mode = "nearest" if decoder_type in ("nearest_upsample", "nearest_conv_upsample") else "bilinear"
         skip_resize_conv = decoder_type == "nearest_conv_upsample"
-        self.up4 = UpsamplingBottleneck(stage3_channels, stage4_channels, double_projections=double_projections,
+        self.up4 = UpsamplingBottleneck(stage3_channels, stage4_channels, relu=decoder_relu,
+                                         double_projections=double_projections,
                                          prelu_variant=self.prelu_variant,
                                          learned_skip_upsample=learned_skip_upsample,
                                          skip_interp_mode=skip_interp_mode,
-                                         skip_resize_conv=skip_resize_conv)
-        self.regular4 = self._make_shallow_stage(stage4_channels, n_regular4, dropout_p=0.1, relu=True)
-        self.up5 = UpsamplingBottleneck(stage4_channels, stage5_channels, double_projections=double_projections,
+                                         skip_resize_conv=skip_resize_conv,
+                                         official=use_official_decoder, dropout_p=decoder_dropout)
+        self.regular4 = self._make_shallow_stage(stage4_channels, n_regular4, dropout_p=decoder_dropout, relu=decoder_relu)
+        self.up5 = UpsamplingBottleneck(stage4_channels, stage5_channels, relu=decoder_relu,
+                                         double_projections=double_projections,
                                          prelu_variant=self.prelu_variant,
                                          learned_skip_upsample=learned_skip_upsample,
                                          skip_interp_mode=skip_interp_mode,
-                                         skip_resize_conv=skip_resize_conv)
+                                         skip_resize_conv=skip_resize_conv,
+                                         official=use_official_decoder, dropout_p=decoder_dropout)
         if dsc_no_projection and not dsc_no_projection_context_only:
             self.regular5 = nn.Sequential(
-                *[DSCNoProjectionBottleneck(stage5_channels, dropout_p=0.1, relu=True,
+                *[DSCNoProjectionBottleneck(stage5_channels, dropout_p=decoder_dropout, relu=decoder_relu,
                                              prelu_variant=self.prelu_variant,
                                              dsc_separable=dsc_separable) for _ in range(n_regular5)]
             )
         else:
             self.regular5 = nn.Sequential(
-                *[RegularBottleneck(stage5_channels, dropout_p=0.1, relu=True, use_dsc=use_dsc,
+                *[RegularBottleneck(stage5_channels, dropout_p=decoder_dropout, relu=decoder_relu, use_dsc=use_dsc,
                                      internal_ratio=self.dsc_internal_ratio,
                                      double_projections=double_projections, prelu_variant=self.prelu_variant)
                   for _ in range(n_regular5)]
             )
         self.final = nn.ConvTranspose2d(stage5_channels, out_channels, kernel_size=2, stride=2)
+
+        if use_official_bn_eps:
+            # Released code builds every SpatialBatchNormalization with
+            # eps=1e-3 (PyTorch's default is 1e-5).
+            for module in self.modules():
+                if isinstance(module, nn.BatchNorm2d):
+                    module.eps = 1e-3
 
     def load_state_dict(self, state_dict, strict: bool = True):
         """Migrates checkpoints trained before regular5 became parametric
@@ -1662,7 +1753,7 @@ class ENet(nn.Module):
                 channels, dropout_p=0.1, use_dsc=use_dsc_here, relu=not self.use_prelu,
                 internal_ratio=self.dsc_internal_ratio,
                 separable_dilated=self.separable_dilated, double_projections=self.double_projections,
-                prelu_variant=self.prelu_variant, **kwargs,
+                prelu_variant=self.prelu_variant, asymmetric_inner_act=not self.official, **kwargs,
             ))
         return TwoBlockSkipStage(ops) if self.two_block_skip else nn.Sequential(*ops)
 

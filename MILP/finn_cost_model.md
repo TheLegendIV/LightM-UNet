@@ -1227,3 +1227,25 @@ anyway, so it's skipped.
 **Per feedback memory** (`finn_cost_model_force_dsp_auto_ram.md`): new
 cost-model calls should use `layer_cost_pe_simd_auto_ram(..., force_dsp=True)`,
 not a hardcoded block/ultra `ram_style`.
+
+## Thresholding memory placement (`_thresholding_rtl_cost`, 2026-10-01)
+
+Replaces the empirical `channels*numSteps >= 1020` BRAM cutoff and the derived URAM/LUTRAM constants. Placement is now
+**pinned**, not left to Vivado: the bridge (`finn_hawq_folding_bridge_nearest_upsample.py`) writes `depth_trigger_bram` on
+every `Thresholding_rtl` node (conv-following and residual-join), and `thresholding.sv` then places stage `s`
+(depth `channels/PE * 2^s`, width = threshold bits) in BRAM iff `depth >= trigger`, else LUTRAM. Trigger 0 = Vivado "auto",
+which no FINN rule describes (every earlier build used it; the 1020 cutoff misclassified 25% of 340 real nodes).
+
+- `ram_style="block"` -> trigger `THR_DEPTH_TRIGGER_BRAM = 1024`; `"distributed"` -> 999999 (every stage LUTRAM). Keep these in
+  sync with `THRESH_BRAM_TRIGGER` / `THRESH_DISTRIBUTED_BRAM_TRIGGER` in the bridge.
+- BRAM18 per stage: FINN's min-waste primitive (`util.basic.memutil` over 36x512 / 18x1024 / 9x2048). LUTRAM: 1 LUT per 64 bits.
+- LUT = old logic fit `PE*(68.2+0.11*numSteps)` + LUTRAM LUTs. URAM is never used (URAM288 cannot be a ROM).
+- 1024 was picked because the estimator then reproduces the real S12 partition-2 build (est 90 vs real 83 BRAM18 over 30
+  nodes, ~52% packing: width 10 of 18 bits is the waste). At depth >= 1024 each BRAM18 replaces the maximum 160 LUTs (width 10).
+- `--min-resources` weights LUT/BRAM18/DSP equally as % of the device, so 1 BRAM18 ~ 369 LUT: the solver prefers LUTRAM for the
+  255-step join thresholds (~1.3k LUT each). Real, unvalidated: the `distributed` cost has never been built.
+- Join thresholds (`skip_quant`, `residual_add`) take `in_bits = bits + 2` (real INT10 at 8 bits); conv thresholds use `acc_bits`.
+- `--tie-residual-bits` (finn_milp.py): `skip_quant`/`residual_add` bits = the block's `expand.0` act bits (one shared add
+  quantizer; FINN v0.10.1 `AddStreams` has one `inputDataType`). Deploy with `expand_layer_bits.py --tie-residual-bits` and
+  `ENET_RESIDUAL_ADD_FOLLOWS_BITS=1`. Without the flag the joins stay fixed Int8 (legacy; Brevitas ignores `bit_width=` on
+  `QuantEltwiseAdd`, verified on 0.12.1). Sensitivity of the skip operand itself is NOT in the objective (only `expand.0`'s).

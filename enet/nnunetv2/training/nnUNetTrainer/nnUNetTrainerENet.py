@@ -249,6 +249,16 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
             reg_bookend_dsc=_parse_bool_env("ENET_REG_BOOKEND_DSC", False),
             merge_reg_boundary=_parse_bool_env("ENET_MERGE_REG_BOUNDARY", False),
             dsc_separable=_parse_bool_env("ENET_DSC_SEPARABLE", False),
+            # PReLU in the decoder too (paper-native, ENet paper Sec. 4 /
+            # Fig. 3). Default False = legacy ReLU decoder.
+            decoder_prelu=_parse_bool_env("ENET_DECODER_PRELU", False),
+            # Faithful to the authors' released Torch code (see ENet.py's
+            # `official`): upsampling-block width/kernel, no decoder dropout,
+            # bare asymmetric pair, BN eps=1e-3. Default False.
+            official=_parse_bool_env("ENET_OFFICIAL", False),
+            # Pieces of `official` usable on non-official architectures (e.g. S12):
+            official_decoder=_parse_bool_env("ENET_OFFICIAL_DECODER", False),
+            official_bn_eps=_parse_bool_env("ENET_OFFICIAL_BN_EPS", False),
         )
 
         # FINN-deployable follow-up to prelu_variant="leaky": overrides the

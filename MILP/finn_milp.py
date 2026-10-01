@@ -37,7 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from block_utils import enumerate_blocks, path_to_block_map  # noqa: E402
 from finn_cost_model import (  # noqa: E402
     IMPL_STYLE_HLS, IMPL_STYLE_RTL, RAM_STYLE_AUTO, RAM_STYLE_BLOCK, RAM_STYLE_ULTRA, LayerGeometry,
-    calibrated_bram18k, calibrated_lut, divisors, layer_cost_pe_simd, max_pe, max_simd, threshold_node_cost,
+    THR_DEFAULT_IN_BITS, calibrated_bram18k, calibrated_lut, divisors, layer_cost_pe_simd, max_pe, max_simd, threshold_node_cost,
     FOLDABLE_STREAM_KINDS, STREAM_NODE_KINDS, stream_node_cost,
 )
 from layer_topology import (  # noqa: E402
@@ -147,6 +147,11 @@ def trace_layer_geometry(model: torch.nn.Module, input_hw: tuple[int, int], in_c
 RESIDUAL_QUANT_BITS = 8  # QuantEltwiseAdd's input/output quant: Int8 regardless of bit_width= (Brevitas kwarg routing)
 THRESHOLD_KINDS = ("skip_quant", "residual_add", "out_act", "input_quant", "act")
 FIXED_BIT_KINDS = ("skip_quant", "residual_add")
+# --tie-residual-bits: skip_quant/residual_add bits = the block's main operand (expand.0) act bits instead of a fixed
+# RESIDUAL_QUANT_BITS. One shared QuantEltwiseAdd quantizer serves both operands (same bits AND scale) and FINN's
+# AddStreams has a single inputDataType, so the two operands cannot differ. Deploy: expand_layer_bits.py
+# --tie-residual-bits + ENET_RESIDUAL_ADD_FOLLOWS_BITS=1. Set from the CLI in main().
+TIE_RESIDUAL_BITS = False
 PAD_MVAU_BITS = (2, 8)  # (weight, act) for the downsampling zero-pad MVAU -- PROVISIONAL, see finn_milp.md
 # Real FINN v0.10.1 custom-op names (finn_milp.md "Dataflow graph" table) --
 # every threshold-kind extra node and the pad-MVAU always use the RTL variant
@@ -261,7 +266,11 @@ def build_extra_nodes(
                 cin=channels, hin=height, win=width, cout=channels, hout=height, wout=width, kh=1, kw=1, sh=1, sw=1,
             )
         if kind in FIXED_BIT_KINDS:
-            nodes.append(ExtraNode(node_geom, kind, RESIDUAL_QUANT_BITS, ()))
+            main_src = f"{stage}.expand.0"
+            if TIE_RESIDUAL_BITS and main_src in act_names:
+                nodes.append(ExtraNode(node_geom, kind, None, (main_src,)))
+            else:
+                nodes.append(ExtraNode(node_geom, kind, RESIDUAL_QUANT_BITS, ()))
         elif kind in THRESHOLD_KINDS:
             sources = tuple(s for s in resolve_act_sources(name, weight_names, act_names, predecessor_map) if s in act_names)
             if not sources:
@@ -283,7 +292,9 @@ def extra_node_options(node: ExtraNode, force_dsp: bool) -> list[tuple[tuple, di
             for ram_style in RAM_STYLES:
                 for bits in bit_options:
                     key = (g.name, pe, 1, ram_style, VARIANT_RTL_DSP_NOACT1, 0, bits)
-                    options.append((key, threshold_node_cost(g, bits, pe, ram_style=ram_style)))
+                    # join thresholds' input is the add/operand datatype (real: INT10 at 8 bits) -> bits + 2
+                    in_bits = bits + 2 if kind in FIXED_BIT_KINDS else THR_DEFAULT_IN_BITS
+                    options.append((key, threshold_node_cost(g, bits, pe, ram_style=ram_style, in_bits=in_bits)))
     elif kind in FOLDABLE_STREAM_KINDS:
         for pe in ([1] if FORCE_SERIAL else divisors(g.cout)):
             options.append(((g.name, pe, 1, "none", "stream", 0, 0), stream_node_cost(kind, g, pe)))
@@ -896,7 +907,8 @@ def _write_run_summary(
         "hard-lut-fraction": args.hard_lut_fraction, "hard-bram-fraction": args.hard_bram_fraction,
         "hard-dsp-fraction": args.hard_dsp_fraction, "hard-uram-fraction": args.hard_uram_fraction, "force-dsp": args.force_dsp,
         "max-latency-ms": args.max_latency_ms, "clock-mhz": args.clock_mhz, "target-fps": args.target_fps,
-        "dsr-ratio": args.dsr_ratio, "pbi-ratio": args.pbi_ratio,
+        "dsr-ratio": args.dsr_ratio, "dsr-ratio-pass2": args.dsr_ratio_pass2,
+        "tie-residual-bits": args.tie_residual_bits, "pbi-ratio": args.pbi_ratio,
         "mvau-wwidth-max": args.mvau_wwidth_max, "min-resources": args.min_resources,
         "lexicographic": args.lexicographic,
         "force-serial": FORCE_SERIAL, "require-simd-ge-pe": args.require_simd_ge_pe,
@@ -997,6 +1009,15 @@ def main() -> None:
                          help="Hard cap on weight_bits * SIMD of every dense layer's fold (FINN SetFolding's "
                               "mvau_wwidth_max quantity). Pass the SAME value to FINN's build config so the MILP "
                               "and FINN auto-fold are compared under one width limit. Off by default.")
+    parser.add_argument("--tie-residual-bits", action="store_true",
+                         help="skip_quant/residual_add thresholds take the main operand's (expand.0) act bits instead "
+                              "of a fixed Int8, so lowering the add lowers both operands together. Default: fixed Int8 "
+                              "(the legacy network). Deploy with expand_layer_bits.py --tie-residual-bits and "
+                              "ENET_RESIDUAL_ADD_FOLLOWS_BITS=1.")
+    parser.add_argument("--dsr-ratio-pass2", type=float, default=None,
+                         help="--lexicographic only: dsr ratio for pass 2 (default: same as --dsr-ratio). Pass 2 pins the "
+                              "bits, so this only reshapes the folding. Pass 2's LUT/BRAM/DSP roof becomes the hard caps "
+                              "instead of pass 1's own use (pass 1 was not solved under this ratio).")
     parser.add_argument("--lexicographic", action="store_true",
                          help="Two passes with the SAME constraints. Pass 1: accuracy objective (sets the bits and a "
                               "resource roof = its own LUT/BRAM/DSP use). Pass 2: bits pinned to pass 1 (epsilon 0), "
@@ -1056,6 +1077,8 @@ def main() -> None:
               f"exactly 0.0 under fp16 deployment -- consider pruning them instead (ENet.py's "
               f"apply_block_pruning / ENET_PRUNED_BLOCKS): {zero_sensitivity_layers}")
 
+    global TIE_RESIDUAL_BITS
+    TIE_RESIDUAL_BITS = args.tie_residual_bits
     model, geometries, extra_nodes, predecessor_map, dataflow_map, node_kinds = build_model_and_graph()
     layer_names = tuple(g.name for g in geometries)
 
@@ -1138,12 +1161,20 @@ def main() -> None:
                   f"under roof LUT {d1['lut_pct_of_budget']:.2f}% BRAM {d1['bram_pct_of_budget']:.2f}% DSP {d1['dsp_pct_of_budget']:.2f}%.")
             roof = 1.0 + 1e-6  # float slack: pass 1's own fold must stay feasible
             pinned2 = {n: (result["layer_weight_bits"][n], result["layer_act_bits"][n]) for n in layer_names}
+            # --dsr-ratio-pass2 adds a constraint pass 1's fold was never solved under, so pass 1's own use is no
+            # longer a feasible roof: bound pass 2 by the hard caps instead (bits stay pinned).
+            if args.dsr_ratio_pass2 is not None:
+                roofs = (args.hard_lut_fraction, args.hard_bram_fraction, args.hard_dsp_fraction)
+                print(f"--dsr-ratio-pass2 {args.dsr_ratio_pass2}: pass 2 roof = hard caps {roofs} (not pass 1's use).")
+            else:
+                roofs = tuple(d1[k] / 100 * roof for k in ("lut_pct_of_budget", "bram_pct_of_budget", "dsp_pct_of_budget"))
             result = solve_joint_perlayer(
-                sensitivity, geometries, d1["lut_pct_of_budget"] / 100 * roof, d1["bram_pct_of_budget"] / 100 * roof,
+                sensitivity, geometries, roofs[0], roofs[1],
                 args.time_limit, args.gap_rel, max_cycles=max_cycles, pinned_bits=pinned2,
                 predecessor_map=predecessor_map, force_dsp=args.force_dsp, require_simd_ge_pe=args.require_simd_ge_pe,
-                hard_dsp_fraction=d1["dsp_pct_of_budget"] / 100 * roof, hard_uram_fraction=args.hard_uram_fraction,
-                dsr_ratio=args.dsr_ratio, pbi_ratio=args.pbi_ratio, max_node_cycles=max_node_cycles,
+                hard_dsp_fraction=roofs[2], hard_uram_fraction=args.hard_uram_fraction,
+                dsr_ratio=args.dsr_ratio if args.dsr_ratio_pass2 is None else args.dsr_ratio_pass2,
+                pbi_ratio=args.pbi_ratio, max_node_cycles=max_node_cycles,
                 min_resources=True, mvau_wwidth_max=args.mvau_wwidth_max,
                 extra_nodes=extra_nodes, dataflow_map=dataflow_map,
             )

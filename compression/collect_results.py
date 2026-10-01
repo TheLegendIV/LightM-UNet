@@ -169,6 +169,10 @@ def run_inference(
     reg_bookend_dsc: bool = False,
     merge_reg_boundary: bool = False,
     dsc_separable: bool = False,
+    decoder_prelu: bool = False,
+    official: bool = False,
+    official_decoder: bool = False,
+    official_bn_eps: bool = False,
     pruned_blocks: str | None = None,
     mobilenet_width_mult: float = 1.0,
     mobilenet_decoder: str = "convtranspose",
@@ -233,6 +237,10 @@ def run_inference(
     env["ENET_REG_BOOKEND_DSC"] = "1" if reg_bookend_dsc else "0"
     env["ENET_MERGE_REG_BOUNDARY"] = "1" if merge_reg_boundary else "0"
     env["ENET_DSC_SEPARABLE"] = "1" if dsc_separable else "0"
+    env["ENET_DECODER_PRELU"] = "1" if decoder_prelu else "0"
+    env["ENET_OFFICIAL"] = "1" if official else "0"
+    env["ENET_OFFICIAL_DECODER"] = "1" if official_decoder else "0"
+    env["ENET_OFFICIAL_BN_EPS"] = "1" if official_bn_eps else "0"
     if quant_bits != 32:
         # Picked up by nnUNetTrainerENetQuant.build_network_architecture,
         # dynamically imported via the checkpoint's own stored trainer_name
@@ -540,7 +548,8 @@ def main() -> None:
                                   "dense_dilation_d2_projected", "dense_dilation_d8_d16_projected",
                                   "dense_dilation_dsc_trailing", "dense_dilation_regnoproj_trailing"],
                          help="'sparse' = regular/dilated4/regular/dilated16 (section 2a's div2/div4 bottleneck axis), no 2/8 rungs, never asymmetric. 'dense_dilation' = every context-stage slot dilated (2/4/8/16 repeated twice over 8 slots), no plain/asymmetric slots at all. 'dense_dilation_half' = dense_dilation with every rate halved (1/2/4/8 repeated twice) -- for a 256x256 input instead of dense_dilation's native 512x512, keeping the relative (fraction-of-feature-map) receptive field the same, see ENet.py's DENSE_DILATION_HALF_PATTERN. 'dense_dilation_a' = same but with the gridding-investigation's coprime (1,5,7,17) schedule instead of (2,4,8,16). 'dense_dilation_reg_interleaved' = (2,4,8,16) with a full RegularBottleneck bookending each cycle (needs dsc_no_projection=1 and stage2/3 bottleneck depth 11, see ENet.py's DENSE_DILATION_REG_INTERLEAVED_PATTERN). 'dense_dilation_reg_trailing' = (2,4,8,16,reg) repeating, reg TRAILS each dilation cycle instead of leading it, meant for use_dsc=1 + dsc_no_projection=0 (DSC WITH projection kept) at stage2/3 bottleneck depth 10, see ENet.py's DENSE_DILATION_REG_TRAILING_PATTERN. 'd16_reg_interleaved' = S15's own pattern: dilation=16 ONLY repeated 4 times, reg-bookended on both sides of EVERY repeat (reg,16,reg,16,reg,16,reg,16,reg, 9 slots) -- needs dsc_no_projection=1 and stage2/3 bottleneck depth 9, see ENet.py's D16_REG_INTERLEAVED_PATTERN. 'dense_dilation_reg_interleaved_double_mid' = S19's own pattern: same as dense_dilation_reg_interleaved but the one truly-interior reg (between a stage's own two dilation cycles) is doubled into two consecutive RegularBottlenecks (reg,2,4,8,16,reg,reg,2,4,8,16,reg, 12 slots) -- leading/trailing bookends stay single, so the stage2/3 seam is unchanged; meant for dsc_no_projection=0 (S10's own recipe), stage2/3 bottleneck depth 12, see ENet.py's DENSE_DILATION_REG_INTERLEAVED_DOUBLE_MID_PATTERN. 'dense_dilation_d2_projected'/'dense_dilation_d8_d16_projected' = plain dense_dilation (8 slots, no reg bookends, native depth 8) but under dsc_no_projection=1, the named dilation rate(s) (d=2 only, or d=8+d=16) become a real DILATED projected RegularBottleneck (full-rank inner conv, real reduce/expand, restoring cross-channel mixing at that rate) instead of DSCNoProjectionBottleneck -- the other rates stay DSCNoProjectionBottleneck (no proj + DSC), see ENet.py's DENSE_DILATION_D2_PROJECTED_PATTERN/DENSE_DILATION_D8_D16_PROJECTED_PATTERN. 'dense_dilation_dsc_trailing'/'dense_dilation_regnoproj_trailing' = S27 family: (2,4,8,16,X) repeating, X TRAILS each dilation cycle (stage2/3 bottleneck depth 10, same trailing position as dense_dilation_reg_trailing) -- X is a projection-free depthwise-separable (DSC) 3x3 for _dsc_trailing (DSCNoProjectionBottleneck) or a projection-free full-rank dense 3x3 for _regnoproj_trailing (RegularNoProjectionBottleneck), forced regardless of use_dsc/dsc_no_projection via ENet.py's own {'dsc_no_proj_bottleneck'}/{'regular_no_proj_bottleneck'} sentinels -- see ENet.py's DENSE_DILATION_DSC_TRAILING_PATTERN/DENSE_DILATION_REGNOPROJ_TRAILING_PATTERN.")
-    parser.add_argument("--use-prelu", type=int, default=1, choices=[0, 1], help="0 = collapse the encoder's PReLU to plain ReLU too (section 1d's ablation) -- decoder is always ReLU regardless, see ENet.py.")
+    parser.add_argument("--use-prelu", type=int, default=1, choices=[0, 1], help="0 = collapse the encoder's PReLU to plain ReLU too (section 1d's ablation). With 1, the decoder is still ReLU unless --decoder-prelu 1 (see ENet.py).")
+    parser.add_argument("--decoder-prelu", type=int, default=0, choices=[0, 1], help="1 = PReLU in the decoder too (up4/regular4/up5/regular5), as in the ENet paper (Sec. 4, Fig. 3). Default 0 keeps the legacy ReLU decoder. Needs --use-prelu 1. See ENet.py's decoder_prelu.")
     parser.add_argument("--prelu-variant", default="standard", choices=["standard", "leaky", "nonneg", "nonneg_block"],
                          help="Only meaningful with --use-prelu 1. 'standard' = real learnable nn.PReLU (default). "
                               "'leaky' = fixed nn.LeakyReLU(0.01), no learnable params. 'nonneg' = learnable PReLU "
@@ -579,6 +588,9 @@ def main() -> None:
     parser.add_argument("--double-projections", type=int, default=0, choices=[0, 1], help="Stage 4.5: stack an extra 1x1 conv+BN+act in every bottleneck's reduce AND expand projection, network-wide.")
     parser.add_argument("--two-block-skip", type=int, default=0, choices=[0, 1], help="Stage 4.6: extra short residual spanning every 2 consecutive context-stage blocks, on top of each block's own internal residual, in stage2 and stage3.")
     parser.add_argument("--dsc-no-projection", type=int, default=0, choices=[0, 1], help="DSC everywhere (stage1/regular1, stage2, stage3, regular4, regular5), with NO reduce/expand 1x1 projection pair -- depthwise+pointwise applied directly at full channel width. Requires --use-asymmetric 0.")
+    parser.add_argument("--official", type=int, default=0, choices=[0, 1], help="1 = ENet exactly as in the authors' released Torch code (ENet-training/train/models/*.lua): upsampling-bottleneck internal width = out/4 and 3x3 stride-2 transposed conv, no decoder dropout, no BN/activation inside the asymmetric 5x1+1x5 pair, BN eps=1e-3. Needs --decoder-type max_unpool, --use-prelu 1, --context-pattern default. See ENet.py's `official`.")
+    parser.add_argument("--official-decoder", type=int, default=0, choices=[0, 1], help="1 = the released ENet decoder pieces on ANY ENet (e.g. S12): upsampling-bottleneck internal width = out/4, 3x3 stride-2 transposed conv, no decoder dropout. Subset of --official that needs no max_unpool/PReLU. See ENet.py.")
+    parser.add_argument("--official-bn-eps", type=int, default=0, choices=[0, 1], help="1 = every BatchNorm eps=1e-3 as in the released code (default 1e-5). Subset of --official.")
     parser.add_argument("--quant-bits", type=int, default=32)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--in-channels", type=int, default=1)
@@ -767,6 +779,10 @@ def main() -> None:
             reg_bookend_dsc=bool(args.reg_bookend_dsc),
             merge_reg_boundary=bool(args.merge_reg_boundary),
             dsc_separable=bool(args.dsc_separable),
+            decoder_prelu=bool(args.decoder_prelu),
+            official=bool(args.official),
+            official_decoder=bool(args.official_decoder),
+            official_bn_eps=bool(args.official_bn_eps),
         )
         if args.pruned_blocks:
             apply_block_pruning(fp32_model, [name.strip() for name in args.pruned_blocks.split(",") if name.strip()])
@@ -860,6 +876,10 @@ def main() -> None:
             reg_bookend_dsc=bool(args.reg_bookend_dsc),
             merge_reg_boundary=bool(args.merge_reg_boundary),
             dsc_separable=bool(args.dsc_separable),
+            decoder_prelu=bool(args.decoder_prelu),
+            official=bool(args.official),
+            official_decoder=bool(args.official_decoder),
+            official_bn_eps=bool(args.official_bn_eps),
             pruned_blocks=args.pruned_blocks,
             mobilenet_width_mult=args.mobilenet_width_mult,
             mobilenet_decoder=args.mobilenet_decoder,
@@ -928,6 +948,12 @@ def main() -> None:
             + f",merge_reg_boundary={args.merge_reg_boundary}"
             + f",dsc_separable={args.dsc_separable}"
             + f",pruned_blocks={args.pruned_blocks}"
+            # Only emitted when on, so every pre-existing row's ops_flags
+            # string stays byte-identical to what was recorded before this flag.
+            + (",decoder_prelu=1" if args.decoder_prelu else "")
+            + (",official=1" if args.official else "")
+            + (",official_decoder=1" if args.official_decoder else "")
+            + (",official_bn_eps=1" if args.official_bn_eps else "")
         )
 
     row = {

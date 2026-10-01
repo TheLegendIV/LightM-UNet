@@ -179,16 +179,30 @@ IMPL_STYLE_RTL: ImplStyle = "rtl"
 # ---- Standalone Thresholding_rtl empirical cost (see finn_cost_model.md) ----
 _THR_RTL_LUT_BASE_PER_PE = 68.1953
 _THR_RTL_LUT_PER_NUMSTEP_PE = 0.1095
-# Below this real channels*numSteps, Vivado infers NO dedicated BRAM at all
-# (pure comparator/register logic) -- refit 2026-XX-XX on 340 real v2+v4
-# threshold rows (165/340 nonzero-BRAM); NOT a clean zero-counterexample
-# boundary like _WM_BRAM_AUTO_MIN_WMEM (85/340 misclassified at this cutoff,
-# real PE is degenerate at 1 in both builds so a pure numSteps-only cutoff
-# doesn't separate the populations at all) -- see finn_cost_model.md.
-_THR_RTL_BRAM_MIN_CHANNELS_NUMSTEP = 1020.0
-_THR_RTL_BRAM18_PER_PE_NUMSTEP = 0.014636  # refit on the above-cutoff subset only, see finn_cost_model.md
-_THR_RTL_URAM_PER_PE_NUMSTEP = _THR_RTL_BRAM18_PER_PE_NUMSTEP * (18_432 / 294_912)  # derived, dead path -- ultra FAILS synthesis
-_THR_RTL_LUTRAM_PER_PE_NUMSTEP = _THR_RTL_BRAM18_PER_PE_NUMSTEP * (18_432 / 64)  # derived, real but unexercised
+# Memory placement is PINNED, not left to Vivado: the bridge writes `depth_trigger_bram` on every
+# Thresholding_rtl node (thresholding.sv: a stage whose depth >= trigger goes to BRAM, a shallower one
+# to LUTRAM; trigger 0 = "auto", Vivado's own undocumented choice, which the MILP cannot predict).
+#   ram_style "block"       -> trigger THR_DEPTH_TRIGGER_BRAM: deep stages in BRAM, shallow in LUTRAM
+#   ram_style "distributed" -> trigger THR_DEPTH_TRIGGER_DISTRIBUTED: every stage in LUTRAM
+# Memory geometry and primitive sizes are FINN's own (thresholding_rtl.get_pe_mem_geometries,
+# util.basic.mem_primitives_versal). 1024 reproduced the real BRAM18 of the S12 partition-2 build
+# (est 90 vs real 83 over 30 nodes, 52% packing). See finn_cost_model.md "Thresholding memory placement".
+THR_DEPTH_TRIGGER_BRAM = 1024
+THR_DEPTH_TRIGGER_DISTRIBUTED = 999_999
+THR_DEFAULT_IN_BITS = 10  # threshold width of the residual-join nodes (real INT10; conv thresholds use acc_bits)
+_BRAM18_PRIMITIVES = ((36, 512), (18, 1024), (9, 2048))  # (width, depth)
+_LUTRAM_BITS_PER_LUT = 64  # one LUT6 as RAM64X1
+
+
+def _bram18_count(width: int, depth: int) -> int:
+    """BRAM18 primitives for a (width, depth) memory: FINN's min-waste choice (memutil)."""
+    best = None
+    for pw, pd in _BRAM18_PRIMITIVES:
+        count = math.ceil(width / pw) * math.ceil(depth / pd)
+        waste = count * pw * pd - width * depth
+        if best is None or waste < best[0]:
+            best = (waste, count)
+    return best[1]
 
 
 @dataclass
@@ -354,33 +368,42 @@ def _finn_swu(
 
 
 def _thresholding_rtl_cost(
-    pe: int, output_bits: int, channels: int, ram_style: str = "block",
+    pe: int, output_bits: int, channels: int, ram_style: str = "block", in_bits: int = THR_DEFAULT_IN_BITS,
 ) -> tuple[float, float, float]:
     """(lut, bram18, uram18) of the standalone Thresholding_rtl node that follows
-    this layer's MVAU/VVAU under noActivation=1 -- see finn_cost_model.md for the
-    real-data basis. ram_style="ultra" is DEAD (real Vivado synthesis fails, URAM
-    can't be ROM) -- kept for provenance only, no live caller should pass it.
-    `channels`: below _THR_RTL_BRAM_MIN_CHANNELS_NUMSTEP (channels*num_steps),
-    real Vivado infers no dedicated BRAM at all -- see that constant's comment."""
+    this layer's MVAU/VVAU under noActivation=1. Stage s (0..output_bits-1) is a
+    (in_bits x channels/pe * 2**s) memory per PE; placement by the pinned depth trigger
+    (see THR_DEPTH_TRIGGER_BRAM). lut = the empirical logic fit (PE*(68.2+0.11*numSteps),
+    from auto-placement builds) + one LUT per 64 bits of every LUTRAM stage. URAM is never
+    used (URAM288 cannot be a ROM -- real synthesis fails)."""
+    if ram_style == "block":
+        trigger = THR_DEPTH_TRIGGER_BRAM
+    elif ram_style == "distributed":
+        trigger = THR_DEPTH_TRIGGER_DISTRIBUTED
+    else:
+        raise ValueError(f"unsupported thresholding ram_style {ram_style!r}")
     num_steps = 2 ** output_bits - 1
     lut = pe * (_THR_RTL_LUT_BASE_PER_PE + _THR_RTL_LUT_PER_NUMSTEP_PE * num_steps)
-    if ram_style == "ultra":
-        return lut, 0.0, _THR_RTL_URAM_PER_PE_NUMSTEP * pe * num_steps
-    if ram_style == "distributed":
-        return lut + _THR_RTL_LUTRAM_PER_PE_NUMSTEP * pe * num_steps, 0.0, 0.0
-    if channels * num_steps < _THR_RTL_BRAM_MIN_CHANNELS_NUMSTEP:
-        return lut, 0.0, 0.0
-    bram18 = _THR_RTL_BRAM18_PER_PE_NUMSTEP * pe * num_steps
-    return lut, bram18, 0.0
+    bram18 = 0
+    cf = channels // pe
+    for stage in range(output_bits):
+        depth = cf * 2 ** stage
+        if depth >= trigger:
+            bram18 += pe * _bram18_count(in_bits, depth)
+        else:
+            lut += pe * math.ceil(depth * in_bits / _LUTRAM_BITS_PER_LUT)
+    return lut, float(bram18), 0.0
 
 
-def threshold_node_cost(layer: LayerGeometry, act_bits: int, pe: int, ram_style: str = "block") -> dict:
+def threshold_node_cost(
+    layer: LayerGeometry, act_bits: int, pe: int, ram_style: str = "block", in_bits: int = THR_DEFAULT_IN_BITS,
+) -> dict:
     """A standalone Thresholding_rtl node not attached to any conv -- the
     residual-join thresholds (skip_quant / residual_add / out_act, see
     finn_cost_model.md "Residual-join thresholds"). Same empirical per-node
     formula as a conv's own standalone threshold; cycles = pixels *
     ceil(channels / PE) (per-channel compare, no reduction axis)."""
-    thr_lut, thr_bram18, thr_uram18 = _thresholding_rtl_cost(pe, act_bits, layer.cout, ram_style=ram_style)
+    thr_lut, thr_bram18, thr_uram18 = _thresholding_rtl_cost(pe, act_bits, layer.cout, ram_style=ram_style, in_bits=in_bits)
     cycles = layer.hout * layer.wout * math.ceil(layer.cout / pe)
     return {
         "total_pe": pe, "total_simd_lanes": 0,
@@ -551,7 +574,7 @@ def conv_cost_pe_simd(
     # PE_thr >= P*Q/mw (and PE_thr | NumChannels) to keep up with the MVAU.
     if no_activation:
         thr_pe = next(d for d in divisors(layer.cout) if d * mw >= P * Q)
-        thr_lut, thr_bram18, thr_uram18 = _thresholding_rtl_cost(thr_pe, A, layer.cout, ram_style=thr_ram_style)
+        thr_lut, thr_bram18, thr_uram18 = _thresholding_rtl_cost(thr_pe, A, layer.cout, ram_style=thr_ram_style, in_bits=acc_bits)
     else:
         thr_pe, thr_lut, thr_bram18, thr_uram18 = 0, 0.0, 0.0, 0
     total_lut = swu_lut + mvu_lut + thr_lut
