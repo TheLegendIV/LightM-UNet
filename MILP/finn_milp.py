@@ -152,6 +152,9 @@ FIXED_BIT_KINDS = ("skip_quant", "residual_add")
 # AddStreams has a single inputDataType, so the two operands cannot differ. Deploy: expand_layer_bits.py
 # --tie-residual-bits + ENET_RESIDUAL_ADD_FOLLOWS_BITS=1. Set from the CLI in main().
 TIE_RESIDUAL_BITS = False
+# --joins-distributed: the residual-join thresholds (skip_quant/residual_add/out_act) may only use ram_style
+# "distributed" (all stages LUTRAM, bridge pins depth_trigger_bram=999999) -- no BRAM for them. Set from the CLI.
+JOINS_DISTRIBUTED = False
 PAD_MVAU_BITS = (2, 8)  # (weight, act) for the downsampling zero-pad MVAU -- PROVISIONAL, see finn_milp.md
 # Real FINN v0.10.1 custom-op names (finn_milp.md "Dataflow graph" table) --
 # every threshold-kind extra node and the pad-MVAU always use the RTL variant
@@ -289,7 +292,7 @@ def extra_node_options(node: ExtraNode, force_dsp: bool) -> list[tuple[tuple, di
     if kind in THRESHOLD_KINDS:
         bit_options = (node.fixed_bits,) if node.fixed_bits is not None else CANDIDATE_BITS
         for pe in ([1] if FORCE_SERIAL else divisors(g.cout)):
-            for ram_style in RAM_STYLES:
+            for ram_style in (("distributed",) if JOINS_DISTRIBUTED and kind in ("skip_quant", "residual_add", "out_act") else RAM_STYLES):
                 for bits in bit_options:
                     key = (g.name, pe, 1, ram_style, VARIANT_RTL_DSP_NOACT1, 0, bits)
                     # join thresholds' input is the add/operand datatype (real: INT10 at 8 bits) -> bits + 2
@@ -867,7 +870,7 @@ def _write_run_summary(
         "lut_pct_of_budget": diag.get("lut_pct_of_budget"), "bram_pct_of_budget": diag.get("bram_pct_of_budget"),
         "dsp_pct_of_budget": diag.get("dsp_pct_of_budget"), "total_dsp": diag.get("total_dsp"),
         "total_cycles": total_cycles, "clock_mhz": args.clock_mhz, "latency_ms": latency_ms,
-        "target_fps": args.target_fps, "bottleneck_node": diag.get("bottleneck_node"),
+        "target_fps": (args.target_fps_pass2 if args.lexicographic and args.target_fps_pass2 is not None else args.target_fps), "bottleneck_node": diag.get("bottleneck_node"),
         "fps": args.clock_mhz * 1e6 / diag["bottleneck_cycles"] if diag.get("bottleneck_cycles") else float("nan"),
         "n_binary_vars": diag.get("n_binary_vars"), "n_layers": diag.get("n_layers"),
         "n_zero_sensitivity_layers": len(zero_sensitivity_layers),
@@ -907,8 +910,8 @@ def _write_run_summary(
         "hard-lut-fraction": args.hard_lut_fraction, "hard-bram-fraction": args.hard_bram_fraction,
         "hard-dsp-fraction": args.hard_dsp_fraction, "hard-uram-fraction": args.hard_uram_fraction, "force-dsp": args.force_dsp,
         "max-latency-ms": args.max_latency_ms, "clock-mhz": args.clock_mhz, "target-fps": args.target_fps,
-        "dsr-ratio": args.dsr_ratio, "dsr-ratio-pass2": args.dsr_ratio_pass2,
-        "tie-residual-bits": args.tie_residual_bits, "pbi-ratio": args.pbi_ratio,
+        "dsr-ratio": args.dsr_ratio, "dsr-ratio-pass2": args.dsr_ratio_pass2, "target-fps-pass2": args.target_fps_pass2,
+        "tie-residual-bits": args.tie_residual_bits, "joins-distributed": args.joins_distributed, "pbi-ratio": args.pbi_ratio,
         "mvau-wwidth-max": args.mvau_wwidth_max, "min-resources": args.min_resources,
         "lexicographic": args.lexicographic,
         "force-serial": FORCE_SERIAL, "require-simd-ge-pe": args.require_simd_ge_pe,
@@ -1014,6 +1017,12 @@ def main() -> None:
                               "of a fixed Int8, so lowering the add lowers both operands together. Default: fixed Int8 "
                               "(the legacy network). Deploy with expand_layer_bits.py --tie-residual-bits and "
                               "ENET_RESIDUAL_ADD_FOLLOWS_BITS=1.")
+    parser.add_argument("--joins-distributed", action="store_true",
+                         help="skip_quant/residual_add/out_act thresholds are LUTRAM only (no BRAM option). A 255-step "
+                              "join threshold is ~7 BRAM18 at --block, ~1.4k LUT as LUTRAM (distributed cost is unvalidated).")
+    parser.add_argument("--target-fps-pass2", type=float, default=None,
+                         help="--lexicographic only: throughput target for pass 2 (default: same as --target-fps, which may "
+                              "itself be unset = no throughput constraint in pass 1).")
     parser.add_argument("--dsr-ratio-pass2", type=float, default=None,
                          help="--lexicographic only: dsr ratio for pass 2 (default: same as --dsr-ratio). Pass 2 pins the "
                               "bits, so this only reshapes the folding. Pass 2's LUT/BRAM/DSP roof becomes the hard caps "
@@ -1077,8 +1086,9 @@ def main() -> None:
               f"exactly 0.0 under fp16 deployment -- consider pruning them instead (ENet.py's "
               f"apply_block_pruning / ENET_PRUNED_BLOCKS): {zero_sensitivity_layers}")
 
-    global TIE_RESIDUAL_BITS
+    global TIE_RESIDUAL_BITS, JOINS_DISTRIBUTED
     TIE_RESIDUAL_BITS = args.tie_residual_bits
+    JOINS_DISTRIBUTED = args.joins_distributed
     model, geometries, extra_nodes, predecessor_map, dataflow_map, node_kinds = build_model_and_graph()
     layer_names = tuple(g.name for g in geometries)
 
@@ -1161,6 +1171,10 @@ def main() -> None:
                   f"under roof LUT {d1['lut_pct_of_budget']:.2f}% BRAM {d1['bram_pct_of_budget']:.2f}% DSP {d1['dsp_pct_of_budget']:.2f}%.")
             roof = 1.0 + 1e-6  # float slack: pass 1's own fold must stay feasible
             pinned2 = {n: (result["layer_weight_bits"][n], result["layer_act_bits"][n]) for n in layer_names}
+            max_node_cycles2 = max_node_cycles
+            if args.target_fps_pass2 is not None:
+                max_node_cycles2 = args.clock_mhz * 1e6 / args.target_fps_pass2
+                print(f"--target-fps-pass2 {args.target_fps_pass2} -> pass 2 every node <= {max_node_cycles2:.0f} cycles.")
             # --dsr-ratio-pass2 adds a constraint pass 1's fold was never solved under, so pass 1's own use is no
             # longer a feasible roof: bound pass 2 by the hard caps instead (bits stay pinned).
             if args.dsr_ratio_pass2 is not None:
@@ -1174,7 +1188,7 @@ def main() -> None:
                 predecessor_map=predecessor_map, force_dsp=args.force_dsp, require_simd_ge_pe=args.require_simd_ge_pe,
                 hard_dsp_fraction=roofs[2], hard_uram_fraction=args.hard_uram_fraction,
                 dsr_ratio=args.dsr_ratio if args.dsr_ratio_pass2 is None else args.dsr_ratio_pass2,
-                pbi_ratio=args.pbi_ratio, max_node_cycles=max_node_cycles,
+                pbi_ratio=args.pbi_ratio, max_node_cycles=max_node_cycles2,
                 min_resources=True, mvau_wwidth_max=args.mvau_wwidth_max,
                 extra_nodes=extra_nodes, dataflow_map=dataflow_map,
             )

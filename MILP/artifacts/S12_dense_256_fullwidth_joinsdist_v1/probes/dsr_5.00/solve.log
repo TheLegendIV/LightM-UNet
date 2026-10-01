@@ -1,0 +1,10 @@
+Overriding CANDIDATE_BITS to (4, 6, 8) (from --candidate-bits).
+Predecessor map: 88/90 layers have a real, traced predecessor (the rest are the network's own first layer(s), with no real predecessor to fall back to anything but self-sensitivity).
+Extra dataflow nodes: 141 {'input_quant': 1, 'concat': 1, 'act': 1, 'upsample': 2, 'out_act': 27, 'residual_add': 27, 'skip_quant': 25, 'add': 27, 'dup': 28, 'pad_mvau': 2}.
+Note: ['down1.pool', 'down2.pool', 'initial.pool'] have no sensitivity entry (MaxPool2d, no weight, never HAWQ-measured) -- given a fixed raw sensitivity of 0.0 for every (w,a), see module docstring.
+Traced 90 layers (per-layer granularity, no block grouping). candidate_bits=(4, 6, 8) -> 9 (w,a) pairs. y: 810 binaries, z: 41679 binaries (42489 total). Solving (time_limit=600s, gap_rel=0.005)...
+--pin-bits-file: y pinned to MILP/artifacts/S12_dense_256_fullwidth_joinsdist_v1/pass1/layer_bits_folding_pass1.json for all 90 layers.
+--target-fps 100.0 @ 100.0MHz -> every node <= 1000000 cycles (hard constraint).
+Wrote MILP/artifacts/S12_dense_256_fullwidth_joinsdist_v1/probes/dsr_5.00/layer_bits_folding_dsr500.json
+ILP status: Infeasible
+No joint per-layer (bits, folding) assignment satisfies the requested hard budget(s) -- see MILP/artifacts/S12_dense_256_fullwidth_joinsdist_v1/probes/dsr_5.00/layer_bits_folding_dsr500.json's own _diagnostics.note.

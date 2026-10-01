@@ -1,0 +1,29 @@
+Overriding CANDIDATE_BITS to (4, 6, 8) (from --candidate-bits).
+Predecessor map: 88/90 layers have a real, traced predecessor (the rest are the network's own first layer(s), with no real predecessor to fall back to anything but self-sensitivity).
+Extra dataflow nodes: 141 {'input_quant': 1, 'concat': 1, 'act': 1, 'upsample': 2, 'out_act': 27, 'residual_add': 27, 'skip_quant': 25, 'add': 27, 'dup': 28, 'pad_mvau': 2}.
+Note: ['down1.pool', 'down2.pool', 'initial.pool'] have no sensitivity entry (MaxPool2d, no weight, never HAWQ-measured) -- given a fixed raw sensitivity of 0.0 for every (w,a), see module docstring.
+Traced 90 layers (per-layer granularity, no block grouping). candidate_bits=(4, 6, 8) -> 9 (w,a) pairs. y: 810 binaries, z: 41679 binaries (42489 total). Solving (time_limit=600s, gap_rel=0.005)...
+--target-fps 100.0 @ 100.0MHz -> every node <= 1000000 cycles (hard constraint).
+Wrote MILP/artifacts/S12_dense_256_fullwidth_joinsdist_v1/search_pass1/dsr_1.05/layer_bits_folding_dsr105.json
+ILP status: Optimal
+LUT used (calibrated): 161150 (69.9% of 230400 budget) -- GUARANTEED (hard constraint).
+BRAM_18K used (calibrated): 68 (10.9% of 624 budget) -- GUARANTEED (hard constraint).
+DSP used: 1545 (89.4% of 1728 budget) -- GUARANTEED (hard constraint).
+Bottleneck: final at 327680 cycles/frame -> 305.2 FPS @ 100.0MHz
+Total cycles (sum over nodes): 8885768
+Branch imbalance (diagnostic, 28 fork/join diamonds): median=1.50x max=1.80x
+Chain-rate imbalance (diagnostic, 230 nodes with a descendant): median=1.03x max=16.51x
+  input_quant   x  1: LUT      139  BRAM_18K    0.0  DSP    0  cycles      65536
+  concat        x  1: LUT        0  BRAM_18K    0.0  DSP    0  cycles      16384
+  act           x  1: LUT      257  BRAM_18K    0.0  DSP    0  cycles      65536
+  upsample      x  2: LUT        0  BRAM_18K    0.0  DSP    0  cycles      20480
+  out_act       x 27: LUT    11385  BRAM_18K    0.0  DSP    0  cycles    1212416
+  residual_add  x 27: LUT    29696  BRAM_18K    0.0  DSP    0  cycles    1212416
+  skip_quant    x 25: LUT    28705  BRAM_18K    0.0  DSP    0  cycles    1081344
+  add           x 27: LUT     3537  BRAM_18K    0.0  DSP    0  cycles    1212416
+  dup           x 28: LUT     3220  BRAM_18K    0.0  DSP    0  cycles    1277952
+  pad_mvau      x  2: LUT      570  BRAM_18K    0.0  DSP   20  cycles      98304
+Wrote MILP/artifacts/S12_dense_256_fullwidth_joinsdist_v1/search_pass1/dsr_1.05/pruning_layer_bits_folding_dsr105.json
+Wrote MILP/artifacts/S12_dense_256_fullwidth_joinsdist_v1/search_pass1/dsr_1.05/final_output.onnx
+Wrote MILP/artifacts/S12_dense_256_fullwidth_joinsdist_v1/search_pass1/dsr_1.05/summary.csv.
+Wrote MILP/artifacts/S12_dense_256_fullwidth_joinsdist_v1/search_pass1/dsr_1.05/run_args.json.

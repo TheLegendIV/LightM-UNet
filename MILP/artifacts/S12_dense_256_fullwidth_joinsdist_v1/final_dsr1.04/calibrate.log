@@ -1,0 +1,160 @@
+/opt/conda/lib/python3.10/site-packages/brevitas/graph/equalize.py:69: UserWarning: fast_hadamard_transform package not found, using standard pytorch kernels
+  warnings.warn("fast_hadamard_transform package not found, using standard pytorch kernels")
+/opt/conda/lib/python3.10/site-packages/torch/_tensor.py:1271: UserWarning: Named tensors and all their associated APIs are an experimental feature and subject to change. Please do not use them for anything important until they are released as stable. (Triggered internally at /opt/conda/conda-bld/pytorch_1682343967769/work/c10/core/TensorImpl.h:1788.)
+  return super().rename(names)
+Loading source FP32 checkpoint: /workspace/LightM-UNet/data/nnUNet_results/Dataset510_ARCADE_256_4c/nnUNetTrainerENet_12_dense_relu_nearest_conv_upsample_256__nnUNetPlans__2d/fold_0/checkpoint_best.pth
+LayerQuantENet.from_pretrained(/workspace/LightM-UNet/data/nnUNet_results/Dataset510_ARCADE_256_4c/nnUNetTrainerENet_12_dense_relu_nearest_conv_upsample_256__nnUNetPlans__2d/fold_0/checkpoint_best.pth): transferred 541/541 model keys (0 shape mismatches, 139 left uninitialized -- expected for Brevitas-only quantizer params).
+Calibrating on real preprocessed images (device=cuda)...
+  [skip] calibration image with shape (1, 1, 254, 256) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 244, 256) failed forward pass: The size of tensor a (61) must match the size of tensor b (60) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 228, 256) failed forward pass: The size of tensor a (57) must match the size of tensor b (56) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 244, 246) failed forward pass: The size of tensor a (61) must match the size of tensor b (60) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 255, 256) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 215, 205) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 108 but got size 107 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 193, 184) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 97 but got size 96 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 174, 184) failed forward pass: The size of tensor a (43) must match the size of tensor b (42) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 254, 256) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 255, 255) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 256, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 250, 256) failed forward pass: The size of tensor a (125) must match the size of tensor b (124) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 256, 255) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 255, 256) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 190, 202) failed forward pass: The size of tensor a (47) must match the size of tensor b (46) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 234, 256) failed forward pass: The size of tensor a (117) must match the size of tensor b (116) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 256, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 256, 255) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 256, 255) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 250, 256) failed forward pass: The size of tensor a (125) must match the size of tensor b (124) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 250, 256) failed forward pass: The size of tensor a (125) must match the size of tensor b (124) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 255, 256) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 255, 255) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 254, 203) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 102 but got size 101 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 218, 194) failed forward pass: The size of tensor a (97) must match the size of tensor b (96) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 244, 242) failed forward pass: The size of tensor a (61) must match the size of tensor b (60) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 256, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 254, 256) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 249, 254) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 125 but got size 124 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 235, 212) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 118 but got size 117 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 255, 255) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 216, 205) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 103 but got size 102 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 256, 255) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 253, 200) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 127 but got size 126 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 182, 188) failed forward pass: The size of tensor a (47) must match the size of tensor b (46) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 256, 197) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 99 but got size 98 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 244, 200) failed forward pass: The size of tensor a (61) must match the size of tensor b (60) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 256, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 255, 256) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 222, 256) failed forward pass: The size of tensor a (55) must match the size of tensor b (54) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 250, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 256, 255) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 158, 256) failed forward pass: The size of tensor a (39) must match the size of tensor b (38) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 206, 232) failed forward pass: The size of tensor a (51) must match the size of tensor b (50) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 254, 256) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 255, 256) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 228, 256) failed forward pass: The size of tensor a (57) must match the size of tensor b (56) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 255, 255) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 230, 219) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 110 but got size 109 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 239, 255) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 120 but got size 119 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 255, 254) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 252, 256) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 255, 256) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 256, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 146, 219) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 110 but got size 109 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 221, 254) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 111 but got size 110 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 256, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 241, 256) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 121 but got size 120 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 246, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 250, 256) failed forward pass: The size of tensor a (125) must match the size of tensor b (124) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 227, 246) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 114 but got size 113 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 255, 256) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 166, 237) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 119 but got size 118 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 210, 192) failed forward pass: The size of tensor a (105) must match the size of tensor b (104) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 251, 256) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 126 but got size 125 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 195, 219) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 98 but got size 97 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 255, 254) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 255, 256) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 254, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 182, 199) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 100 but got size 99 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 254, 256) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 194, 256) failed forward pass: The size of tensor a (97) must match the size of tensor b (96) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 234, 222) failed forward pass: The size of tensor a (55) must match the size of tensor b (54) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 237, 171) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 119 but got size 118 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 256, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 178, 210) failed forward pass: The size of tensor a (105) must match the size of tensor b (104) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 247, 200) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 124 but got size 123 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 238, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 254, 256) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 250, 256) failed forward pass: The size of tensor a (125) must match the size of tensor b (124) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 255, 256) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 199, 190) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 100 but got size 99 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 254, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 256, 255) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 199, 190) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 100 but got size 99 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 256, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 161, 190) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 81 but got size 80 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 254, 256) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 248, 179) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 90 but got size 89 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 256, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 249, 252) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 125 but got size 124 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 217, 214) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 109 but got size 108 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 256, 255) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 197, 256) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 99 but got size 98 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 252, 256) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 254, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 256, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 256, 229) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 115 but got size 114 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 242, 256) failed forward pass: The size of tensor a (121) must match the size of tensor b (120) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 254, 256) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 246, 256) failed forward pass: The size of tensor a (61) must match the size of tensor b (60) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 211, 241) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 106 but got size 105 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 222, 246) failed forward pass: The size of tensor a (61) must match the size of tensor b (60) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 222, 256) failed forward pass: The size of tensor a (55) must match the size of tensor b (54) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 170, 221) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 111 but got size 110 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 183, 250) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 92 but got size 91 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 249, 255) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 125 but got size 124 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 242, 256) failed forward pass: The size of tensor a (121) must match the size of tensor b (120) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 160, 236) failed forward pass: The size of tensor a (59) must match the size of tensor b (58) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 248, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 256, 253) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 127 but got size 126 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 255, 256) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 252, 252) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 256, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 181, 256) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 91 but got size 90 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 251, 252) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 126 but got size 125 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 242, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 254, 256) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 256, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 254, 255) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 230, 219) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 110 but got size 109 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 254, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 255, 256) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 232, 206) failed forward pass: The size of tensor a (51) must match the size of tensor b (50) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 255, 256) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 190, 181) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 91 but got size 90 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 255, 254) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 256, 255) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 254, 255) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 255, 256) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 255, 256) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 230, 192) failed forward pass: The size of tensor a (57) must match the size of tensor b (56) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 255, 256) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 248, 255) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 256, 255) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 250, 250) failed forward pass: The size of tensor a (125) must match the size of tensor b (124) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 254, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 255, 254) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 245, 256) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 123 but got size 122 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 242, 256) failed forward pass: The size of tensor a (121) must match the size of tensor b (120) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 255, 256) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 244, 218) failed forward pass: The size of tensor a (61) must match the size of tensor b (60) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 243, 255) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 122 but got size 121 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 254, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 236, 256) failed forward pass: The size of tensor a (59) must match the size of tensor b (58) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 182, 256) failed forward pass: The size of tensor a (45) must match the size of tensor b (44) at non-singleton dimension 2
+  [skip] calibration image with shape (1, 1, 256, 254) failed forward pass: The size of tensor a (63) must match the size of tensor b (62) at non-singleton dimension 3
+  [skip] calibration image with shape (1, 1, 255, 256) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 255, 255) failed forward pass: Sizes of tensors must match except in dimension 1. Expected size 128 but got size 127 for tensor number 1 in the list.
+  [skip] calibration image with shape (1, 1, 246, 256) failed forward pass: The size of tensor a (61) must match the size of tensor b (60) at non-singleton dimension 2
+Calibration used 1050/1200 images.
+Clamped 0 quantizer scale(s) below the fp16-safe floor (1e-04) -- these sites have ~zero real output either way, so this only prevents a real fp16 x/0->NaN failure at deployment, it doesn't change accuracy.
+Saved calibrated checkpoint: /workspace/LightM-UNet/data/nnUNet_results/Dataset510_ARCADE_256_4c/nnUNetTrainerLayerQuantENet_12_dense_relu_nearest_conv_upsample_256_joint_alpha1.0_candidatebits468_lut70_bram40_dsp90_fps100_dsr1.04_jointsdist_calibrated_all1200__nnUNetPlans__2d/fold_0/checkpoint_best.pth

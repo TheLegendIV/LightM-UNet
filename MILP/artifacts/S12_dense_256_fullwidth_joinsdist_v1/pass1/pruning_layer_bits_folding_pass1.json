@@ -1,0 +1,490 @@
+{
+  "note": "block_sensitivity = sum over the block's measured layers of |trace_w| + |trace_a| (layer_sensitivity.py). frees = this solve's resources/cycles for every hardware node in the block, incl. its residual-join thresholds. Pruning needs retraining/QAT to confirm accuracy.",
+  "zero_sensitivity_layers": [],
+  "candidates": [],
+  "ranked_prunable_blocks": [
+    {
+      "block": "stage3.7",
+      "prunable": true,
+      "zero_sensitivity_layers": [],
+      "all_measured_layers_zero": false,
+      "block_sensitivity": 0.010680354748558685,
+      "min_conv_out_channels": 8,
+      "frees": {
+        "lut_calibrated": 6960.714968888889,
+        "bram18k_calibrated": 9.0,
+        "dsp": 3,
+        "cycles": 1261568
+      },
+      "frees_pct_of_budget": {
+        "lut": 3.0211436496913584,
+        "bram18k": 1.4423076923076923,
+        "dsp": 0.1736111111111111,
+        "cycles": 3.0164926663846163
+      },
+      "env": "ENET_PRUNED_BLOCKS=stage3.7"
+    },
+    {
+      "block": "stage2.3",
+      "prunable": true,
+      "zero_sensitivity_layers": [],
+      "all_measured_layers_zero": false,
+      "block_sensitivity": 0.023029621655414917,
+      "min_conv_out_channels": 8,
+      "frees": {
+        "lut_calibrated": 7289.04804,
+        "bram18k_calibrated": 15.0,
+        "dsp": 4,
+        "cycles": 819200
+      },
+      "frees_pct_of_budget": {
+        "lut": 3.1636493229166667,
+        "bram18k": 2.4038461538461537,
+        "dsp": 0.23148148148148148,
+        "cycles": 1.9587614716783224
+      },
+      "env": "ENET_PRUNED_BLOCKS=stage2.3"
+    },
+    {
+      "block": "stage2.6",
+      "prunable": true,
+      "zero_sensitivity_layers": [],
+      "all_measured_layers_zero": false,
+      "block_sensitivity": 0.02628676410569134,
+      "min_conv_out_channels": 8,
+      "frees": {
+        "lut_calibrated": 6755.261528888888,
+        "bram18k_calibrated": 4.0,
+        "dsp": 13,
+        "cycles": 548864
+      },
+      "frees_pct_of_budget": {
+        "lut": 2.931971149691358,
+        "bram18k": 0.6410256410256411,
+        "dsp": 0.7523148148148148,
+        "cycles": 1.312370186024476
+      },
+      "env": "ENET_PRUNED_BLOCKS=stage2.6"
+    },
+    {
+      "block": "stage3.6",
+      "prunable": true,
+      "zero_sensitivity_layers": [],
+      "all_measured_layers_zero": false,
+      "block_sensitivity": 0.02725703148006464,
+      "min_conv_out_channels": 8,
+      "frees": {
+        "lut_calibrated": 6958.476288888889,
+        "bram18k_calibrated": 9.0,
+        "dsp": 8,
+        "cycles": 698440
+      },
+      "frees_pct_of_budget": {
+        "lut": 3.0201720003858026,
+        "bram18k": 1.4423076923076923,
+        "dsp": 0.46296296296296297,
+        "cycles": 1.6700163113757416
+      },
+      "env": "ENET_PRUNED_BLOCKS=stage3.6"
+    },
+    {
+      "block": "stage2.7",
+      "prunable": true,
+      "zero_sensitivity_layers": [],
+      "all_measured_layers_zero": false,
+      "block_sensitivity": 0.028469441976857954,
+      "min_conv_out_channels": 8,
+      "frees": {
+        "lut_calibrated": 7366.110608888888,
+        "bram18k_calibrated": 15.0,
+        "dsp": 10,
+        "cycles": 745472
+      },
+      "frees_pct_of_budget": {
+        "lut": 3.1970966184413574,
+        "bram18k": 2.4038461538461537,
+        "dsp": 0.5787037037037037,
+        "cycles": 1.7824729392272733
+      },
+      "env": "ENET_PRUNED_BLOCKS=stage2.7"
+    },
+    {
+      "block": "stage2.5",
+      "prunable": true,
+      "zero_sensitivity_layers": [],
+      "all_measured_layers_zero": false,
+      "block_sensitivity": 0.029079213471727327,
+      "min_conv_out_channels": 8,
+      "frees": {
+        "lut_calibrated": 6271.955902222222,
+        "bram18k_calibrated": 12.0,
+        "dsp": 9,
+        "cycles": 573440
+      },
+      "frees_pct_of_budget": {
+        "lut": 2.722203082561728,
+        "bram18k": 1.9230769230769231,
+        "dsp": 0.5208333333333334,
+        "cycles": 1.3711330301748257
+      },
+      "env": "ENET_PRUNED_BLOCKS=stage2.5"
+    },
+    {
+      "block": "stage2.2",
+      "prunable": true,
+      "zero_sensitivity_layers": [],
+      "all_measured_layers_zero": false,
+      "block_sensitivity": 0.029235351974218476,
+      "min_conv_out_channels": 8,
+      "frees": {
+        "lut_calibrated": 6516.176671111111,
+        "bram18k_calibrated": 13.0,
+        "dsp": 12,
+        "cycles": 524288
+      },
+      "frees_pct_of_budget": {
+        "lut": 2.828201680169753,
+        "bram18k": 2.0833333333333335,
+        "dsp": 0.6944444444444444,
+        "cycles": 1.2536073418741263
+      },
+      "env": "ENET_PRUNED_BLOCKS=stage2.2"
+    },
+    {
+      "block": "stage3.3",
+      "prunable": true,
+      "zero_sensitivity_layers": [],
+      "all_measured_layers_zero": false,
+      "block_sensitivity": 0.036189006785324274,
+      "min_conv_out_channels": 8,
+      "frees": {
+        "lut_calibrated": 7426.45532,
+        "bram18k_calibrated": 15.0,
+        "dsp": 6,
+        "cycles": 1015808
+      },
+      "frees_pct_of_budget": {
+        "lut": 3.2232878993055554,
+        "bram18k": 2.4038461538461537,
+        "dsp": 0.3472222222222222,
+        "cycles": 2.42886422488112
+      },
+      "env": "ENET_PRUNED_BLOCKS=stage3.3"
+    },
+    {
+      "block": "stage3.5",
+      "prunable": true,
+      "zero_sensitivity_layers": [],
+      "all_measured_layers_zero": false,
+      "block_sensitivity": 0.03770568222139406,
+      "min_conv_out_channels": 8,
+      "frees": {
+        "lut_calibrated": 6779.37472,
+        "bram18k_calibrated": 15.0,
+        "dsp": 5,
+        "cycles": 671744
+      },
+      "frees_pct_of_budget": {
+        "lut": 2.9424369444444443,
+        "bram18k": 2.4038461538461537,
+        "dsp": 0.28935185185185186,
+        "cycles": 1.6061844067762243
+      },
+      "env": "ENET_PRUNED_BLOCKS=stage3.5"
+    },
+    {
+      "block": "stage3.4",
+      "prunable": true,
+      "zero_sensitivity_layers": [],
+      "all_measured_layers_zero": false,
+      "block_sensitivity": 0.040337107125721555,
+      "min_conv_out_channels": 8,
+      "frees": {
+        "lut_calibrated": 5990.231448888889,
+        "bram18k_calibrated": 2.0,
+        "dsp": 6,
+        "cycles": 630784
+      },
+      "frees_pct_of_budget": {
+        "lut": 2.5999268441358026,
+        "bram18k": 0.32051282051282054,
+        "dsp": 0.3472222222222222,
+        "cycles": 1.5082463331923082
+      },
+      "env": "ENET_PRUNED_BLOCKS=stage3.4"
+    },
+    {
+      "block": "stage2.0",
+      "prunable": true,
+      "zero_sensitivity_layers": [],
+      "all_measured_layers_zero": false,
+      "block_sensitivity": 0.041175874188734134,
+      "min_conv_out_channels": 8,
+      "frees": {
+        "lut_calibrated": 5899.765684444445,
+        "bram18k_calibrated": 2.0,
+        "dsp": 4,
+        "cycles": 1081344
+      },
+      "frees_pct_of_budget": {
+        "lut": 2.5606621894290122,
+        "bram18k": 0.32051282051282054,
+        "dsp": 0.23148148148148148,
+        "cycles": 2.5855651426153856
+      },
+      "env": "ENET_PRUNED_BLOCKS=stage2.0"
+    },
+    {
+      "block": "stage3.0",
+      "prunable": true,
+      "zero_sensitivity_layers": [],
+      "all_measured_layers_zero": false,
+      "block_sensitivity": 0.0601880465549026,
+      "min_conv_out_channels": 8,
+      "frees": {
+        "lut_calibrated": 6238.412742222222,
+        "bram18k_calibrated": 13.0,
+        "dsp": 8,
+        "cycles": 638976
+      },
+      "frees_pct_of_budget": {
+        "lut": 2.7076444193672837,
+        "bram18k": 2.0833333333333335,
+        "dsp": 0.46296296296296297,
+        "cycles": 1.5278339479090914
+      },
+      "env": "ENET_PRUNED_BLOCKS=stage3.0"
+    },
+    {
+      "block": "regular4.1",
+      "prunable": true,
+      "zero_sensitivity_layers": [],
+      "all_measured_layers_zero": false,
+      "block_sensitivity": 0.06439311279879312,
+      "min_conv_out_channels": 4,
+      "frees": {
+        "lut_calibrated": 4167.25468,
+        "bram18k_calibrated": 5.0,
+        "dsp": 3,
+        "cycles": 1409024
+      },
+      "frees_pct_of_budget": {
+        "lut": 1.8087042881944444,
+        "bram18k": 0.8012820512820513,
+        "dsp": 0.1736111111111111,
+        "cycles": 3.3690697312867144
+      },
+      "env": "ENET_PRUNED_BLOCKS=regular4.1"
+    },
+    {
+      "block": "stage2.1",
+      "prunable": true,
+      "zero_sensitivity_layers": [],
+      "all_measured_layers_zero": false,
+      "block_sensitivity": 0.06812916719564385,
+      "min_conv_out_channels": 8,
+      "frees": {
+        "lut_calibrated": 5384.791448888889,
+        "bram18k_calibrated": 4.0,
+        "dsp": 10,
+        "cycles": 1015808
+      },
+      "frees_pct_of_budget": {
+        "lut": 2.337149066358025,
+        "bram18k": 0.6410256410256411,
+        "dsp": 0.5787037037037037,
+        "cycles": 2.42886422488112
+      },
+      "env": "ENET_PRUNED_BLOCKS=stage2.1"
+    },
+    {
+      "block": "stage3.2",
+      "prunable": true,
+      "zero_sensitivity_layers": [],
+      "all_measured_layers_zero": false,
+      "block_sensitivity": 0.0701408310627289,
+      "min_conv_out_channels": 8,
+      "frees": {
+        "lut_calibrated": 6715.225968888888,
+        "bram18k_calibrated": 11.0,
+        "dsp": 4,
+        "cycles": 1146880
+      },
+      "frees_pct_of_budget": {
+        "lut": 2.914594604552469,
+        "bram18k": 1.7628205128205128,
+        "dsp": 0.23148148148148148,
+        "cycles": 2.7422660603496514
+      },
+      "env": "ENET_PRUNED_BLOCKS=stage3.2"
+    },
+    {
+      "block": "stage2.4",
+      "prunable": true,
+      "zero_sensitivity_layers": [],
+      "all_measured_layers_zero": false,
+      "block_sensitivity": 0.08766095766505815,
+      "min_conv_out_channels": 8,
+      "frees": {
+        "lut_calibrated": 6143.295915555555,
+        "bram18k_calibrated": 13.0,
+        "dsp": 9,
+        "cycles": 606208
+      },
+      "frees_pct_of_budget": {
+        "lut": 2.6663610744598767,
+        "bram18k": 2.0833333333333335,
+        "dsp": 0.5208333333333334,
+        "cycles": 1.4494834890419586
+      },
+      "env": "ENET_PRUNED_BLOCKS=stage2.4"
+    },
+    {
+      "block": "stage3.1",
+      "prunable": true,
+      "zero_sensitivity_layers": [],
+      "all_measured_layers_zero": false,
+      "block_sensitivity": 0.10752325008015703,
+      "min_conv_out_channels": 8,
+      "frees": {
+        "lut_calibrated": 6674.27164,
+        "bram18k_calibrated": 15.0,
+        "dsp": 6,
+        "cycles": 746536
+      },
+      "frees_pct_of_budget": {
+        "lut": 2.8968192881944446,
+        "bram18k": 2.4038461538461537,
+        "dsp": 0.3472222222222222,
+        "cycles": 1.7850170337168556
+      },
+      "env": "ENET_PRUNED_BLOCKS=stage3.1"
+    },
+    {
+      "block": "regular4.0",
+      "prunable": true,
+      "zero_sensitivity_layers": [],
+      "all_measured_layers_zero": false,
+      "block_sensitivity": 0.15796186487025865,
+      "min_conv_out_channels": 4,
+      "frees": {
+        "lut_calibrated": 4432.744613333333,
+        "bram18k_calibrated": 0.0,
+        "dsp": 4,
+        "cycles": 950272
+      },
+      "frees_pct_of_budget": {
+        "lut": 1.9239342939814814,
+        "bram18k": 0.0,
+        "dsp": 0.23148148148148148,
+        "cycles": 2.272163307146854
+      },
+      "env": "ENET_PRUNED_BLOCKS=regular4.0"
+    },
+    {
+      "block": "regular1.2",
+      "prunable": true,
+      "zero_sensitivity_layers": [],
+      "all_measured_layers_zero": false,
+      "block_sensitivity": 0.3553928926015018,
+      "min_conv_out_channels": 4,
+      "frees": {
+        "lut_calibrated": 4591.07572,
+        "bram18k_calibrated": 5.0,
+        "dsp": 6,
+        "cycles": 836108
+      },
+      "frees_pct_of_budget": {
+        "lut": 1.992654392361111,
+        "bram18k": 0.8012820512820513,
+        "dsp": 0.3472222222222222,
+        "cycles": 1.9991896198266832
+      },
+      "env": "ENET_PRUNED_BLOCKS=regular1.2"
+    },
+    {
+      "block": "regular1.3",
+      "prunable": true,
+      "zero_sensitivity_layers": [],
+      "all_measured_layers_zero": false,
+      "block_sensitivity": 0.3578182766305697,
+      "min_conv_out_channels": 4,
+      "frees": {
+        "lut_calibrated": 4521.50952,
+        "bram18k_calibrated": 5.0,
+        "dsp": 12,
+        "cycles": 819200
+      },
+      "frees_pct_of_budget": {
+        "lut": 1.9624607291666665,
+        "bram18k": 0.8012820512820513,
+        "dsp": 0.6944444444444444,
+        "cycles": 1.9587614716783224
+      },
+      "env": "ENET_PRUNED_BLOCKS=regular1.3"
+    },
+    {
+      "block": "regular1.1",
+      "prunable": true,
+      "zero_sensitivity_layers": [],
+      "all_measured_layers_zero": false,
+      "block_sensitivity": 0.7362574370056667,
+      "min_conv_out_channels": 4,
+      "frees": {
+        "lut_calibrated": 4661.562599999999,
+        "bram18k_calibrated": 5.0,
+        "dsp": 9,
+        "cycles": 606208
+      },
+      "frees_pct_of_budget": {
+        "lut": 2.0232476562499997,
+        "bram18k": 0.8012820512820513,
+        "dsp": 0.5208333333333334,
+        "cycles": 1.4494834890419586
+      },
+      "env": "ENET_PRUNED_BLOCKS=regular1.1"
+    },
+    {
+      "block": "regular1.0",
+      "prunable": true,
+      "zero_sensitivity_layers": [],
+      "all_measured_layers_zero": false,
+      "block_sensitivity": 0.9697332421040903,
+      "min_conv_out_channels": 4,
+      "frees": {
+        "lut_calibrated": 4656.83504,
+        "bram18k_calibrated": 5.0,
+        "dsp": 6,
+        "cycles": 1179648
+      },
+      "frees_pct_of_budget": {
+        "lut": 2.021195763888889,
+        "bram18k": 0.8012820512820513,
+        "dsp": 0.3472222222222222,
+        "cycles": 2.8206165192167845
+      },
+      "env": "ENET_PRUNED_BLOCKS=regular1.0"
+    },
+    {
+      "block": "regular5.0",
+      "prunable": true,
+      "zero_sensitivity_layers": [],
+      "all_measured_layers_zero": false,
+      "block_sensitivity": 4.665600214219562,
+      "min_conv_out_channels": 1,
+      "frees": {
+        "lut_calibrated": 2458.4833955555555,
+        "bram18k_calibrated": 0.0,
+        "dsp": 6,
+        "cycles": 475136
+      },
+      "frees_pct_of_budget": {
+        "lut": 1.0670500848765432,
+        "bram18k": 0.0,
+        "dsp": 0.3472222222222222,
+        "cycles": 1.136081653573427
+      },
+      "env": "ENET_PRUNED_BLOCKS=regular5.0"
+    }
+  ]
+}
