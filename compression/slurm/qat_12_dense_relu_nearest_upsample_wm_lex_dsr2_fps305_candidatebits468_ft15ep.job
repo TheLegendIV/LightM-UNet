@@ -213,7 +213,7 @@ if [ "$FINAL_EPOCH" -ge "$ENET_EPOCHS" ]; then
     BEST_EPOCH=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_best.pth', map_location='cpu', weights_only=False)['current_epoch'])" 2>/dev/null || echo -1)
     echo "DIAGNOSTIC: checkpoint_best.pth is at epoch ${BEST_EPOCH}, checkpoint_final.pth is at epoch ${FINAL_EPOCH} (target ${ENET_EPOCHS})."
     if [ "$BEST_EPOCH" != "$FINAL_EPOCH" ]; then
-        echo "NOTE: 'best' EMA dice plateaued before the run finished (last improved at epoch ${BEST_EPOCH}, training reached ${FINAL_EPOCH}) -- the standard row below reports epoch-${BEST_EPOCH} weights, not epoch-${FINAL_EPOCH}. This is real, not a failure -- the epoch5/10/15 rows below are NOT affected (fixed snapshots, independent of EMA-best tracking)."
+        echo "NOTE: 'best' EMA dice plateaued before the run finished (last improved at epoch ${BEST_EPOCH}, training reached ${FINAL_EPOCH}) -- the row below reports epoch-${BEST_EPOCH} weights, not epoch-${FINAL_EPOCH}. This is real, not a failure."
     fi
     PREDICTION_DIR="$nnUNet_raw/${DATASET_NAME}/labelsPr_${NET_NAME}"
 
@@ -222,18 +222,7 @@ if [ "$FINAL_EPOCH" -ge "$ENET_EPOCHS" ]; then
     python compression/collect_results.py "${COMMON_ARGS[@]}" \
         --stage "${RUN_NAME}" --checkpoint-name checkpoint_best.pth
 
-    for EP in 5 10 15; do
-        CKPT="${ENET_OUTPUT_FOLDER}/checkpoint_epoch${EP}.pth"
-        if [ -f "$CKPT" ]; then
-            echo "--- Evaluating checkpoint_epoch${EP}.pth ---"
-            rm -rf "${PREDICTION_DIR}"
-            python compression/collect_results.py "${COMMON_ARGS[@]}" \
-                --stage "${RUN_NAME}_epoch${EP}" --config-name "${NET_NAME}_epoch${EP}" \
-                --checkpoint-name "checkpoint_epoch${EP}.pth"
-        else
-            echo "checkpoint_epoch${EP}.pth not found at ${ENET_OUTPUT_FOLDER} -- skipping that row."
-        fi
-    done
+    # Inference ONLY on checkpoint_best.pth for QAT jobs (epoch5/10/15 snapshots are deliberately not evaluated).
 else
     echo "Only at epoch ${FINAL_EPOCH}/${ENET_EPOCHS} -- skipping collect_results.py (resubmit this job to continue training)."
 fi
