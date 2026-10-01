@@ -325,7 +325,10 @@ def _finn_swu(
     buffer_width = simd_swu * A
     if parallel_window:
         buffer_depth = ((kh - 1) * dh * win + (kw - 1) * dw) * cf + 2
-        swu_cycles = hin * win * cf + 2
+        # Real SWU streams the PADDED feature map (same quantity as fmpad_cycles below) --
+        # using unpadded hin/win here undercounts for any padded/dilated layer (fixed 2026-10-01,
+        # see finn_cost_model.md).
+        swu_cycles = (hin + 2 * layer.ph) * (win + 2 * layer.pw) * cf + 2
     else:
         buffer_min_size = ((kh - 1) * dh * win + (kw - 1) * dw + 1) * cf
         buffer_depth = (

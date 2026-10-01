@@ -23,7 +23,7 @@ Run: `docker exec -e HOME=/tmp/home_dir <finn_container> bash /home/thelegendiv/
 
 ## Gates (before trusting any OOC number)
 1. Bridge logs show `Bridged 5 SWU node(s)` with `parallel_window=1`, no WARNING lines.
-2. `python hardware/check_milp_vs_landed_folding.py <milp folding json> <armC_* partition2 prefifo .onnx>` -> `OK` for both C arms.
+2. `python hardware/checks/check_milp_vs_landed_folding.py <milp folding json> <armC_* partition2 prefifo .onnx>` -> `OK` for both C arms.
 3. Arm B: price with `MILP/utils/apply_folding_config_cost.py` (partition 2) and, for the whole network,
    `MILP/utils/price_autofold_all_partitions.py --dir autofold_armB_all_partitions`.
 

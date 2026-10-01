@@ -18,7 +18,12 @@ QUEUE=(
 
 wait_for_free_slot() {
   while true; do
-    n_running=$(pgrep -f finn_ooc_partition2_trained.py | wc -l)
+    # Anchored to the real worker process only -- the detached launcher's own
+    # "bash -c ... nohup python3 ..." wrapper also matches an unanchored
+    # `-f finn_ooc_partition2_trained.py` grep and stays alive for the whole
+    # build (2 PIDs/build), which silently drops the effective cap to ~1
+    # concurrent build instead of 4 (fixed 2026-10-01).
+    n_running=$(pgrep -f '^python3 finn_ooc_partition2_trained.py' | wc -l)
     if [ "$n_running" -lt 4 ]; then
       return
     fi
@@ -29,7 +34,7 @@ wait_for_free_slot() {
 for entry in "${QUEUE[@]}"; do
   IFS='|' read -r tag preamble folding extra <<< "$entry"
   wait_for_free_slot
-  echo "$(date): launching $tag (slot free, $(pgrep -f finn_ooc_partition2_trained.py | wc -l) currently running)"
+  echo "$(date): launching $tag (slot free, $(pgrep -f '^python3 finn_ooc_partition2_trained.py' | wc -l) currently running)"
   if [ -n "$folding" ]; then
     nohup python3 finn_ooc_partition2_trained.py "$preamble" "$tag" "$folding" $extra > "/tmp/ooc_${tag}.log" 2>&1 &
   else

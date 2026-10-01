@@ -790,6 +790,28 @@ calibration data (all 43 are `impl_style="default"`) to confirm
 BRAM sizing, and easy to confuse with this one — an earlier version of this
 function did exactly that).
 
+### `parallel_window=1` cycles must use the PADDED input (fixed 2026-10-01)
+
+`swu_cycles = hin*win*cf + 2` originally used the layer's raw (unpadded)
+`hin`/`win` — real FINN's `ConvolutionInputGenerator_rtl` in parallel mode
+streams the SAME padded feature map `fmpad_cycles` already accounts for
+(FMPadding sits immediately upstream of the SWU), so this undercounted for
+any padded/dilated layer, worse as padding grew with dilation. Caught via
+`hardware/checks/check_milp_vs_landed_folding.py` on the S12-dense
+`dense_dilation` context block (per-layer dilation 1..N -> per-layer
+padding grows too): landed cycles for 5 real `stage2.*.conv` SWU nodes were
+13%-125% above the old formula's prediction, and matched `fmpad_cycles`
+(+2) almost exactly instead. Fix: `swu_cycles = (hin+2*ph)*(win+2*pw)*cf + 2`.
+Checked impact on every completed S12-dense `layer_bits_folding_*.json` in
+this repo: `swu_cycles` was NEVER the binding `max(mvu_cycles, swu_cycles,
+fmpad_cycles)` term except one `final` layer where old vs corrected differ
+by only the formula's existing +2 constant (padding negligible relative to
+that layer's huge resolution) — so this bug never actually changed any past
+MILP folding/throughput decision for this architecture family, it was only
+ever wrong as a standalone diagnostic field. Revisit if a future config has
+smaller MVAU folding (so `mvu_cycles` doesn't dominate) combined with
+heavy padding/dilation and `parallel_window=1`.
+
 ### `ram_style` for SWU (2026-09-17 addition)
 
 Default `"distributed"` preserves this function's exact prior behavior.

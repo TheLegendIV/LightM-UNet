@@ -11,7 +11,7 @@ partition is a contiguous run of the MILP's MVAU-type layers, so the offset
 with the most MVAU matches is used.
 
 Needs only `onnx` (no FINN). Example, from the repo root:
-    python hardware/check_milp_vs_landed_folding.py \\
+    python hardware/checks/check_milp_vs_landed_folding.py \\
         MILP/artifacts/<dir>/<tag>/layer_bits_folding_<tag>.json \\
         hardware/builds/<build>/post_fifo_autosize_checkpoints/partition2_<tag>_milpfold_prefifo_autosize.onnx
 Run in `docker exec lightmunet_dev python3 ...` if the host python has no onnx.
