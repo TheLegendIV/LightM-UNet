@@ -71,6 +71,15 @@ adding a new one.
    venv/conda set up in this repo. Default Windows `python`/`py` is 3.6 with
    no torch.
 
+## Model class rule
+
+For new quantization work (calibration, QAT, test-split evaluation, export) use
+`LayerQuantEnetFINN` directly, not `LayerQuantENet`. The FINN class is the network
+that actually gets exported, so evaluating it removes the proxy gap between the two
+implementations. `LayerQuantENet` stays only for reproducing older results. The
+`calibrate_*_perlayer.py` scripts still build `LayerQuantENet`; a FINN-class
+calibrate/evaluate path should be added before relying on this for PTQ numbers.
+
 ## Known sharp edges
 
 - PowerShell mangles nested double quotes in
