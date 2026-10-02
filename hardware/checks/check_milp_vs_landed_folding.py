@@ -13,8 +13,19 @@ with the most MVAU matches is used.
 Needs only `onnx` (no FINN). Example, from the repo root:
     python hardware/checks/check_milp_vs_landed_folding.py \\
         MILP/artifacts/<dir>/<tag>/layer_bits_folding_<tag>.json \\
-        hardware/builds/<build>/post_fifo_autosize_checkpoints/partition2_<tag>_milpfold_prefifo_autosize.onnx
+        hardware/builds/<build>/post_fifo_autosize_checkpoints/partition2_<tag>_milpfold_prefifo_autosize.onnx \\
+        --conv-order hardware/outputs/<model>_conv_order.json
 Run in `docker exec lightmunet_dev python3 ...` if the host python has no onnx.
+
+The matching between MILP per_layer keys (file order) and landed MVAU nodes
+(real graph order) is positional by default, which is WRONG whenever a block
+forks into sibling branches of different depth before the next weight-bearing
+op (confirmed for FINNUpsamplingBottleneck's skip_resize_conv/reduce pair --
+see finn_gotchas repo memory). Pass --conv-order to validate/self-correct
+this against each landed node's real weight-initializer element count (the
+same fix applied in finn_s12_build_steps.load_partition_logical_names);
+without it, such swaps print as false MISMATCHes even though the landed fold
+is actually correct.
 """
 from __future__ import annotations
 
@@ -25,6 +36,19 @@ import sys
 import onnx
 
 SKIP_OPS = ("StreamingDataWidthConverter", "StreamingFIFO")
+REALIGN_WINDOW = 12  # how far ahead to search for a weight-count match on mismatch
+
+
+def _shape_count(shape) -> int:
+    n = 1
+    for d in shape:
+        n *= d
+    return n
+
+
+def load_conv_order_weight_counts(conv_order_file: str) -> dict[str, int]:
+    entries = json.load(open(conv_order_file))
+    return {e["logical_name"]: _shape_count(e["weight_shape"]) for e in entries if e.get("weight_shape")}
 
 
 def _attrs(node) -> dict:
@@ -42,6 +66,14 @@ def landed_mvaus(model) -> list[dict]:
     for n in model.graph.node:
         for i in n.input:
             consumers.setdefault(i, []).append(n)
+    initializers = {init.name: init for init in model.graph.initializer}
+
+    def weight_count(node):
+        for inp in node.input:
+            init = initializers.get(inp)
+            if init is not None:
+                return _shape_count(init.dims)
+        return None
 
     def upstream(node):
         p = producer.get(node.input[0])
@@ -71,6 +103,7 @@ def landed_mvaus(model) -> list[dict]:
             "swu_pw": _attrs(swu).get("parallel_window") if swu else None,
             "swu_ifm_ch": _attrs(swu).get("IFMChannels") if swu else None,
             "thr": thr.name if thr else None, "thr_pe": _attrs(thr).get("PE") if thr else None,
+            "weight_count": weight_count(n),
         })
     return records
 
@@ -94,7 +127,8 @@ def find_offset(layers: list, landed: list[dict]) -> int:
     return best
 
 
-def check(milp_json: str, onnx_path: str, start_layer: str | None = None) -> list[str]:
+def check(milp_json: str, onnx_path: str, start_layer: str | None = None,
+          weight_counts: dict[str, int] | None = None) -> list[str]:
     per_layer = json.load(open(milp_json))["per_layer"]
     landed = landed_mvaus(onnx.load(onnx_path))
     layers = milp_mvau_layers(per_layer)
@@ -108,8 +142,33 @@ def check(milp_json: str, onnx_path: str, start_layer: str | None = None) -> lis
     else:
         off = find_offset(layers, landed)
     print(f"{len(landed)} landed MVAUs matched against MILP layers starting at {layers[off][0]!r}")
+    if weight_counts is None:
+        print("WARNING: no --conv-order given -- matching MILP layers to landed nodes purely positionally. "
+              "This is WRONG for forked blocks of different depth (e.g. FINNUpsamplingBottleneck's "
+              "skip_resize_conv/reduce pair) -- pass --conv-order to shape-validate and self-correct.")
+    # Mutable window: realign (swap) MILP entries forward/back to match each landed node's real
+    # weight-element count, mirroring finn_s12_build_steps.load_partition_logical_names's fix for
+    # the same conv_order.json-vs-real-graph node-order divergence.
+    window = list(layers[off:off + len(landed)])
     problems = []
-    for (name, e), r in zip(layers[off:], landed):
+    for i, r in enumerate(landed):
+        name, e = window[i]
+        expected = weight_counts.get(name) if weight_counts else None
+        if expected is not None and r["weight_count"] is not None and expected != r["weight_count"]:
+            match_j = next(
+                (j for j in range(i + 1, min(i + 1 + REALIGN_WINDOW, len(window)))
+                 if weight_counts.get(window[j][0]) == r["weight_count"]),
+                None,
+            )
+            if match_j is None:
+                problems.append(f"{name} -> {r['node']}: weight count MILP {expected} != landed "
+                                f"{r['weight_count']}, and no matching MILP layer found within the next "
+                                f"{REALIGN_WINDOW} entries")
+                continue
+            print(f"[checker] REALIGN: MILP layer {name!r} doesn't match landed {r['node']} (weight count "
+                  f"{r['weight_count']}) -- swapping in {window[match_j][0]!r} instead.")
+            window[i], window[match_j] = window[match_j], window[i]
+            name, e = window[i]
         want = (e["pe"], e["simd"], e["mvu_cycles"])
         got = (r["pe"], r["simd"], r["cycles"])
         if want != got:
@@ -140,8 +199,13 @@ def main() -> int:
                      help="MILP per_layer key the landed graph's first MVAU corresponds to. Overrides the "
                           "auto offset-finder -- needed when two partitions have identical (PE,SIMD,mvu_cycles) "
                           "(e.g. symmetric-compute-per-stage architectures), which makes find_offset ambiguous.")
+    ap.add_argument("--conv-order", default=None,
+                     help="conv_order.json for this model (gives each MILP layer's real weight-element count) "
+                          "-- shape-validates the MILP-layer-to-landed-node match and self-corrects forked-branch "
+                          "ordering swaps (e.g. skip_resize_conv/reduce) instead of printing false MISMATCHes.")
     args = ap.parse_args()
-    problems = check(args.milp_json, args.onnx_path, args.start_layer)
+    weight_counts = load_conv_order_weight_counts(args.conv_order) if args.conv_order else None
+    problems = check(args.milp_json, args.onnx_path, args.start_layer, weight_counts)
     for p in problems:
         print("MISMATCH", p)
     print(f"{len(problems)} mismatch(es)" if problems else "OK: landed folding matches MILP")

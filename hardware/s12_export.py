@@ -2,11 +2,11 @@
 
 Presets (override any field with --channels/--bottlenecks/...):
   --resolution 512 : decoder nearest_upsample,      context dense_dilation,      CHANNELS (4,16,32,16,4), Dataset509_ARCADE_1x1_4c
-  --resolution 256 : decoder nearest_conv_upsample, context dense_dilation_half, CHANNELS (4,8,16,8,4),   Dataset510_ARCADE_256_4c
+  --resolution 256 : decoder nearest_conv_upsample, context dense_dilation_half, CHANNELS (4,16,32,16,4), Dataset510_ARCADE_256_4c
 BOTTLENECKS (4,8,8,2,1) for both.
 
-Weights: --checkpoint <nnU-Net checkpoint_best.pth[.txt]> (LayerQuantEnetFINN.from_pretrained),
-or omit it for torch.manual_seed(0) dummy weights (resource-only probes).
+Weights: --checkpoint <nnU-Net checkpoint_best.pth[.txt]> (LayerQuantEnetFINN.from_pretrained) is required --
+there is no dummy-weight fallback.
 Bits: --bits-file <MILP layer_bits_SITES_*.json> (sites missing from it fall back to 6 bits).
 
 Writes <out-dir>/<name>.onnx and <out-dir>/<name>_conv_order.json (the
@@ -42,7 +42,7 @@ FALLBACK_BITS = 6
 PRESETS = {
     512: dict(decoder="nearest_upsample", context="dense_dilation", channels=(4, 16, 32, 16, 4),
               dataset="Dataset509_ARCADE_1x1_4c", name_stem="quantEnet_12_dense_relu_nearest_upsample"),
-    256: dict(decoder="nearest_conv_upsample", context="dense_dilation_half", channels=(4, 8, 16, 8, 4),
+    256: dict(decoder="nearest_conv_upsample", context="dense_dilation_half", channels=(4, 16, 32, 16, 4),
               dataset="Dataset510_ARCADE_256_4c", name_stem="quantEnet_12_dense_relu_nearest_conv_upsample"),
 }
 BOTTLENECKS = (4, 8, 8, 2, 1)
@@ -150,7 +150,7 @@ def main() -> None:
     p.add_argument("--resolution", type=int, choices=sorted(PRESETS), required=True)
     p.add_argument("--tag", required=True, help="goes into the onnx name")
     p.add_argument("--bits-file", required=True, help="MILP layer_bits_SITES_*.json")
-    p.add_argument("--checkpoint", help="omit for seed-0 dummy weights")
+    p.add_argument("--checkpoint", required=True, help="nnU-Net checkpoint_best.pth[.txt]")
     p.add_argument("--name", help="override onnx basename (default <stem>_{trained|dummy}_<tag>_<R>x<R>)")
     p.add_argument("--out-dir", default=str(REPO_ROOT / "hardware" / "outputs"))
     p.add_argument("--decoder")
@@ -171,8 +171,7 @@ def main() -> None:
     channels = tuple(args.channels or preset["channels"])
     bottlenecks = tuple(args.bottlenecks)
     res = args.resolution
-    trained = args.checkpoint is not None
-    name = args.name or f"{preset['name_stem']}_{'trained' if trained else 'dummy'}_{args.tag}_{res}x{res}"
+    name = args.name or f"{preset['name_stem']}_trained_{args.tag}_{res}x{res}"
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     finn_enet_prod_export.OUT_DIR = out_dir
@@ -188,14 +187,10 @@ def main() -> None:
                 bottlenecks_per_stage=bottlenecks, context_pattern=context, decoder_type=decoder)
     print(f"=== {name}: decoder={decoder} context={context} channels={channels} "
           f"{len(weight_names)} weight / {len(act_names)} act sites ===")
-    if trained:
-        ckpt = Path(args.checkpoint)
-        if not ckpt.is_file():
-            p.error(f"checkpoint not found: {ckpt}")
-        model = LayerQuantEnetFINN.from_pretrained(ckpt, w_bits, a_bits, **arch).eval()
-    else:
-        torch.manual_seed(0)
-        model = LayerQuantEnetFINN(w_bits, a_bits, **arch).eval()
+    ckpt = Path(args.checkpoint)
+    if not ckpt.is_file():
+        p.error(f"checkpoint not found: {ckpt}")
+    model = LayerQuantEnetFINN.from_pretrained(ckpt, w_bits, a_bits, **arch).eval()
 
     if args.calibrate is not None:
         pre = REPO_ROOT / "data" / "nnUNet_preprocessed" / preset["dataset"] / "nnUNetPlans_2d"

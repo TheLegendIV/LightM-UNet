@@ -29,11 +29,28 @@ WEIGHT_OP_TYPES = ("MVAU_hls", "MVAU_rtl", "VVAU_hls", "VVAU_rtl")
 THRESH_OP_TYPES = ("Thresholding_hls", "Thresholding_rtl")
 SWU_OP_TYPES = ("ConvolutionInputGenerator_hls", "ConvolutionInputGenerator_rtl")
 FMPAD_OP_TYPES = ("FMPadding_hls", "FMPadding_rtl", "FMPadding_Pixel")
-# Forces thresholding.sv's RAM_STYLE to "distributed" for every real depth.
+# Pinned Thresholding_rtl memory placement (thresholding.sv: stage depth >= trigger -> BRAM, else LUTRAM;
+# 0 = Vivado "auto"). MUST match MILP/finn_cost_model.py THR_DEPTH_TRIGGER_BRAM / THR_DEPTH_TRIGGER_DISTRIBUTED,
+# which is what the MILP priced: ram_style "block" -> 1024, "distributed" -> 999999 (everything LUTRAM).
+THRESH_BRAM_TRIGGER = 1024
 THRESH_DISTRIBUTED_BRAM_TRIGGER = 999999
+THRESH_TRIGGER_BY_STYLE = {"block": THRESH_BRAM_TRIGGER, "distributed": THRESH_DISTRIBUTED_BRAM_TRIGGER}
 PARTITION_RANGE_ORDER = [
     "down1_start", "down2_start", "q2_start", "q3_start", "q4_start", "up4_start", "up5_start",
 ]
+
+# Ported from hardware/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4's
+# finn_ooc_..._8way_full_v4_256x256.py step_allocate_uram_fifos (opt-in here via
+# finn_s12_build.py's --allocate-uram, default OFF -- "no URAM forcing" standing rule otherwise).
+# ZCU7EV has 96 URAM288 blocks (4096-deep x 72b each) total; all 8 partitions are simultaneously
+# resident on the SAME physical chip and share this ONE pool, so the whole-board budget MUST be
+# discounted equally across the 8 partitions up front (OOC synth of one partition can't see the
+# other 7's usage, so handing each partition the full board budget can oversubscribe the real chip
+# by up to 8x). 88 (not the full 96) leaves a margin.
+URAM_BUDGET_BLOCKS = 88
+URAM_PARTITIONS = 8
+URAM_DEPTH_PER_BLOCK = 4096
+URAM_WIDTH_PER_BLOCK = 72
 
 
 # ---------------------------------------------------------------- partitioning
@@ -222,11 +239,31 @@ def _get_pe_simd_bounds(inst):
         return inst.get_nodeattr("Channels"), k_h * k_w
 
 
+REALIGN_WINDOW = 12  # how far ahead to search conv_order.json for a weight-count match on mismatch
+
+
+def _shape_count(shape):
+    n = 1
+    for d in shape:
+        n *= d
+    return n
+
+
 def load_partition_logical_names(preamble_dir, conv_order_file, n_partitions=8):
     """{partition_idx: (conv_logical_names, pool_logical_names)} via positional
-    match of conv_order.json against the pre-partition graph. A forked MatMul
-    duplicated by step_dedup_forked_matmul_before_threshold (same weight
-    tensor) inherits the first copy's logical name."""
+    match of conv_order.json against the pre-partition graph, shape-validated against each
+    node's real weight element count. conv_order.json is built from plain PyTorch forward
+    hooks (Python statement order), but the real exported graph's node order follows
+    topological/readiness order instead -- these DIVERGE whenever a block forks into two
+    branches of different depth before the next weight-bearing op (confirmed for
+    FINNUpsamplingBottleneck's skip_resize_conv (3 hops: main_proj->main_act->main_up) vs.
+    reduce (1 hop, same fork point) -- real graph order ends up [..., reduce, skip_resize_conv,
+    ...], not conv_order.json's [..., skip_resize_conv, reduce, ...]). When the next unconsumed
+    conv_order.json entry's weight_shape element count doesn't match the real node's weight
+    initializer, search ahead (REALIGN_WINDOW) for the entry that does and swap it forward,
+    rather than silently mis-assigning folding params to the wrong real conv. A forked MatMul
+    duplicated by step_dedup_forked_matmul_before_threshold (same weight tensor) inherits the
+    first copy's logical name."""
     full_model = ModelWrapper(f"{preamble_dir}/intermediate_models/step_enet_convert_to_hw_rtl_mvau.onnx")
     boundaries = finn_stage_partition.compute_8way_boundaries(full_model)
     print(f"[bridge] 8-way boundaries: {boundaries}")
@@ -248,13 +285,38 @@ def load_partition_logical_names(preamble_dir, conv_order_file, n_partitions=8):
 
     tensor_to_entry, node_idx_to_entry, pos = {}, {}, 0
     for node_idx in weight_like_idx:
-        wt = _weight_tensor(full_model.graph.node[node_idx])
+        node = full_model.graph.node[node_idx]
+        wt = _weight_tensor(node)
         if wt is not None and wt in tensor_to_entry:
             node_idx_to_entry[node_idx] = tensor_to_entry[wt]
             continue
         if pos >= len(all_names):
             raise RuntimeError(f"ran out of conv_order.json entries at node_idx={node_idx} -- do not proceed.")
+        actual_count = None
+        if wt is not None:
+            arr = full_model.get_initializer(wt)
+            if arr is not None:
+                actual_count = int(np.prod(arr.shape))
         entry = all_names[pos]
+        if (actual_count is not None and entry["weight_shape"] is not None
+                and _shape_count(entry["weight_shape"]) != actual_count):
+            match_j = next(
+                (j for j in range(pos + 1, min(pos + 1 + REALIGN_WINDOW, len(all_names)))
+                 if all_names[j]["weight_shape"] is not None and _shape_count(all_names[j]["weight_shape"]) == actual_count),
+                None,
+            )
+            if match_j is None:
+                raise RuntimeError(
+                    f"node_idx={node_idx} ({node.name}): conv_order.json entry at pos={pos} "
+                    f"({entry['logical_name']!r}, weight_shape={entry['weight_shape']}) doesn't match this "
+                    f"node's real weight element count ({actual_count}), and no match found within the next "
+                    f"{REALIGN_WINDOW} entries -- do not proceed."
+                )
+            print(f"[bridge] REALIGN: conv_order.json pos={pos} ({entry['logical_name']!r}) doesn't match "
+                  f"node_idx={node_idx} ({node.name})'s real weight (count={actual_count}) -- swapping in "
+                  f"pos={match_j} ({all_names[match_j]['logical_name']!r}) instead.")
+            all_names[pos], all_names[match_j] = all_names[match_j], all_names[pos]
+            entry = all_names[pos]
         pos += 1
         if wt is not None:
             tensor_to_entry[wt] = entry
@@ -312,9 +374,123 @@ def _find_following_thresholding(kernel_model, weight_node):
     return None
 
 
-def build_partition_folding_config(partition_model_fn, sdp_node_name, logical_names, per_layer, cfg, tag=""):
+def _uram_blocks_for_fifo(inst, depth):
+    """URAM288 tiling: each block is 4096-deep x 72b -- ceil(width/72) * ceil(depth/4096)
+    blocks needed to hold one FIFO of this width/depth."""
+    width = inst.get_instream_width()
+    return math.ceil(width / URAM_WIDTH_PER_BLOCK) * math.ceil(depth / URAM_DEPTH_PER_BLOCK)
+
+
+def step_allocate_uram_fifos(model, partition_idx, budget=None):
+    """Greedily allocates URAM to the deepest StreamingFIFO_rtl nodes (impl_style=="vivado"
+    only -- impl_style=="rtl"/Q_srl FIFOs are shallow <=256-deep SRL chains with no BRAM/URAM
+    primitive at all) up to a hard budget of `budget` URAM288 blocks (4096x72b each on
+    UltraScale+). `budget` defaults to this partition's equal share of the whole-board
+    URAM_BUDGET_BLOCKS across URAM_PARTITIONS (NOT the full board budget -- see this module's
+    URAM_BUDGET_BLOCKS comment).
+
+    MUST run before SplitLargeFIFOs (confirmed via direct FINN source read of
+    set_fifo_depths.py's SplitLargeFIFOs.apply(): a FIFO's ram_style nodeattr is copied VERBATIM
+    onto every one of its split children) -- allocating here, pre-split, automatically keeps a
+    whole deep FIFO "chain" together in one contiguous URAM allocation once it gets split.
+    Deepest-first greedy selection -- a later (shallower) candidate is still tried if an earlier,
+    deeper one didn't fit the remaining budget."""
+    if budget is None:
+        budget = URAM_BUDGET_BLOCKS // URAM_PARTITIONS
+    candidates = []
+    for node in model.graph.node:
+        if node.op_type != "StreamingFIFO_rtl":
+            continue
+        inst = getCustomOp(node)
+        if inst.get_nodeattr("impl_style") != "vivado":
+            continue  # shallow SRL-only FIFO, no BRAM/URAM primitive exists for it
+        depth = inst.get_nodeattr("depth")
+        blocks = _uram_blocks_for_fifo(inst, depth)
+        candidates.append((depth, blocks, node, inst))
+    candidates.sort(key=lambda c: c[0], reverse=True)  # deepest first
+
+    used = 0
+    allocated = []
+    for depth, blocks, node, inst in candidates:
+        if used + blocks > budget:
+            continue
+        inst.set_nodeattr("ram_style", "ultra")
+        used += blocks
+        allocated.append((node.name, depth, blocks))
+
+    print(f"[partition {partition_idx}] step_allocate_uram_fifos: allocated {used}/{budget} URAM288 block(s) "
+          f"(per-partition share of the board's {URAM_BUDGET_BLOCKS}-block total across {URAM_PARTITIONS} "
+          f"partitions) to {len(allocated)}/{len(candidates)} vivado-impl FIFO(s):")
+    for name, depth, blocks in allocated:
+        print(f"  {name:30s} depth={depth:8d} blocks={blocks}")
+    return model
+
+
+def _find_join_thresholds(kernel_model, logical_names, prev_block=None):
+    """{Thresholding node name: (block, kind)} for the residual-join thresholds the MILP prices as
+    extra nodes `<block>.skip_quant|residual_add|out_act` (finn_cost_model.md "Residual-join
+    thresholds"). Matched structurally around each AddStreams: residual_add = Thresholding
+    consuming the add's output; out_act = the Thresholding consuming that; skip_quant = Thresholding
+    feeding an add input whose producer is NOT an MVAU/VVAU (an MVAU-fed one is that conv's own thr,
+    handled via _find_following_thresholding). Ported from
+    hardware/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/
+    finn_hawq_folding_bridge_nearest_upsample.py's find_join_thresholds."""
+    adds = [n for n in kernel_model.graph.node if n.op_type.startswith("AddStreams")]
+    blocks = [ln[: -len(".expand.0")] for ln in logical_names if ln.endswith(".expand.0")]
+    if len(adds) != len(blocks):
+        print(f"WARNING: {len(adds)} AddStreams vs {len(blocks)} expand.0 logical names in partition -- "
+              "join thresholds left on Vivado auto placement")
+        return {}
+
+    def is_thr(n):
+        return n is not None and n.op_type in THRESH_OP_TYPES
+
+    found = {}
+    # The partition opens with the PREVIOUS block's residual_add + out_act thresholds (their
+    # AddStreams is in the upstream partition): Thresholding nodes before the first Dup, fed by no
+    # node of this graph.
+    first_thr = next((n for n in kernel_model.graph.node if is_thr(n) and kernel_model.find_producer(n.input[0]) is None), None)
+    if first_thr is not None and prev_block is not None:
+        found[first_thr.name] = (prev_block, "residual_add")
+        nxt = kernel_model.find_consumer(first_thr.output[0])
+        if is_thr(nxt):
+            found[nxt.name] = (prev_block, "out_act")
+    for add, block in zip(adds, blocks):
+        res = kernel_model.find_consumer(add.output[0])
+        if is_thr(res):
+            found[res.name] = (block, "residual_add")
+            out = kernel_model.find_consumer(res.output[0])
+            if is_thr(out):
+                found[out.name] = (block, "out_act")
+        for inp in add.input:
+            prod = kernel_model.find_producer(inp)
+            if not is_thr(prod):
+                continue
+            prod_in = kernel_model.find_producer(prod.input[0])
+            if prod_in is None or prod_in.op_type not in WEIGHT_OP_TYPES:
+                found[prod.name] = (block, "skip_quant")
+    return found
+
+
+def _previous_block_name(conv_order_file, first_logical_name):
+    """Block (`<block>` of `<block>.expand.0`) immediately before `first_logical_name` in the
+    full (cross-partition) conv order."""
+    with open(conv_order_file) as f:
+        names = [e["logical_name"] for e in json.load(f)]
+    for ln in reversed(names[: names.index(first_logical_name)]):
+        if ln.endswith(".expand.0"):
+            return ln[: -len(".expand.0")]
+    return None
+
+
+def build_partition_folding_config(partition_model_fn, sdp_node_name, logical_names, per_layer, cfg, tag="",
+                                    extra_nodes=None, conv_order_file=None):
     """MILP per_layer (pe/simd/simd_swu/thr_pe/thr_ram_style) -> FINN folding
-    config keyed by the node names step_apply_folding_config will see."""
+    config keyed by the node names step_apply_folding_config will see.
+    extra_nodes (the MILP folding json's own "extra_nodes" dict) + conv_order_file (the FULL,
+    cross-partition conv_order.json) are optional: when both given, also bridges the residual-join
+    Thresholding nodes' (skip_quant/residual_add/out_act) depth_trigger_bram from their own
+    ram_style -- without them, join thresholds are left on Vivado auto placement."""
     log = f"[bridge {tag}]"
     kernel_model = ModelWrapper(partition_model_fn)
     kernel_model = step_specialize_layers(kernel_model, cfg)
@@ -356,15 +532,20 @@ def build_partition_folding_config(partition_model_fn, sdp_node_name, logical_na
             fmpad_node, swu_node = _find_dense_swu_fmpad(kernel_model, node)
             if swu_node is not None:
                 simd_swu = compute_entry["simd_swu"]
-                swu_cfg = {"SIMD": simd_swu}
                 if swu_node.op_type == "ConvolutionInputGenerator_rtl":
                     # Mirrors finn_cost_model.conv_cost_pe_simd: parallel_window iff MVAU SIMD > cin.
                     ifm_ch = getCustomOp(swu_node).get_nodeattr("IFMChannels")
                     parallel_window = 1 if simd > ifm_ch else 0
-                    swu_cfg["parallel_window"] = parallel_window
                     expected = ifm_ch if parallel_window else math.gcd(simd, ifm_ch)
                     if expected != simd_swu:
-                        print(f"{log} WARNING {swu_node.name}: MILP simd_swu={simd_swu} but cost-model rule gives {expected}")
+                        # select_impl_style() hard-asserts SIMD==IFMChannels when parallel_window=1
+                        # on a dense conv -- clamp to the cost-model-safe value or FINN crashes.
+                        print(f"{log} WARNING {swu_node.name}: MILP simd_swu={simd_swu} but cost-model rule gives "
+                              f"{expected} -- clamping to {expected}")
+                        simd_swu = expected
+                    swu_cfg = {"SIMD": simd_swu, "parallel_window": parallel_window}
+                else:
+                    swu_cfg = {"SIMD": simd_swu}
                 folding_config[swu_node.name] = swu_cfg
                 print(f"{log} {swu_node.name:30s} {swu_node.op_type:12s} (SWU) {swu_cfg}")
                 if fmpad_node is not None:
@@ -375,11 +556,34 @@ def build_partition_folding_config(partition_model_fn, sdp_node_name, logical_na
             thresh_node = _find_following_thresholding(kernel_model, node)
             if thresh_node is not None:
                 thr_config = {"PE": thr_pe}
-                if compute_entry.get("thr_ram_style") == "distributed":
-                    thr_config["depth_trigger_bram"] = THRESH_DISTRIBUTED_BRAM_TRIGGER
+                thr_ram_style = compute_entry.get("thr_ram_style")
+                if thr_ram_style in THRESH_TRIGGER_BY_STYLE:
+                    thr_config["depth_trigger_bram"] = THRESH_TRIGGER_BY_STYLE[thr_ram_style]
                 folding_config[thresh_node.name] = thr_config
                 print(f"{log} {thresh_node.name:30s} {thresh_node.op_type:12s} (thr_pe) {thr_config}")
 
     if unmatched:
         print(f"{log} WARNING: {len(unmatched)} logical names had no folding entry: {unmatched}")
+
+    # residual-join thresholds: memory placement only (their MILP PE is not applied here -- they
+    # stay at FINN's own PE, same as the original partition2_wm bridge this was ported from).
+    n_join = 0
+    if extra_nodes is not None and conv_order_file is not None:
+        prev_block = _previous_block_name(conv_order_file, logical_names[0]) if logical_names else None
+        joins = _find_join_thresholds(kernel_model, logical_names, prev_block)
+        for thr_name, (block, kind) in joins.items():
+            style = (extra_nodes.get(f"{block}.{kind}") or {}).get("ram_style")
+            if style not in THRESH_TRIGGER_BY_STYLE:
+                print(f"{log} WARNING {thr_name}: no ram_style for {block}.{kind} in folding json (got {style!r}) -- left on auto")
+                continue
+            folding_config.setdefault(thr_name, {})["depth_trigger_bram"] = THRESH_TRIGGER_BY_STYLE[style]
+            n_join += 1
+            print(f"{log} {thr_name:30s} Thresholding  (join {kind}) {block} ram_style={style} "
+                  f"depth_trigger_bram={THRESH_TRIGGER_BY_STYLE[style]}")
+        if n_join:
+            print(f"{log} pinned depth_trigger_bram on {n_join} residual-join Thresholding node(s)")
+    elif extra_nodes is not None or conv_order_file is not None:
+        print(f"{log} WARNING: need BOTH extra_nodes and conv_order_file to bridge join thresholds -- got "
+              f"extra_nodes={extra_nodes is not None} conv_order_file={conv_order_file is not None}, skipping")
+
     return folding_config

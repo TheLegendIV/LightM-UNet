@@ -1,6 +1,7 @@
 """Unified S12-dense FINN build: MILP folding bridge -> per-partition
 specialize/fold/codegen/ipgen/FIFO-autosize/SplitLargeFIFOs/stitch -> real
-Vivado OOC synth (+ rtlsim). No URAM forcing (standing rule).
+Vivado OOC synth (+ rtlsim). URAM is NOT forced by default -- pass
+--allocate-uram to opt in (see finn_s12_build_steps.step_allocate_uram_fifos).
 
 Modes:
   --partitions all   full 8-way build; per-partition stitched IPs named after
@@ -14,7 +15,8 @@ Run inside the FINN container:
     docker exec -e HOME=/tmp/home_dir <c> bash -c 'cd /home/thelegendiv/finn/notebooks/enet && \\
         nohup python3 finn_s12_build.py <preamble_dir> --tag <tag> --conv-order <conv_order.json> \\
             [--folding-json layer_bits_folding_<tag>.json] [--partitions all|N ...] \\
-            [--target-fps F] [--mvau-wwidth-max N] > /tmp/ooc_<tag>.log 2>&1 &'
+            [--target-fps F] [--mvau-wwidth-max N] [--allocate-uram [--uram-budget-blocks N]] \\
+            > /tmp/ooc_<tag>.log 2>&1 &'
 """
 import argparse
 import concurrent.futures
@@ -34,6 +36,13 @@ _parser.add_argument("--folding-json", help="MILP layer_bits_folding_*.json; omi
 _parser.add_argument("--partitions", nargs="+", default=["all"])
 _parser.add_argument("--target-fps", type=float, default=None)
 _parser.add_argument("--mvau-wwidth-max", type=int, default=None)
+_parser.add_argument("--allocate-uram", action="store_true",
+                      help="greedily set ram_style=ultra on the deepest vivado-impl StreamingFIFO_rtl nodes "
+                           "per partition, up to an 8-way-shared board budget (default OFF -- see "
+                           "finn_s12_build_steps.step_allocate_uram_fifos)")
+_parser.add_argument("--uram-budget-blocks", type=int, default=None,
+                      help="whole-board URAM288 budget shared across all 8 partitions (default: "
+                           "finn_s12_build_steps.URAM_BUDGET_BLOCKS, currently 88; ZCU7EV has 96 total)")
 _parser.add_argument("--max-workers", type=int, default=4)
 _parser.add_argument("--build-dir", default=None, help="FINN_BUILD_DIR base (default for 'all': finn_build_tmp/<tag>)")
 _parser.add_argument("--output-dir", default=None, help="reuse an existing output dir instead of a new timestamped one")
@@ -75,9 +84,12 @@ from finn_partition_build_steps import (  # noqa: E402
 )
 from finn_stage_partition import validate_partition_single_output  # noqa: E402
 from finn_s12_build_steps import (  # noqa: E402
+    URAM_BUDGET_BLOCKS,
+    URAM_PARTITIONS,
     build_partition_folding_config,
     install_relaxed_stage_boundaries,
     load_partition_logical_names,
+    step_allocate_uram_fifos,
     step_fix_weight_dtype_bipolar_bug,
     step_force_dsp,
     step_minimize_bit_width_standalone_thresh_aware,
@@ -86,7 +98,8 @@ from finn_s12_build_steps import (  # noqa: E402
 install_relaxed_stage_boundaries()
 
 
-def _build_one_partition(fn, cfg, prefix, folding_file, idx, full, fold_suffix, tag, build_dir):
+def _build_one_partition(fn, cfg, prefix, folding_file, idx, full, fold_suffix, tag, build_dir,
+                          allocate_uram=False, uram_budget_blocks=None):
     """full=True: 8-way flow (IP named <prefix>, SynthOutOfContext -> report/ooc_synth_partition_<i>.json).
     full=False: standalone flow (default "finn_design" IP name, required by stock rtlsim's hardcoded wrapper name)."""
     if build_dir:
@@ -112,6 +125,10 @@ def _build_one_partition(fn, cfg, prefix, folding_file, idx, full, fold_suffix, 
     m = step_hw_codegen(m, cfg)
     m = step_hw_ipgen(m, cfg)
     m = step_set_fifo_depths(m, cfg)
+    if allocate_uram:
+        # MUST run before SplitLargeFIFOs -- see step_allocate_uram_fifos's own docstring.
+        budget = (uram_budget_blocks or URAM_BUDGET_BLOCKS) // URAM_PARTITIONS
+        m = step_allocate_uram_fifos(m, idx, budget=budget)
 
     ckpt_dir = os.path.dirname(fn) if full else cfg.output_dir
     ckpt_name = f"partition_{idx}_prefifo_autosize.onnx" if full else f"partition{idx}_{tag}_{fold_suffix}_prefifo_autosize.onnx"
@@ -211,12 +228,16 @@ def main():
     folding_files = {i: None for i in part_ids}
     if _args.folding_json:
         with open(_args.folding_json) as f:
-            per_layer = json.load(f)["per_layer"]
+            folding_block = json.load(f)
+        per_layer = folding_block["per_layer"]
+        extra_nodes = folding_block.get("extra_nodes")
+        if extra_nodes is None:
+            print("WARNING: folding json has no extra_nodes -- join thresholds left on Vivado auto placement")
         logical = load_partition_logical_names(_args.preamble_dir, _args.conv_order)
         for i in part_ids:
             fc = build_partition_folding_config(
                 getCustomOp(sdp_nodes[i]).get_nodeattr("model"), sdp_nodes[i].name, logical[i][0], per_layer,
-                cfg, tag=f"p{i}",
+                cfg, tag=f"p{i}", extra_nodes=extra_nodes, conv_order_file=_args.conv_order,
             )
             folding_files[i] = os.path.join(output_dir, f"hawq_folding_config_partition{i}.json")
             with open(folding_files[i], "w") as f:
@@ -232,7 +253,8 @@ def main():
             pcfg = dataclasses.replace(cfg, output_dir=os.path.join(output_dir, f"partition_{i}"))
             os.makedirs(pcfg.output_dir, exist_ok=True)
         jobs.append((getCustomOp(sdp_nodes[i]).get_nodeattr("model"), pcfg, sdp_nodes[i].name + "_",
-                     folding_files[i], i, full, fold_suffix, _args.tag, build_dir))
+                     folding_files[i], i, full, fold_suffix, _args.tag, build_dir,
+                     _args.allocate_uram, _args.uram_budget_blocks))
 
     results = {}
     if len(jobs) == 1:
