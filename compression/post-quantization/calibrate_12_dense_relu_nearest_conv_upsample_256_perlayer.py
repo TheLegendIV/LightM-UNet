@@ -45,14 +45,25 @@ CONTEXT_PATTERN = "dense_dilation_half"
 DECODER_TYPE = "nearest_conv_upsample"
 
 
-def load_calibration_batches(dataset_name: str, n_images: int, seed: int = 0) -> list[torch.Tensor]:
+def _pad_to_multiple(x: torch.Tensor, multiple: int) -> torch.Tensor:
+    """Reflect-pads H and W up to a multiple of `multiple` (same as the FINN export script's calibration loader). Odd-size
+    edge patches otherwise fail the stride-8 forward pass and are silently skipped."""
+    h, w = x.shape[-2:]
+    pad_h, pad_w = (-h) % multiple, (-w) % multiple
+    if pad_h == 0 and pad_w == 0:
+        return x
+    return torch.nn.functional.pad(x, (0, pad_w, 0, pad_h), mode="reflect")
+
+
+def load_calibration_batches(dataset_name: str, n_images: int, seed: int = 0, pad_multiple: int = 0) -> list[torch.Tensor]:
     preprocessed_dir = NNUNET_PREPROCESSED / dataset_name / "nnUNetPlans_2d"
     image_files = sorted(p for p in preprocessed_dir.glob("*.npy") if not p.name.endswith("_seg.npy"))
     if not image_files:
         raise FileNotFoundError(f"No preprocessed .npy images found under {preprocessed_dir}")
     rng = random.Random(seed)
     sampled = rng.sample(image_files, k=min(n_images, len(image_files)))
-    return [torch.from_numpy(np.load(p)).float() for p in sampled]
+    tensors = [torch.from_numpy(np.load(p)).float() for p in sampled]
+    return [_pad_to_multiple(t, pad_multiple) for t in tensors] if pad_multiple else tensors
 
 
 # fp16 min-normal is 6.1e-5 -- a calibrated Brevitas activation-quantizer
@@ -123,6 +134,9 @@ def main() -> None:
     parser.add_argument("--fold", type=int, default=0)
     parser.add_argument("--n-calibration-images", type=int, default=64)
     parser.add_argument("--calibration-seed", type=int, default=0)
+    parser.add_argument("--pad-to-multiple", type=int, default=0,
+                         help="Reflect-pad each calibration image's H/W to a multiple of this (use 8) so the odd-size edge "
+                              "patches are used instead of skipped. Default 0 = off (legacy behaviour).")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
 
@@ -145,7 +159,7 @@ def main() -> None:
     )
 
     print(f"Calibrating on real preprocessed images (device={args.device})...")
-    calibration_batches = load_calibration_batches(args.dataset_name, args.n_calibration_images, seed=args.calibration_seed)
+    calibration_batches = load_calibration_batches(args.dataset_name, args.n_calibration_images, seed=args.calibration_seed, pad_multiple=args.pad_to_multiple)
     n_used = calibrate(quant_model, calibration_batches, args.device, seed=args.calibration_seed)
     print(f"Calibration used {n_used}/{len(calibration_batches)} images.")
     quant_model.to("cpu")

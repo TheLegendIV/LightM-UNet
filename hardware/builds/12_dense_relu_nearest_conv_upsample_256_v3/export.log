@@ -1,0 +1,24 @@
+/opt/conda/lib/python3.10/site-packages/brevitas/graph/equalize.py:69: UserWarning: fast_hadamard_transform package not found, using standard pytorch kernels
+  warnings.warn("fast_hadamard_transform package not found, using standard pytorch kernels")
+/opt/conda/lib/python3.10/site-packages/torch/_tensor.py:1271: UserWarning: Named tensors and all their associated APIs are an experimental feature and subject to change. Please do not use them for anything important until they are released as stable. (Triggered internally at /opt/conda/conda-bld/pytorch_1682343967769/work/c10/core/TensorImpl.h:1788.)
+  return super().rename(names)
+
+=== Building REAL-weight (v3, tied residual bits), per-layer-bit-width FINN-safe 12_dense_relu_nearest_conv_upsample_256 -- 87 weight sites, 112 act sites ===
+LayerQuantEnetFINN.from_pretrained(/workspace/LightM-UNet/data/nnUNet_results/Dataset510_ARCADE_256_4c/nnUNetTrainerENet_12_dense_relu_nearest_conv_upsample_256__nnUNetPlans__2d/fold_0/checkpoint_best.pth): transferred 541/543 model keys (0 shape mismatches, 144 left uninitialized -- expected for Brevitas-only quantizer params plus the frozen substitute-block params).
+
+=== Calibrating runtime-stats activation scales on real training data ===
+  Loaded 1000 real calibration images from /workspace/LightM-UNet/data/nnUNet_preprocessed/Dataset510_ARCADE_256_4c/nnUNetPlans_2d (split=train).
+  Calibrated runtime-stats scaling buffers over 1000 real training patches.
+
+=== Forward-pass sanity check + QONNX export ===
+  forward OK: output shape (1, 5, 256, 256)
+================ Diagnostic Run torch.onnx.export version 2.0.1 ================
+verbose: False, log level: Level.ERROR
+======================= 0 NONE 0 NOTE 0 WARNING 0 ERROR ========================
+
+  quantEnet_12_dense_relu_nearest_conv_upsample_256_v3_trained: 552 nodes — {'Add': 27, 'BatchNormalization': 86, 'Concat': 1, 'Conv': 86, 'ConvTranspose': 3, 'MaxPool': 3, 'Quant': 260, 'Relu': 84, 'Resize': 2}
+  Saved: /workspace/LightM-UNet/hardware/builds/12_dense_relu_nearest_conv_upsample_256_v3/outputs/quantEnet_12_dense_relu_nearest_conv_upsample_256_v3_trained.onnx
+
+Exported. Copy to FINN container with:
+  docker cp hardware/builds/12_dense_relu_nearest_conv_upsample_256_v3/outputs/quantEnet_12_dense_relu_nearest_conv_upsample_256_v3_trained.onnx <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/
+EXPORT_EXIT=0
