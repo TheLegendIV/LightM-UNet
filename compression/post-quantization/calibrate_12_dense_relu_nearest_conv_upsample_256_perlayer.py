@@ -35,6 +35,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 PACKAGE_ROOT = REPO_ROOT / "enet"
 sys.path.insert(0, str(PACKAGE_ROOT))
 from nnunetv2.nets.LayerQuantENet import LayerQuantENet  # noqa: E402
+from nnunetv2.nets.LayerQuantEnetFINN import LayerQuantEnetFINN  # noqa: E402
 
 NNUNET_PREPROCESSED = REPO_ROOT / "data" / "nnUNet_preprocessed"
 NNUNET_RESULTS = REPO_ROOT / "data" / "nnUNet_results"
@@ -94,7 +95,8 @@ def clamp_quantizer_scales(quant_model: torch.nn.Module, floor: float = FP16_SAF
     return n_clamped
 
 
-def calibrate(quant_model: torch.nn.Module, calibration_batches: list[torch.Tensor], device: str, seed: int) -> int:
+def calibrate(quant_model: torch.nn.Module, calibration_batches: list[torch.Tensor], device: str, seed: int,
+              train_mode: bool = True) -> int:
     """seed reseeds torch's GLOBAL RNG right before calibration starts -- see
     calibrate_12_dense_relu_warmstart150ep_perlayer.py's own calibrate()
     docstring for the full rationale (Downsampling/UpsamplingBottleneck's
@@ -103,7 +105,9 @@ def calibrate(quant_model: torch.nn.Module, calibration_batches: list[torch.Tens
     ambient global RNG state happens to be)."""
     torch.manual_seed(seed)
     quant_model.to(device)
-    quant_model.train()
+    # train_mode=True is the legacy LayerQuantENet behaviour (seeded dropout, see docstring). The FINN class has no dropout
+    # on this path and the FINN export script calibrates in eval mode, so --model-class finn calibrates in eval mode too.
+    quant_model.train(train_mode)
     n_used = 0
     with torch.no_grad(), calibration_mode(quant_model):
         for batch in calibration_batches:
@@ -134,6 +138,10 @@ def main() -> None:
     parser.add_argument("--fold", type=int, default=0)
     parser.add_argument("--n-calibration-images", type=int, default=64)
     parser.add_argument("--calibration-seed", type=int, default=0)
+    parser.add_argument("--model-class", choices=("layerquant", "finn"), default="layerquant",
+                         help="layerquant = LayerQuantENet (legacy default); finn = LayerQuantEnetFINN, the network that is "
+                              "actually exported (AGENTS.md 'Model class rule'). finn saves a checkpoint whose trainer_name is "
+                              "the FINN perlayer trainer, so collect_results.py/nnUNetv2_predict build the FINN class.")
     parser.add_argument("--pad-to-multiple", type=int, default=0,
                          help="Reflect-pad each calibration image's H/W to a multiple of this (use 8) so the odd-size edge "
                               "patches are used instead of skipped. Default 0 = off (legacy behaviour).")
@@ -151,16 +159,24 @@ def main() -> None:
         raise FileNotFoundError(f"Source checkpoint not found: {source_checkpoint_path}")
 
     print(f"Loading source FP32 checkpoint: {source_checkpoint_path}")
-    quant_model = LayerQuantENet.from_pretrained(
-        source_checkpoint_path, layer_weight_bits, layer_act_bits,
-        out_channels=5, channels=CHANNELS, bottlenecks_per_stage=BOTTLENECKS_PER_STAGE,
-        context_pattern=CONTEXT_PATTERN, decoder_type=DECODER_TYPE, use_dilated=True, use_asymmetric=False,
-        use_strided=True, use_dsc=False, dsc_no_projection=False, separable_dilated=False, trainable_slope=False,
-    )
+    if args.model_class == "finn":
+        quant_model = LayerQuantEnetFINN.from_pretrained(
+            source_checkpoint_path, layer_weight_bits, layer_act_bits,
+            in_channels=1, out_channels=5, channels=CHANNELS, bottlenecks_per_stage=BOTTLENECKS_PER_STAGE,
+            context_pattern=CONTEXT_PATTERN, decoder_type=DECODER_TYPE,
+        )
+    else:
+        quant_model = LayerQuantENet.from_pretrained(
+            source_checkpoint_path, layer_weight_bits, layer_act_bits,
+            out_channels=5, channels=CHANNELS, bottlenecks_per_stage=BOTTLENECKS_PER_STAGE,
+            context_pattern=CONTEXT_PATTERN, decoder_type=DECODER_TYPE, use_dilated=True, use_asymmetric=False,
+            use_strided=True, use_dsc=False, dsc_no_projection=False, separable_dilated=False, trainable_slope=False,
+        )
 
     print(f"Calibrating on real preprocessed images (device={args.device})...")
     calibration_batches = load_calibration_batches(args.dataset_name, args.n_calibration_images, seed=args.calibration_seed, pad_multiple=args.pad_to_multiple)
-    n_used = calibrate(quant_model, calibration_batches, args.device, seed=args.calibration_seed)
+    n_used = calibrate(quant_model, calibration_batches, args.device, seed=args.calibration_seed,
+                       train_mode=args.model_class != "finn")
     print(f"Calibration used {n_used}/{len(calibration_batches)} images.")
     quant_model.to("cpu")
 
@@ -182,7 +198,9 @@ def main() -> None:
     network_weights.update(dict(quant_model.named_parameters(remove_duplicate=False)))
     new_checkpoint = dict(reference_checkpoint)
     new_checkpoint["network_weights"] = network_weights
-    new_checkpoint["trainer_name"] = "nnUNetTrainerLayerQuantENet_12_dense_relu_nearest_conv_upsample_256_perlayer"
+    new_checkpoint["trainer_name"] = (
+        "nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_nearest_conv_upsample_256_perlayer" if args.model_class == "finn"
+        else "nnUNetTrainerLayerQuantENet_12_dense_relu_nearest_conv_upsample_256_perlayer")
     out_checkpoint_path = out_fold_dir / "checkpoint_best.pth"
     torch.save(new_checkpoint, out_checkpoint_path)
     print(f"Saved calibrated checkpoint: {out_checkpoint_path}")
