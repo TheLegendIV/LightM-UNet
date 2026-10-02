@@ -2,3 +2,11 @@
   warnings.warn("fast_hadamard_transform package not found, using standard pytorch kernels")
 /opt/conda/lib/python3.10/site-packages/torch/_tensor.py:1271: UserWarning: Named tensors and all their associated APIs are an experimental feature and subject to change. Please do not use them for anything important until they are released as stable. (Triggered internally at /opt/conda/conda-bld/pytorch_1682343967769/work/c10/core/TensorImpl.h:1788.)
   return super().rename(names)
+Loading source FP32 checkpoint: /workspace/LightM-UNet/data/nnUNet_results/Dataset510_ARCADE_256_4c/nnUNetTrainerENet_12_dense_relu_nearest_conv_upsample_256__nnUNetPlans__2d/fold_0/checkpoint_best.pth
+LayerQuantEnetFINN.from_pretrained(/workspace/LightM-UNet/data/nnUNet_results/Dataset510_ARCADE_256_4c/nnUNetTrainerENet_12_dense_relu_nearest_conv_upsample_256__nnUNetPlans__2d/fold_0/checkpoint_best.pth): transferred 541/543 model keys (0 shape mismatches, 144 left uninitialized -- expected for Brevitas-only quantizer params plus the frozen substitute-block params).
+Calibrating on real preprocessed images (device=cuda)...
+Calibration used 1200/1200 images.
+Clamped 0 quantizer scale(s) below the fp16-safe floor (1e-04) -- these sites have ~zero real output either way, so this only prevents a real fp16 x/0->NaN failure at deployment, it doesn't change accuracy.
+Saved calibrated checkpoint: /workspace/LightM-UNet/data/nnUNet_results/Dataset510_ARCADE_256_4c/nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_nearest_conv_upsample_256_joint_alpha1.0_candidatebits468_lut70_bram40_dsp90_fps100_dsr1.04_jointsdist_tied_calibrated_all1200pad8__nnUNetPlans__2d/fold_0/checkpoint_best.pth
+/opt/conda/lib/python3.10/site-packages/timm/models/layers/__init__.py:48: FutureWarning: Importing from timm.models.layers is deprecated, please import via timm.layers
+  warnings.warn(f"Importing from {__name__} is deprecated, please import via timm.layers", FutureWarning)
