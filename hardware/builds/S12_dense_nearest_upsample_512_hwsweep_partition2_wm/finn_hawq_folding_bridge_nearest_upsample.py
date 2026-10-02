@@ -486,6 +486,14 @@ def main():
     if n_join:
         print(f"Pinned depth_trigger_bram on {n_join} residual-join Thresholding node(s)")
 
+    # coverage: every Thresholding node should now carry an explicit depth_trigger_bram; list the ones that don't
+    # (they stay on Vivado "auto" and FINN's PE, so the MILP's memory pricing does not apply to them).
+    unpinned = [n.name for n in kernel_model.graph.node
+                if n.op_type in THRESH_OP_TYPES and "depth_trigger_bram" not in folding_config.get(n.name, {})]
+    n_thr_total = sum(1 for n in kernel_model.graph.node if n.op_type in THRESH_OP_TYPES)
+    print(f"Thresholding coverage: {n_thr_total - len(unpinned)}/{n_thr_total} nodes pinned; "
+          f"{len(unpinned)} left on auto: {unpinned}")
+
     if unmatched:
         print(f"\nWARNING: {len(unmatched)} logical names had no folding json entry: {unmatched}")
     if n_swu_fmpad:
