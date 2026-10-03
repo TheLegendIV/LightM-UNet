@@ -1,0 +1,297 @@
+{
+  "case": "bottleneck_cin32_d4_int6",
+  "tag": "merged",
+  "probe": {
+    "name": "bottleneck_cin32_d4_int6",
+    "cin": 32,
+    "v": 4,
+    "z": 4,
+    "cmid": 8,
+    "cout": 32,
+    "k": 3,
+    "dilation": 4,
+    "padding": 4,
+    "stride": 1,
+    "height": 32,
+    "width": 32,
+    "bits": 6,
+    "seed": 0,
+    "op_counts": {
+      "Quant": 10,
+      "Conv": 3,
+      "BatchNormalization": 3,
+      "Relu": 3,
+      "Add": 1
+    }
+  },
+  "predicted": {
+    "T": 72,
+    "steady_cyc_px": 72.0,
+    "latency_first_out": 10012,
+    "frame_cycles": 82613,
+    "skip_fifo_words": 4416,
+    "skip_fifo_width_bits": 6,
+    "totals": {
+      "lut": 2810.3939177777775,
+      "bram18": 6.0,
+      "uram": 0.0,
+      "dsp": 16.0,
+      "dwc_lut": 89.57910000000001
+    },
+    "nodes": {
+      "dup": {
+        "op": "DuplicateStreams",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 32.0,
+        "lut": 115,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 0,
+        "in_width_bits": 6,
+        "out_width_bits": 6
+      },
+      "mvau_r": {
+        "op": "MVAU rtl 1x1",
+        "pe": 1,
+        "simd": 4,
+        "cyc_px": 64.0,
+        "lut": 188.86088,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 4,
+        "in_width_bits": 24,
+        "out_width_bits": 18
+      },
+      "thr_r": {
+        "op": "Thresholding_rtl",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 8.0,
+        "lut": 218.0938,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 18,
+        "out_width_bits": 6
+      },
+      "fmpad": {
+        "op": "FMPadding",
+        "pe": 0,
+        "simd": 8,
+        "cyc_px": 1.5625,
+        "lut": 0.0,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 48,
+        "out_width_bits": 48
+      },
+      "swg": {
+        "op": "ConvolutionInputGenerator_rtl",
+        "pe": 0,
+        "simd": 8,
+        "cyc_px": 9.2587890625,
+        "lut": 632.8836,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 0.0,
+        "in_width_bits": 48,
+        "out_width_bits": 48
+      },
+      "mvau_m": {
+        "op": "MVAU rtl 3x3 d=4",
+        "pe": 1,
+        "simd": 8,
+        "cyc_px": 72.0,
+        "lut": 237.74844888888887,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 8,
+        "in_width_bits": 48,
+        "out_width_bits": 19
+      },
+      "thr_m": {
+        "op": "Thresholding_rtl",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 8.0,
+        "lut": 226.0938,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 19,
+        "out_width_bits": 6
+      },
+      "mvau_e": {
+        "op": "MVAU rtl 1x1",
+        "pe": 1,
+        "simd": 4,
+        "cyc_px": 64.0,
+        "lut": 187.85288888888888,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 4,
+        "in_width_bits": 24,
+        "out_width_bits": 16
+      },
+      "thr_e": {
+        "op": "Thresholding_rtl",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 32.0,
+        "lut": 323.0938,
+        "bram18": 1.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 16,
+        "out_width_bits": 6
+      },
+      "thr_s": {
+        "op": "Thresholding_rtl (skip)",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 32.0,
+        "lut": 230.0938,
+        "bram18": 1.0,
+        "uram": 0.0,
+        "dsp": 0,
+        "in_width_bits": 6,
+        "out_width_bits": 6
+      },
+      "add": {
+        "op": "AddStreams",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 32.0,
+        "lut": 131,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 0,
+        "in_width_bits": 6,
+        "out_width_bits": 7
+      },
+      "thr_out": {
+        "op": "Thresholding_rtl (join)",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 32.0,
+        "lut": 230.0938,
+        "bram18": 1.0,
+        "uram": 0.0,
+        "dsp": 0,
+        "in_width_bits": 7,
+        "out_width_bits": 6
+      }
+    },
+    "dwcs": [
+      {
+        "edge": "Dup->MVAU_r",
+        "in_width": 6,
+        "out_width": 24,
+        "lut": 22.6122
+      },
+      {
+        "edge": "Thr_r->SWG_m",
+        "in_width": 6,
+        "out_width": 48,
+        "lut": 44.3547
+      },
+      {
+        "edge": "Thr_m->MVAU_e",
+        "in_width": 6,
+        "out_width": 24,
+        "lut": 22.6122
+      }
+    ]
+  },
+  "stages": {
+    "convert": {
+      "ops": [
+        "AddStreams_hls",
+        "ConvolutionInputGenerator_rtl",
+        "DuplicateStreams_hls",
+        "FMPadding_rtl",
+        "MVAU_rtl",
+        "Thresholding_rtl"
+      ],
+      "n_nodes": 13
+    },
+    "folding": {
+      "dup": {
+        "node": "DuplicateStreams_hls_0",
+        "op": "DuplicateStreams_hls",
+        "PE": 1
+      },
+      "mvau_r": {
+        "node": "MVAU_rtl_0",
+        "op": "MVAU_rtl",
+        "PE": 1,
+        "SIMD": 4
+      },
+      "thr_r": {
+        "node": "Thresholding_rtl_2",
+        "op": "Thresholding_rtl",
+        "PE": 1,
+        "depth_trigger_bram": 1024
+      },
+      "fmpad": {
+        "node": "FMPadding_rtl_0",
+        "op": "FMPadding_rtl",
+        "SIMD": 8
+      },
+      "swg": {
+        "node": "ConvolutionInputGenerator_rtl_0",
+        "op": "ConvolutionInputGenerator_rtl",
+        "SIMD": 8,
+        "parallel_window": 0
+      },
+      "mvau_m": {
+        "node": "MVAU_rtl_1",
+        "op": "MVAU_rtl",
+        "PE": 1,
+        "SIMD": 8
+      },
+      "thr_m": {
+        "node": "Thresholding_rtl_3",
+        "op": "Thresholding_rtl",
+        "PE": 1,
+        "depth_trigger_bram": 1024
+      },
+      "mvau_e": {
+        "node": "MVAU_rtl_2",
+        "op": "MVAU_rtl",
+        "PE": 1,
+        "SIMD": 4
+      },
+      "thr_e": {
+        "node": "Thresholding_rtl_4",
+        "op": "Thresholding_rtl",
+        "PE": 1,
+        "depth_trigger_bram": 1024
+      },
+      "thr_s": {
+        "node": "Thresholding_rtl_1",
+        "op": "Thresholding_rtl",
+        "PE": 1,
+        "depth_trigger_bram": 1024
+      },
+      "add": {
+        "node": "AddStreams_hls_0",
+        "op": "AddStreams_hls",
+        "PE": 1
+      },
+      "thr_out": {
+        "node": "Thresholding_rtl_5",
+        "op": "Thresholding_rtl",
+        "PE": 1,
+        "depth_trigger_bram": 1024
+      },
+      "thr_in": {
+        "node": "Thresholding_rtl_0",
+        "op": "Thresholding_rtl",
+        "PE": 1
+      }
+    }
+  }
+}
