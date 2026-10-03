@@ -63,15 +63,56 @@ from finn.builder.build_dataflow_steps import (  # noqa: E402
 from finn.transformation.fpgadataflow.create_stitched_ip import CreateStitchedIP  # noqa: E402
 from finn.transformation.fpgadataflow.hlssynth_ip import HLSSynthIP  # noqa: E402
 from finn.transformation.fpgadataflow.prepare_ip import PrepareIP  # noqa: E402
-from finn.transformation.fpgadataflow.set_fifo_depths import SplitLargeFIFOs  # noqa: E402
+from finn.transformation.fpgadataflow.set_fifo_depths import SplitLargeFIFOs, reset_implementation  # noqa: E402
 from finn.transformation.fpgadataflow.synth_ooc import SynthOutOfContext  # noqa: E402
+from qonnx.core.datatype import DataType  # noqa: E402
 from qonnx.core.modelwrapper import ModelWrapper  # noqa: E402
 from qonnx.custom_op.registry import getCustomOp  # noqa: E402
 from qonnx.transformation.general import GiveReadableTensorNames, GiveUniqueNodeNames  # noqa: E402
 
 FPGA_PART = "xczu7ev-ffvc1156-2-e"
 CLK_NS = 10.0
-SKIP_OPS = ("StreamingFIFO", "StreamingDataWidthConverter")   # transparent when walking the graph
+SKIP_OPS = ("StreamingFIFO",)   # transparent when walking the graph; DWC is its OWN role ("dwc", see role_name_of) --
+# the predicted fifos list brackets each DWC with two separate entries (role->dwc, dwc->role), so DWC must NOT be
+# skipped here or both real FIFOs flanking a DWC collapse onto the same (role, role) key and neither matches.
+
+
+# ------------------------------------------------------------------ signed-identity-Quant workaround (see
+# hardware/archive/20261001_refactor/probes/finn_build_probe_s12_context_v2.py for the original pattern)
+def step_force_signed_identity_quant(model, cfg):
+    """QuantIdentityHandler hard-requires signed=1 on any identity Quant node (no Relu/Selu predecessor) --
+    our thr_in stand-in (previous block's ReLU output) is a real unsigned QuantIdentity. Force signed=1 just so
+    qonnx_to_finn's conversion succeeds; step_fix_signed_thresholds() downgrades the resulting MultiThreshold's
+    dtype back to unsigned right after."""
+    n = 0
+    for node in model.graph.node:
+        if node.op_type != "Quant" or model.find_producer(node.input[0]) is not None:
+            continue
+        inst = getCustomOp(node)
+        if not inst.get_nodeattr("signed"):
+            inst.set_nodeattr("signed", 1)
+            n += 1
+    print(f"[force signed identity quant] forced signed=1 on {n} identity Quant node(s)")
+    return model
+
+
+def step_fix_signed_thresholds(model, cfg):
+    """Downgrade any signed MultiThreshold whose out_bias >= 0 (never produces a negative count) back to
+    unsigned -- undoes step_force_signed_identity_quant's structural workaround now that conversion is done."""
+    n = 0
+    for node in model.graph.node:
+        if node.op_type != "MultiThreshold":
+            continue
+        out_name = node.output[0]
+        dt = model.get_tensor_datatype(out_name)
+        if not dt.signed():
+            continue
+        if getCustomOp(node).get_nodeattr("out_bias") < 0:
+            continue
+        model.set_tensor_datatype(out_name, DataType[f"UINT{dt.bitwidth()}"])
+        n += 1
+    print(f"[fix signed thresholds] downgraded {n} MultiThreshold node(s) signed->unsigned (out_bias >= 0)")
+    return model
 
 
 # ------------------------------------------------------------------ role identification (structural, no node names)
@@ -238,6 +279,13 @@ def step_force_fifo_depths(model, roles: dict, predicted: list, policy: str, ski
             inst.set_nodeattr("depth", depth)
             entry["forced_depth"] = depth
             entry["is_skip"] = f["is_skip"]
+            # rtlsim only supports impl_style=rtl (asserted in streamingfifo_rtl.py), and impl_style=vivado's
+            # Xilinx FIFO-Generator IP only accepts a fixed power-of-2 depth menu (>=16) our small forced depths
+            # mostly don't fit -- force rtl and reset so PrepareIP/HLSSynthIP actually regenerate this node.
+            if inst.get_nodeattr("impl_style") != "rtl":
+                inst.set_nodeattr("impl_style", "rtl")
+                reset_implementation(inst)
+                entry["impl_style_forced_to_rtl"] = True
         elif policy == "ours":
             entry["note"] = "edge not in prediction; stock depth kept"
         report.append(entry)
@@ -283,14 +331,18 @@ def main():
             json.dump(result, f, indent=2, default=str)
 
     m = ModelWrapper(model_file)
+    m = step_force_signed_identity_quant(m, cfg)
     for step in (
         step_qonnx_to_finn, step_enet_tidy, step_fuse_leaky_relu_to_threshold, step_enet_streamline,
         step_absorb_leftover_scale_before_matmul, step_fuse_forked_dequant_into_duplicate_threshold,
         step_dedup_forked_matmul_before_threshold, _fixup_degenerate_signed_bias,
     ):
         m = step(m, cfg)
+        if step is step_qonnx_to_finn:
+            m = step_fix_signed_thresholds(m, cfg)
     if not a.no_merge:
         m = step_compose_consecutive_thresholds(m, cfg)
+    m = step_fix_signed_thresholds(m, cfg)  # re-apply right before convert_to_hw's own InferThresholdingLayer assert
     m = step_enet_convert_to_hw_rtl_mvau(m, cfg)
     if probe.get("block") == "down" and probe.get("skip_pad") == "fmpad":
         # channel zero-pad of the skip -> FMPadding on the regrouped stream (new pass, see finn_channel_pad.py)
@@ -323,6 +375,13 @@ def main():
     result["stages"]["fifo"] = fifo_report
     m = m.transform(SplitLargeFIFOs())
     m = m.transform(GiveUniqueNodeNames())
+    # SplitLargeFIFOs can insert nodes and GiveUniqueNodeNames renumbers everything afterwards, so any
+    # FIFO whose code was reused ("pre-existing") may now carry a different name than what's baked into
+    # its already-generated Verilog module -- forcing a stale/fresh name collision in CreateStitchedIP.
+    # Regenerate every FIFO's IP unconditionally so the module name always matches its final node name.
+    for n in m.graph.node:
+        if n.op_type.startswith("StreamingFIFO"):
+            reset_implementation(getCustomOp(n))
     m = m.transform(PrepareIP(FPGA_PART, CLK_NS))
     m = m.transform(HLSSynthIP())
     m.save(os.path.join(out_dir, "after_forced_fifo.onnx"))

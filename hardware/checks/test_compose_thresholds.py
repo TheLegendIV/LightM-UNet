@@ -94,7 +94,8 @@ def build_graph(t1, t2, out1="UINT8", out2="UINT4", mid=None, extra_consumer=Fal
         oh.make_tensor("t2", TensorProto.FLOAT, list(t2.shape), t2.astype(np.float32).flatten().tolist()),
     ]
     g = oh.make_graph(nodes, "g", [x], outs, initializer=inits)
-    m = ModelWrapper(oh.make_model(g))
+    # pin opset: onnx's default (22) is newer than onnxruntime's execute_onnx support ceiling (21)
+    m = ModelWrapper(oh.make_model(g, opset_imports=[oh.make_opsetid("", 11)]))
     m.set_tensor_datatype("x", DataType["INT8"])
     return m.transform(InferShapes())
 
