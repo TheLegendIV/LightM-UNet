@@ -1,0 +1,26 @@
+{
+  "name": "dn_cin16_cout32_in64_int4_mvau",
+  "block": "down",
+  "cin": 16,
+  "cout": 32,
+  "v": 4,
+  "cmid": 8,
+  "height": 64,
+  "width": 64,
+  "hout": 32,
+  "wout": 32,
+  "bits": 4,
+  "seed": 0,
+  "skip_pad": "mvau",
+  "skip_order": "pad_thr",
+  "T_out": 72,
+  "F": 73728,
+  "op_counts": {
+    "Quant": 11,
+    "MaxPool": 1,
+    "Conv": 4,
+    "BatchNormalization": 3,
+    "Relu": 3,
+    "Add": 1
+  }
+}

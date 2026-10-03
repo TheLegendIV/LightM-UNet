@@ -149,13 +149,14 @@ def _simd_candidates(cin: int, k: int) -> list[int]:
     return sorted(cands)
 
 
-def _search_mvau(layer: LayerGeometry, bits: int, budget: int) -> tuple[int, int, dict]:
+def _search_mvau(layer: LayerGeometry, bits: int, budget: int, weight_bits: int | None = None) -> tuple[int, int, dict]:
     """(PE, SIMD, cost) with the largest cycles <= budget (fully balanced = cycles == budget);
-    ties broken by BRAM then LUT."""
+    ties broken by BRAM then LUT. weight_bits defaults to bits."""
+    wb = bits if weight_bits is None else weight_bits
     best = None
     for pe in fcm.divisors(layer.cout):
         for simd in _simd_candidates(layer.cin, layer.kh):
-            cost = fcm.conv_cost_pe_simd(layer, bits, bits, pe, simd, ram_style=fcm.RAM_STYLE_AUTO, force_dsp=True)
+            cost = fcm.conv_cost_pe_simd(layer, wb, bits, pe, simd, ram_style=fcm.RAM_STYLE_AUTO, force_dsp=True)
             if cost["mvu_cycles"] > budget or cost["fmpad_cycles"] > budget:
                 continue
             key = (-cost["mvu_cycles"], cost["wm_bram18"] + cost["swu_bram18"] + cost["thr_bram18"], cost["total_lut"])
@@ -167,7 +168,7 @@ def _search_mvau(layer: LayerGeometry, bits: int, budget: int) -> tuple[int, int
             f"{layer.hout * layer.wout} cycles/frame (PE=Cout, SIMD=MW). Raise T."
         )
     _, pe, simd = best
-    cost = fcm.layer_cost_pe_simd_auto_ram(layer, bits, bits, pe, simd, force_dsp=True)
+    cost = fcm.layer_cost_pe_simd_auto_ram(layer, wb, bits, pe, simd, force_dsp=True)
     return pe, simd, cost
 
 

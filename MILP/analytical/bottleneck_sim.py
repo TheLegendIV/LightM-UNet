@@ -382,10 +382,21 @@ def simulate(
     sink = Sink("Sink", f_out, w["thr_out"])
     order.append(sink)
 
+    return run_network(
+        r, order, fifos, sink, N, inject_interval, skip_depth, fifo_depth, elastic_depth, fifo_depths, max_cycles,
+    )
+
+
+def run_network(
+    r, order: list, fifos: dict, sink, N: int, inject_interval: int, skip_depth: int, fifo_depth: int,
+    elastic_depth=None, fifo_depths=None, max_cycles=None, elastic_consumers=("FMPad",),
+) -> SimResult:
+    """Step a built network (nodes in topological order) until the sink has N output pixels. Shared by every block type;
+    elastic_depth is applied to the FIFOs whose consumer node is named in elastic_consumers."""
     graph = _describe_graph(r, order, fifos)
     if elastic_depth is not None:
         for f in fifos.values():
-            if graph["fifos"][f.name]["consumer"] == "FMPad":
+            if graph["fifos"][f.name]["consumer"] in elastic_consumers:
                 f.depth = elastic_depth
                 graph["fifos"][f.name]["depth"] = elastic_depth
     for name, d in (fifo_depths or {}).items():

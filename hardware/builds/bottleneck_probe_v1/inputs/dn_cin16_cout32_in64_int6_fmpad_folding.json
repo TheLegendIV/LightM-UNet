@@ -1,0 +1,576 @@
+{
+  "params": {
+    "cin": 16,
+    "cmid": 8,
+    "cout": 32,
+    "v": 4,
+    "z": 4,
+    "T": 72.0,
+    "F": 73728,
+    "bits": 6,
+    "k": 3,
+    "dilation": 1,
+    "stride": 2,
+    "height": 64,
+    "width": 64,
+    "hout": 32,
+    "wout": 32,
+    "pad": 1,
+    "pad_group": 16,
+    "skip_order": "pad_thr",
+    "skip_pad": "fmpad",
+    "T_in": 18.0,
+    "block": "down"
+  },
+  "folding": {
+    "dup": {
+      "PE": 1
+    },
+    "swg_r": {
+      "SIMD": 2,
+      "parallel_window": 0
+    },
+    "mvau_r": {
+      "PE": 4,
+      "SIMD": 2
+    },
+    "thr_r": {
+      "PE": 1,
+      "depth_trigger_bram": 1024
+    },
+    "fmpad": {
+      "SIMD": 8
+    },
+    "swg_m": {
+      "SIMD": 8,
+      "parallel_window": 0
+    },
+    "mvau_m": {
+      "PE": 1,
+      "SIMD": 8
+    },
+    "thr_m": {
+      "PE": 1,
+      "depth_trigger_bram": 1024
+    },
+    "mvau_e": {
+      "PE": 1,
+      "SIMD": 4
+    },
+    "thr_e": {
+      "PE": 1,
+      "depth_trigger_bram": 1024
+    },
+    "maxpool": {},
+    "thr_s": {
+      "PE": 1,
+      "depth_trigger_bram": 1024
+    },
+    "add": {
+      "PE": 1
+    },
+    "thr_out": {
+      "PE": 1,
+      "depth_trigger_bram": 1024
+    },
+    "fmpad_c": {
+      "custom": true,
+      "SIMD": 16,
+      "NumChannels": 16,
+      "ImgDim": [
+        1024,
+        1
+      ],
+      "Padding": [
+        0,
+        0,
+        0,
+        1
+      ]
+    }
+  },
+  "fifos": [
+    {
+      "name": "Dup->main",
+      "producer": "dup",
+      "consumer": "dwc",
+      "producer_node": "Dup",
+      "consumer_node": "DWC(Dup->SWG_r)",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false
+    },
+    {
+      "name": "Dup->skip",
+      "producer": "dup",
+      "consumer": "dwc",
+      "producer_node": "Dup",
+      "consumer_node": "DWC(Dup->MaxPool)",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false
+    },
+    {
+      "name": "Dup->DWC->SWG_r",
+      "producer": "dwc",
+      "consumer": "swg_r",
+      "producer_node": "DWC(Dup->SWG_r)",
+      "consumer_node": "SWG_r",
+      "depth": 4,
+      "width_bits": 12,
+      "max_occupancy": 4,
+      "is_skip": false
+    },
+    {
+      "name": "SWG_r->out",
+      "producer": "swg_r",
+      "consumer": "mvau_r",
+      "producer_node": "SWG_r",
+      "consumer_node": "MVAU_r",
+      "depth": 2,
+      "width_bits": 12,
+      "max_occupancy": 2,
+      "is_skip": false
+    },
+    {
+      "name": "MVAU_r->out",
+      "producer": "mvau_r",
+      "consumer": "dwc",
+      "producer_node": "MVAU_r",
+      "consumer_node": "DWC(MVAU_r->Thr_r)",
+      "depth": 2,
+      "width_bits": 76,
+      "max_occupancy": 1,
+      "is_skip": false
+    },
+    {
+      "name": "MVAU_r->DWC->Thr_r",
+      "producer": "dwc",
+      "consumer": "thr_r",
+      "producer_node": "DWC(MVAU_r->Thr_r)",
+      "consumer_node": "Thr_r",
+      "depth": 2,
+      "width_bits": 19,
+      "max_occupancy": 2,
+      "is_skip": false
+    },
+    {
+      "name": "Thr_r->out",
+      "producer": "thr_r",
+      "consumer": "dwc",
+      "producer_node": "Thr_r",
+      "consumer_node": "DWC(Thr_r->FMPad)",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false
+    },
+    {
+      "name": "Thr_r->DWC->FMPad",
+      "producer": "dwc",
+      "consumer": "fmpad",
+      "producer_node": "DWC(Thr_r->FMPad)",
+      "consumer_node": "FMPad",
+      "depth": 4,
+      "width_bits": 48,
+      "max_occupancy": 4,
+      "is_skip": false
+    },
+    {
+      "name": "FMPad->out",
+      "producer": "fmpad",
+      "consumer": "swg_m",
+      "producer_node": "FMPad",
+      "consumer_node": "SWG_m",
+      "depth": 2,
+      "width_bits": 48,
+      "max_occupancy": 2,
+      "is_skip": false
+    },
+    {
+      "name": "SWG_m->out",
+      "producer": "swg_m",
+      "consumer": "mvau_m",
+      "producer_node": "SWG_m",
+      "consumer_node": "MVAU_m",
+      "depth": 2,
+      "width_bits": 48,
+      "max_occupancy": 2,
+      "is_skip": false
+    },
+    {
+      "name": "MVAU_m->out",
+      "producer": "mvau_m",
+      "consumer": "thr_m",
+      "producer_node": "MVAU_m",
+      "consumer_node": "Thr_m",
+      "depth": 2,
+      "width_bits": 19,
+      "max_occupancy": 1,
+      "is_skip": false
+    },
+    {
+      "name": "Thr_m->out",
+      "producer": "thr_m",
+      "consumer": "dwc",
+      "producer_node": "Thr_m",
+      "consumer_node": "DWC(Thr_m->MVAU_e)",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 1,
+      "is_skip": false
+    },
+    {
+      "name": "Thr_m->DWC->MVAU_e",
+      "producer": "dwc",
+      "consumer": "mvau_e",
+      "producer_node": "DWC(Thr_m->MVAU_e)",
+      "consumer_node": "MVAU_e",
+      "depth": 2,
+      "width_bits": 24,
+      "max_occupancy": 1,
+      "is_skip": false
+    },
+    {
+      "name": "MVAU_e->out",
+      "producer": "mvau_e",
+      "consumer": "thr_e",
+      "producer_node": "MVAU_e",
+      "consumer_node": "Thr_e",
+      "depth": 2,
+      "width_bits": 16,
+      "max_occupancy": 1,
+      "is_skip": false
+    },
+    {
+      "name": "Thr_e->out",
+      "producer": "thr_e",
+      "consumer": "add",
+      "producer_node": "Thr_e",
+      "consumer_node": "Add",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 1,
+      "is_skip": false
+    },
+    {
+      "name": "Dup->DWC->MaxPool",
+      "producer": "dwc",
+      "consumer": "maxpool",
+      "producer_node": "DWC(Dup->MaxPool)",
+      "consumer_node": "MaxPool",
+      "depth": 2,
+      "width_bits": 96,
+      "max_occupancy": 2,
+      "is_skip": false
+    },
+    {
+      "name": "MaxPool->out",
+      "producer": "maxpool",
+      "consumer": "fmpad_c",
+      "producer_node": "MaxPool",
+      "consumer_node": "FMPad_c",
+      "depth": 2,
+      "width_bits": 96,
+      "max_occupancy": 2,
+      "is_skip": false
+    },
+    {
+      "name": "skip FIFO",
+      "producer": "thr_s",
+      "consumer": "add",
+      "producer_node": "Thr_s",
+      "consumer_node": "Add",
+      "depth": 1664,
+      "width_bits": 6,
+      "max_occupancy": 1664,
+      "is_skip": true
+    },
+    {
+      "name": "FMPad_c->out",
+      "producer": "fmpad_c",
+      "consumer": "dwc",
+      "producer_node": "FMPad_c",
+      "consumer_node": "DWC(FMPad_c->Thr_s)",
+      "depth": 2,
+      "width_bits": 96,
+      "max_occupancy": 2,
+      "is_skip": false
+    },
+    {
+      "name": "FMPad_c->DWC->Thr_s",
+      "producer": "dwc",
+      "consumer": "thr_s",
+      "producer_node": "DWC(FMPad_c->Thr_s)",
+      "consumer_node": "Thr_s",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false
+    },
+    {
+      "name": "Add->out",
+      "producer": "add",
+      "consumer": "thr_out",
+      "producer_node": "Add",
+      "consumer_node": "Thr_out",
+      "depth": 2,
+      "width_bits": 7,
+      "max_occupancy": 1,
+      "is_skip": false
+    }
+  ],
+  "predicted": {
+    "T": 72.0,
+    "F": 73728,
+    "steady_cyc_px": 72.0,
+    "latency_first_out": 3779,
+    "frame_cycles": 77102,
+    "skip_fifo_words": 1664,
+    "skip_fifo_width_bits": 6,
+    "totals": {
+      "lut": 3884.608393333334,
+      "bram18": 10.0,
+      "uram": 0.0,
+      "dsp": 16.0,
+      "dwc_lut": 192.2037
+    },
+    "nodes": {
+      "dup": {
+        "op": "DuplicateStreams",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 64.0,
+        "frame_cycles": 65536,
+        "lut": 115,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 6,
+        "out_width_bits": 6
+      },
+      "swg_r": {
+        "op": "ConvolutionInputGenerator_rtl 2x2 s2",
+        "pe": 0,
+        "simd": 2,
+        "cyc_px": 32.515625,
+        "frame_cycles": 33296,
+        "lut": 620.9424,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 0.0,
+        "in_width_bits": 12,
+        "out_width_bits": 12
+      },
+      "mvau_r": {
+        "op": "MVAU rtl 2x2 s2",
+        "pe": 4,
+        "simd": 2,
+        "cyc_px": 64.0,
+        "frame_cycles": 65536,
+        "lut": 248.33235555555555,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 4,
+        "in_width_bits": 12,
+        "out_width_bits": 76
+      },
+      "thr_r": {
+        "op": "Thresholding_rtl",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 8.0,
+        "frame_cycles": 8192,
+        "lut": 226.0938,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 19,
+        "out_width_bits": 6
+      },
+      "fmpad": {
+        "op": "FMPadding 3x3",
+        "pe": 0,
+        "simd": 8,
+        "cyc_px": 1.12890625,
+        "frame_cycles": 1156,
+        "lut": 0.0,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 48,
+        "out_width_bits": 48
+      },
+      "swg_m": {
+        "op": "ConvolutionInputGenerator_rtl",
+        "pe": 0,
+        "simd": 8,
+        "cyc_px": 9.0654296875,
+        "frame_cycles": 9283,
+        "lut": 394.0596,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 0.0,
+        "in_width_bits": 48,
+        "out_width_bits": 48
+      },
+      "mvau_m": {
+        "op": "MVAU rtl 3x3",
+        "pe": 1,
+        "simd": 8,
+        "cyc_px": 72.0,
+        "frame_cycles": 73728,
+        "lut": 237.74844888888887,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 8,
+        "in_width_bits": 48,
+        "out_width_bits": 19
+      },
+      "thr_m": {
+        "op": "Thresholding_rtl",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 8.0,
+        "frame_cycles": 8192,
+        "lut": 226.0938,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 19,
+        "out_width_bits": 6
+      },
+      "mvau_e": {
+        "op": "MVAU rtl 1x1",
+        "pe": 1,
+        "simd": 4,
+        "cyc_px": 64.0,
+        "frame_cycles": 65536,
+        "lut": 187.85288888888888,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 4,
+        "in_width_bits": 24,
+        "out_width_bits": 16
+      },
+      "thr_e": {
+        "op": "Thresholding_rtl",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 32.0,
+        "frame_cycles": 32768,
+        "lut": 323.0938,
+        "bram18": 1.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 16,
+        "out_width_bits": 6
+      },
+      "maxpool": {
+        "op": "StreamingMaxPool_hls",
+        "pe": 0,
+        "simd": 0,
+        "cyc_px": 5.0,
+        "frame_cycles": 5120,
+        "lut": 522,
+        "bram18": 6,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 96,
+        "out_width_bits": 96
+      },
+      "thr_s": {
+        "op": "Thresholding_rtl (skip)",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 32.0,
+        "frame_cycles": 32768,
+        "lut": 230.0938,
+        "bram18": 1.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 6,
+        "out_width_bits": 6
+      },
+      "fmpad_c": {
+        "op": "FMPadding channel pad",
+        "pe": 0,
+        "simd": 16,
+        "cyc_px": 2.0,
+        "frame_cycles": 2048,
+        "lut": 0.0,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 96,
+        "out_width_bits": 96
+      },
+      "add": {
+        "op": "AddStreams",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 32.0,
+        "frame_cycles": 32768,
+        "lut": 131,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 6,
+        "out_width_bits": 7
+      },
+      "thr_out": {
+        "op": "Thresholding_rtl (join)",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 32.0,
+        "frame_cycles": 32768,
+        "lut": 230.0938,
+        "bram18": 1.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 7,
+        "out_width_bits": 6
+      }
+    },
+    "dwcs": [
+      {
+        "edge": "Dup->SWG_r",
+        "in_width": 6,
+        "out_width": 12,
+        "lut": 11.3061
+      },
+      {
+        "edge": "MVAU_r->Thr_r",
+        "in_width": 76,
+        "out_width": 19,
+        "lut": 18.2637
+      },
+      {
+        "edge": "Thr_r->FMPad",
+        "in_width": 6,
+        "out_width": 48,
+        "lut": 44.3547
+      },
+      {
+        "edge": "Thr_m->MVAU_e",
+        "in_width": 6,
+        "out_width": 24,
+        "lut": 22.6122
+      },
+      {
+        "edge": "Dup->MaxPool",
+        "in_width": 6,
+        "out_width": 96,
+        "lut": 86.97
+      },
+      {
+        "edge": "FMPad_c->Thr_s",
+        "in_width": 96,
+        "out_width": 6,
+        "lut": 8.697000000000001
+      }
+    ]
+  }
+}

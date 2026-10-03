@@ -98,8 +98,51 @@ def _real_consumer(model, node):
     return c
 
 
+def identify_roles_down(model, probe: dict) -> dict:
+    """Downsampling block (dn_bottleneck.py): role -> node for dup, swg_r, mvau_r, thr_r, fmpad, swg_m, mvau_m, thr_m, mvau_e,
+    thr_e, maxpool, [mvau_s], thr_s, [fmpad_c], add, thr_out, thr_in. The channel-pad FMPadding (fmpad_c, padding on the regrouped
+    axis [0,0,0,p]) is told apart from the 3x3 spatial one (padding all ones)."""
+    cin, cmid, cout = probe["cin"], probe["cmid"], probe["cout"]
+    roles = {}
+    for n in model.graph.node:
+        inst = getCustomOp(n)
+        if "MVAU" in n.op_type:
+            mw, mh = inst.get_nodeattr("MW"), inst.get_nodeattr("MH")
+            key = {(4 * cin, cmid): "mvau_r", (9 * cmid, cmid): "mvau_m", (cmid, cout): "mvau_e", (cin, cout): "mvau_s"}.get((mw, mh))
+            if key is None:
+                raise RuntimeError(f"unexpected MVAU shape MW={mw} MH={mh} ({n.name})")
+            roles[key] = n
+        elif n.op_type.startswith("DuplicateStreams"):
+            roles["dup"] = n
+        elif n.op_type.startswith("AddStreams"):
+            roles["add"] = n
+        elif n.op_type.startswith("StreamingMaxPool"):
+            roles["maxpool"] = n
+        elif n.op_type.startswith("ConvolutionInputGenerator"):
+            ks = list(inst.get_nodeattr("ConvKernelSize"))
+            roles["swg_r" if ks[0] == 2 else "swg_m"] = n
+        elif n.op_type.startswith("FMPadding"):
+            pad = list(inst.get_nodeattr("Padding"))
+            roles["fmpad" if all(int(x) == 1 for x in pad) else "fmpad_c"] = n
+    need = ["mvau_r", "mvau_m", "mvau_e", "dup", "add", "maxpool", "swg_r", "swg_m", "fmpad"]
+    need.append("mvau_s" if probe["skip_pad"] == "mvau" else "fmpad_c")
+    for r in need:
+        if r not in roles:
+            raise RuntimeError(f"role {r} not found in graph (found {sorted(roles)})")
+    cons = lambda role: _real_consumer(model, roles[role])
+    roles["thr_r"], roles["thr_m"], roles["thr_e"], roles["thr_out"] = cons("mvau_r"), cons("mvau_m"), cons("mvau_e"), cons("add")
+    roles["thr_s"] = cons("mvau_s" if probe["skip_pad"] == "mvau" else "fmpad_c")   # pad_thr order: threshold after the (channel) pad
+    roles["thr_in"] = _real_producer(model, roles["dup"])
+    for r, n in roles.items():
+        if n is None:
+            raise RuntimeError(f"role {r} unresolved")
+    return roles
+
+
 def identify_roles(model, probe: dict) -> dict:
-    """role -> node for dup, mvau_r/m/e, thr_r/m/e/s/out/in, fmpad, swg, add."""
+    """role -> node for dup, mvau_r/m/e, thr_r/m/e/s/out/in, fmpad, swg, add (regular block) or the downsampling roles."""
+    if probe.get("block") == "down":
+        return identify_roles_down(model, probe)
     cin, cmid, cout, k = probe["cin"], probe["cmid"], probe["cout"], probe["k"]
     roles = {}
     for n in model.graph.node:
@@ -155,6 +198,8 @@ def step_apply_probe_folding(model, folding: dict, probe: dict):
     roles = identify_roles(model, probe)
     landed = {}
     for role, attrs in folding.items():
+        if attrs.get("custom"):      # applied by the pass that creates the node (finn_channel_pad.py)
+            continue
         node = roles[role]
         inst = getCustomOp(node)
         for key, val in attrs.items():
@@ -247,6 +292,10 @@ def main():
     if not a.no_merge:
         m = step_compose_consecutive_thresholds(m, cfg)
     m = step_enet_convert_to_hw_rtl_mvau(m, cfg)
+    if probe.get("block") == "down" and probe.get("skip_pad") == "fmpad":
+        # channel zero-pad of the skip -> FMPadding on the regrouped stream (new pass, see finn_channel_pad.py)
+        from finn_channel_pad import step_channel_pad_to_fmpadding
+        m = step_channel_pad_to_fmpadding(m, cfgj["folding"]["fmpad_c"])
     m.save(os.path.join(out_dir, "after_convert_to_hw.onnx"))
     m = step_create_dataflow_partition(m, cfg)           # returns the child dataflow model
     m = step_specialize_layers(m, cfg)

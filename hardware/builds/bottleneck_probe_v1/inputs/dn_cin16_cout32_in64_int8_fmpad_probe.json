@@ -1,0 +1,27 @@
+{
+  "name": "dn_cin16_cout32_in64_int8_fmpad",
+  "block": "down",
+  "cin": 16,
+  "cout": 32,
+  "v": 4,
+  "cmid": 8,
+  "height": 64,
+  "width": 64,
+  "hout": 32,
+  "wout": 32,
+  "bits": 8,
+  "seed": 0,
+  "skip_pad": "fmpad",
+  "skip_order": "pad_thr",
+  "T_out": 72,
+  "F": 73728,
+  "op_counts": {
+    "Quant": 10,
+    "MaxPool": 1,
+    "Conv": 3,
+    "BatchNormalization": 3,
+    "Pad": 1,
+    "Relu": 3,
+    "Add": 1
+  }
+}

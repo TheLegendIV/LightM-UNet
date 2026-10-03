@@ -207,3 +207,34 @@ The rate balance is necessary, not sufficient. With a depth-2 FIFO on every edge
 With those three sized (see MILP/analytical/bottleneck.py verify_with_sim) and every other edge at 2 words, the simulated block holds 72.00 cyc/px.
 Depth 1 would be a combinational ready path; real FINN FIFOs are >= 2 (skid buffer).
 Hardware check of this claim: hardware/builds/bottleneck_probe_v1/ (see FINN_AGENT_HANDOFF.md).
+
+
+Downsampling bottleneck (dn_bottleneck.py, dn_bottleneck_sim.py, test_dn_bottleneck.py)
+
+    main:  Dup -> SWG_r -> MVAU_r (2x2, stride 2) -> Thr_r -> FMPad -> SWG_m -> MVAU_m (3x3, d=1) -> Thr_m -> MVAU_e -> Thr_e -+
+    skip:  Dup -> MaxPool -> Thr_s -> [skip FIFO] -> FMPad_c (channel pad Cin -> Cout) ------------------------------------------+-> Add -> Thr_out
+
+Budget. Two pixel domains: Dup, MaxPool and SWG_r see the H x W input, everything after the stride the (H/2) x (W/2) output.
+Balance on FRAME cycles: every node needs  pixels_node * cyc_per_pixel <= F, with T_out = F / (H/2 * W/2) and T_in = F / (H*W).
+Reported cyc_px is per OUTPUT pixel (= frame cycles / (H/2*W/2)), so util = cyc_px / T_out = frame cycles / F.
+
+Work per output pixel (MACs): reduce 4*Cin*Cmid = Cin*Cout, 3x3 9*Cmid^2, expand Cmid*Cout, identity skip MVAU Cin*Cout.
+
+MaxPool: StreamingMaxPool has no PE: one input pixel (all channels) per cycle plus one cycle per output, ~1.25*H*W cycles per frame.
+It is a floor on F (rejected below it), not a rate problem otherwise, and it needs a Cin*A bit wide input stream (DWC from Dup).
+
+Skip padding. The original export pads the skip with a padded-identity 1x1 MVAU (skip_pad="mvau", weights frozen at INT8): Cin*Cout
+MACs per pixel, of which Cin are useful. Default (skip_pad="fmpad") pads the channels with FMPadding on a regrouped stream:
+    [N, H, W, C]  ->  [N, H*W, C/s, s]   (no data moves; channels fastest)
+    FMPadding: ImgDim = [H*W, C/s], NumChannels = s, SIMD = s, Padding = [0, 0, 0, (Cout-Cin)/s]
+s (knob pad_group) must divide Cin and Cout-Cin; default max = gcd(Cin, Cout-Cin); cost Cout/s cycles per output pixel; stream width s*A bits.
+skip_order="thr_pad" (default) thresholds on Cin channels and pads afterwards (smaller threshold, narrower/shorter skip FIFO);
+"pad_thr" pads first and thresholds Cout channels. Untested in FINN: needs a custom pass that builds this FMPadding node and keeps the
+real tensor shapes (see the handoff notes); FMPadding LUT is not calibrated in finn_cost_model (priced 0).
+
+FIFOs. Only the skip branch (the short-latency one) gets a deep FIFO, narrow and deep after Thr_s (PE_ts words per pixel).
+Everything else stays at 2 to 4 words (the sim's verify_with_sim doubles a uniform depth until T_out is reached, then shrinks every
+FIFO to its observed occupancy). Reference down2-like block (16->32, 64x64 in, T_out=72): all main FIFOs 2-4 words, skip FIFO ~736 words x 4 bit.
+Caveat found in the sim: a deep FIFO anywhere on the skip path (e.g. 64 words after the maxpool = 64 output pixels, one wide word each)
+hides an undersized skip FIFO; the deadlock test therefore runs with depth-2 ordinary FIFOs.
+Latency estimate: first strided window after (W+2)*T_in, MVAU_r, then the 3x3 fill (W/2+2)*T_out, then MVAU_m/Thr/MVAU_e; sim agrees to ~3%.

@@ -2,7 +2,7 @@
 # Launch the bottleneck probe builds in the FINN container (host-side driver, bash / Git Bash).
 #   CONTAINER=<name from `docker ps`> bash run_probes.sh                 # all 15 cases, rtlsim only
 #   CONTAINER=... CASES="bottleneck_cin32_d8_int4" STOP_AFTER=folding bash run_probes.sh   # cheap gate-3 dry run
-# Env: CONTAINER (required) | CASES (default: all 15) | STOP_AFTER (convert|folding|fifo|stitch|rtlsim, default rtlsim)
+# Env: CONTAINER (required) | CASES (default: all 15 regular) | SET=dn (the 6 downsampling probes) | STOP_AFTER (convert|folding|fifo|stitch|rtlsim, default rtlsim)
 #      EXTRA (extra args for finn_bottleneck_probe_build.py, e.g. "--ooc" or "--skip-scale 0.5" or "--no-merge")
 #      JOBS (parallel builds, default 4) | TIMEOUT (seconds per build, default 14400)
 # Results end up in the container under .../enet/finn_deployment_outputs/<case>_<tag>_<ts>/probe_result.json;
@@ -18,11 +18,15 @@ TIMEOUT="${TIMEOUT:-14400}"
 EXTRA="${EXTRA:-}"
 if [ -z "$CASES" ]; then
   CASES=""
-  for d in 1 2 4 8 16; do for b in 4 6 8; do CASES="$CASES bottleneck_cin32_d${d}_int${b}"; done; done
+  if [ "${SET:-reg}" = "dn" ]; then   # SET=dn: the 6 downsampling probes (16->32, 64x64 in): INT4/6/8 x {fmpad, mvau} skip
+    for b in 4 6 8; do for v in fmpad mvau; do CASES="$CASES dn_cin16_cout32_in64_int${b}_${v}"; done; done
+  else                                # default: the 15 regular-bottleneck probes
+    for d in 1 2 4 8 16; do for b in 4 6 8; do CASES="$CASES bottleneck_cin32_d${d}_int${b}"; done; done
+  fi
 fi
 
 echo "=== deploy flat .py files + inputs into $CONTAINER:$ENET ==="
-for f in "$HERE/finn_bottleneck_probe_build.py" "$HW/finn_compose_thresholds.py" \
+for f in "$HERE/finn_bottleneck_probe_build.py" "$HW/finn_compose_thresholds.py" "$HW/finn_channel_pad.py" \
          "$HW/finn_enet_build.py" "$HW/finn_enet_build_fixups.py" "$HW/finn_enet_convert_to_hw_rtl_mvau.py" \
          "$HW/finn_s12_build_steps.py" "$HW/finn_stage_partition.py" "$HW/finn_partition_build_steps.py"; do
   docker cp "$f" "$CONTAINER:$ENET/"
