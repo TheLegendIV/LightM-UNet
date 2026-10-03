@@ -126,6 +126,26 @@ class TestDnSim(unittest.TestCase):
         self.assertTrue(v["ok"])
         self.assertAlmostEqual(v["steady_cyc_px"], 18.0, delta=0.3)
 
+    def test_pool_route_folds_the_pool_over_channels(self):
+        # Pool_hls: (C*K^2/PE)*OH*OW; the depthwise SWG (SIMD = PE) adds fill and per-row overhead, so PE=1 (80.9k cycles) does not fit F = 73728 but PE=2 does
+        r = model_dn_bottleneck(**REF, skip_order="pad_thr", skip_pad="mvau", pool_impl="swg_pool")
+        n = {x.name: x for x in r.nodes}
+        self.assertNotIn("MaxPool", n)
+        self.assertEqual((n["Pool"].pe, n["SWG_p"].simd), (2, 2))
+        self.assertEqual(n["Pool"].frame_cycles, (16 * 4 // 2) * 32 * 32)
+        for x in r.nodes:
+            self.assertLessEqual(x.frame_cycles, F_REF, x.name)
+        d = {x.name: x for x in model_dn_bottleneck(**REF, skip_order="pad_thr", skip_pad="mvau").nodes}
+        self.assertEqual(d["MaxPool"].in_width_bits, 16 * 4)                 # the streaming node takes all 16 channels per cycle, the Pool route only 2
+
+    def test_pool_route_verifies(self):
+        r = model_dn_bottleneck(**REF, skip_order="pad_thr", skip_pad="mvau", pool_impl="swg_pool")
+        v = verify_with_sim(r)
+        self.assertTrue(v["ok"])
+        f = to_folding_config(r)["folding"]
+        self.assertNotIn("maxpool", f)
+        self.assertEqual(f["pool"], {"PE": 2})
+
     def test_rate_report_lists_branches_and_mismatch(self):
         text = rate_report(self.r)
         for key in ("MAIN branch", "SKIP branch", "JOIN", "mismatch summary", "MVAU_m", "MaxPool", "FMPad_c"):

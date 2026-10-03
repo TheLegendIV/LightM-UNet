@@ -1,0 +1,27 @@
+{
+  "name": "up_cin32_cout16_in32_int8_conv",
+  "block": "up",
+  "cin": 32,
+  "cout": 16,
+  "v": 4,
+  "cmid": 8,
+  "height": 32,
+  "width": 32,
+  "hout": 64,
+  "wout": 64,
+  "bits": 8,
+  "seed": 0,
+  "skip_conv": true,
+  "decoder_type": "nearest_conv_upsample",
+  "T_out": 18,
+  "F": 73728,
+  "op_counts": {
+    "Quant": 14,
+    "Conv": 4,
+    "BatchNormalization": 5,
+    "Relu": 4,
+    "Resize": 1,
+    "ConvTranspose": 1,
+    "Add": 1
+  }
+}

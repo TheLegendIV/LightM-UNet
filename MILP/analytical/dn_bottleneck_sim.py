@@ -216,15 +216,25 @@ def simulate_dn(
     f_main_add = link("Thr_e", thr_e_w, "Add", add_w, f_o, n_out)
 
     # ---- skip branch: maxpool, then (channel pad | identity MVAU) and the skip requantizing threshold
-    f = link("Dup", dup_w, "MaxPool", 1, f_ds, n_in)
-    f_mp = fifo("MaxPool->out")
-    order.append(MaxPoolNode("MaxPool", f, f_mp, H, W, frames))
+    if p.get("pool_impl", "streaming") == "streaming":
+        f = link("Dup", dup_w, "MaxPool", 1, f_ds, n_in)
+        f_mp = fifo("MaxPool->out")
+        order.append(MaxPoolNode("MaxPool", f, f_mp, H, W, frames))
+        pool_last, pool_w = "MaxPool", 1
+    else:          # InferPool route: depthwise 2x2 stride-2 window generator (SIMD = PE) -> Pool_hls (PE), 4*C/PE words in, C/PE words out per pixel
+        cf_p = cin // n["SWG_p"].simd
+        f = link("Dup", dup_w, "SWG_p", cf_p, f_ds, n_in)
+        f_o = fifo("SWG_p->out")
+        order.append(Swg2Node("SWG_p", f, f_o, H, W, cf_p, 4 * cf_p, swg_cap_px(W, 2, 2, 2, 2), frames))
+        f_mp = fifo("Pool->out")
+        order.append(StreamNode("Pool", [f_o], [f_mp], 4 * cf_p, cf_p, n_out))
+        pool_last, pool_w = "Pool", cf_p
     thr_s_w = (cin if (skip_pad == "fmpad" and skip_order == "thr_pad") else cout) // n["Thr_s"].pe
     f_skip = fifo("skip FIFO", skip_depth)
     if skip_pad == "mvau":
         sf_s = cin // n["MVAU_s"].simd
         nf_s = cout // n["MVAU_s"].pe
-        f = link("MaxPool", 1, "MVAU_s", sf_s, f_mp, n_out)
+        f = link(pool_last, pool_w, "MVAU_s", sf_s, f_mp, n_out)
         f_o = fifo("MVAU_s->out")
         order.append(MvauNode("MVAU_s", f, f_o, sf_s, nf_s, n_out))
         f = link("MVAU_s", nf_s, "Thr_s", thr_s_w, f_o, n_out)
@@ -233,14 +243,14 @@ def simulate_dn(
     else:
         g, pw = cin // s_pad, (cout - cin) // s_pad
         if skip_order == "thr_pad":
-            f = link("MaxPool", 1, "Thr_s", thr_s_w, f_mp, n_out)
+            f = link(pool_last, pool_w, "Thr_s", thr_s_w, f_mp, n_out)
             order.append(StreamNode("Thr_s", [f], [f_skip], thr_s_w, thr_s_w, n_out))
             f = link("skipFIFO", thr_s_w, "FMPad_c", g, f_skip, n_out)
             f_pad = fifo("FMPad_c->out")
             order.append(ChanPadNode("FMPad_c", f, f_pad, n_out, g, pw))
             f_skip_add = link("FMPad_c", g + pw, "Add", add_w, f_pad, n_out)
         else:  # pad_thr
-            f = link("MaxPool", 1, "FMPad_c", g, f_mp, n_out)
+            f = link(pool_last, pool_w, "FMPad_c", g, f_mp, n_out)
             f_pad = fifo("FMPad_c->out")
             order.append(ChanPadNode("FMPad_c", f, f_pad, n_out, g, pw))
             f = link("FMPad_c", g + pw, "Thr_s", thr_s_w, f_pad, n_out)

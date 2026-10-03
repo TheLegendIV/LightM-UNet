@@ -22,7 +22,7 @@ TOL, TOL_NEAR = 1.02, 1.03
 
 def pixels_per_frame(res):
     p = res["probe"]
-    if p.get("block") == "down":
+    if p.get("block") in ("down", "up", "init", "final"):
         return p["hout"] * p["wout"]
     return p["height"] * p["width"]
 

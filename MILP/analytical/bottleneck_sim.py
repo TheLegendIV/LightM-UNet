@@ -256,7 +256,7 @@ def _describe_graph(r: BottleneckResult, order: list, fifos: dict) -> dict:
         if prod.startswith("DWC("):
             return by_name[prod[4:-1].split("->")[1]].in_width_bits
         if prod == "Source":
-            return by_name["Dup"].in_width_bits
+            return by_name["Dup"].in_width_bits if "Dup" in by_name else r.nodes[0].in_width_bits
         raise KeyError(prod)
 
     return dict(

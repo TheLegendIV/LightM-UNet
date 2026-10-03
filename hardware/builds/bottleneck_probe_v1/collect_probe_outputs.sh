@@ -7,7 +7,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENET=/home/thelegendiv/finn/notebooks/enet
 DEST="$HERE/results"
 mkdir -p "$DEST"
-for d in $(docker exec "$CONTAINER" bash -c "ls -d $ENET/finn_deployment_outputs/bottleneck_cin32_* $ENET/finn_deployment_outputs/dn_cin16_* 2>/dev/null"); do
+for d in $(docker exec "$CONTAINER" bash -c "ls -d $ENET/finn_deployment_outputs/bottleneck_cin32_* $ENET/finn_deployment_outputs/dn_cin16_* $ENET/finn_deployment_outputs/up_cin32_* $ENET/finn_deployment_outputs/up_cin16_* $ENET/finn_deployment_outputs/init_cin1_* $ENET/finn_deployment_outputs/fnl_cin4_* 2>/dev/null"); do
   n=$(basename "$d")
   mkdir -p "$DEST/$n"
   docker cp "$CONTAINER:$d/probe_result.json" "$DEST/$n/" 2>/dev/null || echo "no probe_result.json in $n"

@@ -5,6 +5,8 @@ You are taking over a prepared set of build files. Everything host-side is done 
 Read `AGENTS.md` (repo root) first: FINN code must be run as `docker exec -e HOME=/tmp/home_dir <container> ...`, files are
 `docker cp`'d flat into `/home/thelegendiv/finn/notebooks/enet/`, Vivado needs `source /tools/Xilinx/Vivado/2022.2/settings64.sh`.
 
+> **Sections 13-15 (final deconv, Pool route, batch protocol: build + OOC for ALL probes, max 4 at a time, per-block change log) are the newest and override earlier wording.**
+
 ## 1. The goal (do not lose sight of it)
 **Verify that our tightly coupled bottleneck does not deadlock in hardware and achieves the required throughput.**
 "Tightly coupled" = our PE/SIMD per node, thresholds at the narrowest PE that keeps up, DWCs where widths differ, and
@@ -200,3 +202,136 @@ stale dirs from the iteration phase can be ignored (the compare script lists eve
 The build script on the host was extended with downsampling support (section 9): `identify_roles_down`, a `custom` flag in the folding
 dict (skipped by the generic apply), and the `finn_channel_pad` hook -- your container copy does not have these edits yet; `run_probes.sh`
 re-copies the host files, so just rerun it (check that your fixes 1-5 are still in the host copy, they were when I extended it).
+
+
+## 11. Upsampling probes (6 more cases): `up_cin32_cout16_in32_int{4,6,8}_{conv,noconv}`
+
+Same goal and procedure as sections 4 / 9 (`SET=up CONTAINER=<name> bash run_probes.sh`; `STOP_AFTER=folding` first). Model:
+`MILP/analytical/up_bottleneck.py` (+ `up_bottleneck_sim.py`, `test_up_bottleneck.py`, section "Upsampling bottleneck" in `analytical.md`).
+Measure steady throughput as in section 10.1: `(cycles - latency_cycles) / (N - 1) / 4096` -- the target is **18 cyc per OUTPUT pixel**
+(`predicted.T`; frame budget F = 73728, same as the 72-cycle 32x32 probes; input side 72 cyc per input pixel).
+
+Case: ENet up4-like, nearest-neighbour decoder: Cin 32 -> Cout 16, Cmid = Cin // 4 = 8, 32x32 input -> 64x64 output, uniform INT b, seed 0.
+* `conv` = decoder_type `nearest_conv_upsample` (main = main_proj 1x1 -> nearest x2 -> 3x3 skip_resize_conv; the decoder this repo trains);
+  `noconv` = `nearest_upsample` (no 3x3). Ext branch for both: reduce 1x1 -> ConvTranspose 2x2 stride 2 -> expand 1x1, `Add`, `Thr_out`.
+  Both branches are real compute here, unlike the bottleneck's identity skip.
+* Expected FINN graph (after the usual convert): `Thr_in -> Dup`; main `MVAU_p -> Thr_p -> UpsampleNearestNeighbour -> [FMPadding 3x3 -> SWG 3x3 -> MVAU_k -> Thr_k]`;
+  ext `MVAU_r -> Thr_r -> FMPadding_Pixel -> SWG 2x2 -> MVAU_u -> Thr_u -> MVAU_e -> Thr_e`; `AddStreams -> Thr_out`. The ConvTranspose is lowered by the
+  repo's `InferPixelPaddingDeconv` (FMPadding_Pixel + Im2Col + MatMul). `identify_roles_up` tells `mvau_r` (Cin -> Cmid) from `mvau_u` (4*Cmid -> Cmid, same
+  (MW, MH) = (32, 8) here) by their producer (Dup side vs a 2x2 sliding window); `thr_s` (noconv) is the consumer of the UpsampleNearestNeighbour node.
+* **Model facts to check against hardware:** MVAU_k (conv variant) is the heaviest node: PE 8 x SIMD 16 = 128 MACs per cycle, 64 DSP at INT4 (block total 100 DSP,
+  vs 36 for `noconv`); MVAU_u does `4*Cmid*Cmid` MACs per output pixel because 3 of 4 window elements are inserted zeros; UpsampleNearestNeighbour is not
+  foldable (one OUTPUT pixel per cycle = 4096 cycles per frame, ~6% of F); only the join FIFOs are deep: `skip FIFO` (end of the ext branch, ~1.2k words x 4 bit for
+  `conv`) and `FIFO main` (17 words); prefetch FIFOs in front of the 3x3 FMPadding and FMPadding_Pixel are small (~100-140 words, `emap` in `verify_with_sim`).
+  Expected steady period 18.1 (conv) / 17.6 (noconv): no deep padding window, so the inter-frame gap of section 10 is only ~0.6%. Expected first-out latency ~2.4k (conv) /
+  ~0.14k (noconv) cycles.
+* **Expected resources (INT4 / INT6 / INT8):** conv LUT 5598 / 7308 / 7971, BRAM18 3 / 3 / 25, DSP 100 / 100 / 100; noconv LUT 3146 / 4211 / 4894, BRAM18 1 / 1 / 21, DSP 36
+  (FIFOs, DWCs and thresholds included; FMPadding_Pixel, FMPadding and UpsampleNearestNeighbour LUTs are not calibrated, priced 0).
+* Folding roles: dup, mvau_p, thr_p, upnn, [fmpad_k, swg_k, mvau_k, thr_k | thr_s], mvau_r, thr_r, fmpadpix, swg_u, mvau_u, thr_u, mvau_e, thr_e, add, thr_out. No new FINN
+  pass is needed (all ops exist), so these six can run right away; if `UpsampleNearestNeighbour` or `FMPadding_Pixel` rejects the forced `SIMD`, report the attribute error.
+
+### 11.1 Three more upsampling probes at the ENet U4 up5 sizes: `up_cin16_cout4_in64_int{4,6,8}_conv` (`SET=up5`)
+
+"U4" = ENet width divisor 4: (16, 64, 128, 64, 16) / 4 = channels (4, 16, 32, 16, 4); the up4 probes above are its 32 -> 16 block (32x32 -> 64x64), up5 is 16 -> 4
+(64x64 -> 128x128, Cmid = 16 // 4 = 4), conv decoder (`nearest_conv_upsample`) only. Same frame budget F = 73728, so **T_out = 4.5 cyc per OUTPUT pixel**
+(16384 output pixels; T_in = 18 per input pixel). Measure as in 10.1 with `pixels_per_frame = 16384` (`compare_probe_vs_model.py` does this for `block == "up"`).
+* Everything of section 11 applies. New: with Cout = Cmid = 4 the 1x1 MVAUs `mvau_p` (16 -> 4) and `mvau_r` (16 -> 4) have the SAME (MW, MH); `identify_roles_up`
+  now classifies the three 1x1 MVAUs by what follows them (UpsampleNearestNeighbour = proj, FMPadding_Pixel = reduce, AddStreams = expand).
+* Model: every MVAU at 4.00 cyc/px (89% of the 4.5 budget), MVAU_k = PE 1 x SIMD 36 (36 DSP, the 3x3 on 4 channels), block 64 DSP / 3.7k LUT / 2 BRAM18 at INT4
+  (INT6 / INT8: see `predicted.totals` in the folding json); simulated steady 4.38 cyc/px (3 frames), first-out latency ~1.2k cycles; skip FIFO (ext end) ~520 words x 4 bit,
+  FIFO main 5 words, FIFO in front of the 3x3 FMPadding ~530 words. T_out is only 4.5 cycles: with so little slack per pixel, watch the stream widths (each DWC and the
+  UpsampleNearestNeighbour node run at one word per cycle) -- a node that needs more than one cycle per output pixel anywhere on the join would show up as SLOW.
+
+
+## 12. Initial-block probes (3 cases): `init_cin1_cout4_in256_int{4,6,8}`  (`SET=int`)
+
+ENet U4 initial block, `FINNInitialBlockConcat` (LayerQuantEnetFINN.py): 1 -> 4 channels, 256x256 input -> 128x128 output. The block has its own input quantizer
+(no stand-in). Model: `MILP/analytical/int_bottleneck.py` (+ `int_bottleneck_sim.py`, `test_int_bottleneck.py`, section in `analytical.md`).
+
+    Thr_in -> Dup -> [FMPad -> SWG (3x3, stride 2) -> MVAU_c (9 -> 3) -> Thr_c] -> FIFO main -+
+                     [MaxPool (2x2, stride 2) -> Thr_m] --------------------> skip FIFO -----+-> Concat -> Thr_act
+
+* **Frame budget F = 81920 cycles = the MAXPOOL FLOOR**, 1.25 * 256 * 256 (FINN's `get_exp_cycles` estimate for the 2D `StreamingMaxPool`: one cycle per input pixel plus one per
+  output pixel, no PE/SIMD). So the target is **5.0 cyc per OUTPUT pixel** (16384 output pixels), 1.25 per input pixel. Measure as in section 10.1 with
+  `pixels_per_frame = 16384`. **Please report the maxpool's real rtlsim behaviour**: if its output write overlaps the input read the real floor is 65536 cycles
+  (1.0 / pixel) and the whole network budget could drop by 20%; run this probe first among the three and look at the stable period (`(cycles - latency)/(N-1)`).
+* One input channel means no channel parallelism: Thr_in, Dup, FMPad and the maxpool are all pixel-serial (>= 65536 cycles). MVAU_c has MW = 9, MH = 3: the model picks
+  PE 1 x SIMD 9 (parallel_window = 1 on the SWG, SIMD of the FMPad/SWG = 1 = Cin), 9 DSP at every bit width; block = 1.66k LUT / 5 BRAM18 / 9 DSP at INT4
+  (INT6 1788 LUT, INT8 2244 LUT). Simulated steady 5.02 cyc/px (maxpool at 100% of F, MVAU_c at 60%), first-out latency ~540 cycles; join FIFOs: skip FIFO (maxpool end)
+  96 words x A bit, FIFO main (conv end) 77 words; FIFO in front of the 3x3 FMPad ~260 words (next-frame prefetch, W+2 pixels).
+* The stride-2 3x3 window never reads the last padded row / column (258 padded, last window ends at 256): the sim's window node drains them before the next frame -- a real SWG
+  does this too; if its throughput looks lower than the model, check the SWG's frame-boundary handling first.
+* Roles (`identify_roles_init`): thr_in, dup, fmpad, swg, mvau_c, thr_c, maxpool, thr_m, concat, thr_act. thr_c / thr_m are the shared `branch_quant` thresholds before the
+  concat, thr_act the BN + ReLU threshold after it -- streamlining may move the BN scale differently; report what the landed graph looks like if the roles do not resolve.
+  The concat path needs the repo's existing concat fixups (`MoveTransposePastJoinConcat`, `MoveScalarMulPastConcat`, see finn_enet_build*.py); no new FINN pass is required.
+
+
+## 13. Final-deconvolution probes (6 cases): `fnl_cin4_cout5_in128_int{4,6,8}_{bias,nobias}`  (`SET=fnl`)
+
+ENet U4 final layer of `LayerQuantEnetFINN`: `qnn.QuantConvTranspose2d(c5 = 4 -> out_channels = 5, kernel 2, stride 2)`, 128x128 input -> 256x256 output, Int8 weight quantizer at
+weight_bit_width = b. Model: `MILP/analytical/fnl_block.py` (+ `fnl_block_sim.py`, `test_fnl_block.py`, section in `analytical.md`). **Not a bottleneck**: one path, no Dup, no skip, no join
+FIFO, no output threshold (the output is the raw logit). Export: `export_fnl_probe.py`; folding: `make_fnl_folding_configs.py`.
+
+    Thr_in -> FMPadding_Pixel -> SWG (2x2, stride 1) -> MVAU_f (4*Cin = 16 -> Cout = 5) -> [Bias add]
+
+* Frame budget F = 73728 (same as the other U4 probes) = **1.125 cyc per OUTPUT pixel** (65536 output pixels; 4.5 per input pixel). Measure as in 10.1 with `pixels_per_frame = 65536`
+  (`compare_probe_vs_model.py` does this for `block == "final"`). This is the tightest budget of all probes: one output pixel per cycle is the floor (65536), and FMPadding_Pixel emits the
+  (2H+1)(2W+1) = 257 x 257 = 66049-cycle zero-inserted image with SIMD = Cin. Expect the stable period at ~1.01 cyc/px (model), i.e. 88% of the budget.
+* Folding (all bit widths): FMPadding_Pixel SIMD 4, SWG SIMD 4 (parallel_window 0), MVAU_f PE 5 x SIMD 16 (80 MACs/cycle -> 48 DSP, one output pixel per cycle), bias PE 5. The lowered
+  transposed conv spends 4x MACs on inserted zeros (3 of the 4 window elements), as in the up-blocks.
+* Two variants, because the repo itself is inconsistent here -- **this is the main open question of this block**:
+  * `bias`   = `LayerQuantEnetFINN` default (`final_bias=True`, `Int32Bias`): the graph has an integer bias add after the MVAU. Expected to land as a `ChannelwiseOp` (role `bias`).
+  * `nobias` = what `hardware/finn_enet_prod_export.py` exports today (comment there: "bias in ConvTranspose requires extra BN/threshold handling").
+  Report for `bias`: what node the bias becomes (ChannelwiseOp, an MVAU bias attribute, or a leftover `Add`/`Mul` that stays OUTSIDE the dataflow partition). If it does not lower, say so --
+  that decides whether the production network must keep `final_bias=False` or needs a new absorb pass. `identify_roles_final` raises "bias variant: no node after the MVAU" in that case.
+* The output is tagged INT8 (as `finn_enet_prod_export.export_model` does). Streamlining may leave the weight-scale `Mul` after the MVAU outside the dataflow partition: that is fine for
+  these probes (the partition should end at the MVAU / bias node); report it.
+* Roles (`identify_roles_final`): thr_in (producer of the FMPadding_Pixel; its PE is set equal to the FMPadding SIMD), fmpadpix, swg_u, mvau_f, [bias].
+* **Expected resources** (INT4 / INT6 / INT8): bias LUT 2276 / 2395 / 2276, nobias LUT 1548 / 1647 / 1508, BRAM18 0, DSP 48 for all (FMPadding_Pixel and ChannelwiseOp LUT are not calibrated;
+  the bias add is priced like an AddStreams -- treat the ~730 LUT gap bias vs nobias as a placeholder, report the real number). Simulated first-out latency ~260 cycles, FIFO depths 2-4 everywhere
+  except a 4-word prefetch FIFO before FMPadding_Pixel. Nothing here should deadlock; if it does, it is the FMPadding_Pixel / SWG handshake at SIMD 4 (report which FIFO is full).
+
+## 14. Pool-route probes (2 cases): `init_cin1_cout4_in256_int4_pool`, `dn_cin16_cout32_in64_int4_mvau_pool`  (`SET=pool`)
+
+FINN's 2D `StreamingMaxPool` is not foldable (1.25 * H * W cycles). FINN also has a second route: `InferPool` lowers a MaxPool to a depthwise SWG (`Im2Col`) + `Pool_hls` (`PE`), cycles
+(C * K^2 / PE) * OH * OW, which can be folded over channels. The probe script monkeypatches `convert_to_hw_layers.InferStreamingMaxPool = InferPool` when `probe["pool_impl"] == "pool"`.
+Each pool probe **shares the ONNX** of its StreamingMaxPool twin; only the folding json (extra rows `swg_p`, `pool`) and the `_probe.json` (`pool_impl: "pool"`) differ.
+* **First check (gate 0 for this set):** the container FINN is `v0.10.1-10g39f0c9a6b`; confirm `InferPool` (or `InferPool_Batch`) exists in
+  `finn/transformation/fpgadataflow/convert_to_hw_layers.py` and which op names result (`Pool_hls`? `Pool_rtl`? `ConvolutionInputGenerator` with `depthwise = 1`). If neither exists, stop and report;
+  do not invent a pass. Run `STOP_AFTER=convert` first and list the nodes.
+* `init_cin1_cout4_in256_int4_pool`: **F = 69632** (T_out = 4.25 per output pixel), not 81920: at F = 65536 the depthwise SWG (66050 cycles) and the conv-branch FMPadding (66564) are infeasible, so
+  69632 is the first sensible budget. Folding: `swg_p` SIMD 1 + `pool` PE 1 (Cin = 1, so no channel folding here; the gain over StreamingMaxPool is that Pool_hls reads 1 pixel per cycle,
+  no 1.25 factor). Model: steady 4.06 cyc/px, latency 536, 1750 LUT / 3 BRAM18 / 9 DSP, skip FIFO 68 words.
+* `dn_cin16_cout32_in64_int4_mvau_pool`: F = 73728 (T_out = 72), `swg_p` SIMD 2 + `pool` PE 2 (PE 1 = 80.9k cycles does not fit). Model: steady 72.0, latency 3774, 4193 LUT / 1 BRAM18 / 28 DSP, skip FIFO 1421 words.
+* **Report:** real rtlsim period of the Pool route vs the StreamingMaxPool twin (init: 4.06 predicted vs 5.02 for the streaming route; dn: unchanged 72), the landed `Pool` PE and `swg_p` SIMD (does
+  `parallel_window` / `depthwise` constrain SIMD == PE?), and LUT/BRAM of the Pool node. Also **report the StreamingMaxPool twin's real cycles per frame** (init, first run of `SET=int`): the model
+  assumes 1.25 * H * W = 81920; if the rtlsim shows 65536 the whole network budget could drop.
+
+## 15. Batch protocol and per-bottleneck change log (READ BEFORE LAUNCHING ANYTHING)
+
+### 15.1 Run EVERY probe through build + OOC synthesis, at most 4 builds at a time
+All 41 probes (reg 15, dn 6, up 6, up5 3, int 3, pool 2, fnl 6) need the **full flow: stitched-IP rtlsim AND out-of-context synthesis**, not rtlsim only (this supersedes the "rtlsim first, OOC secondary"
+wording of section 1 and the single "--ooc later" step of section 4.6). One run per case does both: `EXTRA="--ooc"`.
+* **Never more than 4 builds running at once** across the whole container (Vivado/HLS memory). `run_probes.sh` caps one SET at `JOBS=4` (default) -- **do not raise `JOBS`, and do not start a second
+  `run_probes.sh` while one is running** (two sets in parallel = 8 builds). Run the sets one after another.
+* Suggested order (small/new first, so a script bug does not burn a 15-case batch): `SET=fnl` (6) -> `SET=int` (3) -> `SET=pool` (2) -> `SET=up5` (3) -> `SET=up` (6) -> `SET=dn` (6) -> `SET=reg` (15, d16 last).
+  First `STOP_AFTER=folding` for one case of each SET (gate 3), then the full batch: `CONTAINER=<name> SET=fnl EXTRA="--ooc" JOBS=4 bash run_probes.sh`.
+* After **each** set: `CONTAINER=<name> bash collect_probe_outputs.sh` (copies `probe_result.json`, `report/` and `utilization_placed.rpt` out of the container; the OOC json DSP field is wrong, the raw
+  report is the truth) and `python3 compare_probe_vs_model.py`. Do this before starting the next set -- build dirs under `/tmp/finn_dev_*` are lost when the container is recreated.
+* Per-case timeouts: `TIMEOUT` default 14400 s; exit code 124 = timeout = possible deadlock (capture which FIFO is full). reg d16 and fnl (66k-cycle frames x 3) are the longest rtlsims -- raise `TIMEOUT`
+  rather than `JOBS`.
+
+### 15.2 What changed per bottleneck since you last saw it (RERUN = results you already have are stale, NEW = never built)
+* **reg (15, `bottleneck_cin32_d{1,2,4,8,16}_int{4,6,8}`): RERUN.** FIFO sizing now escalates through a capped schedule (d16 no longer asks for 17k-32k word FIFOs), the 3-frame saturated run is the
+  sizing criterion, a `tol_soft` 3% warning exists, and the prediction carries FIFO memory choices (`mem`, `depth_alloc`, BRAM18/URAM/LUT per FIFO: srl <= 64 deep, bram pow2, uram if efficient). The forced
+  depths in `_folding.json` were regenerated -> **earlier regular-probe results used old depths; rerun all 15**. `stable_throughput` from FINN is miscaled (divides by N, not N-1);
+  `compare_probe_vs_model.py` recomputes it, trust that column.
+* **dn (6, `dn_cin16_cout32_in64_int{4,6,8}_{fmpad,mvau}`): RERUN + pool twin.** Default (StreamingMaxPool) structure unchanged, but the model gained `pool_impl` and the multi-frame prefetch FIFOs
+  (before FMPad / SWG) were re-sized -> regenerated folding json. New: the Pool-route twin (section 14). The `fmpad` variant still needs your `finn_channel_pad.py` pass (stub in repo).
+* **up (6, `up_cin32_cout16_in32_*`) + up5 (3, `up_cin16_cout4_in64_*_conv`): NEW** (sections 11 / 11.1). `identify_roles_up` classifies 1x1 MVAUs by what follows; no new FINN pass.
+* **int (3, `init_cin1_cout4_in256_int{4,6,8}`) + int pool (1): NEW** (sections 12 / 14). Needs the concat fixups already in the repo; the strided 3x3 SWG's frame-boundary behaviour is the thing to watch.
+* **fnl (6): NEW** (section 13). New role dispatch `identify_roles_final`; the `bias` variant is an open FINN-lowering question.
+* **Shared script changes** (`finn_bottleneck_probe_build.py`): `identify_roles` dispatches on `probe["block"]` in {down, up, init, final}; `thr_in` PE is taken from the Dup, or from the
+  FMPadding_Pixel SIMD when there is no Dup (final); MVAU divisibility asserts run over whichever `mvau_*` roles exist; Pool-route monkeypatch. `run_probes.sh` knows
+  `SET=reg|dn|up|up5|int|pool|fnl`; `collect_probe_outputs.sh` and `compare_probe_vs_model.py` know all prefixes and `block == "final"`. `run_probes.sh` re-`docker cp`s everything on every launch --
+  do not hand-edit the container copies.

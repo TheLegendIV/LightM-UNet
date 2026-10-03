@@ -109,10 +109,11 @@ class BottleneckResult:
             for d in self.dwcs:
                 lines.append(f"  {d.edge:22s} {d.in_width:5d} -> {d.out_width:5d} bits  LUT {d.lut:7.0f}  {d.cyc_px:6.2f} cyc/px")
         f = self.skip_fifo
-        lines.append(
-            f"skip FIFO: width {f.width_bits} bits (PE_ts={f.pe}), depth {f.depth_words} words "
-            f"({f.pixels_buffered} pixels), {f.bits} bits, ~{f.bram18_if_block} BRAM18 if block / ~{f.lutram_luts_if_distributed} LUT if distributed"
-        )
+        if f is not None:
+            lines.append(
+                f"skip FIFO: width {f.width_bits} bits (PE_ts={f.pe}), depth {f.depth_words} words "
+                f"({f.pixels_buffered} pixels), {f.bits} bits, ~{f.bram18_if_block} BRAM18 if block / ~{f.lutram_luts_if_distributed} LUT if distributed"
+            )
         t = self.totals
         lines.append(f"totals: LUT {t['lut']:.0f}  BRAM18 {t['bram18']:.1f}  URAM {t['uram']:.0f}  DSP {t['dsp']:.0f}  (DWC LUT {t['dwc_lut']:.0f})")
         lines.append(f"latency (first pixel in -> first pixel out): {self.latency_first_out_cycles} cycles; frame ~ {self.frame_cycles} cycles")
@@ -121,8 +122,8 @@ class BottleneckResult:
         if self.fifo_costs:
             t = self.totals
             sf = self.skip_fifo
-            lines.append(f"FIFO memory: skip FIFO -> {sf.mem} ({sf.depth_alloc} deep: {sf.mem_bram18} BRAM18 / {sf.mem_uram} URAM / {sf.mem_lut} LUT); "
-                         f"all FIFOs: {t['fifo_lut']:.0f} LUT, {t['fifo_bram18']:.0f} BRAM18, {t['fifo_uram']:.0f} URAM")
+            head = f"skip FIFO -> {sf.mem} ({sf.depth_alloc} deep: {sf.mem_bram18} BRAM18 / {sf.mem_uram} URAM / {sf.mem_lut} LUT); " if sf is not None else ""
+            lines.append(f"FIFO memory: {head}all FIFOs: {t['fifo_lut']:.0f} LUT, {t['fifo_bram18']:.0f} BRAM18, {t['fifo_uram']:.0f} URAM")
         v = self.verification
         if v:
             lines.append(
@@ -160,7 +161,8 @@ def _simd_candidates(cin: int, k: int) -> list[int]:
     return sorted(cands)
 
 
-def _search_mvau(layer: LayerGeometry, bits: int, budget: int, weight_bits: int | None = None) -> tuple[int, int, dict]:
+def _search_mvau(layer: LayerGeometry, bits: int, budget: int, weight_bits: int | None = None,
+                 extra_ok=None) -> tuple[int, int, dict]:
     """(PE, SIMD, cost) with the largest cycles <= budget (fully balanced = cycles == budget);
     ties broken by BRAM then LUT. weight_bits defaults to bits."""
     wb = bits if weight_bits is None else weight_bits
@@ -169,6 +171,8 @@ def _search_mvau(layer: LayerGeometry, bits: int, budget: int, weight_bits: int 
         for simd in _simd_candidates(layer.cin, layer.kh):
             cost = fcm.conv_cost_pe_simd(layer, wb, bits, pe, simd, ram_style=fcm.RAM_STYLE_AUTO, force_dsp=True)
             if cost["mvu_cycles"] > budget or cost["fmpad_cycles"] > budget:
+                continue
+            if extra_ok is not None and not extra_ok(cost):   # e.g. FMPadding_Pixel cycles of a lowered transposed conv
                 continue
             key = (-cost["mvu_cycles"], cost["wm_bram18"] + cost["swu_bram18"] + cost["thr_bram18"], cost["total_lut"])
             if best is None or key < best[0]:
@@ -181,6 +185,25 @@ def _search_mvau(layer: LayerGeometry, bits: int, budget: int, weight_bits: int 
     _, pe, simd = best
     cost = fcm.layer_cost_pe_simd_auto_ram(layer, wb, bits, pe, simd, force_dsp=True)
     return pe, simd, cost
+
+
+
+def search_swg_pool(g_pool: LayerGeometry, bits: int, budget: int) -> dict:
+    """FINN `Pool` route for a MaxPool (InferPool: depthwise ConvolutionInputGenerator + Pool_hls with PE), instead of StreamingMaxPool.
+    Pool cycles (finn pool.py get_exp_cycles) = (C * K^2 / PE) * OH * OW with PE | C; the depthwise SWG (SIMD = PE) must also fit. No extra
+    output cycle (StreamingMaxPool: 1.25 * H * W); one channel still gives 1 cycle per input pixel. Returns the smallest PE that fits the budget
+    (narrowest = cheapest). Pool LUT is provisional (comparators only, no calibration data)."""
+    c, k2, ohw = g_pool.cin, g_pool.kh * g_pool.kw, g_pool.hout * g_pool.wout
+    best = None
+    for pe in fcm.divisors(c):
+        pool_cycles = (c * k2 // pe) * ohw
+        swg_lut, swg_bram18, swg_uram18, swg_cycles = fcm._finn_swu(g_pool, bits, pe, True, False)
+        if best is None:
+            best = (pe, pool_cycles, swg_cycles)
+        if pool_cycles <= budget and swg_cycles <= budget:
+            return dict(pe=pe, pool_cycles=pool_cycles, pool_lut=120 + pe * bits * (k2 - 1) * 3, swg_cycles=swg_cycles, swg_lut=swg_lut,
+                        swg_bram18=swg_bram18, swg_uram18=swg_uram18)
+    raise ValueError(f"{g_pool.name}: Pool route cannot reach {budget} cycles/frame even with PE = C = {c} (needs {best and best[1]} / SWG {best and best[2]})")
 
 
 def _retarget_threshold(cost: dict, layer: LayerGeometry, bits: int, thr_pe: int) -> dict:
@@ -421,8 +444,9 @@ def finalize_fifo_costs(r: "BottleneckResult", mem: str = "auto") -> None:
             continue
         costs[name] = fifo_memory(f["bits"], f["depth"], mem if name == "skip FIFO" else "auto")
     r.fifo_costs = costs
-    sf, c = r.skip_fifo, costs["skip FIFO"]
-    sf.mem, sf.depth_alloc, sf.mem_bram18, sf.mem_uram, sf.mem_lut = c["mem"], c["depth_alloc"], c["bram18"], c["uram"], c["lut"]
+    sf, c = r.skip_fifo, costs.get("skip FIFO")
+    if sf is not None and c is not None:     # single-path blocks (final deconv) have no skip FIFO
+        sf.mem, sf.depth_alloc, sf.mem_bram18, sf.mem_uram, sf.mem_lut = c["mem"], c["depth_alloc"], c["bram18"], c["uram"], c["lut"]
     dwc_lut = sum(d.lut for d in r.dwcs)
     r.totals = dict(
         lut=sum(x.lut for x in r.nodes) + dwc_lut + sum(v["lut"] for v in costs.values()),

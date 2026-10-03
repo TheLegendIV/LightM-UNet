@@ -28,7 +28,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bottleneck as reg  # noqa: E402
 from bottleneck import (  # noqa: E402
     BottleneckResult, DwcResult, NodeResult, SkipFifo, _dwc, _fifo_attrs, _fifo_bram18, _geom, _min_pe, _retarget_threshold,
-    _search_mvau, finalize_fifo_costs,
+    _search_mvau, finalize_fifo_costs, search_swg_pool,
 )
 
 fcm = reg.fcm
@@ -42,7 +42,7 @@ def pad_group_candidates(cin: int, cout: int) -> list[int]:
 
 def model_dn_bottleneck(
     cin: int, cout: int, v: int, bits: int, height: int, width: int, F: int | None = None, T_out: float | None = None,
-    pad_group: int | None = None, skip_order: str = "thr_pad", skip_pad: str = "fmpad",
+    pad_group: int | None = None, skip_order: str = "thr_pad", skip_pad: str = "fmpad", pool_impl: str = "streaming",
 ) -> BottleneckResult:
     """cin -> cout (cout > cin) downsampling block, Cmid = cout/v, input map height x width (even), uniform INT `bits`.
     Budget: F frame cycles, or T_out cycles per output pixel (F = T_out * (height/2 * width/2))."""
@@ -52,6 +52,8 @@ def model_dn_bottleneck(
         raise ValueError("downsampling block pads channels: need cout > cin")
     if cout % v:
         raise ValueError(f"Cout={cout} not divisible by v={v}")
+    if pool_impl not in ("streaming", "swg_pool"):
+        raise ValueError("pool_impl in (streaming = StreamingMaxPool, swg_pool = depthwise SWG + Pool_hls with PE)")
     if skip_order not in SKIP_ORDERS or skip_pad not in SKIP_PADS:
         raise ValueError(f"skip_order in {SKIP_ORDERS}, skip_pad in {SKIP_PADS}")
     if (F is None) == (T_out is None):
@@ -72,7 +74,7 @@ def model_dn_bottleneck(
             raise ValueError(f"channel pad needs {cout // s} cycles/pixel > T_out={T:.1f}; raise pad_group (options {cands})")
     res = BottleneckResult(params=dict(
         cin=cin, cmid=cmid, cout=cout, v=v, z=v, T=T, F=F, bits=bits, k=3, dilation=1, stride=2, height=height, width=width,
-        hout=ho, wout=wo, pad=1, pad_group=s, skip_order=skip_order, skip_pad=skip_pad, T_in=F / px_in, block="down",
+        hout=ho, wout=wo, pad=1, pad_group=s, skip_order=skip_order, skip_pad=skip_pad, T_in=F / px_in, block="down", pool_impl=pool_impl,
     ))
 
     # ---- geometries
@@ -96,9 +98,14 @@ def model_dn_bottleneck(
     c_e = _retarget_threshold(c_e, g_e, A, tpe_e)
 
     # ---- maxpool (not foldable): floor on F
-    c_mp = fcm.maxpool_cost(g_mp, A)
-    if c_mp["cycles"] > F:
-        raise ValueError(f"F={F} is below the maxpool floor of {c_mp['cycles']} cycles/frame (not foldable)")
+    if pool_impl == "streaming":
+        c_mp = fcm.maxpool_cost(g_mp, A)
+        if c_mp["cycles"] > F:
+            raise ValueError(f"F={F} is below the maxpool floor of {c_mp['cycles']} cycles/frame (not foldable)")
+        pe_mp_in, pool_first, pool_last = cin, "MaxPool", "MaxPool"      # StreamingMaxPool takes all channels per cycle
+    else:
+        sp = search_swg_pool(g_mp, A, F)
+        pe_mp_in, pool_first, pool_last = sp["pe"], "SWG_p", "Pool"      # Pool folded over channels: narrowest PE that fits F
 
     # ---- stream nodes
     pe_d = _min_pe(cin, px_in, F, "Dup")
@@ -149,8 +156,13 @@ def model_dn_bottleneck(
                      c_e["mvu_dsp"], in_w=simd_e * A, out_w=pe_e * acc_e))
     nodes.append(row("Thr_e", "Thresholding_rtl", tpe_e, 0, px_out * (cout // tpe_e), c_e["thr_lut"], c_e["thr_bram18"],
                      in_w=tpe_e * acc_e, out_w=tpe_e * A))
-    nodes.append(row("MaxPool", "StreamingMaxPool_hls", 0, 0, c_mp["cycles"], c_mp["total_lut"], c_mp["swu_bram18"],
-                     in_w=cin * A, out_w=cin * A))
+    if pool_impl == "streaming":
+        nodes.append(row("MaxPool", "StreamingMaxPool_hls", 0, 0, c_mp["cycles"], c_mp["total_lut"], c_mp["swu_bram18"],
+                         in_w=cin * A, out_w=cin * A))
+    else:
+        nodes.append(row("SWG_p", "ConvolutionInputGenerator depthwise 2x2 s2", 0, sp["pe"], sp["swg_cycles"], sp["swg_lut"], sp["swg_bram18"],
+                         sp["swg_uram18"], in_w=sp["pe"] * A, out_w=sp["pe"] * A))
+        nodes.append(row("Pool", "Pool_hls", sp["pe"], 0, sp["pool_cycles"], sp["pool_lut"], in_w=sp["pe"] * A, out_w=sp["pe"] * A))
     if skip_pad == "mvau":
         pe_s, simd_s, c_s = mvau_s
         acc_s = c_s["acc_bits"]
@@ -168,7 +180,6 @@ def model_dn_bottleneck(
 
     # ---- DWCs (every edge with a width mismatch)
     dw = res.dwcs
-    pe_mp_in = cin  # maxpool takes all channels per cycle
     _dwc("Dup->SWG_r", pe_d * A, simd_swu_r * A, cin, pe_d, simd_swu_r, px_in, px_out, dw)
     _dwc("MVAU_r->Thr_r", pe_r * acc_r, tpe_r * acc_r, cmid, pe_r, tpe_r, px_out, px_out, dw)
     _dwc("Thr_r->FMPad", tpe_r * A, simd_swu_m * A, cmid, tpe_r, simd_swu_m, px_out, px_out, dw)
@@ -176,17 +187,17 @@ def model_dn_bottleneck(
     _dwc("Thr_m->MVAU_e", tpe_m * A, simd_e * A, cmid, tpe_m, simd_e, px_out, px_out, dw)
     _dwc("MVAU_e->Thr_e", pe_e * acc_e, tpe_e * acc_e, cout, pe_e, tpe_e, px_out, px_out, dw)
     _dwc("Thr_e->Add", tpe_e * A, pe_a * A, cout, tpe_e, pe_a, px_out, px_out, dw)
-    _dwc("Dup->MaxPool", pe_d * A, cin * A, cin, pe_d, pe_mp_in, px_in, px_out, dw)
+    _dwc(f"Dup->{pool_first}", pe_d * A, pe_mp_in * A, cin, pe_d, pe_mp_in, px_in, px_out, dw)
     if skip_pad == "mvau":
-        _dwc("MaxPool->MVAU_s", cin * A, simd_s * A, cin, pe_mp_in, simd_s, px_out, px_out, dw)
+        _dwc(f"{pool_last}->MVAU_s", pe_mp_in * A, simd_s * A, cin, pe_mp_in, simd_s, px_out, px_out, dw)
         _dwc("MVAU_s->Thr_s", pe_s * acc_s, pe_ts * acc_s, cout, pe_s, pe_ts, px_out, px_out, dw)
         _dwc("FIFO->Add (skip)", pe_ts * A, pe_a * A, cout, pe_ts, pe_a, px_out, px_out, dw)
     elif skip_order == "thr_pad":
-        _dwc("MaxPool->Thr_s", cin * A, pe_ts * A, cin, pe_mp_in, pe_ts, px_out, px_out, dw)
+        _dwc(f"{pool_last}->Thr_s", pe_mp_in * A, pe_ts * A, cin, pe_mp_in, pe_ts, px_out, px_out, dw)
         _dwc("FIFO->FMPad_c", pe_ts * A, s * A, cin, pe_ts, s, px_out, px_out, dw)   # widen AFTER the (narrow) FIFO
         _dwc("FMPad_c->Add", s * A, pe_a * A, cout, s, pe_a, px_out, px_out, dw)
     else:
-        _dwc("MaxPool->FMPad_c", cin * A, s * A, cin, pe_mp_in, s, px_out, px_out, dw)
+        _dwc(f"{pool_last}->FMPad_c", pe_mp_in * A, s * A, cin, pe_mp_in, s, px_out, px_out, dw)
         _dwc("FMPad_c->Thr_s", s * A, pe_ts * A, cout, s, pe_ts, px_out, px_out, dw)
         _dwc("FIFO->Add (skip)", pe_ts * A, pe_a * A, cout, pe_ts, pe_a, px_out, px_out, dw)
     _dwc("Add->Thr_out", pe_a * add_bits, pe_to * add_bits, cout, pe_a, pe_to, px_out, px_out, dw)
@@ -317,12 +328,13 @@ def _branches(r: BottleneckResult) -> dict:
     p = r.params
     names = {x.name for x in r.nodes}
     main = ["SWG_r", "MVAU_r", "Thr_r", "FMPad", "SWG_m", "MVAU_m", "Thr_m", "MVAU_e", "Thr_e"]
+    pool = ["MaxPool"] if p.get("pool_impl", "streaming") == "streaming" else ["SWG_p", "Pool"]
     if p["skip_pad"] == "mvau":
-        skip = ["MaxPool", "MVAU_s", "Thr_s"]
+        skip = pool + ["MVAU_s", "Thr_s"]
     elif p["skip_order"] == "thr_pad":
-        skip = ["MaxPool", "Thr_s", "FMPad_c"]
+        skip = pool + ["Thr_s", "FMPad_c"]
     else:
-        skip = ["MaxPool", "FMPad_c", "Thr_s"]
+        skip = pool + ["FMPad_c", "Thr_s"]
     return dict(shared=["Dup"], main=[n for n in main if n in names], skip=[n for n in skip if n in names], join=["Add", "Thr_out"])
 
 
@@ -378,7 +390,7 @@ def rate_report(r: BottleneckResult, with_sim: bool = True) -> str:
 _OP_LABEL = {
     "Dup": "DuplicateStreams_hls", "SWG_r": "ConvolutionInputGenerator_rtl", "SWG_m": "ConvolutionInputGenerator_rtl",
     "MVAU_r": "MVAU_rtl", "MVAU_m": "MVAU_rtl", "MVAU_e": "MVAU_rtl", "MVAU_s": "MVAU_rtl", "FMPad": "FMPadding_rtl",
-    "FMPad_c": "FMPadding_rtl", "MaxPool": "StreamingMaxPool_hls", "Add": "AddStreams_hls",
+    "FMPad_c": "FMPadding_rtl", "MaxPool": "StreamingMaxPool_hls", "SWG_p": "ConvolutionInputGenerator_rtl", "Pool": "Pool_hls", "Add": "AddStreams_hls",
 }
 
 
@@ -400,7 +412,7 @@ def export_onnx(r: BottleneckResult, path: str) -> None:
     node_shape = {
         "Dup": (cin, H, W), "SWG_r": (4 * cin, Ho, Wo), "MVAU_r": (cmid, Ho, Wo), "Thr_r": (cmid, Ho, Wo),
         "FMPad": (cmid, Ho + 2, Wo + 2), "SWG_m": (9 * cmid, Ho, Wo), "MVAU_m": (cmid, Ho, Wo), "Thr_m": (cmid, Ho, Wo),
-        "MVAU_e": (cout, Ho, Wo), "Thr_e": (cout, Ho, Wo), "MaxPool": (cin, Ho, Wo), "MVAU_s": (cout, Ho, Wo),
+        "MVAU_e": (cout, Ho, Wo), "Thr_e": (cout, Ho, Wo), "MaxPool": (cin, Ho, Wo), "SWG_p": (4 * cin, Ho, Wo), "Pool": (cin, Ho, Wo), "MVAU_s": (cout, Ho, Wo),
         "Thr_s": (ts_ch, Ho, Wo), "FMPad_c": (cout, Ho, Wo), "Add": (cout, Ho, Wo), "Thr_out": (cout, Ho, Wo),
     }
     ends = {"Source", "Sink"}
@@ -480,7 +492,7 @@ def export_onnx(r: BottleneckResult, path: str) -> None:
 
 _ROLE_OF = {
     "Dup": "dup", "SWG_r": "swg_r", "MVAU_r": "mvau_r", "Thr_r": "thr_r", "FMPad": "fmpad", "SWG_m": "swg_m", "MVAU_m": "mvau_m",
-    "Thr_m": "thr_m", "MVAU_e": "mvau_e", "Thr_e": "thr_e", "MaxPool": "maxpool", "MVAU_s": "mvau_s", "Thr_s": "thr_s",
+    "Thr_m": "thr_m", "MVAU_e": "mvau_e", "Thr_e": "thr_e", "MaxPool": "maxpool", "SWG_p": "swg_p", "Pool": "pool", "MVAU_s": "mvau_s", "Thr_s": "thr_s",
     "FMPad_c": "fmpad_c", "Add": "add", "Thr_out": "thr_out",
 }
 
@@ -508,7 +520,8 @@ def to_folding_config(r: BottleneckResult) -> dict:
         "thr_m": {"PE": n["Thr_m"].pe, "depth_trigger_bram": block},
         "mvau_e": {"PE": n["MVAU_e"].pe, "SIMD": n["MVAU_e"].simd},
         "thr_e": {"PE": n["Thr_e"].pe, "depth_trigger_bram": block},
-        "maxpool": {},
+        **({"maxpool": {}} if p.get("pool_impl", "streaming") == "streaming" else
+           {"swg_p": {"SIMD": n["SWG_p"].simd, "parallel_window": 0}, "pool": {"PE": n["Pool"].pe}}),
         "thr_s": {"PE": n["Thr_s"].pe, "depth_trigger_bram": block},
         "add": {"PE": n["Add"].pe},
         "thr_out": {"PE": n["Thr_out"].pe, "depth_trigger_bram": block},
@@ -555,13 +568,14 @@ def main() -> None:
     ap.add_argument("--pad-group", type=int, help="s: channels per FMPad word (default: largest common divisor)")
     ap.add_argument("--skip-order", choices=SKIP_ORDERS, default="thr_pad")
     ap.add_argument("--skip-pad", choices=SKIP_PADS, default="fmpad")
+    ap.add_argument("--pool-impl", choices=("streaming", "swg_pool"), default="streaming")
     ap.add_argument("--verify", action="store_true", help="run the cycle-level simulation check")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--folding-json", metavar="PATH", help="verify, then write the FINN probe folding + FIFO config")
     ap.add_argument("--rates", action="store_true", help="print the rate-mismatch report (model + saturated simulation)")
     ap.add_argument("--onnx", metavar="PATH", help="verify with the simulator, then write the dataflow graph (needs onnx)")
     a = ap.parse_args()
-    r = model_dn_bottleneck(a.cin, a.cout, a.v, a.bits, a.height, a.width, a.F, a.T_out, a.pad_group, a.skip_order, a.skip_pad)
+    r = model_dn_bottleneck(a.cin, a.cout, a.v, a.bits, a.height, a.width, a.F, a.T_out, a.pad_group, a.skip_order, a.skip_pad, a.pool_impl)
     if a.verify or a.rates or a.onnx or a.folding_json:
         verify_with_sim(r)
     if a.folding_json:

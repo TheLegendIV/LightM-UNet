@@ -238,3 +238,57 @@ FIFO to its observed occupancy). Reference down2-like block (16->32, 64x64 in, T
 Caveat found in the sim: a deep FIFO anywhere on the skip path (e.g. 64 words after the maxpool = 64 output pixels, one wide word each)
 hides an undersized skip FIFO; the deadlock test therefore runs with depth-2 ordinary FIFOs.
 Latency estimate: first strided window after (W+2)*T_in, MVAU_r, then the 3x3 fill (W/2+2)*T_out, then MVAU_m/Thr/MVAU_e; sim agrees to ~3%.
+
+
+Upsampling bottleneck (up_bottleneck.py, up_bottleneck_sim.py, test_up_bottleneck.py), nearest-neighbour decoder
+
+    main:  Dup -> MVAU_p (1x1) -> Thr_p -> UpNN (x2 nearest) -> [FMPad_k -> SWG_k -> MVAU_k (3x3) -> Thr_k] -> FIFO main -+
+    ext:   Dup -> MVAU_r (1x1) -> Thr_r -> FMPadPix -> SWG_u (2x2) -> MVAU_u -> Thr_u -> MVAU_e (1x1) -> Thr_e -> skip FIFO -+-> Add -> Thr_out
+
+Input H x W, output 2H x 2W, Cmid = Cin / v. skip_conv=True is decoder_type nearest_conv_upsample (the 3x3 skip_resize_conv is present), False is nearest_upsample.
+Same frame-cycle budget as the downsampling block: Dup, MVAU_p, MVAU_r (+ thresholds) see the H*W input pixels, UpNN and everything after the 2H*2W output pixels;
+T_out = F / (4*H*W), T_in = F / (H*W). Reported cyc_px is per OUTPUT pixel.
+
+* Both branches are real compute (no identity skip). The 3x3 skip conv runs at OUTPUT resolution: 9*Cout^2 MACs per output pixel (2304 for Cout = 16), the heaviest MVAU
+  (128 MACs/cycle at T_out = 18; 64 DSP at INT4 of the block's 100).
+* ConvTranspose (K = S = 2) is lowered by InferPixelPaddingDeconv to FMPadding_Pixel (zero insertion, (2H+1) x (2W+1) image) + a 2x2 stride-1 window + MVAU:
+  4*Cmid*Cmid MACs per output pixel, 3 of 4 window elements are inserted zeros. FMPadding_Pixel emits one word group per pixel of the zero-inserted image.
+* UpsampleNearestNeighbour is not foldable: all channels per word, one OUTPUT pixel per cycle (Hout*Wout cycles per frame), a floor on F. Per input row it emits every
+  pixel twice (2W cycles) and re-emits the buffered row (2W cycles).
+* Two join FIFOs, both sized by the simulation: "skip FIFO" at the end of the ext branch (the shorter-latency branch for the conv variant) and "FIFO main".
+* The sliding windows are small here (3x3 at d=1, 2x2), so the next-frame fill gap that hurt the dilated blocks is ~0.6% (18.10 vs 18 cyc/px).
+* Untested in FINN: FMPadding_Pixel / UpsampleNearestNeighbour attributes (SIMD), their LUTs are priced 0 or provisional.
+
+
+Initial block (int_bottleneck.py, int_bottleneck_sim.py, test_int_bottleneck.py), reference FINNInitialBlockConcat, U4: 1 -> 4 channels, 256x256 -> 128x128
+
+    Thr_in -> Dup -> [FMPad -> SWG (3x3, s2) -> MVAU_c (9 -> 3) -> Thr_c] -> FIFO main -+
+                     [MaxPool (2x2, s2) -> Thr_m] -----------------------> skip FIFO ---+-> Concat -> Thr_act
+
+* The 2D StreamingMaxPool is not foldable and costs 1.25 cycles per input pixel in FINN's estimate: 81,920 cycles for a 256x256 input. That is a floor on the frame budget of
+  the WHOLE network (the other probe blocks used 73,728). With one input channel every front node is pixel-serial (>= 65,536 cycles), so the floor cannot go below 65,536
+  without a pixel-parallel maxpool and a multi-pixel input stream; FINN has neither. Practical levers: the clock (cycles are fixed, frames per second scale with f_clk) and
+  using 81,920 as the network F (the other blocks then get 11% slack). Whether the real hardware needs the extra 0.25 is for the rtlsim of the init probes to show.
+* The conv on one input channel has MW = 9: parallel-window SWG (SIMD 9), MVAU PE 1 x SIMD 9 (9 DSP).
+* Concat is StreamingConcat (all channels per word, one output pixel per cycle). The shared branch_quant thresholds (Thr_c, Thr_m) sit before it and the BN + ReLU threshold
+  (Thr_act) after it; composing each branch threshold with the matching channels of Thr_act (like the residual merge pass) would remove two threshold nodes -- not done.
+* Strided windows can leave the last padded row / column unread: the sliding-window node must drain them before the next frame (bug found while building the sim).
+
+Pool route for the 2D maxpool (initial and downsampling blocks, `pool_impl="swg_pool"`). FINN's `InferPool` lowers a MaxPool to a depthwise sliding window + `Pool_hls` instead of
+`StreamingMaxPool`. Pool_hls is foldable: cycles = (C * K^2 / PE) * OH * OW, the depthwise SWG (SIMD = PE) adds fill and per-row overhead. Model rows `SWG_p` / `Pool` replace `MaxPool`.
+* initial block (C = 1): the maxpool floor drops from 1.25 * H * W to ~1.0 * H * W, but the depthwise SWG (66,050) and the conv-branch FMPadding (66,564) then dominate; the first sensible
+  frame budget is F = 69,632 (4.25 cyc per output pixel), simulated 4.06.
+* downsampling block (C = 16, 2x2 window): PE 1 needs ~80.9k cycles, PE 2 fits F = 73,728 (`SWG_p` SIMD 2, `Pool` PE 2).
+* Probes `init_..._pool` and `dn_..._mvau_pool` share the ONNX of their StreamingMaxPool twin; they need `InferPool` in the container's FINN (v0.10.1).
+
+Final deconvolution (fnl_block.py, fnl_block_sim.py, test_fnl_block.py; not a bottleneck: single path), reference `LayerQuantEnetFINN.final` =
+`QuantConvTranspose2d(c5 -> out_channels, k = 2, s = 2)`, U4: 4 -> 5 channels, 128x128 -> 256x256.
+
+    Thr_in -> FMPadPix (zero insertion) -> SWG_u (2x2) -> MVAU_f (4*Cin -> Cout) -> [Bias (ChannelwiseOp add)]
+
+* No Dup, no skip FIFO, no join, no output threshold (raw logit): only ordinary FIFOs; `BottleneckResult.skip_fifo` is None.
+* Pixel domains: FMPadPix emits (2H+1)(2W+1) pixels (66,049 cycles at SIMD = Cin); SWG_u and MVAU_f work at OUTPUT resolution (65,536 pixels), with 4 * Cin * Cout MACs per output pixel
+  (3 of 4 window elements are inserted zeros, as in the up-block's transposed conv). One output pixel per cycle is the floor: F >= 65,536. Reference F = 73,728 -> T_out = 1.125.
+* U4 result: MVAU_f PE 5 x SIMD 16 (48 DSP), SWG / FMPadPix SIMD 4, bias PE 5; simulated steady 1.01 cyc/px, first-out latency ~263 cycles, all FIFOs 2-4 words (+4-word prefetch before FMPadPix).
+* `bias=True` (LayerQuantEnetFINN default, `Int32Bias`) adds the integer bias add; `bias=False` matches the production export (`finn_enet_prod_export.py`). How FINN lowers the bias is
+  untested: both variants are probed (6 cases `fnl_cin4_cout5_in128_int{b}_{bias,nobias}`).

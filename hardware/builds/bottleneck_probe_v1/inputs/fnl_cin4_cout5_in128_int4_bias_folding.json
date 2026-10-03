@@ -1,0 +1,175 @@
+{
+  "params": {
+    "cin": 4,
+    "cmid": 4,
+    "cout": 5,
+    "v": 1,
+    "z": 1,
+    "T": 1.125,
+    "F": 73728,
+    "T_in": 4.5,
+    "bits": 4,
+    "k": 2,
+    "dilation": 1,
+    "stride": 2,
+    "height": 128,
+    "width": 128,
+    "hout": 256,
+    "wout": 256,
+    "pad": 0,
+    "block": "final",
+    "skip_pad": "n/a",
+    "skip_order": "n/a",
+    "pad_group": null,
+    "bias": true
+  },
+  "folding": {
+    "fmpadpix": {
+      "SIMD": 4
+    },
+    "swg_u": {
+      "SIMD": 4,
+      "parallel_window": 1
+    },
+    "mvau_f": {
+      "PE": 5,
+      "SIMD": 16
+    },
+    "bias": {
+      "PE": 5
+    }
+  },
+  "fifos": [
+    {
+      "name": "FMPadPix->out",
+      "producer": "fmpadpix",
+      "consumer": "swg_u",
+      "producer_node": "FMPadPix",
+      "consumer_node": "SWG_u",
+      "depth": 2,
+      "width_bits": 16,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "is_join_fifo": false,
+      "mem": "srl",
+      "depth_alloc": 2,
+      "mem_lut": 24,
+      "mem_bram18": 0,
+      "mem_uram": 0,
+      "mem_efficiency": 0.042,
+      "finn_impl": "rtl"
+    },
+    {
+      "name": "SWG_u->out",
+      "producer": "swg_u",
+      "consumer": "mvau_f",
+      "producer_node": "SWG_u",
+      "consumer_node": "MVAU_f",
+      "depth": 2,
+      "width_bits": 16,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "is_join_fifo": false,
+      "mem": "srl",
+      "depth_alloc": 2,
+      "mem_lut": 24,
+      "mem_bram18": 0,
+      "mem_uram": 0,
+      "mem_efficiency": 0.042,
+      "finn_impl": "rtl"
+    },
+    {
+      "name": "MVAU_f->out",
+      "producer": "mvau_f",
+      "consumer": "bias",
+      "producer_node": "MVAU_f",
+      "consumer_node": "Bias",
+      "depth": 2,
+      "width_bits": 65,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "is_join_fifo": false,
+      "mem": "srl",
+      "depth_alloc": 2,
+      "mem_lut": 73,
+      "mem_bram18": 0,
+      "mem_uram": 0,
+      "mem_efficiency": 0.056,
+      "finn_impl": "rtl"
+    }
+  ],
+  "predicted": {
+    "T": 1.125,
+    "F": 73728,
+    "steady_cyc_px": 1.0078277587890625,
+    "latency_first_out": 263,
+    "frame_cycles": 198152,
+    "skip_fifo_words": 0,
+    "skip_fifo_width_bits": 0,
+    "totals": {
+      "lut": 2275.7980666666667,
+      "bram18": 0.0,
+      "uram": 0.0,
+      "dsp": 48.0,
+      "dwc_lut": 0,
+      "fifo_lut": 121,
+      "fifo_bram18": 0,
+      "fifo_uram": 0
+    },
+    "nodes": {
+      "fmpadpix": {
+        "op": "FMPadding_Pixel_hls",
+        "pe": 0,
+        "simd": 4,
+        "cyc_px": 1.0078277587890625,
+        "frame_cycles": 66049,
+        "lut": 0.0,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 16,
+        "out_width_bits": 16
+      },
+      "swg_u": {
+        "op": "ConvolutionInputGenerator_rtl 2x2",
+        "pe": 0,
+        "simd": 4,
+        "cyc_px": 1.0078582763671875,
+        "frame_cycles": 66051,
+        "lut": 409.9812,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 0.0,
+        "in_width_bits": 16,
+        "out_width_bits": 16
+      },
+      "mvau_f": {
+        "op": "MVAU rtl 2x2 (lowered ConvTranspose)",
+        "pe": 5,
+        "simd": 16,
+        "cyc_px": 1.0,
+        "frame_cycles": 65536,
+        "lut": 1089.8168666666668,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 48,
+        "in_width_bits": 64,
+        "out_width_bits": 65
+      },
+      "bias": {
+        "op": "ChannelwiseOp_hls (bias add)",
+        "pe": 5,
+        "simd": 0,
+        "cyc_px": 1.0,
+        "frame_cycles": 65536,
+        "lut": 655,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 65,
+        "out_width_bits": 65
+      }
+    },
+    "dwcs": []
+  }
+}

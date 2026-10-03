@@ -22,17 +22,31 @@ OUT_DIR = Path(__file__).resolve().parent / "inputs"
 CIN, COUT, V, HW_IN, T_OUT = 16, 32, 4, 64, 72
 
 
+def _pool_case(base: str, name: str, extra: dict) -> None:
+    """The Pool-route probe shares the ONNX with its StreamingMaxPool twin (the difference is FINN's conversion of the MaxPool, InferPool)."""
+    import shutil
+    shutil.copyfile(OUT_DIR / f"{base}.onnx", OUT_DIR / f"{name}.onnx")
+    info = json.loads((OUT_DIR / f"{base}_probe.json").read_text())
+    info.update(extra, name=name, pool_impl="pool")
+    (OUT_DIR / f"{name}_probe.json").write_text(json.dumps(info, indent=2))
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--bits", type=int, nargs="+", default=[4, 6, 8])
     ap.add_argument("--variants", nargs="+", default=["fmpad", "mvau"], choices=["fmpad", "mvau"])
+    ap.add_argument("--pool-impl", choices=("streaming", "swg_pool"), default="streaming",
+                    help="swg_pool: InferPool route (depthwise SWG + Pool_hls with PE); writes the '_pool' twin of each case")
     a = ap.parse_args()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for b in a.bits:
         for variant in a.variants:
-            r = model_dn_bottleneck(CIN, COUT, V, b, HW_IN, HW_IN, T_out=T_OUT, skip_order="pad_thr", skip_pad=variant)
+            r = model_dn_bottleneck(CIN, COUT, V, b, HW_IN, HW_IN, T_out=T_OUT, skip_order="pad_thr", skip_pad=variant, pool_impl=a.pool_impl)
             verify_with_sim(r)
-            name = f"dn_cin{CIN}_cout{COUT}_in{HW_IN}_int{b}_{variant}"
+            base = f"dn_cin{CIN}_cout{COUT}_in{HW_IN}_int{b}_{variant}"
+            name = base + ("_pool" if a.pool_impl == "swg_pool" else "")
+            if a.pool_impl == "swg_pool":
+                _pool_case(base, name, {})
             (OUT_DIR / f"{name}_folding.json").write_text(json.dumps(to_folding_config(r), indent=2))
             v = r.verification
             print(f"{name}: steady {v['steady_cyc_px']:.2f} cyc/px  skip FIFO {r.skip_fifo.depth_words} words  latency {v['latency_first_out']}  "
