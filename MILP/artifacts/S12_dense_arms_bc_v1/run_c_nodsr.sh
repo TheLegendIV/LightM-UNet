@@ -18,7 +18,7 @@ PY
 python3 MILP/finn_milp.py --config config_12_dense_relu_nearest_upsample_wm \
   --sensitivity-file MILP/artifacts/layer_sensitivity_12_dense_relu_nearest_upsample_wm.json \
   --candidate-bits 4,6,8 --pin-bits-file $SRC/layer_bits_folding_lex_dsr2_fps305.json \
-  --hard-lut-fraction $LUT --hard-bram-fraction $BRAM --hard-dsp-fraction $DSP \
-  --hard-uram-fraction 1.0 --force-dsp --target-fps 305.17 --mvau-wwidth-max 80 \
+  --max-lut-fraction $LUT --max-bram-fraction $BRAM --max-dsp-fraction $DSP \
+  --max-uram-fraction 1.0 --force-dsp --target-fps 305.17 --mvau-wwidth-max 80 \
   --min-resources --time-limit 900 --gap-rel 0.005 \
   --out-file $OUT/layer_bits_folding_lex_nodsr_fps305.json > $OUT/solve.log 2>&1

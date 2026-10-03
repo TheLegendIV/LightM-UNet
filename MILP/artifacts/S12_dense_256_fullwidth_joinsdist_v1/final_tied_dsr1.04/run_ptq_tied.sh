@@ -4,10 +4,9 @@
 set -e
 cd /workspace/LightM-UNet
 export nnUNet_raw=/workspace/LightM-UNet/data/nnUNet_raw nnUNet_preprocessed=/workspace/LightM-UNet/data/nnUNet_preprocessed nnUNet_results=/workspace/LightM-UNet/data/nnUNet_results
-export ENET_RESIDUAL_ADD_FOLLOWS_BITS=1
 D=MILP/artifacts/S12_dense_256_fullwidth_joinsdist_v1/final_tied_dsr1.04
 NAME=nnUNetTrainerLayerQuantENet_12_dense_relu_nearest_conv_upsample_256_joint_alpha1.0_candidatebits468_lut70_bram40_dsp90_fps100_dsr1.04_jointsdist_tied_calibrated_all1200pad8
-python3 MILP/expand_layer_bits.py --config config_12_dense_relu_nearest_conv_upsample_256 --tie-residual-bits --ilp-result $D/layer_bits_folding_final.json --out-file $D/layer_bits_SITES_final.json
+python3 MILP/expand_layer_bits.py --config config_12_dense_relu_nearest_conv_upsample_256 --ilp-result $D/layer_bits_folding_final.json --out-file $D/layer_bits_SITES_final.json
 python3 compression/post-quantization/calibrate_12_dense_relu_nearest_conv_upsample_256_perlayer.py --layer-bits-file $D/layer_bits_SITES_final.json --out-net-name $NAME --n-calibration-images 1200 --pad-to-multiple 8
 export ENET_LAYER_BITS_FILE=/workspace/LightM-UNet/$D/layer_bits_SITES_final.json
 rm -rf data/nnUNet_raw/Dataset510_ARCADE_256_4c/labelsPr_$NAME

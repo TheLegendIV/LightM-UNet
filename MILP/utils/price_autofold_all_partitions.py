@@ -70,10 +70,10 @@ def main() -> int:
     print(f"Slowest node overall: {slowest['bottleneck_name']} at {slowest['bottleneck_cycles']:.0f} cycles "
           f"-> {slowest['fps']:.2f} FPS @ {args.clock_mhz:.0f} MHz\n")
     print(f"# finn_milp.py flags equal to FINN auto-fold's cost ({label}):")
-    print(f"--hard-lut-fraction {tot['total_lut'] / XCZU7EV['LUT']:.4f}")
-    print(f"--hard-bram-fraction {tot['total_bram18'] / XCZU7EV['BRAM_18K']:.4f}")
-    print(f"--hard-dsp-fraction {tot['total_dsp'] / XCZU7EV['DSP']:.4f}")
-    print(f"--hard-uram-fraction {tot['total_uram18'] / XCZU7EV['URAM']:.4f}")
+    print(f"--max-lut-fraction {tot['total_lut'] / XCZU7EV['LUT']:.4f}")
+    print(f"--max-bram-fraction {tot['total_bram18'] / XCZU7EV['BRAM_18K']:.4f}")
+    print(f"--max-dsp-fraction {tot['total_dsp'] / XCZU7EV['DSP']:.4f}")
+    print(f"--max-uram-fraction {tot['total_uram18'] / XCZU7EV['URAM']:.4f}")
     print(f"--target-fps {slowest['fps']:.1f}")
     return 1 if missing else 0
 

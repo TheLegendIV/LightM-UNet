@@ -111,8 +111,8 @@ for ALPHA in "${ALPHAS[@]}"; do
         --sensitivity-file "${SENSITIVITY_FILE}" \
         --candidate-bits 4,6,8 \
         --alpha "${ALPHA}" \
-        --hard-lut-fraction 0.7 \
-        --hard-bram-fraction 1.0 \
+        --max-lut-fraction 0.7 \
+        --max-bram-fraction 1.0 \
         --force-dsp \
         --max-latency-ms 1000 \
         --clock-mhz 100.0 \

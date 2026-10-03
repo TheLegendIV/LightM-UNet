@@ -38,7 +38,7 @@ def _layer_op_type(op: str, variant: str) -> str:
     nodes already carry theirs via finn_milp.EXTRA_OP_LABEL (op_types). MVAU
     is rtl iff its own chosen resource variant is the RTL one (finn_milp.py's
     VARIANT_RTL_DSP_NOACT1 vs VARIANT_HLS_LUT_NOACT0, the latter only
-    reachable via --allow-lut-mult, off by default)."""
+    no longer reachable: --allow-lut-mult was removed)."""
     if op == "MaxPool2d":
         return "StreamingMaxPool_hls"
     return "MVAU_rtl" if variant.startswith("rtl") else "MVAU_hls"

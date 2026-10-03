@@ -4,8 +4,7 @@ network for the TIED-residual-bits MILP solve (MILP/artifacts/S12_dense_256_full
   - Source is the FP32 checkpoint (nnUNetTrainerENet_12_dense_relu_nearest_conv_upsample_256, trained from scratch, 150 ep),
     re-quantized with the tied SITES bits via LayerQuantEnetFINN.from_pretrained, then runtime-stats calibrated on the FULL
     train split (reflect-padded to x8) -- so --calibrate is ON by default here (v2 started from a FINN-native QAT checkpoint).
-  - MUST run with ENET_RESIDUAL_ADD_FOLLOWS_BITS=1 (the script sets it before importing the nets): the add's input AND output
-    quantizers then use act_bits["residual_add"] instead of the legacy hard-wired Int8.
+  - The add's input AND output quantizers use act_bits["residual_add"] (the network no longer hard-wires Int8).
   - Output goes to this folder's outputs/ with a "_v3_" tag.
 
 Usage (pytorch container, repo root):
@@ -14,10 +13,6 @@ Usage (pytorch container, repo root):
 Output: hardware/builds/12_dense_relu_nearest_conv_upsample_256_v3/outputs/quantEnet_12_dense_relu_nearest_conv_upsample_256_v3_trained.onnx
 """
 from __future__ import annotations
-
-import os
-
-os.environ["ENET_RESIDUAL_ADD_FOLLOWS_BITS"] = "1"  # before the nets import (read at import time)
 
 import argparse
 import sys

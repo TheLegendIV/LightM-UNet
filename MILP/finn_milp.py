@@ -17,7 +17,7 @@ Usage:
     python MILP/finn_milp.py --config config_12_dense_relu_nearest_conv_upsample \\
         --sensitivity-file MILP/artifacts/layer_sensitivity_12_dense_relu_nearest_conv_upsample.json \\
         --candidate-bits 4,6,8 --force-dsp \\
-        --hard-lut-fraction 0.5 --hard-bram-fraction 0.5 --hard-dsp-fraction 0.9 --max-latency-ms 200 \\
+        --max-lut-fraction 0.5 --max-bram-fraction 0.5 --max-dsp-fraction 0.9 --max-latency-ms 200 \\
         --out-file MILP/artifacts/<dir>/layer_bits_folding_<...>.json
 """
 from __future__ import annotations
@@ -62,22 +62,13 @@ INPUT_HW = (512, 512)
 RAM_STYLES = (RAM_STYLE_BLOCK, "distributed")  # the standalone Thresholding node's memory -- the only free RAM choice
 FORCE_SERIAL = False
 
-VARIANT_RTL_DSP_NOACT1 = "rtl_dsp_noact1"
-VARIANT_HLS_LUT_NOACT0 = "hls_lut_noact0"
-
-VARIANT_HLS_DSP_NOACT0 = "hls_dsp_noact0"  # placeholder, never eligible -- see finn_milp.md before enabling
-
-ALLOW_LUT_MULT = False
+VARIANT_RTL_DSP_NOACT1 = "rtl_dsp_noact1"  # the only resource variant (standalone Thresholding_rtl after an MVAU_rtl)
 
 
 def _variant_cost_kwargs(variant: str, force_dsp: bool) -> dict:
     """variant -> (impl_style, force_dsp, no_activation) for layer_cost_pe_simd."""
     if variant == VARIANT_RTL_DSP_NOACT1:
         return {"impl_style": IMPL_STYLE_RTL, "force_dsp": force_dsp, "no_activation": True}
-    if variant == VARIANT_HLS_LUT_NOACT0:
-        return {"impl_style": IMPL_STYLE_HLS, "force_dsp": False, "no_activation": False}
-    if variant == VARIANT_HLS_DSP_NOACT0:
-        return {"impl_style": IMPL_STYLE_HLS, "force_dsp": True, "no_activation": False}
     raise ValueError(f"unknown resource variant {variant!r}")
 
 
@@ -144,17 +135,15 @@ def trace_layer_geometry(model: torch.nn.Module, input_hw: tuple[int, int], in_c
 
 # ---- Extra hardware nodes with no conv/pool module (see finn_milp.md "Dataflow graph") ----
 
-RESIDUAL_QUANT_BITS = 8  # QuantEltwiseAdd's input/output quant: Int8 regardless of bit_width= (Brevitas kwarg routing)
 THRESHOLD_KINDS = ("skip_quant", "residual_add", "out_act", "input_quant", "act")
-FIXED_BIT_KINDS = ("skip_quant", "residual_add")
-# --tie-residual-bits: skip_quant/residual_add bits = the block's main operand (expand.0) act bits instead of a fixed
-# RESIDUAL_QUANT_BITS. One shared QuantEltwiseAdd quantizer serves both operands (same bits AND scale) and FINN's
-# AddStreams has a single inputDataType, so the two operands cannot differ. Deploy: expand_layer_bits.py
-# --tie-residual-bits + ENET_RESIDUAL_ADD_FOLLOWS_BITS=1. Set from the CLI in main().
-TIE_RESIDUAL_BITS = False
-# --joins-distributed: the residual-join thresholds (skip_quant/residual_add/out_act) may only use ram_style
-# "distributed" (all stages LUTRAM, bridge pins depth_trigger_bram=999999) -- no BRAM for them. Set from the CLI.
-JOINS_DISTRIBUTED = False
+# skip_quant/residual_add share the add's single quantizer with the main operand (expand.0's output threshold): one shared
+# QuantEltwiseAdd quantizer serves both operands (same bits AND scale) and FINN's AddStreams has a single inputDataType,
+# so their bits are tied to expand.0's act bits (the network follows act_bits["residual_add"], see
+# LayerQuantENet._residual_add_quant; expand_layer_bits.py maps the same tie).
+TIED_BIT_KINDS = ("skip_quant", "residual_add")
+# Join thresholds (skip_quant/residual_add/out_act) are LUTRAM only: a 255-step join threshold is ~7 BRAM18 as BRAM vs
+# ~1.4k LUT as LUTRAM (the distributed cost is not yet validated against a real build); the bridge pins depth_trigger_bram.
+JOIN_THRESHOLD_KINDS = ("skip_quant", "residual_add", "out_act")
 PAD_MVAU_BITS = (2, 8)  # (weight, act) for the downsampling zero-pad MVAU -- PROVISIONAL, see finn_milp.md
 # Real FINN v0.10.1 custom-op names (finn_milp.md "Dataflow graph" table) --
 # every threshold-kind extra node and the pad-MVAU always use the RTL variant
@@ -268,12 +257,11 @@ def build_extra_nodes(
                 op_type=EXTRA_OP_LABEL[kind], name=name, stage=stage,
                 cin=channels, hin=height, win=width, cout=channels, hout=height, wout=width, kh=1, kw=1, sh=1, sw=1,
             )
-        if kind in FIXED_BIT_KINDS:
+        if kind in TIED_BIT_KINDS:
             main_src = f"{stage}.expand.0"
-            if TIE_RESIDUAL_BITS and main_src in act_names:
-                nodes.append(ExtraNode(node_geom, kind, None, (main_src,)))
-            else:
-                nodes.append(ExtraNode(node_geom, kind, RESIDUAL_QUANT_BITS, ()))
+            if main_src not in act_names:
+                raise ValueError(f"{name}: no main-operand layer {main_src!r} to tie the residual-add bits to.")
+            nodes.append(ExtraNode(node_geom, kind, None, (main_src,)))
         elif kind in THRESHOLD_KINDS:
             sources = tuple(s for s in resolve_act_sources(name, weight_names, act_names, predecessor_map) if s in act_names)
             if not sources:
@@ -292,11 +280,11 @@ def extra_node_options(node: ExtraNode, force_dsp: bool) -> list[tuple[tuple, di
     if kind in THRESHOLD_KINDS:
         bit_options = (node.fixed_bits,) if node.fixed_bits is not None else CANDIDATE_BITS
         for pe in ([1] if FORCE_SERIAL else divisors(g.cout)):
-            for ram_style in (("distributed",) if JOINS_DISTRIBUTED and kind in ("skip_quant", "residual_add", "out_act") else RAM_STYLES):
+            for ram_style in (("distributed",) if kind in JOIN_THRESHOLD_KINDS else RAM_STYLES):
                 for bits in bit_options:
                     key = (g.name, pe, 1, ram_style, VARIANT_RTL_DSP_NOACT1, 0, bits)
                     # join thresholds' input is the add/operand datatype (real: INT10 at 8 bits) -> bits + 2
-                    in_bits = bits + 2 if kind in FIXED_BIT_KINDS else THR_DEFAULT_IN_BITS
+                    in_bits = bits + 2 if kind in TIED_BIT_KINDS else THR_DEFAULT_IN_BITS
                     options.append((key, threshold_node_cost(g, bits, pe, ram_style=ram_style, in_bits=in_bits)))
     elif kind in FOLDABLE_STREAM_KINDS:
         for pe in ([1] if FORCE_SERIAL else divisors(g.cout)):
@@ -325,8 +313,6 @@ def candidate_folds(layer: LayerGeometry) -> list[tuple[int, int, str, str]]:
     if layer.op_type == "MaxPool2d":
         return [(1, 1, "block", VARIANT_RTL_DSP_NOACT1)]
     variants = [VARIANT_RTL_DSP_NOACT1]
-    if ALLOW_LUT_MULT:
-        variants.append(VARIANT_HLS_LUT_NOACT0)
     folds = [
         (pe, simd, ram_style, variant)
         for pe in divisors(max_pe(layer)) for simd in divisors(max_simd(layer))
@@ -358,14 +344,13 @@ def _act_sensitivity_sources(name: str, predecessor_map: dict[str, list[str]] | 
 
 def solve_joint_perlayer(
     sensitivity: dict, geometries: list[LayerGeometry],
-    hard_lut_fraction: float, hard_bram_fraction: float,
+    max_lut_fraction: float, max_bram_fraction: float,
     time_limit: int, gap_rel: float, max_cycles: float | None = None,
     pinned_bits: dict[str, tuple[int, int]] | None = None,
     predecessor_map: dict[str, list[str]] | None = None,
     force_dsp: bool = False,
-    require_simd_ge_pe: bool = False,
-    hard_dsp_fraction: float = 1.0,
-    hard_uram_fraction: float = 1.0,
+    max_dsp_fraction: float = 1.0,
+    max_uram_fraction: float = 1.0,
     dsr_ratio: float | None = None,
     pbi_ratio: float | None = None,
     max_node_cycles: float | None = None,
@@ -373,8 +358,10 @@ def solve_joint_perlayer(
     dataflow_map: dict[str, list[str]] | None = None,
     min_resources: bool = False,
     mvau_wwidth_max: int | None = None,
+    feasibility_only: bool = False,
 ) -> dict:
-    """Build and solve the MILP. Formulation: finn_milp.md "Formulation"."""
+    """Build and solve the MILP. Formulation: finn_milp.md "Formulation".
+    feasibility_only: zero objective (any feasible point is Optimal) -- used by the --min-dsr probes."""
     candidate_pairs = tuple((w, a) for w in CANDIDATE_BITS for a in CANDIDATE_BITS)
     layer_names = tuple(g.name for g in geometries)
     n_layers = len(geometries)
@@ -407,8 +394,6 @@ def solve_joint_perlayer(
 
     for layer in geometries:
         folds = candidate_folds(layer)
-        if require_simd_ge_pe:
-            folds = [f for f in folds if f[1] >= f[0]]
         layer_folds[layer.name] = folds
         for pe, simd, ram_style, variant in folds:
             variant_kwargs = _variant_cost_kwargs(variant, force_dsp)
@@ -429,7 +414,6 @@ def solve_joint_perlayer(
                 raw_cycles[key] = cost["cycles"]
                 raw_lut[key] = calibrated_lut(
                     cost["total_lut"], w, a, force_dsp=_calibration_force_dsp(variant_kwargs),
-                    lut_mult=(variant == VARIANT_HLS_LUT_NOACT0),
                 )
                 raw_bram[key] = calibrated_bram18k(
                     cost["swu_bram18"] + cost["wm_bram18"] + cost.get("thr_bram18", 0), w, a,
@@ -634,10 +618,10 @@ def solve_joint_perlayer(
             n_chain_rate_constraints += 1
 
     # Hard resource budgets and latency cap (sum of cycles).
-    prob += pulp.lpSum(z[k] * raw_lut[k] for k in z) <= hard_lut_fraction * XCZU7EV["LUT"], "hard_lut_budget"
-    prob += pulp.lpSum(z[k] * raw_bram[k] for k in z) <= hard_bram_fraction * XCZU7EV["BRAM_18K"], "hard_bram_budget"
-    prob += pulp.lpSum(z[k] * raw_dsp[k] for k in z) <= hard_dsp_fraction * XCZU7EV["DSP"], "hard_dsp_budget"
-    prob += pulp.lpSum(z[k] * raw_uram[k] for k in z) <= hard_uram_fraction * XCZU7EV["URAM"], "hard_uram_budget"
+    prob += pulp.lpSum(z[k] * raw_lut[k] for k in z) <= max_lut_fraction * XCZU7EV["LUT"], "max_lut_budget"
+    prob += pulp.lpSum(z[k] * raw_bram[k] for k in z) <= max_bram_fraction * XCZU7EV["BRAM_18K"], "max_bram_budget"
+    prob += pulp.lpSum(z[k] * raw_dsp[k] for k in z) <= max_dsp_fraction * XCZU7EV["DSP"], "max_dsp_budget"
+    prob += pulp.lpSum(z[k] * raw_uram[k] for k in z) <= max_uram_fraction * XCZU7EV["URAM"], "max_uram_budget"
     if max_cycles is not None:
         prob += pulp.lpSum(z[k] * raw_cycles[k] for k in z) <= max_cycles, "max_cycles_budget"
 
@@ -656,7 +640,9 @@ def solve_joint_perlayer(
     sensitivity_term = (1.0 / n_layers) * pulp.lpSum(
         y[(name, w, a)] * sens_norm[(name, w, a)] for name in layer_names for w, a in candidate_pairs
     )
-    if min_resources:
+    if feasibility_only:
+        prob += pulp.LpAffineExpression([(next(iter(y.values())), 0)])
+    elif min_resources:
         # --min-resources: replace the accuracy objective by the equal-weight mean of the
         # LUT / BRAM_18K / DSP fractions of the board (same raw_* the hard caps use). Meant for FIXED
         # bits (single --candidate-bits value or --pin-bits-file): it picks the cheapest fold among
@@ -691,18 +677,18 @@ def solve_joint_perlayer(
                 "n_extra_nodes": len(extra_nodes),
                 "n_binary_vars": n_binary_vars, "n_constraints": n_constraints,
                 "min_resources": min_resources, "mvau_wwidth_max": mvau_wwidth_max,
-                "hard_lut_fraction": hard_lut_fraction, "hard_bram_fraction": hard_bram_fraction,
-                "hard_dsp_fraction": hard_dsp_fraction, "hard_uram_fraction": hard_uram_fraction,
+                "max_lut_fraction": max_lut_fraction, "max_bram_fraction": max_bram_fraction,
+                "max_dsp_fraction": max_dsp_fraction, "max_uram_fraction": max_uram_fraction,
                 "max_cycles": max_cycles, "max_node_cycles": max_node_cycles,
                 "throughput_floor_violations": throughput_floor_violations,
                 "dsr_ratio": dsr_ratio, "pbi_ratio": pbi_ratio, "n_join_constraints": n_join_constraints,
                 "n_chain_rate_constraints": n_chain_rate_constraints,
                 "solver_time_limit_s": time_limit, "solver_gap_rel": gap_rel, "force_serial": FORCE_SERIAL,
-                "force_dsp": force_dsp, "require_simd_ge_pe": require_simd_ge_pe, "allow_lut_mult": ALLOW_LUT_MULT,
+                "force_dsp": force_dsp,
                 "note": f"Solver status {status_name!r} -- no joint per-layer (bits, folding) assignment "
-                        f"satisfies the requested hard LUT/BRAM/DSP/URAM budget(s) (hard_lut_fraction={hard_lut_fraction}, "
-                        f"hard_bram_fraction={hard_bram_fraction}, hard_dsp_fraction={hard_dsp_fraction}, "
-                        f"hard_uram_fraction={hard_uram_fraction})"
+                        f"satisfies the requested hard LUT/BRAM/DSP/URAM budget(s) (max_lut_fraction={max_lut_fraction}, "
+                        f"max_bram_fraction={max_bram_fraction}, max_dsp_fraction={max_dsp_fraction}, "
+                        f"max_uram_fraction={max_uram_fraction})"
                         + (f" and max_cycles={max_cycles:.0f}" if max_cycles is not None else "")
                         + (f" and max_node_cycles={max_node_cycles:.0f} (nodes that cannot reach it even fully "
                            f"folded: {throughput_floor_violations or 'none'})" if max_node_cycles is not None else "")
@@ -742,7 +728,6 @@ def solve_joint_perlayer(
         v["lut_calibrated"] = calibrated_lut(
             v["total_lut"], v["weight_bits"], v["act_bits"],
             force_dsp=_calibration_force_dsp(_variant_cost_kwargs(v["variant"], force_dsp)),
-            lut_mult=(v["variant"] == VARIANT_HLS_LUT_NOACT0),
         )
         v["bram18k_calibrated"] = calibrated_bram18k(
             v["swu_bram18"] + v["wm_bram18"] + v.get("thr_bram18", 0), v["weight_bits"], v["act_bits"],
@@ -809,8 +794,8 @@ def solve_joint_perlayer(
             "uram_pct_of_budget": 100 * total_uram / XCZU7EV["URAM"], "total_cycles": total_cycles,
             "total_dsp": total_dsp, "xczu7ev_dsp_budget": XCZU7EV["DSP"],
             "dsp_pct_of_budget": 100 * total_dsp / XCZU7EV["DSP"],
-            "hard_lut_fraction": hard_lut_fraction, "hard_bram_fraction": hard_bram_fraction,
-            "hard_dsp_fraction": hard_dsp_fraction, "hard_uram_fraction": hard_uram_fraction,
+            "max_lut_fraction": max_lut_fraction, "max_bram_fraction": max_bram_fraction,
+            "max_dsp_fraction": max_dsp_fraction, "max_uram_fraction": max_uram_fraction,
             "max_cycles": max_cycles, "max_node_cycles": max_node_cycles,
             "bottleneck_node": bottleneck_node, "bottleneck_cycles": node_cycles[bottleneck_node],
             # the accuracy objective of the chosen bits: raw = sum over layers of (w-sens + a-sens),
@@ -820,7 +805,7 @@ def solve_joint_perlayer(
             "dsr_ratio": dsr_ratio, "pbi_ratio": pbi_ratio, "n_join_constraints": n_join_constraints,
             "n_chain_rate_constraints": n_chain_rate_constraints,
             "solver_time_limit_s": time_limit, "solver_gap_rel": gap_rel, "force_serial": FORCE_SERIAL,
-            "force_dsp": force_dsp, "require_simd_ge_pe": require_simd_ge_pe, "allow_lut_mult": ALLOW_LUT_MULT,
+            "force_dsp": force_dsp,
             "note": "Joint per-LAYER MILP: y[layer,w,a] (sensitivity) linked to z[layer,pe,simd,ram_style,w,a] "
                     "(cycles/LUT/BRAM/DSP/URAM) via a same-layer equality constraint -- LUT/BRAM/DSP/URAM are REAL "
                     "hard <= XCZU7EV constraints here (not a soft penalty). ram_style selects the SWU's own line-"
@@ -907,28 +892,27 @@ def _write_run_summary(
     shared_args = {
         "config": args.config, "sensitivity-file": str(args.sensitivity_file),
         "candidate-bits": ",".join(str(b) for b in CANDIDATE_BITS),
-        "hard-lut-fraction": args.hard_lut_fraction, "hard-bram-fraction": args.hard_bram_fraction,
-        "hard-dsp-fraction": args.hard_dsp_fraction, "hard-uram-fraction": args.hard_uram_fraction, "force-dsp": args.force_dsp,
+        "max-lut-fraction": args.max_lut_fraction, "max-bram-fraction": args.max_bram_fraction,
+        "max-dsp-fraction": args.max_dsp_fraction, "max-uram-fraction": args.max_uram_fraction, "force-dsp": args.force_dsp,
         "max-latency-ms": args.max_latency_ms, "clock-mhz": args.clock_mhz, "target-fps": args.target_fps,
         "dsr-ratio": args.dsr_ratio, "dsr-ratio-pass2": args.dsr_ratio_pass2, "target-fps-pass2": args.target_fps_pass2,
-        "tie-residual-bits": args.tie_residual_bits, "joins-distributed": args.joins_distributed, "pbi-ratio": args.pbi_ratio,
+        "pbi-ratio": args.pbi_ratio,
         "mvau-wwidth-max": args.mvau_wwidth_max, "min-resources": args.min_resources,
         "lexicographic": args.lexicographic,
-        "force-serial": FORCE_SERIAL, "require-simd-ge-pe": args.require_simd_ge_pe,
-        "allow-lut-mult": ALLOW_LUT_MULT,
+        "force-serial": FORCE_SERIAL, "min-dsr": args.min_dsr,
         "time-limit": args.time_limit, "gap-rel": args.gap_rel,
     }
     run_args = {
         "pipeline": [
             "MILP/layer_sensitivity.py --candidate-bits ...",
-            "MILP/finn_milp.py --candidate-bits ... --hard-lut-fraction ... --hard-bram-fraction ... "
-            "--hard-dsp-fraction ... --force-dsp",
+            "MILP/finn_milp.py --candidate-bits ... --max-lut-fraction ... --max-bram-fraction ... "
+            "--max-dsp-fraction ... --force-dsp",
             "MILP/expand_layer_bits.py",
         ],
         "shared_args": shared_args,
         "granularity": "layer",
         "notes": f"Per-layer accuracy-only MILP (no alpha -- see finn_milp.md) for {args.config}, hard LUT/BRAM/DSP "
-                 f"caps {args.hard_lut_fraction}/{args.hard_bram_fraction}/{args.hard_dsp_fraction} under "
+                 f"caps {args.max_lut_fraction}/{args.max_bram_fraction}/{args.max_dsp_fraction} under "
                  f"force_dsp={args.force_dsp}. See summary.csv for this run's result.",
     }
     run_args_path.write_text(json.dumps(run_args, indent=2))
@@ -981,6 +965,51 @@ def build_model_and_graph() -> tuple[
     return model, geometries, extra_nodes, predecessor_map, dataflow_map, node_kinds
 
 
+# ---- --min-dsr: smallest feasible dsr ratio ----
+# DSR enters the model as `max_downstream_rate[L] <= ratio * rate[L]` (ratio times a linear expression in the fold binaries),
+# so making the ratio a variable would be bilinear. Feasibility is monotone in the ratio, so it is searched instead.
+
+_MIN_DSR_GRID = (101, 102, 105, 110, 125, 150, 200, 300, 500, 800, 1200, 2000)  # hundredths
+_probe_kwargs: dict = {}
+
+
+def _probe_dsr(hundredths: int) -> tuple[int, str]:
+    try:
+        return hundredths, solve_joint_perlayer(**_probe_kwargs, dsr_ratio=hundredths / 100, feasibility_only=True)["status"]
+    except Exception as error:  # e.g. solver time limit without a verdict: treat as not proven feasible
+        return hundredths, f"error: {error}"
+
+
+def find_min_dsr(solve_kwargs: dict) -> float:
+    """Smallest dsr ratio (multiple of 0.01, within 1.01..20) whose pass-1 problem (solve_kwargs, no objective) is feasible."""
+    import multiprocessing
+    import os
+
+    global _probe_kwargs
+    _probe_kwargs = solve_kwargs  # inherited by the forked workers
+    workers = max(1, min(8, os.cpu_count() or 1))
+    results: dict[int, str] = {}
+    with multiprocessing.get_context("fork").Pool(workers) as pool:
+        for h, st in pool.imap_unordered(_probe_dsr, _MIN_DSR_GRID):
+            results[h] = st
+            print(f"  --min-dsr probe {h / 100:.2f}: {st}", flush=True)
+        feasible = sorted(h for h, st in results.items() if st == "Optimal")
+        if not feasible:
+            raise SystemExit("--min-dsr: infeasible even at DSR 20.00 under the other constraints.")
+        hi = feasible[0]
+        lo = max([h for h, st in results.items() if h < hi] or [100])  # 1.00 is treated as infeasible
+        while hi - lo > 1:
+            k = min(workers - 1, hi - lo - 1)
+            points = sorted({lo + round((hi - lo) * (i + 1) / (k + 1)) for i in range(k)} - {lo, hi})
+            for h, st in pool.imap_unordered(_probe_dsr, points):
+                results[h] = st
+                print(f"  --min-dsr probe {h / 100:.2f}: {st}", flush=True)
+            hi = min([h for h in points if results[h] == "Optimal"] + [hi])
+            lo = max([h for h in points if results[h] != "Optimal" and h < hi] + [lo])
+    print(f"--min-dsr: smallest feasible DSR = {hi / 100:.2f}", flush=True)
+    return hi / 100
+
+
 # ---- CLI (flag rationale: finn_milp.md "CLI flags") ----
 
 def main() -> None:
@@ -990,11 +1019,11 @@ def main() -> None:
                          help="layer_sensitivity_*.json from layer_sensitivity.py.")
     parser.add_argument("--candidate-bits", type=str, default=None,
                          help="Comma-separated bit-width candidates (e.g. '4,6,8'); overrides CANDIDATE_BITS.")
-    parser.add_argument("--hard-lut-fraction", type=float, default=1.0, help="Hard cap as a fraction of device LUT.")
-    parser.add_argument("--hard-bram-fraction", type=float, default=1.0, help="Hard cap as a fraction of device BRAM_18K.")
-    parser.add_argument("--hard-dsp-fraction", type=float, default=1.0, help="Hard cap as a fraction of device DSP.")
-    parser.add_argument("--hard-uram-fraction", type=float, default=1.0,
-                         help="Hard cap as a fraction of device URAM (inert: URAM is always 0).")
+    parser.add_argument("--max-lut-fraction", type=float, default=1.0, help="Maximum fraction of device LUT.")
+    parser.add_argument("--max-bram-fraction", type=float, default=1.0, help="Maximum fraction of device BRAM_18K.")
+    parser.add_argument("--max-dsp-fraction", type=float, default=1.0, help="Maximum fraction of device DSP.")
+    parser.add_argument("--max-uram-fraction", type=float, default=1.0,
+                         help="Maximum fraction of device URAM (inert: URAM is always 0).")
     parser.add_argument("--force-dsp", action="store_true",
                          help="Use the forced-DSP calibration factors instead of the auto-resType table.")
     parser.add_argument("--target-fps", type=float, default=None,
@@ -1005,6 +1034,11 @@ def main() -> None:
     parser.add_argument("--dsr-ratio", type=float, default=None,
                          help="Downstream-rate ratio: chain-coherence constraint bounding a node's rate against "
                               "the slowest rate anywhere in its downstream subtree (off by default).")
+    parser.add_argument("--min-dsr", action="store_true",
+                         help="Find the SMALLEST --dsr-ratio (to 0.01) for which the problem is feasible under all other "
+                              "constraints, then solve with it (both passes with --lexicographic). Feasibility probes run "
+                              "in parallel; the search covers 1.01..20 and aborts if even 20 is infeasible. Exclusive with "
+                              "--dsr-ratio.")
     parser.add_argument("--pbi-ratio", type=float, default=None,
                          help="DEPRECATED (kept so old runs reproduce): parallel-branch-imbalance join-balance "
                               "constraint. Never engaged by default; PBI is only reported in summary.csv.")
@@ -1012,14 +1046,6 @@ def main() -> None:
                          help="Hard cap on weight_bits * SIMD of every dense layer's fold (FINN SetFolding's "
                               "mvau_wwidth_max quantity). Pass the SAME value to FINN's build config so the MILP "
                               "and FINN auto-fold are compared under one width limit. Off by default.")
-    parser.add_argument("--tie-residual-bits", action="store_true",
-                         help="skip_quant/residual_add thresholds take the main operand's (expand.0) act bits instead "
-                              "of a fixed Int8, so lowering the add lowers both operands together. Default: fixed Int8 "
-                              "(the legacy network). Deploy with expand_layer_bits.py --tie-residual-bits and "
-                              "ENET_RESIDUAL_ADD_FOLLOWS_BITS=1.")
-    parser.add_argument("--joins-distributed", action="store_true",
-                         help="skip_quant/residual_add/out_act thresholds are LUTRAM only (no BRAM option). A 255-step "
-                              "join threshold is ~7 BRAM18 at --block, ~1.4k LUT as LUTRAM (distributed cost is unvalidated).")
     parser.add_argument("--target-fps-pass2", type=float, default=None,
                          help="--lexicographic only: throughput target for pass 2 (default: same as --target-fps, which may "
                               "itself be unset = no throughput constraint in pass 1).")
@@ -1037,15 +1063,14 @@ def main() -> None:
                               "accuracy. For FIXED bits (one --candidate-bits value or --pin-bits-file): picks the "
                               "cheapest fold so runs differing only in a constraint (e.g. --dsr-ratio) are comparable.")
     parser.add_argument("--force-serial", action="store_true", help="Restrict every node to PE=SIMD=1.")
-    parser.add_argument("--allow-lut-mult", action="store_true",
-                         help="Also allow the hls_lut_noact0 variant (LUT multipliers, fused activation).")
-    parser.add_argument("--require-simd-ge-pe", action="store_true", help="Drop conv folds with PE > SIMD.")
     parser.add_argument("--time-limit", type=int, default=1800, help="CBC time limit in seconds.")
     parser.add_argument("--gap-rel", type=float, default=0.02, help="CBC relative optimality gap.")
     parser.add_argument("--pin-bits-file", type=Path, default=None,
                          help="TEST-ONLY: pin y to a layer_bits_*.json (skips the bit-choice search; folding is still solved).")
     parser.add_argument("--out-file", type=Path, required=True)
     args = parser.parse_args()
+    if args.min_dsr and args.dsr_ratio is not None:
+        parser.error("--min-dsr and --dsr-ratio are mutually exclusive.")
 
     load_config(args.config)
 
@@ -1061,12 +1086,6 @@ def main() -> None:
         global FORCE_SERIAL
         FORCE_SERIAL = True
         print("--force-serial: every layer restricted to (PE, SIMD) = (1, 1) before solving.")
-
-    if args.allow_lut_mult:
-        global ALLOW_LUT_MULT
-        ALLOW_LUT_MULT = True
-        print("--allow-lut-mult: 'hls_lut_noact0' (LUT-mult, fused activation) made eligible alongside "
-              "'rtl_dsp_noact1' on every layer -- PROVISIONAL fused-threshold LUT term, see --help.")
 
     with open(args.sensitivity_file) as f:
         sensitivity = json.load(f)
@@ -1086,9 +1105,6 @@ def main() -> None:
               f"exactly 0.0 under fp16 deployment -- consider pruning them instead (ENet.py's "
               f"apply_block_pruning / ENET_PRUNED_BLOCKS): {zero_sensitivity_layers}")
 
-    global TIE_RESIDUAL_BITS, JOINS_DISTRIBUTED
-    TIE_RESIDUAL_BITS = args.tie_residual_bits
-    JOINS_DISTRIBUTED = args.joins_distributed
     model, geometries, extra_nodes, predecessor_map, dataflow_map, node_kinds = build_model_and_graph()
     layer_names = tuple(g.name for g in geometries)
 
@@ -1116,11 +1132,7 @@ def main() -> None:
               f"HAWQ-measured) -- given a fixed raw sensitivity of 0.0 for every (w,a), see module docstring.")
 
     candidate_pairs_count = len(CANDIDATE_BITS) ** 2
-    n_folds_per_layer = [
-        len([f for f in candidate_folds(g) if f[1] >= f[0]]) if args.require_simd_ge_pe
-        else len(candidate_folds(g))
-        for g in geometries
-    ]
+    n_folds_per_layer = [len(candidate_folds(g)) for g in geometries]
     n_z = sum(n_folds_per_layer) * candidate_pairs_count
     n_y = len(layer_names) * candidate_pairs_count
     print(f"Traced {len(geometries)} layers (per-layer granularity, no block grouping). "
@@ -1149,11 +1161,22 @@ def main() -> None:
         print(f"--max-latency-ms {args.max_latency_ms} @ {args.clock_mhz}MHz -> max_cycles={max_cycles:.0f} "
               f"(hard constraint).")
 
+    if args.min_dsr:
+        print("--min-dsr: searching for the smallest feasible DSR ratio...", flush=True)
+        args.dsr_ratio = find_min_dsr(dict(
+            sensitivity=sensitivity, geometries=geometries, max_lut_fraction=args.max_lut_fraction,
+            max_bram_fraction=args.max_bram_fraction, time_limit=args.time_limit, gap_rel=args.gap_rel,
+            max_cycles=max_cycles, pinned_bits=pinned_bits, predecessor_map=predecessor_map, force_dsp=args.force_dsp,
+            max_dsp_fraction=args.max_dsp_fraction, max_uram_fraction=args.max_uram_fraction, pbi_ratio=args.pbi_ratio,
+            max_node_cycles=max_node_cycles, mvau_wwidth_max=args.mvau_wwidth_max, extra_nodes=extra_nodes,
+            dataflow_map=dataflow_map,
+        ))
+
     result = solve_joint_perlayer(
-        sensitivity, geometries, args.hard_lut_fraction, args.hard_bram_fraction,
+        sensitivity, geometries, args.max_lut_fraction, args.max_bram_fraction,
         args.time_limit, args.gap_rel, max_cycles=max_cycles, pinned_bits=pinned_bits,
-        predecessor_map=predecessor_map, force_dsp=args.force_dsp, require_simd_ge_pe=args.require_simd_ge_pe,
-        hard_dsp_fraction=args.hard_dsp_fraction, hard_uram_fraction=args.hard_uram_fraction,
+        predecessor_map=predecessor_map, force_dsp=args.force_dsp,
+        max_dsp_fraction=args.max_dsp_fraction, max_uram_fraction=args.max_uram_fraction,
         dsr_ratio=args.dsr_ratio, pbi_ratio=args.pbi_ratio, max_node_cycles=max_node_cycles,
         min_resources=args.min_resources, mvau_wwidth_max=args.mvau_wwidth_max,
         extra_nodes=extra_nodes, dataflow_map=dataflow_map,
@@ -1178,15 +1201,15 @@ def main() -> None:
             # --dsr-ratio-pass2 adds a constraint pass 1's fold was never solved under, so pass 1's own use is no
             # longer a feasible roof: bound pass 2 by the hard caps instead (bits stay pinned).
             if args.dsr_ratio_pass2 is not None:
-                roofs = (args.hard_lut_fraction, args.hard_bram_fraction, args.hard_dsp_fraction)
+                roofs = (args.max_lut_fraction, args.max_bram_fraction, args.max_dsp_fraction)
                 print(f"--dsr-ratio-pass2 {args.dsr_ratio_pass2}: pass 2 roof = hard caps {roofs} (not pass 1's use).")
             else:
                 roofs = tuple(d1[k] / 100 * roof for k in ("lut_pct_of_budget", "bram_pct_of_budget", "dsp_pct_of_budget"))
             result = solve_joint_perlayer(
                 sensitivity, geometries, roofs[0], roofs[1],
                 args.time_limit, args.gap_rel, max_cycles=max_cycles, pinned_bits=pinned2,
-                predecessor_map=predecessor_map, force_dsp=args.force_dsp, require_simd_ge_pe=args.require_simd_ge_pe,
-                hard_dsp_fraction=roofs[2], hard_uram_fraction=args.hard_uram_fraction,
+                predecessor_map=predecessor_map, force_dsp=args.force_dsp,
+                max_dsp_fraction=roofs[2], max_uram_fraction=args.max_uram_fraction,
                 dsr_ratio=args.dsr_ratio if args.dsr_ratio_pass2 is None else args.dsr_ratio_pass2,
                 pbi_ratio=args.pbi_ratio, max_node_cycles=max_node_cycles2,
                 min_resources=True, mvau_wwidth_max=args.mvau_wwidth_max,

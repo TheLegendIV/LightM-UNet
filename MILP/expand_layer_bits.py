@@ -148,13 +148,13 @@ def _residual_join_sources(
 
 def main_operand_source(block_prefix: str, block_type: str) -> str:
     """The residual add's MAIN operand = the block's last computation (its requant threshold is the add
-    input_quant). With --tie-residual-bits its act bits set BOTH add operands and the add output."""
+    input_quant). Its act bits set BOTH add operands and the add output (the residual_add site)."""
     return f"{block_prefix}.conv.3" if block_type == "dsc_no_projection" else f"{block_prefix}.expand.0"
 
 
 def resolve_act_sources(
     act_site_name: str, layer_weight_bits: dict[str, int], layer_act_bits: dict[str, int],
-    predecessor_map: dict[str, list[str]], tie_residual_bits: bool = False,
+    predecessor_map: dict[str, list[str]],
 ) -> list[str]:
     block_prefix, suffix = _match_suffix(act_site_name)
     if suffix == "reduce.2":
@@ -181,7 +181,7 @@ def resolve_act_sources(
         return [f"{block_prefix}.conv", f"{block_prefix}.pool"]
     if suffix in ("residual_add", "out_act"):
         block_type = _block_type(block_prefix, layer_weight_bits, layer_act_bits)
-        if suffix == "residual_add" and tie_residual_bits:
+        if suffix == "residual_add":
             return [main_operand_source(block_prefix, block_type)]
         return _residual_join_sources(block_prefix, block_type, predecessor_map)
     raise ValueError(f"Unhandled suffix {suffix!r} for act site {act_site_name!r}")
@@ -189,7 +189,7 @@ def resolve_act_sources(
 
 def expand_layer_bits_to_site_bits(
     ilp_result: dict, weight_site_names: tuple[str, ...], act_site_names: tuple[str, ...],
-    predecessor_map: dict[str, list[str]], tie_residual_bits: bool = False,
+    predecessor_map: dict[str, list[str]],
 ) -> tuple[dict[str, int], dict[str, int]]:
     layer_weight_bits = ilp_result["layer_weight_bits"]
     layer_act_bits = ilp_result["layer_act_bits"]
@@ -198,7 +198,7 @@ def expand_layer_bits_to_site_bits(
 
     site_act_bits: dict[str, int] = {}
     for name in act_site_names:
-        sources = resolve_act_sources(name, layer_weight_bits, layer_act_bits, predecessor_map, tie_residual_bits)
+        sources = resolve_act_sources(name, layer_weight_bits, layer_act_bits, predecessor_map)
         values = [layer_act_bits[s] for s in sources if s in layer_act_bits]
         if not values:
             raise ValueError(f"No act_bits value resolvable for site {name!r} (sources tried: {sources}).")
@@ -214,9 +214,6 @@ def main() -> None:
     parser.add_argument("--ilp-result", type=Path, required=True,
                          help="A layer_bits_folding_*.json from joint_bits_folding_ilp_perlayer.py.")
     parser.add_argument("--out-file", type=Path, required=True)
-    parser.add_argument("--tie-residual-bits", action="store_true",
-                         help="residual_add site = the main operand's (expand.0) act bits only, matching finn_milp.py "
-                              "--tie-residual-bits (deploy with ENET_RESIDUAL_ADD_FOLLOWS_BITS=1).")
     args = parser.parse_args()
 
     load_config(args.config)
@@ -247,7 +244,7 @@ def main() -> None:
         raise ValueError(f"{args.ilp_result} status={ilp_result.get('status')!r}, not Optimal -- nothing to expand.")
 
     site_weight_bits, site_act_bits = expand_layer_bits_to_site_bits(
-        ilp_result, weight_site_names, act_site_names, predecessor_map, args.tie_residual_bits,
+        ilp_result, weight_site_names, act_site_names, predecessor_map,
     )
 
     args.out_file.parent.mkdir(parents=True, exist_ok=True)

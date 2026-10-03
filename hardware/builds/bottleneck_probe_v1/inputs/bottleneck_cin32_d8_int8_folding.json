@@ -1,0 +1,414 @@
+{
+  "params": {
+    "cin": 32,
+    "cmid": 8,
+    "cout": 32,
+    "v": 4,
+    "z": 4,
+    "T": 72,
+    "bits": 8,
+    "k": 3,
+    "dilation": 8,
+    "stride": 1,
+    "height": 32,
+    "width": 32,
+    "hout": 32,
+    "wout": 32,
+    "pad": 8
+  },
+  "folding": {
+    "dup": {
+      "PE": 1
+    },
+    "mvau_r": {
+      "PE": 1,
+      "SIMD": 4
+    },
+    "thr_r": {
+      "PE": 1,
+      "depth_trigger_bram": 1024
+    },
+    "fmpad": {
+      "SIMD": 8
+    },
+    "swg": {
+      "SIMD": 8,
+      "parallel_window": 0
+    },
+    "mvau_m": {
+      "PE": 1,
+      "SIMD": 8
+    },
+    "thr_m": {
+      "PE": 1,
+      "depth_trigger_bram": 1024
+    },
+    "mvau_e": {
+      "PE": 1,
+      "SIMD": 4
+    },
+    "thr_e": {
+      "PE": 1,
+      "depth_trigger_bram": 1024
+    },
+    "thr_s": {
+      "PE": 1,
+      "depth_trigger_bram": 1024
+    },
+    "add": {
+      "PE": 1
+    },
+    "thr_out": {
+      "PE": 1,
+      "depth_trigger_bram": 1024
+    }
+  },
+  "fifos": [
+    {
+      "name": "Dup->main",
+      "producer": "dup",
+      "consumer": "dwc",
+      "producer_node": "Dup",
+      "consumer_node": "DWC(Dup->MVAU_r)",
+      "depth": 4,
+      "width_bits": 8,
+      "max_occupancy": 4,
+      "is_skip": false
+    },
+    {
+      "name": "Dup->skip",
+      "producer": "dup",
+      "consumer": "thr_s",
+      "producer_node": "Dup",
+      "consumer_node": "Thr_s",
+      "depth": 4,
+      "width_bits": 8,
+      "max_occupancy": 4,
+      "is_skip": false
+    },
+    {
+      "name": "Dup->DWC->MVAU_r",
+      "producer": "dwc",
+      "consumer": "mvau_r",
+      "producer_node": "DWC(Dup->MVAU_r)",
+      "consumer_node": "MVAU_r",
+      "depth": 4,
+      "width_bits": 32,
+      "max_occupancy": 4,
+      "is_skip": false
+    },
+    {
+      "name": "MVAU_r->out",
+      "producer": "mvau_r",
+      "consumer": "thr_r",
+      "producer_node": "MVAU_r",
+      "consumer_node": "Thr_r",
+      "depth": 2,
+      "width_bits": 22,
+      "max_occupancy": 1,
+      "is_skip": false
+    },
+    {
+      "name": "Thr_r->out",
+      "producer": "thr_r",
+      "consumer": "dwc",
+      "producer_node": "Thr_r",
+      "consumer_node": "DWC(Thr_r->FMPad)",
+      "depth": 2,
+      "width_bits": 8,
+      "max_occupancy": 1,
+      "is_skip": false
+    },
+    {
+      "name": "Thr_r->DWC->FMPad",
+      "producer": "dwc",
+      "consumer": "fmpad",
+      "producer_node": "DWC(Thr_r->FMPad)",
+      "consumer_node": "FMPad",
+      "depth": 14,
+      "width_bits": 64,
+      "max_occupancy": 14,
+      "is_skip": false
+    },
+    {
+      "name": "FMPad->out",
+      "producer": "fmpad",
+      "consumer": "swg",
+      "producer_node": "FMPad",
+      "consumer_node": "SWG_m",
+      "depth": 4,
+      "width_bits": 64,
+      "max_occupancy": 4,
+      "is_skip": false
+    },
+    {
+      "name": "SWG_m->out",
+      "producer": "swg",
+      "consumer": "mvau_m",
+      "producer_node": "SWG_m",
+      "consumer_node": "MVAU_m",
+      "depth": 4,
+      "width_bits": 64,
+      "max_occupancy": 4,
+      "is_skip": false
+    },
+    {
+      "name": "MVAU_m->out",
+      "producer": "mvau_m",
+      "consumer": "thr_m",
+      "producer_node": "MVAU_m",
+      "consumer_node": "Thr_m",
+      "depth": 2,
+      "width_bits": 23,
+      "max_occupancy": 1,
+      "is_skip": false
+    },
+    {
+      "name": "Thr_m->out",
+      "producer": "thr_m",
+      "consumer": "dwc",
+      "producer_node": "Thr_m",
+      "consumer_node": "DWC(Thr_m->MVAU_e)",
+      "depth": 2,
+      "width_bits": 8,
+      "max_occupancy": 1,
+      "is_skip": false
+    },
+    {
+      "name": "Thr_m->DWC->MVAU_e",
+      "producer": "dwc",
+      "consumer": "mvau_e",
+      "producer_node": "DWC(Thr_m->MVAU_e)",
+      "consumer_node": "MVAU_e",
+      "depth": 2,
+      "width_bits": 32,
+      "max_occupancy": 1,
+      "is_skip": false
+    },
+    {
+      "name": "MVAU_e->out",
+      "producer": "mvau_e",
+      "consumer": "thr_e",
+      "producer_node": "MVAU_e",
+      "consumer_node": "Thr_e",
+      "depth": 2,
+      "width_bits": 20,
+      "max_occupancy": 1,
+      "is_skip": false
+    },
+    {
+      "name": "Thr_e->out",
+      "producer": "thr_e",
+      "consumer": "add",
+      "producer_node": "Thr_e",
+      "consumer_node": "Add",
+      "depth": 2,
+      "width_bits": 8,
+      "max_occupancy": 1,
+      "is_skip": false
+    },
+    {
+      "name": "skip FIFO",
+      "producer": "thr_s",
+      "consumer": "add",
+      "producer_node": "Thr_s",
+      "consumer_node": "Add",
+      "depth": 8736,
+      "width_bits": 8,
+      "max_occupancy": 8736,
+      "is_skip": true
+    },
+    {
+      "name": "Add->out",
+      "producer": "add",
+      "consumer": "thr_out",
+      "producer_node": "Add",
+      "consumer_node": "Thr_out",
+      "depth": 2,
+      "width_bits": 9,
+      "max_occupancy": 1,
+      "is_skip": false
+    }
+  ],
+  "predicted": {
+    "T": 72,
+    "steady_cyc_px": 72.0,
+    "latency_first_out": 19780,
+    "frame_cycles": 91325,
+    "skip_fifo_words": 8736,
+    "skip_fifo_width_bits": 8,
+    "totals": {
+      "lut": 3797.5180600000003,
+      "bram18": 34.0,
+      "uram": 0.0,
+      "dsp": 16.0,
+      "dwc_lut": 117.4095
+    },
+    "nodes": {
+      "dup": {
+        "op": "DuplicateStreams",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 32.0,
+        "lut": 115,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 0,
+        "in_width_bits": 8,
+        "out_width_bits": 8
+      },
+      "mvau_r": {
+        "op": "MVAU rtl 1x1",
+        "pe": 1,
+        "simd": 4,
+        "cyc_px": 64.0,
+        "lut": 129.03016,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 4,
+        "in_width_bits": 32,
+        "out_width_bits": 22
+      },
+      "thr_r": {
+        "op": "Thresholding_rtl",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 8.0,
+        "lut": 446.1178,
+        "bram18": 2.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 22,
+        "out_width_bits": 8
+      },
+      "fmpad": {
+        "op": "FMPadding",
+        "pe": 0,
+        "simd": 8,
+        "cyc_px": 2.25,
+        "lut": 0.0,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 64,
+        "out_width_bits": 64
+      },
+      "swg": {
+        "op": "ConvolutionInputGenerator_rtl",
+        "pe": 0,
+        "simd": 8,
+        "cyc_px": 9.5166015625,
+        "lut": 1190.1396,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 0.0,
+        "in_width_bits": 64,
+        "out_width_bits": 64
+      },
+      "mvau_m": {
+        "op": "MVAU rtl 3x3 d=8",
+        "pe": 1,
+        "simd": 8,
+        "cyc_px": 72.0,
+        "lut": 169.95412,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 8,
+        "in_width_bits": 64,
+        "out_width_bits": 23
+      },
+      "thr_m": {
+        "op": "Thresholding_rtl",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 8.0,
+        "lut": 462.1178,
+        "bram18": 2.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 23,
+        "out_width_bits": 8
+      },
+      "mvau_e": {
+        "op": "MVAU rtl 1x1",
+        "pe": 1,
+        "simd": 4,
+        "cyc_px": 64.0,
+        "lut": 128.39568,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 4,
+        "in_width_bits": 32,
+        "out_width_bits": 20
+      },
+      "thr_e": {
+        "op": "Thresholding_rtl",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 32.0,
+        "lut": 406.1178,
+        "bram18": 11.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 20,
+        "out_width_bits": 8
+      },
+      "thr_s": {
+        "op": "Thresholding_rtl (skip)",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 32.0,
+        "lut": 251.1178,
+        "bram18": 7.0,
+        "uram": 0.0,
+        "dsp": 0,
+        "in_width_bits": 8,
+        "out_width_bits": 8
+      },
+      "add": {
+        "op": "AddStreams",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 32.0,
+        "lut": 131,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 0,
+        "in_width_bits": 8,
+        "out_width_bits": 9
+      },
+      "thr_out": {
+        "op": "Thresholding_rtl (join)",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 32.0,
+        "lut": 251.1178,
+        "bram18": 7.0,
+        "uram": 0.0,
+        "dsp": 0,
+        "in_width_bits": 9,
+        "out_width_bits": 8
+      }
+    },
+    "dwcs": [
+      {
+        "edge": "Dup->MVAU_r",
+        "in_width": 8,
+        "out_width": 32,
+        "lut": 29.5698
+      },
+      {
+        "edge": "Thr_r->SWG_m",
+        "in_width": 8,
+        "out_width": 64,
+        "lut": 58.2699
+      },
+      {
+        "edge": "Thr_m->MVAU_e",
+        "in_width": 8,
+        "out_width": 32,
+        "lut": 29.5698
+      }
+    ]
+  }
+}

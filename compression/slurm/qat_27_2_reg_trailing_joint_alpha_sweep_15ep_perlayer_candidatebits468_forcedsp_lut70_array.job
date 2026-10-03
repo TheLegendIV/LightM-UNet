@@ -129,7 +129,7 @@ nvidia-smi
 cd "$HOME/LightM-UNet"
 
 if [ ! -f "$LAYER_BITS_ILP_FILE" ]; then
-    echo "ERROR: $LAYER_BITS_ILP_FILE not found -- run the per-layer candidate-bits={4,6,8} --hard-lut-fraction 0.7 " \
+    echo "ERROR: $LAYER_BITS_ILP_FILE not found -- run the per-layer candidate-bits={4,6,8} --max-lut-fraction 0.7 " \
          "--force-dsp joint ILP sweep first (see compression/hawq/artifacts/archive/S27_2_ILP_outputs_perlayer_forcedsp_lut70/run_args.json " \
          "for the exact command)." >&2
     exit 1

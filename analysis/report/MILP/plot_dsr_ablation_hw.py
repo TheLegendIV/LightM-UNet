@@ -37,7 +37,7 @@ VARIANTS = [
     ("DSR\noff", "dsr_off", "dsr_off"),
     ("FINN\nautofold", "dsr_ablation_autofold_control", None),
 ]
-SERIES = [("LUT", "#0061d6"), ("BRAM", "#00a78c"), ("DSP", "#eb4300"), ("FIFO BRAM", "#5600bf")]
+SERIES = [("LUT", "#0061d6"), ("LUTRAM", "#7fb0ee"), ("BRAM", "#00a78c"), ("DSP", "#eb4300"), ("FIFO BRAM", "#5600bf")]
 
 
 def build_dir(tag: str) -> Path:
@@ -87,6 +87,7 @@ def load(tag: str, art: str | None) -> dict:
     est = partition2_estimate(ART / art) if art else {}
     return {
         "LUT": 100 * ooc["LUT"] / LUT_TOT,
+        "LUTRAM": 100 * ooc["LUTRAM"] / LUT_TOT,
         "BRAM": 100 * ooc["BRAM"] / BRAM36_TOT,
         "DSP": 100 * dsp / DSP_TOT,
         "FIFO BRAM": 100 * fifo / BRAM36_TOT,
@@ -98,7 +99,7 @@ TABLE_HEADER = [
     "est_LUT_pct", "real_LUT_pct", "LUT_err_pct",
     "est_DSP_pct", "real_DSP_pct", "DSP_err_pct",
     "est_BRAM_pct", "real_BRAM_excl_FIFO_pct", "BRAM_err_pct",
-    "real_FIFO_BRAM_pct", "total_fifo_bits",
+    "real_FIFO_BRAM_pct", "total_fifo_bits", "real_LUTRAM_pct",
     "est_FPS", "real_FPS", "FPS_err_pct",
 ]
 
@@ -114,7 +115,7 @@ def table_row(r) -> list:
     g = r.get
     return (trio(g("est_LUT"), r["LUT"]) + trio(g("est_DSP"), r["DSP"])
             + trio(g("est_BRAM"), r["BRAM"] - r["FIFO BRAM"])
-            + [f"{r['FIFO BRAM']:.2f}", f"{r['fifo_bits']:.0f}"] + trio(g("est_fps"), r["fps"]))
+            + [f"{r['FIFO BRAM']:.2f}", f"{r['fifo_bits']:.0f}", f"{r['LUTRAM']:.2f}"] + trio(g("est_fps"), r["fps"]))
 
 
 def write_table(path, id_header, ids, rows) -> None:
@@ -126,23 +127,25 @@ def write_table(path, id_header, ids, rows) -> None:
 
 
 def draw_bars(ax, rows, w) -> None:
-    """Side by side: LUT | DSP | BRAM Computation (total - FIFO) | BRAM FIFO, FPS above each group."""
+    """Side by side: LUT | LUTRAM | DSP | BRAM Computation (total - FIFO) | BRAM FIFO, FPS above each group.
+    LUTRAM is the subset of LUTs used as distributed memory (same % of XCZU7EV LUTs)."""
     col = dict(SERIES)
     n = range(len(rows))
     bars = [
         ("LUT", col["LUT"], [r["LUT"] for r in rows]),
+        ("LUTRAM", col["LUTRAM"], [r["LUTRAM"] for r in rows]),
         ("DSP", col["DSP"], [r["DSP"] for r in rows]),
         ("BRAM Computation", col["BRAM"], [r["BRAM"] - r["FIFO BRAM"] for r in rows]),
         ("BRAM FIFO", col["FIFO BRAM"], [r["FIFO BRAM"] for r in rows]),
     ]
     for j, (name, color, vals) in enumerate(bars):
-        ax.bar([i + (j - 1.5) * w for i in n], vals, w, color=color, label=name, edgecolor=SURFACE, zorder=3)
+        ax.bar([i + (j - 2) * w for i in n], vals, w, color=color, label=name, edgecolor=SURFACE, zorder=3)
     top = [max(v[i] for _, _, v in bars) for i in n]
     for i, r in enumerate(rows):
         ax.text(i, top[i] + 1.0, f"{r['fps']:.0f} FPS", ha="center", va="bottom",
                 color=INK, fontsize=9, fontweight="bold")
     ax.set_ylim(0, max(top) * 1.15)
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.2), ncol=4, frameon=True, facecolor=SURFACE,
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.2), ncol=5, frameon=True, facecolor=SURFACE,
               edgecolor="#c3c2b7", fontsize=8.5, labelcolor=SECONDARY_INK)
 
 
@@ -156,7 +159,7 @@ def main() -> int:
     write_table(OUT_CSV, ["variant"], [[lab.replace("\n", " ")] for lab, *_ in VARIANTS], rows)
     print(f"Wrote {OUT_CSV}")
 
-    w = 0.19
+    w = 0.16
     fig, ax = plt.subplots(figsize=(9.5, 5.2), facecolor=SURFACE)
     _style_axes(ax)
     draw_bars(ax, rows, w)

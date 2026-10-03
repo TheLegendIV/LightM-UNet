@@ -65,8 +65,8 @@ set -e
 # be re-solved, not reused. The ILP solve (and its own
 # layer_sensitivity_12_dense_relu_nearest_conv_upsample_256_w8_16.json) has
 # been run for this width (finn_milp.py: --candidate-bits 4,6,8 --force-dsp
-# --alpha 1.0 --target-fps 250 --hard-lut-fraction 0.5 --hard-bram-fraction
-# 0.5 --hard-dsp-fraction 0.9 --optimize-downstream-rate 2.25 --config
+# --alpha 1.0 --target-fps 250 --max-lut-fraction 0.5 --max-bram-fraction
+# 0.5 --max-dsp-fraction 0.9 --optimize-downstream-rate 2.25 --config
 # config_12_dense_relu_nearest_conv_upsample_256_w8_16 --out-file under
 # MILP/artifacts/S12_dense_nn_upsample_256_w8_16_v2/), matching the base
 # width's v1->v2 experience: pinning another solve's bits and only
@@ -144,7 +144,7 @@ cd "$HOME/LightM-UNet"
 
 if [ ! -f "$LAYER_BITS_ILP_FILE" ]; then
     echo "ERROR: $LAYER_BITS_ILP_FILE not found -- run the per-layer candidate-bits={4,6,8} alpha=1.0 " \
-         "--hard-lut-fraction 0.5 --hard-bram-fraction 0.5 --hard-dsp-fraction 0.9 --target-fps 250 " \
+         "--max-lut-fraction 0.5 --max-bram-fraction 0.5 --max-dsp-fraction 0.9 --target-fps 250 " \
          "--optimize-downstream-rate 2.25 --force-dsp joint ILP solve first, against " \
          "--config config_12_dense_relu_nearest_conv_upsample_256_w8_16 (this width's own config -- " \
          "see MILP/artifacts/S12_dense_nn_upsample_256_v2/run_args.json for the base width's command to " \

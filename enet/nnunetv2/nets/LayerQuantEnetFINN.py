@@ -97,29 +97,19 @@ for the full derivation/verification of each:
 """
 from __future__ import annotations
 
-import os
-
 import torch
 from torch import nn
 
 import brevitas.nn as qnn
 from brevitas.quant import Int8ActPerTensorFloat, Int8WeightPerTensorFloat, Int32Bias
 
-# Opt-in (ENET_RESIDUAL_ADD_FOLLOWS_BITS=1): QuantEltwiseAdd's input AND output quantizers really use act_bits["residual_add"].
-# Default (unset) keeps the legacy behavior, where the `bit_width=` kwarg is NOT routed to either quantizer
-# (verified with brevitas 0.12.1) and both stay Int8. The single input_quant instance is applied to both operands,
-# so skip and main share bit width AND scale. MILP counterpart: finn_milp.py --tie-residual-bits.
-RESIDUAL_ADD_FOLLOWS_BITS = os.environ.get("ENET_RESIDUAL_ADD_FOLLOWS_BITS", "0") == "1"
-
-
+# The residual add's input AND output quantizers use act_bits["residual_add"]. (The old `bit_width=` kwarg on QuantEltwiseAdd is NOT
+# routed to either quantizer -- verified with brevitas 0.12.1 -- so both silently stayed Int8.) The single input_quant instance
+# is applied to both operands, so skip and main share bit width AND scale. MILP counterpart: finn_milp.py ties
+# skip_quant/residual_add to expand.0's act bits (expand_layer_bits.py writes the residual_add site accordingly).
 def _residual_add_quant(bits: int) -> qnn.QuantEltwiseAdd:
-    if RESIDUAL_ADD_FOLLOWS_BITS:
-        q = Int8ActPerTensorFloat.let(bit_width=bits)
-        return qnn.QuantEltwiseAdd(input_quant=q, output_quant=q, return_quant_tensor=True)
-    return qnn.QuantEltwiseAdd(bit_width=bits, input_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
-
-from nnunetv2.nets.QuantENet import _quant_conv2d, _quant_act, _quant_block_act
-from nnunetv2.nets.LayerQuantENet import _make_layer_shallow_stage, _make_layer_context_stage, _local_single
+    q = Int8ActPerTensorFloat.let(bit_width=bits)
+    return qnn.QuantEltwiseAdd(input_quant=q, output_quant=q, return_quant_tensor=True)
 
 
 # ---------------------------------------------------------------------------

@@ -31,7 +31,7 @@ set -e
 # S12_dense_nn_upsample_256_w8_16_v3.json / layer_bits_SITES_..., see that
 # directory's own run_args.json for the exact finn_milp.py invocation) used:
 #   --candidate-bits 4,6,8 --alpha 1.0 --force-dsp
-#   --hard-lut-fraction 0.5 --hard-bram-fraction 0.4 --hard-dsp-fraction 0.9
+#   --max-lut-fraction 0.5 --max-bram-fraction 0.4 --max-dsp-fraction 0.9
 #   --target-fps 200 --clock-mhz 100 --optimize-downstream-rate 2.5
 # solved AFTER this session's finn_cost_model.py recalibration (real per-node
 # Vivado data: threshold LUT/BRAM, SWU LUT, MVAU/VVAU weight-memory
@@ -40,7 +40,7 @@ set -e
 # the 200 FPS floor), LUT 49.7% / BRAM 39.9% / DSP 37.2% of budget, avg
 # weight/act bits 7.40/6.62.
 #
-# --hard-bram-fraction 0.4 (not the base/older width's 0.5) and
+# --max-bram-fraction 0.4 (not the base/older width's 0.5) and
 # --optimize-downstream-rate 2.5 (not 1.5 or 2.25) are deliberate for THIS
 # solve -- --optimize-downstream-rate 1.0/1.5/2.0 were all confirmed
 # Infeasible at bram=0.4 (swept this session); 2.5 was chosen over the
@@ -126,7 +126,7 @@ cd "$HOME/LightM-UNet"
 
 if [ ! -f "$LAYER_BITS_ILP_FILE" ]; then
     echo "ERROR: $LAYER_BITS_ILP_FILE not found -- run the per-layer candidate-bits={4,6,8} alpha=1.0 " \
-         "--hard-lut-fraction 0.5 --hard-bram-fraction 0.4 --hard-dsp-fraction 0.9 --target-fps 200 " \
+         "--max-lut-fraction 0.5 --max-bram-fraction 0.4 --max-dsp-fraction 0.9 --target-fps 200 " \
          "--optimize-downstream-rate 2.5 --force-dsp joint ILP solve first, against " \
          "--config config_12_dense_relu_nearest_conv_upsample_256_w8_16 (see MILP/artifacts/" \
          "S12_dense_nn_upsample_256_w8_16_v3/run_args.json for the exact command -- this is a SEPARATE " \

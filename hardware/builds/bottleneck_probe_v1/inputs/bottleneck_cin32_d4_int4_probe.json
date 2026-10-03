@@ -1,0 +1,23 @@
+{
+  "name": "bottleneck_cin32_d4_int4",
+  "cin": 32,
+  "v": 4,
+  "z": 4,
+  "cmid": 8,
+  "cout": 32,
+  "k": 3,
+  "dilation": 4,
+  "padding": 4,
+  "stride": 1,
+  "height": 32,
+  "width": 32,
+  "bits": 4,
+  "seed": 0,
+  "op_counts": {
+    "Quant": 10,
+    "Conv": 3,
+    "BatchNormalization": 3,
+    "Relu": 3,
+    "Add": 1
+  }
+}

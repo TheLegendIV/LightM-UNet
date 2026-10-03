@@ -59,7 +59,7 @@ When a job is retired, `git mv` its folder into
   an earlier "pure new solve" assumption was corrected), fine-tuned via
   `compression/slurm/qat_12_dense_relu_nearest_conv_upsample_256_w8_16_v4.job`
   against the v4 MILP solve (`MILP/artifacts/S12_dense_nn_upsample_256_w8_16_v4/`,
-  `--hard-bram-fraction 0.2 --target-fps 200 --optimize-downstream-rate 2.5`).
+  `--max-bram-fraction 0.2 --target-fps 200 --optimize-downstream-rate 2.5`).
   Has its own `finn_export_..._w8_16_v4_trained.py`,
   `finn_hawq_dump_conv_order_..._w8_16_v4.py`,
   `finn_hawq_preamble_..._w8_16_v4_trained_256x256.py`, and

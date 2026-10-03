@@ -7,8 +7,8 @@ cd /workspace/LightM-UNet
 OUT=MILP/artifacts/S12_dense_dsr_ablation_v1
 COMMON="--config config_12_dense_relu_nearest_upsample_wm \
   --sensitivity-file MILP/artifacts/layer_sensitivity_12_dense_relu_nearest_upsample_wm.json \
-  --candidate-bits 4 --hard-lut-fraction 1.0 --hard-bram-fraction 1.0 --hard-dsp-fraction 1.0 \
-  --hard-uram-fraction 1.0 --force-dsp --target-fps 250 --min-resources --time-limit 600 --gap-rel 0.02"
+  --candidate-bits 4 --max-lut-fraction 1.0 --max-bram-fraction 1.0 --max-dsp-fraction 1.0 \
+  --max-uram-fraction 1.0 --force-dsp --target-fps 250 --min-resources --time-limit 600 --gap-rel 0.02"
 for r in "$@"; do
   tag=bracket_dsr$r; extra="--dsr-ratio $r"; [ "$r" = off ] && { tag=bracket_dsroff; extra=""; }
   mkdir -p $OUT/$tag

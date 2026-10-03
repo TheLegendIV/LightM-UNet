@@ -39,7 +39,7 @@ def main() -> int:
     for (lab, *_), r in zip(ARMS, rows):
         print(lab.replace("\n", " "), {k: round(v, 2) for k, v in r.items()})
 
-    w = 0.19
+    w = 0.16
     fig, ax = plt.subplots(figsize=(8.5, 5.2), facecolor=SURFACE)
     _style_axes(ax)
     draw_bars(ax, rows, w)

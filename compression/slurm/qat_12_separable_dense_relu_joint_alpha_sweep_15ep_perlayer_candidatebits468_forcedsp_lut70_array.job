@@ -23,7 +23,7 @@ set -e
 # see joint_bits_folding_ilp_perlayer.py's and layer_topology.py's own
 # module docstrings. Same 5 alpha points and --max-latency-ms 1000
 # --clock-mhz 100 hard-capped convention as every earlier alpha sweep this
-# session, but --hard-lut-fraction 0.7 --force-dsp instead of the earlier
+# session, but --max-lut-fraction 0.7 --force-dsp instead of the earlier
 # default (1.0, auto-resType) regime -- deploys via LayerQuantENet (one
 # independent bit-width per quantizer SITE, not per whole block).
 #
@@ -144,7 +144,7 @@ nvidia-smi
 cd "$HOME/LightM-UNet"
 
 if [ ! -f "$LAYER_BITS_ILP_FILE" ]; then
-    echo "ERROR: $LAYER_BITS_ILP_FILE not found -- run the per-layer candidate-bits={4,6,8} --hard-lut-fraction 0.7 " \
+    echo "ERROR: $LAYER_BITS_ILP_FILE not found -- run the per-layer candidate-bits={4,6,8} --max-lut-fraction 0.7 " \
          "--force-dsp joint ILP sweep first (see compression/hawq/artifacts/archive/S12_ILP_outputs_perlayer_forcedsp_lut70/run_args.json " \
          "for the exact command)." >&2
     exit 1

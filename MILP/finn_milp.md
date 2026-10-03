@@ -316,7 +316,7 @@ no working URAM path on this device:
   threshold table is a compile-time constant.
 
 So URAM is structurally 0 everywhere; `XCZU7EV["URAM"]` /
-`--hard-uram-fraction` are kept only for provenance.
+`--max-uram-fraction` are kept only for provenance.
 
 The axis now drives block vs **distributed** (LUTRAM) for thresholds — real:
 `thresholding.sv`'s `RAM_STYLE` localparam has a genuine distributed branch,
@@ -332,24 +332,11 @@ FIFOs are not a modeled resource at all.
 
 ## Resource variants
 
-- `rtl_dsp_noact1` — default and only variant unless `--allow-lut-mult`:
-  MVAU_rtl, DSP multipliers, standalone Thresholding (`noActivation=1`).
-  Depthwise layers resolve to HLS inside the cost model (VVAU_rtl needs a
-  Versal DSP58), which matches real behavior.
-- `hls_lut_noact0` (`--allow-lut-mult`, added 2026-09-17) — HLS backend, LUT
-  multipliers, fused activation. Lets the ILP spend spare LUT instead of DSP
-  per layer. Its fused-threshold LUT term is a FINN-source transcription, not
-  calibrated on real hardware. `--force-dsp` deliberately does not affect it.
+- `rtl_dsp_noact1` — the only variant: MVAU_rtl, DSP multipliers, standalone Thresholding (`noActivation=1`).
+  Depthwise layers resolve to HLS inside the cost model (VVAU_rtl needs a Versal DSP58), which matches real behavior.
+  (`hls_lut_noact0` / `--allow-lut-mult` and `hls_dsp_noact0` were removed 2026-10-02: never used by any run.)
 - Not in the curated set: `rtl_dsp_noact0` (illegal — MVAU_rtl requires
   `noActivation=1`), `hls_dsp_noact1` (dominated by `rtl_dsp_noact1`).
-- `hls_dsp_noact0` — **placeholder, never eligible**. `_variant_cost_kwargs`
-  handles it, but before enabling it, hard-restrict its folds to PE ≤ SIMD:
-  on 89 real MVAU_hls nodes of exactly this kind (resType=dsp, fused
-  threshold; `hardware/datasets/mvau_lut_calibration_dataset.csv`,
-  `hardware/mvau_lut_correlation_report.txt`) the structural LUT formula gets
-  R²=0.009, PE alone correlates 0.69, SIMD is negatively correlated (−0.41),
-  and PE>SIMD rows are 36% of rows but 70.7% of real LUT.
-
 `_calibration_force_dsp`: `rtl_dsp_noact1` always gets the RTL LUT derate
 inside `conv_cost_pe_simd` (RTL is DSP-only), so `calibrated_lut` must always
 bypass its avg_bits table for it — not only when `--force-dsp` is set.
@@ -367,9 +354,9 @@ Every run so far passed `--force-dsp`, which masked this.
 | `--target-fps` | throughput target: every node ≤ `clock_mhz·1e6/target_fps` cycles (the physically meaningful rate constraint for a dataflow pipeline). |
 | `--max-latency-ms` / `--clock-mhz` | hard cap on the sum of cycles — a sequential-execution proxy, not the pipeline's real latency (see "Formulation"). The builds run at 100 MHz. |
 | `--dsr-ratio` / `--pbi-ratio` | see Rate coherence; independent flags, either/both/neither may be set. |
+| `--min-dsr` | find the smallest feasible `--dsr-ratio` (to 0.01, search range 1.01..20; parallel zero-objective feasibility probes) and solve with it, both passes under `--lexicographic`. Exclusive with `--dsr-ratio`. DSR multiplies a linear rate expression, so a DSR *variable* would be bilinear — it is searched, not optimized. |
+| `--max-lut-fraction` / `--max-bram-fraction` / `--max-dsp-fraction` / `--max-uram-fraction` | maximum fraction of the device (renamed from `--hard-*-fraction`, 2026-10-02). |
 | `--force-serial` | PE=SIMD=1 everywhere, thresholds included. |
-| `--allow-lut-mult` | enables `hls_lut_noact0`. |
-| `--require-simd-ge-pe` | drops conv folds with PE>SIMD — a zero-fit fix for the real PE>SIMD LUT blowup (36% of rows, 70.7% of real LUT). Never empties a fold set (PE=1 always pairs with max SIMD). Threshold nodes are unaffected. |
 | `--time-limit` / `--gap-rel` | CBC limits (default 1800 s, 2%). |
 | `--pin-bits-file` | TEST-ONLY: pin `y` to a `layer_bits_*.json`, skipping the bit-choice search; folding is still solved. |
 
@@ -515,8 +502,8 @@ cost model's calibration, not a certified hardware guarantee.
   above), which zeroed the folding variables' objective weight entirely —
   the folding a solve landed on was therefore always a solver-arbitrary tie
   among feasible options, not a real speed decision, and inspecting a
-  solved `S12_dense_nn_upsample_256_w8_16_v4` (`--hard-lut-fraction 0.5
-  --hard-bram-fraction 0.2 --hard-dsp-fraction 0.9 --target-fps 200`) showed
+  solved `S12_dense_nn_upsample_256_w8_16_v4` (`--max-lut-fraction 0.5
+  --max-bram-fraction 0.2 --max-dsp-fraction 0.9 --target-fps 200`) showed
   exactly that: PE=1 on 78/90 conv/pool layers and all 81 threshold nodes,
   LUT/BRAM pinned at their 50%/20% caps (spent on bit-width) while DSP sat at
   38.8% of a 90% allowance. Objective is now `mean(sens_norm)` only; `z`
@@ -565,3 +552,7 @@ cost model's calibration, not a certified hardware guarantee.
   `finn_milp.py`'s own post-solve diagnostics block alongside
   `branch_imbalance`.
 - 2026-09-30: `--min-resources` added (objective = equal-weight mean of LUT/BRAM_18K/DSP board fractions; for FIXED bits, e.g. one `--candidate-bits` value, so runs differing only in a constraint like `--dsr-ratio` compare on the cheapest fold, not an arbitrary tie). `--pbi-ratio` DEPRECATED (kept for reproducing old runs; PBI is only reported). `summary.csv` gained `dsr_ratio_setting`, `pbi_ratio_setting`, `dsr_*` (all nodes) and `dsr_foldable_*` (fixed-cycle nodes exempt = exactly what `--dsr-ratio` bounds; `dsr_foldable_max <= --dsr-ratio`). Min feasible DSR is found by bracketing/bisecting `--dsr-ratio` (feasibility is monotone; a native min-DSR objective would be bilinear). See artifacts/S12_dense_dsr_ablation_v1.
+- 2026-10-02: residual-join handling is now always on (flags removed): `skip_quant`/`residual_add` bits are tied to the
+  block's `expand.0` act bits (one shared add quantizer, FINN `AddStreams` single `inputDataType`) and join thresholds
+  (`skip_quant`/`residual_add`/`out_act`) are LUTRAM-only. Removed `--tie-residual-bits`, `--joins-distributed`,
+  `--allow-lut-mult`, `--require-simd-ge-pe`; renamed `--hard-*-fraction` -> `--max-*-fraction`; added `--min-dsr`.

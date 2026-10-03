@@ -284,8 +284,7 @@ def find_join_thresholds(kernel_model, logical_names, prev_block=None):
 
 def check_join_bits(kernel_model, logical_names, extra_nodes, joins):
     """Fail-fast guard that the exported network carries the bits the MILP priced for the residual joins
-    (finn_milp.py --tie-residual-bits <-> expand_layer_bits.py --tie-residual-bits <-> ENET_RESIDUAL_ADD_FOLLOWS_BITS=1;
-    without that env var at export the add stays Int8 whatever the MILP assumed). Checks, per matched join:
+    (finn_milp.py ties them to expand.0's bits; expand_layer_bits.py writes the same residual_add site; the network follows it). Checks, per matched join:
       * Thresholding output bit width == extra_nodes[<block>.<kind>].act_bits
       * both operands of each AddStreams have the same bit width (FINN v0.10.1 AddStreams has ONE inputDataType)
     and warns when the MILP chose a join PE != 1 (not applied by this bridge). Returns the number of problems."""
@@ -299,7 +298,7 @@ def check_join_bits(kernel_model, logical_names, extra_nodes, joins):
         if info.get("act_bits") is not None and got != info["act_bits"]:
             problems += 1
             print(f"ERROR {thr_name} ({block}.{kind}): exported output is {got}-bit, MILP priced {info['act_bits']}-bit -- "
-                  "was the network exported with ENET_RESIDUAL_ADD_FOLLOWS_BITS=1 and expand_layer_bits.py --tie-residual-bits?")
+                  "was the network exported from the SITES file of THIS solve (expand_layer_bits.py)?")
         if info.get("pe", 1) != 1:
             print(f"WARNING {block}.{kind}: MILP chose PE={info['pe']} but this bridge does not apply join PEs (stays at FINN's)")
     adds = [n for n in kernel_model.graph.node if n.op_type.startswith("AddStreams")]

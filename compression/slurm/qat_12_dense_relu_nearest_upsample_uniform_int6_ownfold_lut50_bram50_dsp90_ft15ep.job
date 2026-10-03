@@ -23,7 +23,7 @@ set -e
 #
 # See MILP/artifacts/S12_dense_nearest_upsample_512_v1_uniform_ownfold/
 # run_args.json for the exact solve command (--candidate-bits 6
-# --hard-lut-fraction 0.5 --hard-bram-fraction 0.5 --hard-dsp-fraction 0.9
+# --max-lut-fraction 0.5 --max-bram-fraction 0.5 --max-dsp-fraction 0.9
 # --force-dsp, no rate-coherence constraint).
 #
 # NOTE on comparing to the mixed job: folding carries ZERO objective weight
@@ -103,7 +103,7 @@ cd "$HOME/LightM-UNet"
 
 if [ ! -f "$LAYER_BITS_ILP_FILE" ]; then
     echo "ERROR: $LAYER_BITS_ILP_FILE not found -- run the uniform INT6 own-fold ILP solve first " \
-         "(--candidate-bits 6 --hard-lut-fraction 0.5 --hard-bram-fraction 0.5 --hard-dsp-fraction 0.9 " \
+         "(--candidate-bits 6 --max-lut-fraction 0.5 --max-bram-fraction 0.5 --max-dsp-fraction 0.9 " \
          "--force-dsp -- see MILP/artifacts/S12_dense_nearest_upsample_512_v1_uniform_ownfold/run_args.json)." >&2
     exit 1
 fi

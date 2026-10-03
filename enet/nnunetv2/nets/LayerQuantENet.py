@@ -63,8 +63,6 @@ from __future__ import annotations
 import collections
 from pathlib import Path
 
-import os
-
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -72,51 +70,13 @@ from torch import nn
 import brevitas.nn as qnn
 from brevitas.quant import Int8ActPerTensorFloat, Int8WeightPerTensorFloat
 
-# Opt-in (ENET_RESIDUAL_ADD_FOLLOWS_BITS=1): QuantEltwiseAdd's input AND output quantizers really use act_bits["residual_add"].
-# Default (unset) keeps the legacy behavior, where the `bit_width=` kwarg is NOT routed to either quantizer
-# (verified with brevitas 0.12.1) and both stay Int8. The single input_quant instance is applied to both operands,
-# so skip and main share bit width AND scale. MILP counterpart: finn_milp.py --tie-residual-bits.
-RESIDUAL_ADD_FOLLOWS_BITS = os.environ.get("ENET_RESIDUAL_ADD_FOLLOWS_BITS", "0") == "1"
-
-
+# The residual add's input AND output quantizers use act_bits["residual_add"]. (The old `bit_width=` kwarg on QuantEltwiseAdd is NOT
+# routed to either quantizer -- verified with brevitas 0.12.1 -- so both silently stayed Int8.) The single input_quant instance
+# is applied to both operands, so skip and main share bit width AND scale. MILP counterpart: finn_milp.py ties
+# skip_quant/residual_add to expand.0's act bits (expand_layer_bits.py writes the residual_add site accordingly).
 def _residual_add_quant(bits: int) -> qnn.QuantEltwiseAdd:
-    if RESIDUAL_ADD_FOLLOWS_BITS:
-        q = Int8ActPerTensorFloat.let(bit_width=bits)
-        return qnn.QuantEltwiseAdd(input_quant=q, output_quant=q, return_quant_tensor=True)
-    return qnn.QuantEltwiseAdd(bit_width=bits, input_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
-
-from nnunetv2.nets.ENet import (
-    CONTEXT_STAGE_PATTERN,
-    DENSE_DILATION_PATTERN,
-    DENSE_DILATION_HALF_PATTERN,
-    DENSE_DILATION_REG_INTERLEAVED_PATTERN,
-    DENSE_DILATION_REG_INTERLEAVED_DOUBLE_MID_PATTERN,
-    DENSE_DILATION_D2_PROJECTED_PATTERN,
-    DENSE_DILATION_D8_D16_PROJECTED_PATTERN,
-    DENSE_DILATION_D2_REGULAR_PATTERN,
-    DENSE_DILATION_REG_TRAILING_PATTERN,
-)
-from nnunetv2.nets.QuantENet import (
-    _quant_act,
-    _quant_block_act,
-    _quant_conv2d,
-    QuantDecomposedLeakyAct,
-    QuantFusedLeakyAct,
-)
-
-VALID_CONTEXT_PATTERNS = (
-    "default", "dense_dilation", "dense_dilation_half", "dense_dilation_reg_interleaved",
-    "dense_dilation_reg_interleaved_double_mid",
-    "dense_dilation_d2_projected", "dense_dilation_d8_d16_projected",
-    "dense_dilation_d2_regular", "dense_dilation_reg_trailing",
-)
-
-# QuantDecomposedLeakyAct/QuantFusedLeakyAct contain their OWN internal
-# QuantIdentity/QuantReLU submodules (pre_quant/act_pos/out_quant) -- a flat
-# isinstance-filtered named_modules() walk would wrongly also match those,
-# inflating one real site into 3-4 spurious ones. _first_match_modules below
-# stops descending the instant a module itself matches one of these types.
-ACT_SITE_TYPES = (qnn.QuantReLU, qnn.QuantIdentity, QuantDecomposedLeakyAct, QuantFusedLeakyAct, qnn.QuantEltwiseAdd)
+    q = Int8ActPerTensorFloat.let(bit_width=bits)
+    return qnn.QuantEltwiseAdd(input_quant=q, output_quant=q, return_quant_tensor=True)
 
 
 def _first_match_modules(

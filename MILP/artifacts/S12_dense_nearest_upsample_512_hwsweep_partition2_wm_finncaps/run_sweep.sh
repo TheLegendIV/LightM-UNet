@@ -8,8 +8,8 @@ cd /workspace/LightM-UNet
 OUT=MILP/artifacts/S12_dense_nearest_upsample_512_hwsweep_partition2_wm_finncaps
 COMMON="--config config_12_dense_relu_nearest_upsample_wm \
   --sensitivity-file MILP/artifacts/layer_sensitivity_12_dense_relu_nearest_upsample_wm.json \
-  --candidate-bits 4,6,8 --hard-lut-fraction 0.3499 --hard-bram-fraction 0.8164 --hard-dsp-fraction 0.2611 \
-  --hard-uram-fraction 1.0 --force-dsp --target-fps 190.7 --time-limit 600 --gap-rel 0.02"
+  --candidate-bits 4,6,8 --max-lut-fraction 0.3499 --max-bram-fraction 0.8164 --max-dsp-fraction 0.2611 \
+  --max-uram-fraction 1.0 --force-dsp --target-fps 190.7 --time-limit 600 --gap-rel 0.02"
 run() { # tag extra-flags...
   tag=$1; shift
   mkdir -p $OUT/$tag

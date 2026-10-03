@@ -1245,7 +1245,8 @@ which no FINN rule describes (every earlier build used it; the 1020 cutoff miscl
 - `--min-resources` weights LUT/BRAM18/DSP equally as % of the device, so 1 BRAM18 ~ 369 LUT: the solver prefers LUTRAM for the
   255-step join thresholds (~1.3k LUT each). Real, unvalidated: the `distributed` cost has never been built.
 - Join thresholds (`skip_quant`, `residual_add`) take `in_bits = bits + 2` (real INT10 at 8 bits); conv thresholds use `acc_bits`.
-- `--tie-residual-bits` (finn_milp.py): `skip_quant`/`residual_add` bits = the block's `expand.0` act bits (one shared add
-  quantizer; FINN v0.10.1 `AddStreams` has one `inputDataType`). Deploy with `expand_layer_bits.py --tie-residual-bits` and
-  `ENET_RESIDUAL_ADD_FOLLOWS_BITS=1`. Without the flag the joins stay fixed Int8 (legacy; Brevitas ignores `bit_width=` on
-  `QuantEltwiseAdd`, verified on 0.12.1). Sensitivity of the skip operand itself is NOT in the objective (only `expand.0`'s).
+- Residual joins (always on since 2026-10-02): `skip_quant`/`residual_add` bits = the block's `expand.0` act bits (one shared add
+  quantizer; FINN v0.10.1 `AddStreams` has one `inputDataType`), and the network's `QuantEltwiseAdd` follows
+  `act_bits["residual_add"]` (Brevitas ignores `bit_width=` on `QuantEltwiseAdd`, verified on 0.12.1, so the legacy network was
+  silently Int8). Join thresholds are LUTRAM-only. Sensitivity of the skip operand itself is NOT in the objective (only
+  `expand.0`'s).

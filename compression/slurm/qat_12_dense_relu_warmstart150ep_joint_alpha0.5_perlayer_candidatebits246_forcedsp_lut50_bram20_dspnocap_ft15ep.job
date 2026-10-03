@@ -106,7 +106,7 @@ cd "$HOME/LightM-UNet"
 
 if [ ! -f "$LAYER_BITS_ILP_FILE" ]; then
     echo "ERROR: $LAYER_BITS_ILP_FILE not found -- run the v5 per-layer candidate-bits={2,4,6} alpha=0.5 " \
-         "--hard-lut-fraction 0.5 --hard-bram-fraction 0.2 --force-dsp joint ILP solve first (see " \
+         "--max-lut-fraction 0.5 --max-bram-fraction 0.2 --force-dsp joint ILP solve first (see " \
          "MILP/artifacts/archive/12_dense_relu_warmstart150ep_ILP_outputs_v5/run_args.json for the exact command)." >&2
     exit 1
 fi
