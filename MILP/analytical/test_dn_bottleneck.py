@@ -8,7 +8,7 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from dn_bottleneck import export_onnx, model_dn_bottleneck, rate_report, verify_with_sim  # noqa: E402
+from dn_bottleneck import export_onnx, model_dn_bottleneck, rate_report, to_folding_config, verify_with_sim  # noqa: E402
 from dn_bottleneck_sim import simulate_dn  # noqa: E402
 
 REF = dict(cin=16, cout=32, v=4, bits=4, height=64, width=64, T_out=72)
@@ -89,11 +89,16 @@ class TestDnSim(unittest.TestCase):
         self.assertFalse(self.v["deadlock"])
         self.assertAlmostEqual(self.v["steady_cyc_px"], 72.0, delta=0.5)
 
-    def test_only_the_skip_fifo_is_deep(self):
+    def test_deep_fifos_are_the_skip_fifo_and_the_next_frame_prefetch_feeds(self):
         fifos = self.r.fifo_graph["fifos"]
         deep = {n for n, f in fifos.items() if f["depth"] > 8}
-        self.assertEqual(deep, {"skip FIFO"})
-        self.assertGreater(fifos["skip FIFO"]["depth"], 100)
+        self.assertIn("skip FIFO", deep)
+        # the others hold the next frame's first window in front of the two sliding windows (SWG_r: W+2 input pixels,
+        # FMPad: Wo+2 pixels) -- sizes from the multi-frame simulation
+        feeds = {n for n, f in fifos.items() if f["consumer"] in ("SWG_r", "FMPad", "SWG_m") and f["depth"] > 8}
+        self.assertEqual(deep - {"skip FIFO"}, feeds)
+        self.assertEqual(max(deep, key=lambda n: fifos[n]["depth"]), "skip FIFO")
+        self.assertEqual(len(self.v["frame_periods"]), 2)
 
     def test_latency_close_to_analytic(self):
         a = self.r.latency_first_out_cycles
@@ -151,6 +156,31 @@ class TestDnSim(unittest.TestCase):
         for n in g.node:
             for i in n.input:
                 self.assertIn(i, produced)
+
+    def test_folding_config_fmpad_variant(self):
+        r = model_dn_bottleneck(**REF, skip_order="pad_thr")
+        verify_with_sim(r)
+        cfg = to_folding_config(r)
+        f = cfg["folding"]
+        self.assertNotIn("mvau_s", f)
+        self.assertEqual(f["fmpad_c"]["Padding"], [0, 0, 0, 1])          # (32-16)/16
+        self.assertEqual(f["fmpad_c"]["ImgDim"], [1024, 1])              # [H'*W', Cin/s]
+        self.assertEqual((f["fmpad_c"]["SIMD"], f["fmpad_c"]["NumChannels"]), (16, 16))
+        self.assertTrue(f["fmpad_c"]["custom"])
+        self.assertEqual(f["swg_r"]["parallel_window"], 0)
+        skip = [x for x in cfg["fifos"] if x["is_skip"]]
+        self.assertEqual(len(skip), 1)
+        self.assertEqual(skip[0]["producer"], "thr_s")
+        self.assertGreaterEqual(min(x["depth"] for x in cfg["fifos"]), 2)
+
+    def test_folding_config_mvau_variant(self):
+        r = model_dn_bottleneck(**REF, skip_pad="mvau")
+        verify_with_sim(r)
+        f = to_folding_config(r)["folding"]
+        self.assertIn("mvau_s", f)
+        self.assertNotIn("fmpad_c", f)
+        self.assertEqual(16 % f["mvau_s"]["SIMD"], 0)
+        self.assertEqual(32 % f["mvau_s"]["PE"], 0)
 
 
 if __name__ == "__main__":

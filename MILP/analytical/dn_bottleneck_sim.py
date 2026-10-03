@@ -27,8 +27,8 @@ from bottleneck_sim import (  # noqa: E402
 class MaxPoolNode:
     """Input: one word (all channels) per input pixel, raster order. Output: one word per 2x2 window."""
 
-    def __init__(self, name, inp: Fifo, out: Fifo, h: int, w: int):
-        self.name, self.inp, self.out, self.h, self.w = name, inp, out, h, w
+    def __init__(self, name, inp: Fifo, out: Fifo, h: int, w: int, frames: int = 1):
+        self.name, self.inp, self.out, self.h, self.w, self.frames = name, inp, out, h, w, frames
         self.i = 0
         self.pending = None
 
@@ -39,24 +39,26 @@ class MaxPoolNode:
             self.out.push((self.pending, 0))
             self.pending = None
             return BUSY
-        if self.i >= self.h * self.w:
+        if self.i >= self.h * self.w * self.frames:
             return IDLE
         if not self.inp.q:
             return STARVED
         pid, _ = self.inp.q.popleft()
         assert pid == self.i, f"{self.name}: input pixel {pid}, expected {self.i}"
-        r, c = divmod(self.i, self.w)
+        f, loc = divmod(self.i, self.h * self.w)
+        r, c = divmod(loc, self.w)
         self.i += 1
         if r % 2 == 1 and c % 2 == 1:
-            self.pending = (r // 2) * (self.w // 2) + c // 2
+            self.pending = f * (self.h // 2) * (self.w // 2) + (r // 2) * (self.w // 2) + c // 2
         return BUSY
 
 
 class Swg2Node:
     """Sliding window for kernel 2, stride 2, no padding. Output pixel (oy, ox) needs input pixels 2oy..2oy+1 x 2ox..2ox+1."""
 
-    def __init__(self, name, inp: Fifo, out: Fifo, h: int, w: int, cf: int, out_w: int, cap_px: int):
+    def __init__(self, name, inp: Fifo, out: Fifo, h: int, w: int, cf: int, out_w: int, cap_px: int, frames: int = 1):
         self.name, self.inp, self.out, self.h, self.w, self.cf, self.out_w = name, inp, out, h, w, cf, out_w
+        self.frames, self.f = frames, 0
         self.wo, self.ho = w // 2, h // 2
         self.cap_words = cap_px * cf
         self.recv = 0
@@ -70,29 +72,31 @@ class Swg2Node:
 
     def step(self, t: int) -> int:
         progressed = blocked = False
-        done = self.u >= self.ho * self.wo
+        done = self.f >= self.frames
         base = self._base_last()[0] if not done else self.h * self.w
-        if self.recv < self.total_in and self.inp.q and self.recv - base * self.cf < self.cap_words:
+        if not done and self.recv < self.total_in and self.inp.q and self.recv - base * self.cf < self.cap_words:
             q, _ = self.inp.q.popleft()
-            assert q == self.recv // self.cf, f"{self.name}: input pixel {q}, expected {self.recv // self.cf}"
+            assert q == self.f * self.h * self.w + self.recv // self.cf, f"{self.name}: input pixel {q}, expected {self.recv // self.cf}"
             self.recv += 1
             progressed = True
         if not done:
             base, last = self._base_last()
             if self.recv >= (last + 1) * self.cf:
                 if self.out.space():
-                    self.out.push((self.u, self.e))
+                    self.out.push((self.f * self.ho * self.wo + self.u, self.e))
                     self.e += 1
                     progressed = True
                     if self.e == self.out_w:
                         self.e, self.u = 0, self.u + 1
+                        if self.u == self.ho * self.wo:
+                            self.u, self.recv, self.f = 0, 0, self.f + 1
                 else:
                     blocked = True
         if progressed:
             return BUSY
         if blocked:
             return BLOCKED
-        return IDLE if self.u >= self.ho * self.wo else STARVED
+        return IDLE if self.f >= self.frames else STARVED
 
 
 class ChanPadNode:
@@ -133,13 +137,13 @@ def swg_cap_px(w: int, kh: int, sh: int, kw: int, sw: int) -> int:
 def simulate_dn(
     r, inject_interval: float = 0, skip_depth: int | None = None, fifo_depth: int = 2, fifo_depths: dict | None = None,
     elastic_depth: int | None = None, elastic_consumers=("FMPad", "SWG_r"), max_cycles: int | None = None,
-    swg_slack_px: int = 1,
+    swg_slack_px: int = 1, frames: int = 1, elastic_map: dict | None = None,
 ) -> SimResult:
     """inject_interval: cycles between INPUT pixels (0 = saturated, r.params['T_in'] = upstream block at the budget)."""
     p = r.params
     H, W, Ho, Wo = p["height"], p["width"], p["height"] // 2, p["width"] // 2
     cin, cmid, cout = p["cin"], p["cmid"], p["cout"]
-    n_in, n_out = H * W, Ho * Wo
+    n_in, n_out = H * W * frames, Ho * Wo * frames
     n = _io_names(r)
     order: list = []
     fifos: dict = {}
@@ -185,7 +189,7 @@ def simulate_dn(
     f = link("Dup", dup_w, "SWG_r", cf_r, f_dm, n_in)
     f_o = fifo("SWG_r->out")
     cap = swg_cap_px(W, 2, 2, 2, 2)
-    order.append(Swg2Node("SWG_r", f, f_o, H, W, cf_r, sf_r, cap))
+    order.append(Swg2Node("SWG_r", f, f_o, H, W, cf_r, sf_r, cap, frames))
     f = link("SWG_r", sf_r, "MVAU_r", sf_r, f_o, n_out)
     f_o = fifo("MVAU_r->out")
     order.append(MvauNode("MVAU_r", f, f_o, sf_r, nf_r, n_out))
@@ -194,9 +198,9 @@ def simulate_dn(
     order.append(StreamNode("Thr_r", [f], [f_o], thr_r_w, thr_r_w, n_out))
     f = link("Thr_r", thr_r_w, "FMPad", cf_m, f_o, n_out)
     f_o = fifo("FMPad->out")
-    order.append(FmPadNode("FMPad", f, f_o, Ho, Wo, 1, cf_m))
+    order.append(FmPadNode("FMPad", f, f_o, Ho, Wo, 1, cf_m, frames))
     f_o2 = fifo("SWG_m->out")
-    order.append(SwgNode("SWG_m", f_o, f_o2, Ho, Wo, 3, cf_m, sf_m, swg_slack_px))
+    order.append(SwgNode("SWG_m", f_o, f_o2, Ho, Wo, 3, cf_m, sf_m, swg_slack_px, frames))
     f = link("SWG_m", sf_m, "MVAU_m", sf_m, f_o2, n_out)
     f_o = fifo("MVAU_m->out")
     order.append(MvauNode("MVAU_m", f, f_o, sf_m, nf_m, n_out))
@@ -214,7 +218,7 @@ def simulate_dn(
     # ---- skip branch: maxpool, then (channel pad | identity MVAU) and the skip requantizing threshold
     f = link("Dup", dup_w, "MaxPool", 1, f_ds, n_in)
     f_mp = fifo("MaxPool->out")
-    order.append(MaxPoolNode("MaxPool", f, f_mp, H, W))
+    order.append(MaxPoolNode("MaxPool", f, f_mp, H, W, frames))
     thr_s_w = (cin if (skip_pad == "fmpad" and skip_order == "thr_pad") else cout) // n["Thr_s"].pe
     f_skip = fifo("skip FIFO", skip_depth)
     if skip_pad == "mvau":
@@ -254,5 +258,5 @@ def simulate_dn(
 
     return run_network(
         r, order, fifos, sink, n_out, inject_interval, skip_depth, fifo_depth, elastic_depth, fifo_depths, max_cycles,
-        elastic_consumers=elastic_consumers,
+        elastic_consumers=elastic_consumers, px_per_frame=(Ho * Wo if frames > 1 else None), elastic_map=elastic_map,
     )

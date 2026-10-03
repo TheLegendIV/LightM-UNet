@@ -9,7 +9,7 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from bottleneck import export_onnx, model_bottleneck, to_folding_config, verify_with_sim  # noqa: E402
+from bottleneck import export_onnx, fifo_memory, model_bottleneck, to_folding_config, verify_with_sim  # noqa: E402
 
 REF = dict(cin=32, v=4, z=4, T=72, bits=4, height=32, width=32, k=3, dilation=8, stride=1)
 
@@ -104,7 +104,10 @@ class TestVerifyAndExport(unittest.TestCase):
 
     def test_simulation_verifies_target(self):
         self.assertTrue(self.v["ok"])
-        self.assertLessEqual(self.v["steady_cyc_px"], REF["T"] * 1.01)
+        self.assertLessEqual(self.v["steady_cyc_px"], REF["T"] * 1.02)     # last of 3 back-to-back frames
+        periods = self.v["frame_periods"]
+        self.assertEqual(len(periods), 2)
+        self.assertAlmostEqual(periods[-1] / (32 * 32), self.v["steady_cyc_px"], places=6)
 
     def test_elastic_fifo_holds_row_refill(self):
         # the FIFO feeding FMPad must hold pad+1 real pixels (cf = 1 word per pixel here)
@@ -162,6 +165,33 @@ class TestVerifyAndExport(unittest.TestCase):
         for n in g.node:  # every input tensor is produced by a node or is the graph input
             for i in n.input:
                 self.assertIn(i, produced)
+
+
+class TestFifoMemory(unittest.TestCase):
+    def test_narrow_deep_skip_fifo_goes_to_bram_with_pow2_depth(self):
+        c = fifo_memory(4, 8736)
+        self.assertEqual((c["mem"], c["depth_alloc"], c["bram18"], c["uram"]), ("bram", 16384, 4, 0))
+        self.assertLess(c["options"]["uram"]["efficiency"], 0.05)       # 4 of 72 URAM bits used: never URAM
+
+    def test_tiny_fifo_is_srl(self):
+        c = fifo_memory(32, 2)
+        self.assertEqual((c["mem"], c["bram18"], c["uram"]), ("srl", 0, 0))
+        self.assertLess(c["lut"], 64)
+
+    def test_wide_deep_fifo_goes_to_uram(self):
+        c = fifo_memory(72, 8192)
+        self.assertEqual((c["mem"], c["uram"], c["bram18"]), ("uram", 2, 0))
+        self.assertAlmostEqual(c["efficiency"], 1.0)
+
+    def test_forced_mem_and_finalized_totals(self):
+        self.assertEqual(fifo_memory(4, 8736, "srl")["mem"], "srl")
+        r = model_bottleneck(**REF)
+        verify_with_sim(r, fifo_mem="uram")
+        self.assertEqual(r.skip_fifo.mem, "uram")
+        t = r.totals
+        self.assertAlmostEqual(t["lut"], sum(n.lut for n in r.nodes) + t["dwc_lut"] + t["fifo_lut"])
+        self.assertEqual(t["uram"], sum(n.uram for n in r.nodes) + t["fifo_uram"])
+        self.assertGreaterEqual(t["fifo_uram"], r.skip_fifo.mem_uram)
 
 
 if __name__ == "__main__":

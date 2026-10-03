@@ -147,13 +147,14 @@ class MvauNode:
 
 
 class FmPadNode:
-    def __init__(self, name, inp: Fifo, out: Fifo, h: int, w: int, pad: int, cf: int):
+    def __init__(self, name, inp: Fifo, out: Fifo, h: int, w: int, pad: int, cf: int, frames: int = 1):
         self.name, self.inp, self.out, self.h, self.w, self.pad, self.cf = name, inp, out, h, w, pad, cf
         self.hp, self.wp = h + 2 * pad, w + 2 * pad
         self.q = self.wd = 0
+        self.frames, self.f = frames, 0
 
     def step(self, t: int) -> int:
-        if self.q >= self.hp * self.wp:
+        if self.f >= self.frames:
             return IDLE
         r, c = divmod(self.q, self.wp)
         real = self.pad <= r < self.pad + self.h and self.pad <= c < self.pad + self.w
@@ -163,20 +164,24 @@ class FmPadNode:
             return BLOCKED
         if real:
             pid, _ = self.inp.q.popleft()
-            expect = (r - self.pad) * self.w + (c - self.pad)
+            expect = self.f * self.h * self.w + (r - self.pad) * self.w + (c - self.pad)
             assert pid == expect, f"{self.name}: input pixel {pid}, expected {expect}"
         self.out.push((self.q, self.wd))
         self.wd += 1
         if self.wd == self.cf:
             self.wd, self.q = 0, self.q + 1
+            if self.q == self.hp * self.wp:          # padded frame complete: the next frame starts right away
+                self.q, self.f = 0, self.f + 1
         return BUSY
 
 
 class SwgNode:
     """Sliding-window generator: stride 1, same padding, dilated k_eff window."""
 
-    def __init__(self, name, inp: Fifo, out: Fifo, h: int, w: int, k_eff: int, cf: int, out_w: int, slack_px: int = 1):
+    def __init__(self, name, inp: Fifo, out: Fifo, h: int, w: int, k_eff: int, cf: int, out_w: int, slack_px: int = 1,
+                 frames: int = 1):
         self.name, self.inp, self.out, self.h, self.w, self.k_eff, self.cf, self.out_w = name, inp, out, h, w, k_eff, cf, out_w
+        self.frames, self.f = frames, 0
         self.pad = (k_eff - 1) // 2
         self.wp = w + 2 * self.pad
         self.hp = h + 2 * self.pad
@@ -193,9 +198,9 @@ class SwgNode:
     def step(self, t: int) -> int:
         progressed = False
         blocked = False
-        done = self.u >= self.h * self.w
+        done = self.f >= self.frames
         base = self._base_last()[0] if not done else self.hp * self.wp
-        if self.recv < self.total_in and self.inp.q and self.recv - base * self.cf < self.cap_words:
+        if not done and self.recv < self.total_in and self.inp.q and self.recv - base * self.cf < self.cap_words:
             q, _ = self.inp.q.popleft()
             assert q == self.recv // self.cf, f"{self.name}: input pixel {q}, expected {self.recv // self.cf}"
             self.recv += 1
@@ -204,18 +209,20 @@ class SwgNode:
             base, last = self._base_last()
             if self.recv >= (last + 1) * self.cf:
                 if self.out.space():
-                    self.out.push((self.u, self.e))
+                    self.out.push((self.f * self.h * self.w + self.u, self.e))
                     self.e += 1
                     progressed = True
                     if self.e == self.out_w:
                         self.e, self.u = 0, self.u + 1
+                        if self.u == self.h * self.w:    # last window of the frame emitted -> next frame
+                            self.u, self.recv, self.f = 0, 0, self.f + 1
                 else:
                     blocked = True
         if progressed:
             return BUSY
         if blocked:
             return BLOCKED
-        return IDLE if self.u >= self.h * self.w else STARVED
+        return IDLE if self.f >= self.frames else STARVED
 
 
 # ---------------------------------------------------------------- build + run
@@ -275,6 +282,7 @@ class SimResult:
     fifo_max: dict
     params: dict = field(default_factory=dict)
     graph: dict = field(default_factory=dict)  # nodes (topological), io, fifos (depth/bits/producer/consumer)
+    frame_periods: list = field(default_factory=list)   # cycles between consecutive frame completions (frames > 1)
 
     def fractions(self, name: str, window: tuple | None = None) -> dict:
         a, b = window if window else (0, self.cycles)
@@ -302,16 +310,17 @@ def _words(r: BottleneckResult) -> dict:
 def simulate(
     r: BottleneckResult, inject_interval: int = 0, skip_depth: int | None = None, fifo_depth: int = 2,
     swg_slack_px: int = 1, max_cycles: int | None = None, elastic_depth: int | None = None,
-    fifo_depths: dict | None = None,
+    fifo_depths: dict | None = None, frames: int = 1,
 ) -> SimResult:
-    """inject_interval: cycles between input pixels (0 = as fast as the chain accepts, T = upstream block at rate T).
+    """frames: number of consecutive frames fed back to back (steady_cyc_px is then the LAST frame's period per pixel).
+    inject_interval: cycles between input pixels (0 = as fast as the chain accepts, T = upstream block at rate T).
     skip_depth: skip FIFO depth in words (None = the analytic depth of r, UNBOUNDED = measure the need).
     elastic_depth: depth in words of the FIFO feeding FMPad (None = fifo_depth). It must hold the pad+1 real pixels the
     SWG needs at each output row start; see bottleneck.verify_with_sim. fifo_depths: per-FIFO overrides (name -> words),
     applied last."""
     p = r.params
     H, W, pad = p["height"], p["width"], p["pad"]
-    N = H * W
+    N = H * W * frames
     k_eff = (p["k"] - 1) * p["dilation"] + 1
     w = _words(r)
     if skip_depth is None:
@@ -350,9 +359,9 @@ def simulate(
     order.append(StreamNode("Thr_r", [link("MVAU_r", w["nf_r"], "Thr_r", w["thr_r"], f, N)], [f_o], w["thr_r"], w["thr_r"], N))
     f = link("Thr_r", w["thr_r"], "FMPad", w["cf"], f_o, N)
     f_o = fifo("FMPad->out")
-    order.append(FmPadNode("FMPad", f, f_o, H, W, pad, w["cf"]))
+    order.append(FmPadNode("FMPad", f, f_o, H, W, pad, w["cf"], frames))
     f_o2 = fifo("SWG_m->out")
-    order.append(SwgNode("SWG_m", f_o, f_o2, H, W, k_eff, w["cf"], w["sf_m"], swg_slack_px))
+    order.append(SwgNode("SWG_m", f_o, f_o2, H, W, k_eff, w["cf"], w["sf_m"], swg_slack_px, frames))
     f = link("SWG_m", w["sf_m"], "MVAU_m", w["sf_m"], f_o2, N)
     f_o = fifo("MVAU_m->out")
     order.append(MvauNode("MVAU_m", f, f_o, w["sf_m"], w["nf_m"], N))
@@ -384,12 +393,14 @@ def simulate(
 
     return run_network(
         r, order, fifos, sink, N, inject_interval, skip_depth, fifo_depth, elastic_depth, fifo_depths, max_cycles,
+        px_per_frame=(H * W if frames > 1 else None),
     )
 
 
 def run_network(
     r, order: list, fifos: dict, sink, N: int, inject_interval: int, skip_depth: int, fifo_depth: int,
-    elastic_depth=None, fifo_depths=None, max_cycles=None, elastic_consumers=("FMPad",),
+    elastic_depth=None, fifo_depths=None, max_cycles=None, elastic_consumers=("FMPad",), px_per_frame=None,
+    elastic_map=None,
 ) -> SimResult:
     """Step a built network (nodes in topological order) until the sink has N output pixels. Shared by every block type;
     elastic_depth is applied to the FIFOs whose consumer node is named in elastic_consumers."""
@@ -399,6 +410,10 @@ def run_network(
             if graph["fifos"][f.name]["consumer"] in elastic_consumers:
                 f.depth = elastic_depth
                 graph["fifos"][f.name]["depth"] = elastic_depth
+    for f in fifos.values():                       # elastic_map: consumer node name -> depth of the FIFO(s) feeding it
+        c = graph["fifos"][f.name]["consumer"]
+        if elastic_map and c in elastic_map:
+            f.depth = graph["fifos"][f.name]["depth"] = elastic_map[c]
     for name, d in (fifo_depths or {}).items():
         fifos[name].depth = d
         graph["fifos"][name]["depth"] = d
@@ -434,12 +449,17 @@ def run_network(
         steady = (b - a) / max(1, (int(0.8 * len(done)) - 1) - int(0.2 * len(done)))
     else:
         a, b, steady = 0, cycles, float("inf")
+    periods = []
+    if px_per_frame and len(done) >= 2 * px_per_frame:
+        ends = [done[(k + 1) * px_per_frame - 1] for k in range(len(done) // px_per_frame)]
+        periods = [ends[k] - ends[k - 1] for k in range(1, len(ends))]
+        steady = periods[-1] / px_per_frame
     return SimResult(
         deadlock=deadlock, cycles=cycles, out_times=done, first_inject=0,
         latency_first_out=(done[0] if done else -1), steady_cyc_px=steady, node_names=names, states=states,
         steady_window=(a, b), fifo_max={n: f.max_occ for n, f in fifos.items()}, params=dict(
             inject_interval=inject_interval, skip_depth=skip_depth, fifo_depth=fifo_depth),
-        graph=graph,
+        graph=graph, frame_periods=periods,
     )
 
 

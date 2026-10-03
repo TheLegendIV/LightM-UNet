@@ -62,6 +62,23 @@ class TestSim(unittest.TestCase):
         self.assertFalse(res.deadlock)
         self.assertAlmostEqual(res.steady_cyc_px, REF["T"], delta=0.5)
 
+    def test_consecutive_frames_do_not_overlap_without_prefetch_fifos(self):
+        # Hardware (FINN rtlsim of the probe, depths: 2 everywhere, MVAU_r feed 4, FMPad feed 14, skip 8736) measured
+        # 87.9 cyc/px for this block, not 72: the sliding window serves one frame at a time, so every frame pays the fill of
+        # its first window (pad*W + pad + 1 pixels at the upstream period). The multi-frame sim reproduces that.
+        res = simulate(self.r, inject_interval=0, skip_depth=8736, fifo_depth=2,
+                       fifo_depths={"Dup->DWC->MVAU_r": 4, "Thr_r->DWC->FMPad": 14}, frames=3)
+        self.assertFalse(res.deadlock)
+        self.assertAlmostEqual(res.steady_cyc_px, 87.9, delta=1.5)
+        self.assertEqual(len(res.frame_periods), 2)
+
+    def test_prefetch_fifo_in_front_of_fmpad_hides_the_gap(self):
+        n_fill = 8 * 32 + 8 + 1
+        res = simulate(self.r, inject_interval=0, skip_depth=UNBOUNDED, fifo_depth=2,
+                       fifo_depths={"Dup->DWC->MVAU_r": 4, "Thr_r->DWC->FMPad": n_fill + 2}, frames=3)
+        self.assertFalse(res.deadlock)
+        self.assertLess(res.steady_cyc_px, 73.2)
+
     def test_undersized_skip_fifo_deadlocks(self):
         # Dup stalls on a full skip FIFO while the main branch is still filling the SWG -> no pixel ever completes
         res = simulate(self.r, inject_interval=REF["T"], skip_depth=64, fifo_depth=64)

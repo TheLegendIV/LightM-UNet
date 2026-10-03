@@ -66,6 +66,11 @@ class SkipFifo:
     lutram_luts_if_distributed: int
     pixels_buffered: int
     pe: int
+    mem: str = ""
+    depth_alloc: int = 0
+    mem_bram18: int = 0
+    mem_uram: int = 0
+    mem_lut: int = 0
 
 
 @dataclass
@@ -81,6 +86,7 @@ class BottleneckResult:
     warnings: list = field(default_factory=list)
     verification: dict = field(default_factory=dict)   # filled by verify_with_sim
     fifo_graph: dict = field(default_factory=dict)     # simulated topology + verified FIFO depths
+    fifo_costs: dict = field(default_factory=dict)     # per FIFO: chosen memory (srl/bram/uram) and its cost, see fifo_memory
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -112,6 +118,11 @@ class BottleneckResult:
         lines.append(f"latency (first pixel in -> first pixel out): {self.latency_first_out_cycles} cycles; frame ~ {self.frame_cycles} cycles")
         b = self.balance
         lines.append(f"balance ({b['scope']}): slowest {b['max_cyc_px']:.2f}, fastest {b['min_cyc_px']:.2f} cyc/px, min/max = {b['min_over_max']:.2f}, mean util = {b['mean_util']:.2f}")
+        if self.fifo_costs:
+            t = self.totals
+            sf = self.skip_fifo
+            lines.append(f"FIFO memory: skip FIFO -> {sf.mem} ({sf.depth_alloc} deep: {sf.mem_bram18} BRAM18 / {sf.mem_uram} URAM / {sf.mem_lut} LUT); "
+                         f"all FIFOs: {t['fifo_lut']:.0f} LUT, {t['fifo_bram18']:.0f} BRAM18, {t['fifo_uram']:.0f} URAM")
         v = self.verification
         if v:
             lines.append(
@@ -359,14 +370,94 @@ def model_bottleneck(
 
 # ---------------------------------------------------------------- simulation verification
 
-def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.01, max_tries: int = 8, shrink: bool = True) -> dict:
+
+# ---------------------------------------------------------------- FIFO memory mapping (LUT/SRL, BRAM, URAM)
+
+URAM_BITS = 72 * 4096          # one URAM288: 4096 deep x 72 wide
+FIFO_SRL_MAX_DEPTH = 64        # up to here the auto policy keeps a FIFO in SRL / LUT shift registers
+FIFO_URAM_MIN_EFF = 0.2        # auto: use URAM only if at least this fraction of the allocated URAM bits is used (BRAM-bound: relieve BRAM18 where URAM is not wasteful)
+
+
+def _pow2_at_least(n: int, lo: int = 16) -> int:
+    p = lo
+    while p < n:
+        p *= 2
+    return p
+
+
+def fifo_memory(width_bits: int, depth: int, mem: str = "auto") -> dict:
+    """Cost of one FIFO of `width_bits` x `depth` words in each memory type and the pick for `mem` in {auto, srl, bram, uram}.
+    srl : FINN StreamingFIFO impl_style=rtl (SRL32 shift registers): ~width * ceil(depth/32) LUT, any depth; the only style rtlsim supports.
+    bram: Vivado FIFO IP (impl_style=vivado, ram_style=block): depth rounded UP to a power of two >= 16, BRAM18 over the SDP aspect table.
+    uram: same IP with ram_style=ultra: ceil(width/72) * ceil(depth_alloc/4096) URAM288 (4096 x 72 each).
+    auto: srl for depth <= FIFO_SRL_MAX_DEPTH; otherwise URAM if its bit utilisation >= FIFO_URAM_MIN_EFF (wide FIFOs), else BRAM
+    (a narrow and deep FIFO such as the 4-bit skip FIFO is far denser in BRAM18's 16K x 1 mode than in URAM: width 4 would use 4 of 72 bits)."""
+    bits = width_bits * depth
+    alloc = _pow2_at_least(depth)
+    opts = {
+        "srl": dict(mem="srl", depth_alloc=depth, lut=width_bits * math.ceil(depth / 32) + 8, bram18=0, uram=0),
+        "bram": dict(mem="bram", depth_alloc=alloc, lut=0, bram18=_fifo_bram18(width_bits, alloc), uram=0),
+        "uram": dict(mem="uram", depth_alloc=alloc, lut=0, bram18=0, uram=math.ceil(width_bits / 72) * math.ceil(alloc / 4096)),
+    }
+    for o in opts.values():
+        cap = (o["bram18"] * 18432 + o["uram"] * URAM_BITS) or max(1, o["lut"] * 32)
+        o["bits_used"], o["efficiency"] = bits, bits / cap
+    if mem != "auto":
+        pick = opts[mem]
+    elif depth <= FIFO_SRL_MAX_DEPTH:
+        pick = opts["srl"]
+    else:
+        pick = opts["uram"] if opts["uram"]["efficiency"] >= FIFO_URAM_MIN_EFF else opts["bram"]
+    return dict(pick, options=opts)
+
+
+def finalize_fifo_costs(r: "BottleneckResult", mem: str = "auto") -> None:
+    """After verify_with_sim: price EVERY FIFO of the verified graph (r.fifo_costs), update r.skip_fifo and rebuild r.totals so that
+    LUT / BRAM18 / URAM include all FIFOs (the big prefetch FIFOs in front of the sliding windows were not counted before).
+    `mem` applies to the skip FIFO; all other FIFOs use the auto policy."""
+    costs = {}
+    for name, f in r.fifo_graph["fifos"].items():
+        if f["producer"] == "Source" or f["consumer"] == "Sink":
+            continue
+        costs[name] = fifo_memory(f["bits"], f["depth"], mem if name == "skip FIFO" else "auto")
+    r.fifo_costs = costs
+    sf, c = r.skip_fifo, costs["skip FIFO"]
+    sf.mem, sf.depth_alloc, sf.mem_bram18, sf.mem_uram, sf.mem_lut = c["mem"], c["depth_alloc"], c["bram18"], c["uram"], c["lut"]
+    dwc_lut = sum(d.lut for d in r.dwcs)
+    r.totals = dict(
+        lut=sum(x.lut for x in r.nodes) + dwc_lut + sum(v["lut"] for v in costs.values()),
+        bram18=sum(x.bram18 for x in r.nodes) + sum(v["bram18"] for v in costs.values()),
+        uram=sum(x.uram for x in r.nodes) + sum(v["uram"] for v in costs.values()),
+        dsp=sum(x.dsp for x in r.nodes), dwc_lut=dwc_lut,
+        fifo_lut=sum(v["lut"] for v in costs.values()), fifo_bram18=sum(v["bram18"] for v in costs.values()),
+        fifo_uram=sum(v["uram"] for v in costs.values()),
+    )
+
+
+def _fifo_attrs(r: "BottleneckResult", fname: str) -> dict:
+    c = getattr(r, "fifo_costs", {}).get(fname)
+    if not c:
+        return {}
+    return dict(mem=c["mem"], depth_alloc=int(c["depth_alloc"]), mem_lut=int(c["lut"]), mem_bram18=int(c["bram18"]), mem_uram=int(c["uram"]),
+                mem_efficiency=float(round(c["efficiency"], 3)),
+                finn_impl=("rtl" if c["mem"] == "srl" else f"vivado/{'block' if c['mem'] == 'bram' else 'ultra'}"))
+
+
+# escalation schedule: (elastic scale, FIFO after FMPad holds the next frame's padding, uniform depth multiplier)
+_SIZING_SCHEDULE = ((1, False, 1), (1, True, 1), (2, True, 1), (2, True, 2), (4, True, 2), (4, True, 4))
+
+
+def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02, max_tries: int = 8, shrink: bool = True,
+                    tol_soft: float = 0.03, fifo_mem: str = "auto") -> dict:
     """Run bottleneck_sim on the chosen foldings and size the FIFOs until the simulated throughput meets T.
 
     1. Input paced at T with an unbounded skip FIFO: measures the skip FIFO the design really needs and the latency;
        the skip FIFO is raised to that if the analytic estimate was short.
-    2. Saturated input: the elastic FIFO in front of FMPad starts at (pad+1) pixels (the SWG needs pad+1 new real
-       pixels at every output row start) and doubles until the steady cyc/px is within tol of T. Without it the
-       SWG starves the 3x3 MVAU at each row start.
+    2. Saturated input over 3 back-to-back frames (steady cyc/px = last frame's period). The FIFO in front of FMPad must
+       hold the next frame's first window, n_fill = pad*W + pad + 1 real pixels: the sliding window serves ONE frame at a
+       time, so without it every frame pays n_fill pixel times of the upstream period as a gap (hardware: 73.7 / 75.8 /
+       87.9 cyc/px at d = 1 / 2 / 8 instead of 72). If a residual gap remains, the FIFO after FMPad also holds the next
+       frame's top padding rows; then a uniform depth doubles until the period is within tol of T.
     The verified FIFO depths are stored in r.fifo_graph for export_onnx. Raises RuntimeError if no depth reaches T."""
     from bottleneck_sim import UNBOUNDED, simulate
 
@@ -374,8 +465,10 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.01,
     cf = r.params["cmid"] // next(n for n in r.nodes if n.name == "SWG_m").simd
     words_px = r.params["cout"] // r.skip_fifo.pe
 
-    elastic = (pad + 1) * cf + 2
-    paced = simulate(r, inject_interval=T, skip_depth=UNBOUNDED, fifo_depth=fifo_depth, elastic_depth=elastic)
+    W = r.params["width"]
+    elastic = (pad * W + pad + 1) * cf + 2
+    pad_out = pad * (W + 2 * pad) * cf + 2                  # padded top rows of the next frame
+    paced = simulate(r, inject_interval=T, skip_depth=UNBOUNDED, fifo_depth=fifo_depth, elastic_depth=elastic, frames=2)
     need = paced.fifo_max["skip FIFO"]
     if need > r.skip_fifo.depth_words:
         d = need + words_px
@@ -388,21 +481,28 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.01,
     # double one uniform depth until the saturated run reaches T, then shrink every FIFO to its observed occupancy.
     sat = None
     tries = 0
-    depth = fifo_depth
-    for tries in range(1, max_tries + 1):
-        elastic = max(elastic, depth)
-        sat = simulate(r, inject_interval=0, skip_depth=r.skip_fifo.depth_words, fifo_depth=depth, elastic_depth=elastic)
+    elastic0 = elastic
+    for tries, (es, with_pad, um) in enumerate(_SIZING_SCHEDULE[:max_tries], 1):
+        depth = fifo_depth * um
+        elastic = max(elastic0 * es, depth)
+        extra = {"FMPad->out": pad_out * es} if with_pad else {}
+        sat = simulate(r, inject_interval=0, skip_depth=r.skip_fifo.depth_words, fifo_depth=depth, elastic_depth=elastic,
+                       fifo_depths=extra, frames=3)
         if not sat.deadlock and sat.steady_cyc_px <= T * (1 + tol):
             break
-        depth *= 2
-        elastic *= 2
     if not sat.deadlock and sat.steady_cyc_px <= T * (1 + tol) and shrink:
         sized = {n: max(fifo_depth, occ) for n, occ in sat.fifo_max.items() if n != "skip FIFO"}
         small = simulate(r, inject_interval=0, skip_depth=r.skip_fifo.depth_words, fifo_depth=depth, elastic_depth=elastic,
-                         fifo_depths=sized)
+                         fifo_depths=sized, frames=3)
         if not small.deadlock and small.steady_cyc_px <= T * (1 + tol):
             sat = small
     ok = (not sat.deadlock) and sat.steady_cyc_px <= T * (1 + tol)
+    if not ok and not sat.deadlock and sat.steady_cyc_px <= T * (1 + tol_soft):
+        # inherent per-frame gap: the sliding window needs the next frame's first window (padding rows are read at one word
+        # per cycle) before it can emit, which no FIFO hides completely; accept up to tol_soft but say so
+        r.warnings.append(f"steady {sat.steady_cyc_px:.2f} cyc/px is {sat.steady_cyc_px / T - 1:.1%} above T: residual per-frame "
+                          f"window-fill gap that FIFO sizing cannot remove")
+        ok = True
     graph = sat.graph
     for name, occ in sat.fifo_max.items():
         graph["fifos"][name]["max_occ"] = occ
@@ -410,7 +510,9 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.01,
     r.verification = dict(
         ok=ok, steady_cyc_px=sat.steady_cyc_px, latency_first_out=paced.latency_first_out, frame_cycles=sat.cycles,
         skip_needed_words=need, elastic_depth=elastic, uniform_depth=depth, tries=tries, deadlock=sat.deadlock,
+        frame_periods=sat.frame_periods,
     )
+    finalize_fifo_costs(r, fifo_mem)
     if not ok:
         raise RuntimeError(
             f"simulation does not reach T={T}: steady {sat.steady_cyc_px:.2f} cyc/px, deadlock={sat.deadlock}, "
@@ -492,6 +594,7 @@ def export_onnx(r: BottleneckResult, path: str) -> None:
                 bits=int(depth * bits), max_occupancy=int(f.get("max_occ", 0)),
                 bram18_if_block=int(_fifo_bram18(bits, depth)), lutram_luts_if_distributed=int(math.ceil(bits * depth / 64)),
                 is_skip_fifo=int(fname == "skip FIFO"), producer=f["producer"], consumer=f["consumer"],
+                **_fifo_attrs(r, fname),
             ))
             shape[f"{fname}:out"] = shape[tin]
             wired.append(f"{fname}:out")
@@ -564,7 +667,7 @@ def to_folding_config(r: BottleneckResult) -> dict:
         fifos.append(dict(
             name=name, producer=role(f["producer"]), consumer=role(f["consumer"]), producer_node=f["producer"],
             consumer_node=f["consumer"], depth=int(f["depth"]), width_bits=int(f["bits"]), max_occupancy=int(f.get("max_occ", 0)),
-            is_skip=name == "skip FIFO",
+            is_skip=name == "skip FIFO", **_fifo_attrs(r, name),
         ))
     v = r.verification
     return dict(

@@ -111,3 +111,92 @@ BRAM, expect ~34 BRAM18). Append rows to `hardware/results.csv` via `hardware/co
   and the skip branch must buffer what arrives during the SWG fill (about half the image at d=16). The simulator finds that with depth-2 FIFOs everywhere the
   block runs at ~80 cyc/px, not 72. If hardware shows a similar loss, check those two FIFOs first.
 - Depth 1 would be a combinational ready path; real FINN FIFOs are >= 2 (skid buffer), so do not try to go below 2.
+
+
+## 9. Downsampling probes (6 more cases) -- added after the regular-bottleneck batch
+
+Goal is the same (no deadlock in hardware, throughput within 2% of the target), now for the ENet **downsampling** bottleneck:
+`dn_cin16_cout32_in64_int{4,6,8}_{fmpad,mvau}`. One block = one partition = one single-partition run, exactly like section 4
+(use `SET=dn CONTAINER=<name> bash run_probes.sh`; `STOP_AFTER=folding` first). Model: `MILP/analytical/dn_bottleneck.py`
+(+ `dn_bottleneck_sim.py`, `test_dn_bottleneck.py`, section "Downsampling bottleneck" in `analytical.md`).
+
+Case: Cin 16 -> Cout 32, internal ratio 4 (Cmid 8), 64x64 input -> 32x32 output, uniform INT b, frame budget F = 72*32*32 = 73728
+cycles (T_out = 72 cyc per OUTPUT pixel, T_in = 18 per input pixel). The target for rtlsim is therefore 72 cyc per output pixel
+(`predicted.T` in the folding json; compare script already uses it). Dummy weights, seed 0. No dilation (3x3 d = 1, pad 1).
+
+Graph (after merge pass): `Thr_in -> Dup -> [main] SWG_r(2x2 s2) -> MVAU_r -> Thr_r -> FMPad(3x3) -> SWG_m -> MVAU_m -> Thr_m -> MVAU_e -> Thr_e -> Add`,
+`[skip] Dup -> MaxPool -> (A) identity MVAU_s -> Thr_s | (B) channel pad FMPad_c -> Thr_s -> Add`, `Add -> Thr_out`.
+
+* **`mvau` variants (3 probes) are the comparison baseline** = the existing `FINNDownsamplingBottleneck` unchanged: skip = MaxPool ->
+  frozen padded-identity 1x1 conv (INT8 weights) -> MVAU_s. They need NO new FINN pass: do these three first (`CASES="dn_..._mvau"`).
+  Folding roles: dup, swg_r, mvau_r, thr_r, fmpad, swg_m, mvau_m, thr_m, mvau_e, thr_e, maxpool, mvau_s, thr_s, add, thr_out
+  (`identify_roles_down` identifies MVAUs by (MW, MH) = (4*Cin, Cmid), (9*Cmid, Cmid), (Cmid, Cout), (Cin, Cout); the two sliding windows by
+  ConvKernelSize 2 vs 3; the MaxPool, Dup, Add by op type).
+* **`fmpad` variants (3 probes) replace the identity MVAU by a channel zero-pad**: the exported ONNX has `MaxPool -> Pad(pads [0,0,0,0, 0,16,0,0],
+  value 0) -> Quant` (the residual add's shared input quantizer, i.e. the skip threshold sits AFTER the pad = "pad_thr" order in the model;
+  the model's default "thr_pad" order would need a different export, not done). FINN has no hardware op for a channel pad, so a **new pass
+  `hardware/finn_channel_pad.py::step_channel_pad_to_fmpadding` must be written by you** (currently a stub raising NotImplementedError; the
+  full contract is in its docstring). Idea: the stream is NHWC, so re-read it as `[N, H*W, C/s, s]` (s = 16 here) and pad the "width" axis
+  (C/s) on the right by (Cout-Cin)/s = 1 with FMPadding: ImgDim [1024, 1], NumChannels = SIMD = 16, Padding [0,0,0,1] (the exact values are
+  in `folding["fmpad_c"]`). The graph keeps its real tensor shapes. Test it on the tiny example in `MILP/analytical/analytical.md` (2x2, C 2 -> 6,
+  s = 2) before trusting it, in whole-graph rtlsim. If FINN rejects this, report why: the alternatives are a StreamingConcat with a
+  zero stream (needs a zero source) or going back to the identity MVAU.
+* **Differences from the regular block to watch for in the logs:** two pixel domains (Dup, MaxPool, SWG_r see 64x64, the rest 32x32);
+  MaxPool is not foldable (one pixel = all Cin channels per cycle, ~1.25*64*64 cycles per frame) so a width converter widens Dup's stream to
+  Cin*A bits in front of it; the strided 2x2 sliding window has a ~2W-pixel buffer (no elastic FIFO was needed in the model); the only deep
+  FIFO is the skip FIFO (`skip FIFO`, 1662 words x A bit for fmpad/pad_thr, 1259 for mvau at INT4), every other edge is 2-4 words.
+* **Expected numbers from the model (INT4 / INT6 / INT8):** fmpad LUT 3208 / 3885 / 4511, BRAM18 5 / 10 / 38, DSP 20 / 16 / 16;
+  mvau LUT 3520 / 4265 / 4898, BRAM18 5 / 11 / 42, DSP 28 / 24 / 24; steady 72.00 cyc per output pixel; first-out latency about 3.8k (fmpad)
+  / 4.1k (mvau) cycles. FMPadding LUT is not calibrated in the cost model (priced 0), so landed LUT of the fmpad variant is expected to
+  exceed the prediction by the FMPadding + width converters.
+* Negative control as in section 4: `EXTRA="--skip-scale 0.5"` should deadlock/stall the down block too (the model deadlocks below ~600 words
+  of skip FIFO at INT4/mvau-order settings). Keep ordinary FIFOs at their forced 2-4 words for that test.
+
+
+## 10. Follow-up to FINN_AGENT_PRELIM_REPORT.md -- READ THIS BEFORE RUNNING MORE BUILDS
+
+Thank you for the report. Three things change the plan.
+
+**10.1 The PASS verdicts were false positives (FINN's "stable throughput" is mis-scaled).** From your own numbers
+(`N = 6`, `cycles` = 6-frame total, `latency_cycles` = the single-frame run): FINN's `stable_throughput` equals
+`N / (cycles - latency_cycles)`, but `cycles - latency_cycles` covers only the other **N-1** frames. Correct steady period:
+
+    cyc/px = (cycles - latency_cycles) / (N - 1) / pixels_per_frame        (pixels_per_frame = 1024 for the regular blocks)
+
+| case | FINN field | corrected | target |
+|---|---|---|---|
+| d1_int4 | 61.39 | **73.67** | 72 |
+| d2_int4 | 63.17 | **75.80** | 72 |
+| d8_int4 (3 frames) | 58.61 | **87.92** (= (cycles-lat)/2) | 72 |
+
+`steady_cyc_per_pixel` in `finn_bottleneck_probe_build.py` must use `(N-1)`; `compare_probe_vs_model.py` already recomputes it from the
+raw `cycles` / `latency_cycles` / `N` fields (and prints FINN's number only for reference). Verdicts: PASS <= 2%, NEAR <= 3%, SLOW otherwise.
+Single-frame totals (`latency_cycles`) match the model to 0.3% (76115 vs 76079, 78255 vs 78260, 91130 vs 91325): the per-frame model was right,
+**consecutive frames just do not overlap as the single-frame simulation assumed.**
+
+**10.2 Cause and cure.** The sliding window (and the FMPadding feeding it) serves ONE frame at a time. Frame k+1's first window needs
+`n_fill = pad*W + pad + 1` freshly computed real pixels (d1: 34, d2: 67, d4: 133, d8: 265, d16: 529 at cf = 1) and the upstream (MVAU_r, ~64 cyc/px)
+delivers them only after frame k's last window is out, so every frame pays about n_fill x 64 cycles of gap (d8: ~17k of 74k). The simulator
+(`bottleneck_sim.simulate(..., frames=3)`) now models this and reproduces the hardware to 0.6% (73.85 / 76.03 / 88.31 for d1 / d2 / d8).
+The cure is elasticity in front of the window, not a faster node: the FIFO feeding FMPad must hold the next frame's first window
+(`>= n_fill*cf + 2` words) and the FIFO after FMPad the next frame's top padding rows (`>= pad*(W+2*pad)*cf + 2`). With those the simulated
+period is 72.0 / 72.2 / 72.3 / 72.7 for d1 / d2 / d4 / d8 and 74.0 for d16 (a residual 2.7% that no FIFO removes: the window reads the next
+frame's padding rows at one word per cycle before it can emit; flagged as a warning). **The `_folding.json` files in `inputs/` have been
+regenerated with these depths (edge `fmpad -> swg` is new in the FIFO list). Re-run all regular cases with them; the old runs used the
+old depths and are expected to be SLOW.** Memory note: the prefetch FIFOs are `32 bit x ~270` words at d8 (about 1 BRAM18 or ~300 LUT as SRL),
+cheap compared to the 22% throughput they recover.
+
+**10.3 FIFO implementation changes the resource prediction (open question for you).** You found that overriding a FIFO depth forces
+`impl_style="rtl"` (SRL) because the Vivado FIFO IP only accepts a power-of-two depth menu (16 ... 32768) and rtlsim supports only rtl. So in the
+probes the 8736-deep skip FIFO is built from SRL LUTs (about `width * ceil(depth/32)` LUT, ~1.1k LUT at INT4), whereas the model priced it as BRAM
+(3 BRAM18, unrounded). For the real design we want BRAM (BRAM-bound study, narrow+deep FIFO): that needs `impl_style="vivado"` with the depth
+rounded UP to the next power of two (8736 -> 16384, 4 bit wide -> 4 BRAM18; 1662 -> 2048 ...). Please report both numbers if you can: (a) OOC of the
+rtl/SRL build as is, (b) one OOC run with the skip FIFO forced to `impl_style="vivado"` at the rounded depth (rtlsim is not available for it:
+verify throughput with the rtl build, then swap the FIFO only for the synthesis). The model will get a `skip_fifo_impl` knob once we know
+(b) works.
+
+**10.4 Housekeeping.** Eight parallel builds were fine. Keep `--rtlsim-frames 6`. `collect_probe_outputs.sh` also collects `dn_cin16_*` dirs;
+stale dirs from the iteration phase can be ignored (the compare script lists every dir it finds, so delete or move them before comparing).
+The build script on the host was extended with downsampling support (section 9): `identify_roles_down`, a `custom` flag in the folding
+dict (skipped by the generic apply), and the `finn_channel_pad` hook -- your container copy does not have these edits yet; `run_probes.sh`
+re-copies the host files, so just rerun it (check that your fixes 1-5 are still in the host copy, they were when I extended it).

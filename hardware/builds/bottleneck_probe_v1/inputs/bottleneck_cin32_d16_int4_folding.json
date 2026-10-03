@@ -70,10 +70,17 @@
       "consumer": "dwc",
       "producer_node": "Dup",
       "consumer_node": "DWC(Dup->MVAU_r)",
-      "depth": 4,
+      "depth": 8,
       "width_bits": 4,
-      "max_occupancy": 4,
-      "is_skip": false
+      "max_occupancy": 8,
+      "is_skip": false,
+      "mem": "srl",
+      "depth_alloc": 8,
+      "mem_lut": 12,
+      "mem_bram18": 0,
+      "mem_uram": 0,
+      "mem_efficiency": 0.083,
+      "finn_impl": "rtl"
     },
     {
       "name": "Dup->skip",
@@ -81,10 +88,17 @@
       "consumer": "thr_s",
       "producer_node": "Dup",
       "consumer_node": "Thr_s",
-      "depth": 4,
+      "depth": 8,
       "width_bits": 4,
-      "max_occupancy": 4,
-      "is_skip": false
+      "max_occupancy": 8,
+      "is_skip": false,
+      "mem": "srl",
+      "depth_alloc": 8,
+      "mem_lut": 12,
+      "mem_bram18": 0,
+      "mem_uram": 0,
+      "mem_efficiency": 0.083,
+      "finn_impl": "rtl"
     },
     {
       "name": "Dup->DWC->MVAU_r",
@@ -92,10 +106,17 @@
       "consumer": "mvau_r",
       "producer_node": "DWC(Dup->MVAU_r)",
       "consumer_node": "MVAU_r",
-      "depth": 4,
+      "depth": 8,
       "width_bits": 16,
-      "max_occupancy": 4,
-      "is_skip": false
+      "max_occupancy": 8,
+      "is_skip": false,
+      "mem": "srl",
+      "depth_alloc": 8,
+      "mem_lut": 24,
+      "mem_bram18": 0,
+      "mem_uram": 0,
+      "mem_efficiency": 0.167,
+      "finn_impl": "rtl"
     },
     {
       "name": "MVAU_r->out",
@@ -103,10 +124,17 @@
       "consumer": "thr_r",
       "producer_node": "MVAU_r",
       "consumer_node": "Thr_r",
-      "depth": 2,
+      "depth": 8,
       "width_bits": 14,
       "max_occupancy": 1,
-      "is_skip": false
+      "is_skip": false,
+      "mem": "srl",
+      "depth_alloc": 8,
+      "mem_lut": 22,
+      "mem_bram18": 0,
+      "mem_uram": 0,
+      "mem_efficiency": 0.159,
+      "finn_impl": "rtl"
     },
     {
       "name": "Thr_r->out",
@@ -114,10 +142,17 @@
       "consumer": "dwc",
       "producer_node": "Thr_r",
       "consumer_node": "DWC(Thr_r->FMPad)",
-      "depth": 2,
+      "depth": 8,
       "width_bits": 4,
       "max_occupancy": 1,
-      "is_skip": false
+      "is_skip": false,
+      "mem": "srl",
+      "depth_alloc": 8,
+      "mem_lut": 12,
+      "mem_bram18": 0,
+      "mem_uram": 0,
+      "mem_efficiency": 0.083,
+      "finn_impl": "rtl"
     },
     {
       "name": "Thr_r->DWC->FMPad",
@@ -125,10 +160,17 @@
       "consumer": "fmpad",
       "producer_node": "DWC(Thr_r->FMPad)",
       "consumer_node": "FMPad",
-      "depth": 31,
+      "depth": 2124,
       "width_bits": 32,
-      "max_occupancy": 31,
-      "is_skip": false
+      "max_occupancy": 28,
+      "is_skip": false,
+      "mem": "uram",
+      "depth_alloc": 4096,
+      "mem_lut": 0,
+      "mem_bram18": 0,
+      "mem_uram": 1,
+      "mem_efficiency": 0.23,
+      "finn_impl": "vivado/ultra"
     },
     {
       "name": "FMPad->out",
@@ -136,10 +178,17 @@
       "consumer": "swg",
       "producer_node": "FMPad",
       "consumer_node": "SWG_m",
-      "depth": 4,
+      "depth": 4104,
       "width_bits": 32,
-      "max_occupancy": 4,
-      "is_skip": false
+      "max_occupancy": 2095,
+      "is_skip": false,
+      "mem": "uram",
+      "depth_alloc": 8192,
+      "mem_lut": 0,
+      "mem_bram18": 0,
+      "mem_uram": 2,
+      "mem_efficiency": 0.223,
+      "finn_impl": "vivado/ultra"
     },
     {
       "name": "SWG_m->out",
@@ -147,10 +196,17 @@
       "consumer": "mvau_m",
       "producer_node": "SWG_m",
       "consumer_node": "MVAU_m",
-      "depth": 4,
+      "depth": 8,
       "width_bits": 32,
-      "max_occupancy": 4,
-      "is_skip": false
+      "max_occupancy": 8,
+      "is_skip": false,
+      "mem": "srl",
+      "depth_alloc": 8,
+      "mem_lut": 40,
+      "mem_bram18": 0,
+      "mem_uram": 0,
+      "mem_efficiency": 0.2,
+      "finn_impl": "rtl"
     },
     {
       "name": "MVAU_m->out",
@@ -158,10 +214,17 @@
       "consumer": "thr_m",
       "producer_node": "MVAU_m",
       "consumer_node": "Thr_m",
-      "depth": 2,
+      "depth": 8,
       "width_bits": 15,
       "max_occupancy": 1,
-      "is_skip": false
+      "is_skip": false,
+      "mem": "srl",
+      "depth_alloc": 8,
+      "mem_lut": 23,
+      "mem_bram18": 0,
+      "mem_uram": 0,
+      "mem_efficiency": 0.163,
+      "finn_impl": "rtl"
     },
     {
       "name": "Thr_m->out",
@@ -169,10 +232,17 @@
       "consumer": "dwc",
       "producer_node": "Thr_m",
       "consumer_node": "DWC(Thr_m->MVAU_e)",
-      "depth": 2,
+      "depth": 8,
       "width_bits": 4,
       "max_occupancy": 1,
-      "is_skip": false
+      "is_skip": false,
+      "mem": "srl",
+      "depth_alloc": 8,
+      "mem_lut": 12,
+      "mem_bram18": 0,
+      "mem_uram": 0,
+      "mem_efficiency": 0.083,
+      "finn_impl": "rtl"
     },
     {
       "name": "Thr_m->DWC->MVAU_e",
@@ -180,10 +250,17 @@
       "consumer": "mvau_e",
       "producer_node": "DWC(Thr_m->MVAU_e)",
       "consumer_node": "MVAU_e",
-      "depth": 2,
+      "depth": 8,
       "width_bits": 16,
       "max_occupancy": 1,
-      "is_skip": false
+      "is_skip": false,
+      "mem": "srl",
+      "depth_alloc": 8,
+      "mem_lut": 24,
+      "mem_bram18": 0,
+      "mem_uram": 0,
+      "mem_efficiency": 0.167,
+      "finn_impl": "rtl"
     },
     {
       "name": "MVAU_e->out",
@@ -191,10 +268,17 @@
       "consumer": "thr_e",
       "producer_node": "MVAU_e",
       "consumer_node": "Thr_e",
-      "depth": 2,
+      "depth": 8,
       "width_bits": 12,
       "max_occupancy": 1,
-      "is_skip": false
+      "is_skip": false,
+      "mem": "srl",
+      "depth_alloc": 8,
+      "mem_lut": 20,
+      "mem_bram18": 0,
+      "mem_uram": 0,
+      "mem_efficiency": 0.15,
+      "finn_impl": "rtl"
     },
     {
       "name": "Thr_e->out",
@@ -202,10 +286,17 @@
       "consumer": "add",
       "producer_node": "Thr_e",
       "consumer_node": "Add",
-      "depth": 2,
+      "depth": 8,
       "width_bits": 4,
       "max_occupancy": 1,
-      "is_skip": false
+      "is_skip": false,
+      "mem": "srl",
+      "depth_alloc": 8,
+      "mem_lut": 12,
+      "mem_bram18": 0,
+      "mem_uram": 0,
+      "mem_efficiency": 0.083,
+      "finn_impl": "rtl"
     },
     {
       "name": "skip FIFO",
@@ -216,7 +307,14 @@
       "depth": 17472,
       "width_bits": 4,
       "max_occupancy": 17472,
-      "is_skip": true
+      "is_skip": true,
+      "mem": "bram",
+      "depth_alloc": 32768,
+      "mem_lut": 0,
+      "mem_bram18": 8,
+      "mem_uram": 0,
+      "mem_efficiency": 0.474,
+      "finn_impl": "vivado/block"
     },
     {
       "name": "Add->out",
@@ -224,25 +322,35 @@
       "consumer": "thr_out",
       "producer_node": "Add",
       "consumer_node": "Thr_out",
-      "depth": 2,
+      "depth": 8,
       "width_bits": 5,
       "max_occupancy": 1,
-      "is_skip": false
+      "is_skip": false,
+      "mem": "srl",
+      "depth_alloc": 8,
+      "mem_lut": 13,
+      "mem_bram18": 0,
+      "mem_uram": 0,
+      "mem_efficiency": 0.096,
+      "finn_impl": "rtl"
     }
   ],
   "predicted": {
     "T": 72,
-    "steady_cyc_px": 72.0,
+    "steady_cyc_px": 73.962890625,
     "latency_first_out": 39316,
-    "frame_cycles": 108749,
+    "frame_cycles": 259169,
     "skip_fifo_words": 17472,
     "skip_fifo_width_bits": 4,
     "totals": {
-      "lut": 2896.8123533333337,
-      "bram18": 5.0,
-      "uram": 0.0,
+      "lut": 3122.8123533333337,
+      "bram18": 8.0,
+      "uram": 3.0,
       "dsp": 16.0,
-      "dwc_lut": 61.74870000000001
+      "dwc_lut": 61.74870000000001,
+      "fifo_lut": 226,
+      "fifo_bram18": 8,
+      "fifo_uram": 3
     },
     "nodes": {
       "dup": {
