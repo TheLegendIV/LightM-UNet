@@ -61,8 +61,20 @@ rtlsim and OOC cleanly, they just **miss their throughput target**, which is
 a folding/parallelization gap rather than a crash:
 
 - `up_cin32_cout16_in32_int{4,6,8}_noconv`: ~20.3-20.5 cyc/px vs 18.0 target
-  (~14% over budget). The `conv` variant (same Cin/Cout) hits target fine, so
-  this is specific to the `noconv` topology's own folding, not a shared bug.
+  (~14% over budget). **ROOT-CAUSED 2026-10-04** via the 6-case `SET=upd`
+  diagnostic batch (handoff §16): the FIFOs immediately around
+  `UpsampleNearestNeighbour` are undersized (stock 8 words each side vs. the
+  ~40/91 words needed for `mvau_p` to run ahead while the upsampler re-emits
+  a row). Evidence: `_fupnn` (resize just those two FIFOs) alone recovers to
+  PASS (16.00 cyc/px), `_fall` (fupnn+fjoin) gives the identical 16.00 -- so
+  `fjoin` (the `Thr_e->Add` join FIFO resize) contributes nothing on its own
+  (`_fjoin` alone stays SLOW at 20.53, unchanged from baseline). Raising PE
+  (`_pe2`/`_pe4`) also independently recovers it (overprovisioned compute
+  absorbs the same stall differently), but the FIFO-sizing bug in
+  `up_bottleneck_sim.py`'s folding-config generator for the `noconv` path is
+  the actual root cause, not a join-chain PE-slack issue. Fix: widen the
+  `dwc->upnn`/`upnn->...` FIFOs in the `noconv` folding config generator to
+  match `_fupnn`'s values (40/91 words) instead of raising PE/SIMD.
 - `init_cin1_cout4_in256_int{4,6,8}` (non-pool route): 15.78 cyc/px vs 5.0
   target (>3x over) — the pool-route variant (`_int4_pool`) comes much closer
   (5.01 vs 4.2) before hitting the separate Vivado-crash issue above.
@@ -81,7 +93,11 @@ account for the gap.
 
 ## Open / not yet done
 
-- Root-cause the three throughput shortfalls above.
+- Apply the `noconv` FIFO-sizing fix (widen `dwc->upnn`/`upnn->...` to
+  40/91 words) in `up_bottleneck_sim.py`'s folding generator and re-verify
+  `up_cin32_cout16_in32_int{4,6,8}_noconv` lands PASS without needing a PE bump.
+- Root-cause the remaining two throughput shortfalls (`init` non-pool,
+  `fnl_nobias`) -- the `noconv` one above is now resolved.
 - Retry/investigate `fnl_cin4_cout5_in128_int4_bias` (only one `NO-RTLSIM`
   attempt on record, never followed up).
 - RTL MVU Verilog bug (item 2): try a different PE/SIMD folding, or escalate
