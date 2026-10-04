@@ -78,6 +78,16 @@ a folding/parallelization gap rather than a crash:
 - `init_cin1_cout4_in256_int{4,6,8}` (non-pool route): 15.78 cyc/px vs 5.0
   target (>3x over) — the pool-route variant (`_int4_pool`) comes much closer
   (5.01 vs 4.2) before hitting the separate Vivado-crash issue above.
+  **PARTIALLY INVESTIGATED 2026-10-04**: landed the `MoveMaxPoolPastMultiThreshold`
+  graph reorder (threshold upstream of the maxpool, matching the real
+  FINN-lowering order) and re-ran as `SET=intpre` (`_thrpre` twins, same
+  ONNX, reordered graph). Result: 13.04 cyc/px for all of int4/int6/int8 —
+  better than 15.78 (~17% faster) but still SLOW, still >2.6x over target,
+  and identical across all three bit widths (same signature as `fnl_nobias`
+  below — points to a structural bottleneck independent of folding/bit
+  width, not yet identified). The reorder was necessary groundwork (it's
+  what lets the pool branch's `MaxPool` become eligible for `MakeMaxPoolNHWC`
+  at all) but is not sufficient on its own to close the gap.
 - `fnl_cin4_cout5_in128_int{4,6,8}_nobias`: 763.95 cyc/px vs 1.1 target
   (~700x over) — this looks like a real folding/parallelization gap in the
   final-deconv probe's config, not noise. The `_bias` variant was only ever
@@ -97,7 +107,10 @@ account for the gap.
   40/91 words) in `up_bottleneck_sim.py`'s folding generator and re-verify
   `up_cin32_cout16_in32_int{4,6,8}_noconv` lands PASS without needing a PE bump.
 - Root-cause the remaining two throughput shortfalls (`init` non-pool,
-  `fnl_nobias`) -- the `noconv` one above is now resolved.
+  `fnl_nobias`) -- the `noconv` one above is now resolved. `init` non-pool
+  improved 15.78->13.04 via the thrpre reorder but is still unexplained;
+  next step is diffing `stages.folding` vs `predicted.nodes` per-node to find
+  which HW node accounts for the remaining ~2.6x gap.
 - Retry/investigate `fnl_cin4_cout5_in128_int4_bias` (only one `NO-RTLSIM`
   attempt on record, never followed up).
 - RTL MVU Verilog bug (item 2): try a different PE/SIMD folding, or escalate
