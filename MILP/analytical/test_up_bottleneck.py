@@ -51,15 +51,35 @@ class TestUpModel(unittest.TestCase):
         self.assertEqual(self.n["Dup"].frame_cycles, 32 * 32 * 32 // self.n["Dup"].pe)
         self.assertEqual(self.n["Thr_p"].frame_cycles, 32 * 32 * (16 // self.n["Thr_p"].pe))
 
-    def test_join_pe_widens_only_the_join_chain(self):
-        base = model_up_bottleneck(**REF, skip_conv=False)
-        wide = model_up_bottleneck(**REF, skip_conv=False, join_pe=4)
+    def test_join_pe_rule_for_the_nearest_upsampler(self):
+        # UpNN re-emits each stored row with no new input: d = Cout/PE must satisfy 2*d <= t_in - c_p. U4 up4: t_in 72, c_p 64 -> d <= 4 -> PE 4
+        auto = model_up_bottleneck(**REF, skip_conv=False)
+        one = model_up_bottleneck(**REF, skip_conv=False, join_pe=1)
         pe = lambda r: {x.name: x.pe for x in r.nodes}
-        self.assertEqual((pe(base)["Thr_s"], pe(base)["Add"], pe(base)["Thr_out"]), (1, 1, 1))
-        self.assertEqual((pe(wide)["Thr_s"], pe(wide)["Add"], pe(wide)["Thr_out"]), (4, 4, 4))
+        self.assertEqual((pe(auto)["Thr_s"], pe(auto)["Add"], pe(auto)["Thr_out"]), (4, 4, 4))
+        self.assertEqual((pe(one)["Thr_s"], pe(one)["Add"], pe(one)["Thr_out"]), (1, 1, 1))
+        self.assertEqual(auto.params["join_pe"], 4)
         for name in ("MVAU_p", "MVAU_r", "MVAU_u", "MVAU_e", "Thr_e"):
-            self.assertEqual(pe(base)[name], pe(wide)[name], name)
-        self.assertTrue(verify_with_sim(wide)["ok"])
+            self.assertEqual(pe(one)[name], pe(auto)[name], name)
+        self.assertTrue(verify_with_sim(auto)["ok"])
+
+    def test_conv_decoder_keeps_the_narrowest_join_chain(self):
+        r = model_up_bottleneck(**REF, skip_conv=True)         # the 3x3 stage behind the upsampler buffers its output rows
+        self.assertEqual(r.params["join_pe"], 1)
+
+    def test_join_pe_satisfies_the_reemit_rule_across_targets(self):
+        # 2 * (Cout / PE) <= t_in - c_p, with c_p the MVAU_p cycles per INPUT pixel; PE = Cout and a warning when c_p sits on the budget (T_out 16)
+        for t in (24, 18, 16, 14, 12, 10):
+            r = model_up_bottleneck(**{**REF, "T_out": t}, skip_conv=False)
+            n = {x.name: x for x in r.nodes}
+            slack = r.params["T_in"] - n["MVAU_p"].frame_cycles / (REF["height"] * REF["width"])
+            warned = any("UpsampleNearestNeighbour" in w for w in r.warnings)
+            if warned:
+                self.assertEqual(r.params["join_pe"], REF["cout"])
+                self.assertLess(slack, 2)
+            else:
+                self.assertLessEqual(2 * (REF["cout"] // r.params["join_pe"]), slack + 1e-9, t)
+        self.assertTrue(any("UpsampleNearestNeighbour" in w for w in model_up_bottleneck(**{**REF, "T_out": 16}, skip_conv=False).warnings))
 
     def test_noconv_variant_has_no_3x3(self):
         r = model_up_bottleneck(**REF, skip_conv=False)

@@ -1,0 +1,24 @@
+{
+  "name": "init_cin1_cout4_in256_int6_thrpre",
+  "block": "init",
+  "cin": 1,
+  "cout": 4,
+  "cmid": 3,
+  "height": 256,
+  "width": 256,
+  "hout": 128,
+  "wout": 128,
+  "bits": 6,
+  "seed": 0,
+  "T_out": 5.0,
+  "F": 81920,
+  "op_counts": {
+    "Quant": 5,
+    "Conv": 1,
+    "MaxPool": 1,
+    "Concat": 1,
+    "BatchNormalization": 1,
+    "Relu": 1
+  },
+  "thr_m_order": "pre"
+}

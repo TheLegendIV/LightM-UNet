@@ -292,3 +292,31 @@ Final deconvolution (fnl_block.py, fnl_block_sim.py, test_fnl_block.py; not a bo
 * U4 result: MVAU_f PE 5 x SIMD 16 (48 DSP), SWG / FMPadPix SIMD 4, bias PE 5; simulated steady 1.01 cyc/px, first-out latency ~263 cycles, all FIFOs 2-4 words (+4-word prefetch before FMPadPix).
 * `bias=True` (LayerQuantEnetFINN default, `Int32Bias`) adds the integer bias add; `bias=False` matches the production export (`finn_enet_prod_export.py`). How FINN lowers the bias is
   untested: both variants are probed (6 cases `fnl_cin4_cout5_in128_int{b}_{bias,nobias}`).
+
+PE of the nodes behind the nearest-neighbour upsampler (up_bottleneck.py, `join_pe`; found from the diagnostic probes `up_..._int4_noconv_{pe2,pe4,fjoin,fupnn,fall,pe4fall}`)
+
+Mean-rate balance is not enough behind UpsampleNearestNeighbour. For each input row it runs two phases: phase 1 reads the row and emits every pixel twice (input-limited, one input
+pixel per `c_p` cycles), phase 2 re-emits the stored row and needs no new input (output-limited, one output pixel per `d` cycles). The 1x1 projection in front of it (MVAU_p) can only
+work during phase 1 unless buffering lets it run ahead. Per input row, with no run-ahead:
+
+    W * c_p  +  2 * W * d   <=   W * t_in        <=>        d <= (t_in - c_p) / 2
+
+* `t_in = F / (H*W)` is the budget per INPUT pixel (= 4 * T_out), `c_p` the cycles per input pixel of the slowest node in front of the upsampler (MVAU_p, NF * SF), `d = Cout / PE` the cycles per
+  OUTPUT pixel of the node behind it (Thr_s; Add and Thr_out are widened with it). Plain rate balance would only ask `d <= t_in / 4`, which is why PE 1 looked fine.
+* **The PE of Thr_s / Add / Thr_out has to scale up with the target**: `PE >= 2 * Cout / (t_in - c_p)`, rounded up to a divisor of Cout. The slack `t_in - c_p` shrinks as the budget tightens
+  (and jumps when MVAU_p changes its fold), so the required PE grows; when `t_in - c_p < 2` even PE = Cout is not enough (the model warns) and the only levers are buffering
+  (>= half an input row in front of the upsampler, or one output row behind it) or a looser target. The model derives it automatically for the noconv decoder (`join_pe=None`);
+  the conv decoder does not need it because its 3x3 stage (FMPad + SWG line buffer) absorbs the re-emitted rows at full speed.
+* U4 up4 (32 -> 16, 32x32 -> 64x64, T_out 18): `t_in` 72, `c_p` 64, so `d <= 4` and PE 4 (16 channels, 4 words per pixel). rtlsim of the INT4 probe: PE 1 (d = 16) 20.53, PE 2 (d = 8) 17.96,
+  PE 4 (d = 4) 16.25 cyc per output pixel against the 18.0 target; the node-limited floor is 16.0 (65,536 cycles per frame).
+* Buffering is the other cure and the FIFO probes confirm it: 40 words in front of + 91 behind the upsampler gives exactly 16.00 at PE 1; the join FIFO (`Thr_e -> Add`, 17 -> 512 words) does
+  nothing (20.53). The model prefers the PE route (PE 4: 3768 LUT, no deep FIFO) over the 91-word FIFO (3885 LUT, 64 bit x 91).
+* Why the simulation missed it: FIFO sizing shrank every FIFO to the smallest depth that met T = 18 within 2% (depth 8 -> 17.58), which sits on a steep part of the curve
+  (depth 2 / 4 / 8 / 16 -> 20.58 / 19.58 / 17.58 / 16.0); the hardware behaved like depth ~2. A rule of thumb that follows: size FIFOs to the node-limited rate (here 16.0), not to the looser target.
+
+Initial block: Thr_m upstream of the maxpool (updated model). The first init probes showed the landed graph is Dup -> Thr_m -> MaxPool -> Concat, not the exported MaxPool -> Quant: FINN's
+`MoveMaxPoolPastMultiThreshold` (hardware/finn_enet_build.py) swaps MaxPool -> MultiThreshold into MultiThreshold -> MaxPool, which pays when the pool follows a wide accumulator but is pointless here
+because the pool already reads the INT-A input stream. Consequences in the model: Thr_m runs on H*W pixels (65,536 cycles at PE 1, 80% of F), the skip FIFO sits at the pool output (maxpool -> concat), and
+the DWCs are Dup->Thr_m, Thr_m->pool, pool->Concat. Rate and totals are unchanged (the sim still gives 5.02 cyc/px, MaxPool at 100% of F), so the order alone does not explain the 15.78 cyc/px measured in
+hardware. What the first probes got wrong is where the join FIFO was forced: on thr_m -> concat, an edge that does not exist in hardware, leaving the real join edge (maxpool -> concat) at FINN's 2 words.
+Rule: forced FIFO depths only take effect on edges present in the landed graph; check the edge list of `stages.fifo` ("edge not in prediction") after every new block.

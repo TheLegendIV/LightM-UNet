@@ -41,6 +41,12 @@ class TestIntModel(unittest.TestCase):
         self.assertEqual(c.simd, 9)                                     # MW = 9 on one input channel: SIMD = whole window
         self.assertEqual(c.dsp, (c.pe + 1) // 2 * c.simd)
 
+    def test_threshold_is_upstream_of_the_pool(self):
+        # landed FINN graph: MoveMaxPoolPastMultiThreshold swaps MaxPool -> Thr_m into Thr_m -> MaxPool, so Thr_m sees all H*W input pixels
+        self.assertEqual(self.n["Thr_m"].frame_cycles, 256 * 256 // self.n["Thr_m"].pe)
+        names = [x.name for x in self.r.nodes]
+        self.assertLess(names.index("Thr_m"), names.index("MaxPool"))
+
     def test_input_side_runs_at_pixel_rate(self):
         # one channel: no channel parallelism, every front node needs >= 1 cycle per input pixel
         self.assertEqual(self.n["Dup"].frame_cycles, 256 * 256)
@@ -72,12 +78,28 @@ class TestIntSim(unittest.TestCase):
     def setUpClass(cls):
         cls.r = model_int_bottleneck(**REF)
         cls.v = verify_with_sim(cls.r)
+        cls.rp = model_int_bottleneck(**{**REF, "F": 69632}, pool_impl="swg_pool")
+        verify_with_sim(cls.rp)
 
     def test_reaches_target_without_deadlock(self):
         self.assertTrue(self.v["ok"])
         self.assertFalse(self.v["deadlock"])
         self.assertLessEqual(self.v["steady_cyc_px"], 5.0 * 1.02)
         self.assertEqual(len(self.v["frame_periods"]), 2)
+
+    def test_fifo_edges_follow_the_landed_graph_order(self):
+        # FINN stock-sizing report of the INT4 init probe: dup -> thr_m -> maxpool -> concat
+        for cfg in (to_folding_config(self.r), to_folding_config(self.rp)):
+            edges = {(f["producer"], f["consumer"]) for f in cfg["fifos"]}
+            self.assertIn(("dup", "thr_m"), edges)
+            self.assertNotIn(("maxpool", "thr_m"), edges)
+            self.assertNotIn(("pool", "thr_m"), edges)
+        edges = {(f["producer"], f["consumer"]) for f in to_folding_config(self.r)["fifos"]}
+        self.assertIn(("thr_m", "maxpool"), edges)
+        self.assertIn(("maxpool", "concat"), edges)
+        pool_edges = {(f["producer"], f["consumer"]) for f in to_folding_config(self.rp)["fifos"]}
+        for e in (("thr_m", "swg_p"), ("swg_p", "pool"), ("pool", "concat")):
+            self.assertIn(e, pool_edges)
 
     def test_maxpool_is_the_bottleneck(self):
         sim = simulate_int(self.r, inject_interval=0, skip_depth=self.r.skip_fifo.depth_words, main_depth=self.r.params["main_fifo_words"],

@@ -357,3 +357,40 @@ the baseline `up_cin32_cout16_in32_int4_noconv` once so everything uses the same
 * if only `_fjoin` / `_fupnn` recover, the join FIFO sizing in `up_bottleneck_sim.py` is wrong for `noconv` and the model needs fixing (report the max occupancy of `thr_e -> add` and `thr_s -> add`);
 * if nothing recovers, report per-node cycle counts of the stitched model (`AnnotateCycles` / per-node `get_exp_cycles` versus the rtlsim) and which FIFO is full or empty at the end of a frame.
 Also report `stock` vs `forced` depth per edge (the usual `stages.fifo`) and the real max occupancy of the join FIFOs. The model's own numbers for these twins are in each json (`predicted`).
+
+## 17. Result of section 16 and what to run next (PE of the nodes behind the nearest-neighbour upsampler)
+
+Measured (INT4 `up_cin32_cout16_in32_..._noconv`, rtlsim cyc per OUTPUT pixel, target 18.0): baseline 20.53, `_fjoin` 20.53, `_pe2` 17.96, `_pe4` 16.25, `_fupnn` 16.00, `_fall` 16.00, `_pe4fall` 16.25.
+The join FIFO was not the cause; the nearest-neighbour upsampler (read a row, emit each pixel twice, then re-emit the row with no input) needs either a faster drain behind it (PE of `Thr_s` / `Add` /
+`Thr_out`) or buffering around it. Decision: **raise the PE** (the model now derives it: `up_bottleneck.model_up_bottleneck(join_pe=None)`, rule and worked numbers in `analytical.md`, section
+"PE of the nodes behind the nearest-neighbour upsampler").
+
+**The PE of that join chain must scale with the target.** `PE >= 2 * Cout / (t_in - c_p)` (t_in = 4 * T_out cycles per input pixel, c_p = MVAU_p cycles per input pixel, rounded up to a divisor of Cout).
+If a later experiment tightens the target (smaller F / T_out) the same node needs a larger PE, or buffering when `t_in - c_p < 2` (the model prints a warning). Do not copy PE 4 to other sizes: regenerate the folding
+(`make_up_folding_configs.py`) so the PE follows the rule.
+
+Changed files and what to rebuild:
+* `inputs/up_cin32_cout16_in32_int{4,6,8}_noconv_folding.json` were regenerated: Thr_s / Add / Thr_out at PE 4 (before: PE 1). The INT4 json is identical to the validated `_pe4` twin, so **no INT4 rebuild is
+  needed**; the old `up_..._int4_noconv_merged_*` result folders are the superseded PE 1 configuration (20.53). **Rebuild INT6 and INT8 `noconv` (2 builds, rtlsim + OOC)** with the new jsons; expect ~16.3 cyc/px.
+* The 6 diagnostic twins stay as they are (`make_up_diag_configs.py` passes `join_pe` explicitly, so `_fjoin`, `_fupnn`, `_fall` still mean PE 1 + their FIFO change).
+* Not changed: the `conv` decoder (join chain stays PE 1; it passes), the FIFO sizing rule in `verify_with_sim` (still shrinks to the smallest depth meeting T; see analytical.md for why that is risky).
+* Up5 (16 -> 4, 64x64 in) `noconv`, once exported, gets its PE from the same rule (t_in 18, c_p 16 -> PE = Cout = 4).
+
+## 18. Initial block with the landed graph order: `init_cin1_cout4_in256_int{4,6,8}_thrpre`  (`SET=intpre`, 3 builds, rtlsim + OOC)
+
+Why: the first init probes (`init_cin1_cout4_in256_int{4,6,8}`) measured 15.78 cyc/px against the 5.0 target. Their FIFO report showed the hardware graph is `Dup -> Thr_m -> MaxPool -> Concat`:
+FINN's streamline step `MoveMaxPoolPastMultiThreshold` (`hardware/finn_enet_build.py`) swapped the exported `MaxPool -> Quant` into `Thr -> MaxPool`. The model had `Dup -> MaxPool -> Thr_m -> Concat`,
+so (a) Thr_m's work was priced at 16,384 pixels instead of 65,536 and (b) **the 96-word skip FIFO was forced on the edge `thr_m -> concat`, which does not exist in hardware**; in the first
+probes the real join edge `maxpool -> concat` kept FINN's 2 words and the edges in front of the maxpool kept FINN's stock sizes (25,304 and 65,536 words). That mismatch is a candidate cause of the slowdown.
+
+What changed (model `int_bottleneck.py` + `int_bottleneck_sim.py`, 16 tests pass): Thr_m is upstream of the pool (65,536 pixels, PE 1, 4.0 cyc per output pixel = 80% of F), new DWC edges
+`Dup->Thr_m`, `Thr_m->pool`, the skip FIFO sits at the pool output (`maxpool -> concat`, 96 words x 4 bit, forced; `dup -> thr_m` and `thr_m -> maxpool` 2 words). The simulated rate is unchanged (5.02 cyc/px,
+maxpool at 100% of F); folding PE/SIMD and totals are unchanged (1658 / 1788 / 2244 LUT, 5 BRAM18, 9 DSP for INT4 / 6 / 8).
+
+The new cases `init_cin1_cout4_in256_int{4,6,8}_thrpre` share the ONNX of the old ones; only `_folding.json` and `_probe.json` (`thr_m_order: "pre"`) differ. The old folding jsons and result folders are the
+earlier (post-pool) model and are left as they are. `identify_roles_init` already resolves `thr_m` as the producer of the maxpool (no script change needed).
+
+**Please report, per case:** rtlsim cyc per OUTPUT pixel ((cycles - latency_cycles)/(N-1)/16384, target 5.0); forced vs stock depth for `dup -> thr_m`, `thr_m -> maxpool`, `maxpool -> concat`; and the max occupancy of
+`maxpool -> concat`. If the rate stays near 15.8 the FIFO mismatch was not the cause: then report the per-node busy / stall counts of `StreamingMaxPool_hls` and the Dup, and whether the real maxpool takes
+about 4 cycles per input pixel (the first probes' frame period was ~258.6k cycles = 3.95 per input pixel). The Pool-route twin (`init_..._int4_pool`) still has the old order; regenerate it with
+`make_int_folding_configs.py --pool-impl swg_pool --F 69632` after this set, if the result calls for it.

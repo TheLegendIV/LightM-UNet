@@ -2,7 +2,9 @@
 
     python3 hardware/builds/bottleneck_probe_v1/make_int_folding_configs.py [--bits 4 6 8]
 
-Same case as export_int_probe.py (1 -> 4 channels, 256x256 -> 128x128, F = 81920). Writes inputs/init_cin1_cout4_in256_int{b}_folding.json.
+Same case as export_int_probe.py (1 -> 4 channels, 256x256 -> 128x128, F = 81920). Writes inputs/init_cin1_cout4_in256_int{b}_thrpre_folding.json: the
+model now has Thr_m UPSTREAM of the maxpool (landed FINN graph, see int_bottleneck.py), so these are new cases `_thrpre` (they share the ONNX of the
+`init_cin1_cout4_in256_int{b}` probes, whose own folding jsons / results are the earlier post-pool model and stay untouched).
 """
 from __future__ import annotations
 
@@ -20,12 +22,12 @@ OUT_DIR = Path(__file__).resolve().parent / "inputs"
 CIN, COUT, HW_IN, F = 1, 4, 256, 81920
 
 
-def _pool_case(base: str, name: str, extra: dict) -> None:
-    """The Pool-route probe shares the ONNX with its StreamingMaxPool twin (the difference is FINN's conversion of the MaxPool, InferPool)."""
+def _twin(base: str, name: str, extra: dict) -> None:
+    """A twin shares the ONNX of its base probe (a different folding / FINN conversion of the same graph)."""
     import shutil
     shutil.copyfile(OUT_DIR / f"{base}.onnx", OUT_DIR / f"{name}.onnx")
     info = json.loads((OUT_DIR / f"{base}_probe.json").read_text())
-    info.update(extra, name=name, pool_impl="pool")
+    info.update(extra, name=name)
     (OUT_DIR / f"{name}_probe.json").write_text(json.dumps(info, indent=2))
 
 
@@ -41,9 +43,8 @@ def main() -> None:
         r = model_int_bottleneck(CIN, COUT, b, HW_IN, HW_IN, F=a.F, pool_impl=a.pool_impl)
         verify_with_sim(r)
         base = f"init_cin{CIN}_cout{COUT}_in{HW_IN}_int{b}"
-        name = base + ("_pool" if a.pool_impl == "swg_pool" else "")
-        if a.pool_impl == "swg_pool":
-            _pool_case(base, name, dict(F=a.F, T_out=a.F / (HW_IN // 2) ** 2))
+        name = base + ("_pool" if a.pool_impl == "swg_pool" else "") + "_thrpre"
+        _twin(base, name, dict(thr_m_order="pre", **(dict(F=a.F, T_out=a.F / (HW_IN // 2) ** 2, pool_impl="pool") if a.pool_impl == "swg_pool" else {})))
         (OUT_DIR / f"{name}_folding.json").write_text(json.dumps(to_folding_config(r), indent=2))
         v = r.verification
         print(f"{name}: steady {v['steady_cyc_px']:.2f} cyc/px  skip FIFO {r.skip_fifo.depth_words} words  FIFO main {r.params['main_fifo_words']}  "

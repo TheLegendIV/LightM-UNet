@@ -41,14 +41,33 @@ def _pe_at_least(channels: int, pe: int, floor: int) -> int:
     return next(d for d in fcm.divisors(channels) if d >= max(pe, floor))
 
 
+def _join_pe_for_upnn(cout: int, t_in: float, c_p_in: float, res) -> int:
+    """Smallest PE | Cout with 2 * (Cout / PE) <= t_in - c_p_in (see model_up_bottleneck). PE = Cout plus a warning when no PE is enough."""
+    slack = t_in - c_p_in
+    for pe in fcm.divisors(cout):
+        if 2 * (cout // pe) <= slack + 1e-9:
+            return pe
+    res.warnings.append(f"UpsampleNearestNeighbour: t_in - c_p = {slack:.1f} cyc per input pixel is below 2 even at PE = Cout; the join chain cannot drain the "
+                        "re-emit phase in time. Add run-ahead buffering (>= half an input row in front of the upsampler or one output row behind it).")
+    return cout
+
+
 def model_up_bottleneck(
     cin: int, cout: int, v: int, bits: int, height: int, width: int, F: int | None = None, T_out: float | None = None,
-    skip_conv: bool = True, join_pe: int = 1,
+    skip_conv: bool = True, join_pe: int | None = None,
 ) -> BottleneckResult:
     """cin -> cout upsampling block, Cmid = cin/v, INPUT map height x width, output 2*height x 2*width, uniform INT `bits`.
     Budget: F frame cycles, or T_out cycles per OUTPUT pixel (F = T_out * 4*height*width).
-    join_pe: lower bound on the PE of the output-resolution join nodes (Thr_s of the noconv decoder, Add, Thr_out). The default 1 takes the narrowest PE that
-    fits F (89% busy at the U4 up4 size); a larger value gives the DWC / threshold / add chain slack (diagnostic probes `up_..._pe2`, `_pe4`)."""
+    join_pe: lower bound on the PE of the output-resolution join chain (Thr_s of the noconv decoder, Add, Thr_out). None (default) derives it from the budget
+    for the noconv decoder (rule below) and uses the narrowest PE that fits F for the conv decoder; an int overrides.
+
+    Why the noconv join chain needs a PE above the 'narrowest that fits F': UpsampleNearestNeighbour reads an input row and emits every pixel twice (phase 1,
+    input-limited), then re-emits the stored row with no new input (phase 2, output-limited). Per input row, with no run-ahead buffering in front of it,
+        W * c_p  +  2 * W * d   <=   W * t_in      <=>      d <= (t_in - c_p) / 2
+    where t_in = F / (H*W) is the budget per INPUT pixel, c_p the cycles per input pixel of the slowest main-branch node in front of it (MVAU_p), and
+    d = Cout / PE the cycles per OUTPUT pixel of the node behind the upsampler (Thr_s). Mean-rate balance only asks d <= t_in / 4. U4 up4: t_in 72, c_p 64 ->
+    d <= 4 -> PE >= 4 (measured: PE 1 20.53, PE 2 17.96, PE 4 16.25 cyc/px, target 18). Tightening the target shrinks t_in - c_p and raises the PE; when
+    t_in - c_p < 2 even PE = Cout is not enough and only buffering (>= half an input row in front of the upsampler or one output row behind) can help."""
     if cin % v:
         raise ValueError(f"Cin={cin} not divisible by v={v}")
     if (F is None) == (T_out is None):
@@ -60,7 +79,7 @@ def model_up_bottleneck(
     cmid, A = cin // v, bits
     res = BottleneckResult(params=dict(
         cin=cin, cmid=cmid, cout=cout, v=v, z=v, T=T, F=F, T_in=T_in, bits=bits, k=3, dilation=1, stride=1, height=H, width=W,
-        hout=Ho, wout=Wo, pad=1, block="up", skip_conv=skip_conv, join_pe=join_pe, skip_pad="n/a", skip_order="n/a", pad_group=None,
+        hout=Ho, wout=Wo, pad=1, block="up", skip_conv=skip_conv, skip_pad="n/a", skip_order="n/a", pad_group=None,
     ))
     if px_out > F:
         raise ValueError(f"F={F} is below the UpsampleNearestNeighbour floor of {px_out} cycles/frame (one output pixel per cycle, not foldable)")
@@ -75,6 +94,9 @@ def model_up_bottleneck(
     g_join = _geom("join", cout, cout, Ho, Wo, Ho, Wo, op="Thresholding")
 
     pe_p, simd_p, c_p = _search_mvau(g_p, bits, F)
+    if join_pe is None:
+        join_pe = 1 if skip_conv else _join_pe_for_upnn(cout, T_in, c_p["mvu_cycles"] / px_in, res)
+    res.params["join_pe"] = join_pe
     pe_r, simd_r, c_r = _search_mvau(g_r, bits, F)
     # FMPadding_Pixel over the (2H+1) x (2W+1) zero-inserted image emits cf words per pixel: it must also fit F
     pe_u, simd_u, c_u = _search_mvau(g_u, bits, F, extra_ok=lambda c: (Ho + 1) * (Wo + 1) * math.ceil(cmid / c["simd_swu"]) <= F)

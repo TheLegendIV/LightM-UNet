@@ -2,7 +2,7 @@
 # Launch the bottleneck probe builds in the FINN container (host-side driver, bash / Git Bash).
 #   CONTAINER=<name from `docker ps`> bash run_probes.sh                 # all 15 cases, rtlsim only
 #   CONTAINER=... CASES="bottleneck_cin32_d8_int4" STOP_AFTER=folding bash run_probes.sh   # cheap gate-3 dry run
-# Env: CONTAINER (required) | CASES (default: all 15 regular) | SET=dn (the 6 downsampling probes) | SET=up (the 6 up4 upsampling probes) | SET=up5 (the 3 up5 probes) | SET=int (the 3 initial-block probes) | SET=fnl (the 6 final-deconvolution probes) | SET=upd (the 6 noconv diagnostic twins, section 16) | SET=pool (the 2 Pool-route probes) | STOP_AFTER (convert|folding|fifo|stitch|rtlsim, default rtlsim)
+# Env: CONTAINER (required) | CASES (default: all 15 regular) | SET=dn (the 6 downsampling probes) | SET=up (the 6 up4 upsampling probes) | SET=up5 (the 3 up5 probes) | SET=int (the 3 initial-block probes) | SET=fnl (the 6 final-deconvolution probes) | SET=upd (the 6 noconv diagnostic twins, section 16) | SET=intpre (3 init probes, Thr_m upstream of the pool, section 18) | SET=pool (the 2 Pool-route probes) | STOP_AFTER (convert|folding|fifo|stitch|rtlsim, default rtlsim)
 #      EXTRA (extra args for finn_bottleneck_probe_build.py, e.g. "--ooc" or "--skip-scale 0.5" or "--no-merge")
 #      JOBS (parallel builds, default 4, HARD CAP 4 -- run ONE set at a time) | TIMEOUT (seconds per build, default 14400)
 #      EXTRA defaults to "--ooc" (build + OOC synthesis for every probe); EXTRA="" = rtlsim only
@@ -22,6 +22,8 @@ if [ -z "$CASES" ]; then
   CASES=""
   if [ "${SET:-reg}" = "pool" ]; then # SET=pool: the 2 Pool-route probes (MaxPool lowered to depthwise SWG + Pool_hls with PE): initial block + down2-like block, INT4
     CASES="init_cin1_cout4_in256_int4_pool dn_cin16_cout32_in64_int4_mvau_pool"
+  elif [ "${SET:-reg}" = "intpre" ]; then  # SET=intpre: the 3 initial-block probes with the landed graph order (Thr_m upstream of the maxpool), INT4/6/8
+    for b in 4 6 8; do CASES="$CASES init_cin1_cout4_in256_int${b}_thrpre"; done
   elif [ "${SET:-reg}" = "upd" ]; then  # SET=upd: the 6 diagnostic twins of up_cin32_cout16_in32_int4_noconv (PE route pe2/pe4, FIFO route fjoin/fupnn/fall, ceiling pe4fall)
     for t in pe2 pe4 fjoin fupnn fall pe4fall; do CASES="$CASES up_cin32_cout16_in32_int4_noconv_${t}"; done
   elif [ "${SET:-reg}" = "fnl" ]; then  # SET=fnl: the 6 final-deconv probes (4->5, 128x128 in -> 256x256 out): INT4/6/8 x {bias, nobias}

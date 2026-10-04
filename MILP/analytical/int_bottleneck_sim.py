@@ -1,9 +1,11 @@
 """Cycle-level token simulation of the ENet INITIAL block (companion of int_bottleneck.py), FINNInitialBlockConcat:
 
     Source -> Thr_in -> Dup -> [FMPad (pad 1) -> SWG (3x3, stride 2) -> MVAU_c (Cin*9 -> Cout-Cin) -> Thr_c (branch_quant)] -> FIFO main -+
-                              [MaxPool (2x2, stride 2) -> Thr_m (branch_quant)] ------------------------------------------> skip FIFO -+-> Concat -> Thr_act
+                              [Thr_m (branch_quant) -> MaxPool (2x2, stride 2)] ------------------------------------------> skip FIFO -+-> Concat -> Thr_act
 
-Pixel domains: Source, Thr_in, Dup, FMPad, SWG input side and MaxPool see the H x W input; everything after the stride the (H/2) x (W/2) output.
+Thr_m is upstream of the pool (landed FINN graph: MoveMaxPoolPastMultiThreshold swaps MaxPool -> Thr into Thr -> MaxPool).
+
+Pixel domains: Source, Thr_in, Dup, FMPad, SWG input side, Thr_m and MaxPool see the H x W input; everything after the stride the (H/2) x (W/2) output.
 New node type: SwgStrNode, a strided KxK window generator over a padded image (the stride-2 3x3 of the conv branch). MaxPoolNode comes from
 dn_bottleneck_sim, the rest from bottleneck_sim.
 """
@@ -123,29 +125,28 @@ def simulate_int(
     f_main = fifo("FIFO main", main_depth)
     order.append(StreamNode("Thr_c", [f], [f_main], thr_c_w, thr_c_w, n_out))
 
-    # ---- maxpool branch
+    # ---- pool branch: Thr_m (branch quant, full resolution) -> MaxPool
+    thr_m_w = cin // n["Thr_m"].pe
+    f = link("Dup", dup_w, "Thr_m", thr_m_w, f_dm, n_in)
+    f_tm = fifo("Thr_m->out")
+    order.append(StreamNode("Thr_m", [f], [f_tm], thr_m_w, thr_m_w, n_in))
+    f_skip = fifo("skip FIFO", skip_depth)
     if p.get("pool_impl", "streaming") == "streaming":
-        f = link("Dup", dup_w, "MaxPool", 1, f_dm, n_in)
-        f_mp = fifo("MaxPool->out")
-        order.append(MaxPoolNode("MaxPool", f, f_mp, H, W, frames))
-        pool_last, pool_w = "MaxPool", 1
+        f = link("Thr_m", thr_m_w, "MaxPool", 1, f_tm, n_in)
+        order.append(MaxPoolNode("MaxPool", f, f_skip, H, W, frames))
+        pool_w = 1
     else:          # InferPool route: depthwise 2x2 stride-2 SWG (SIMD = PE) -> Pool_hls (PE)
         cf_p = cin // n["SWG_p"].simd
-        f = link("Dup", dup_w, "SWG_p", cf_p, f_dm, n_in)
+        f = link("Thr_m", thr_m_w, "SWG_p", cf_p, f_tm, n_in)
         f_o = fifo("SWG_p->out")
         order.append(Swg2Node("SWG_p", f, f_o, H, W, cf_p, 4 * cf_p, swg_cap_px(W, 2, 2, 2, 2), frames))
-        f_mp = fifo("Pool->out")
-        order.append(StreamNode("Pool", [f_o], [f_mp], 4 * cf_p, cf_p, n_out))
-        pool_last, pool_w = "Pool", cf_p
-    thr_m_w = cin // n["Thr_m"].pe
-    f = link(pool_last, pool_w, "Thr_m", thr_m_w, f_mp, n_out)
-    f_skip = fifo("skip FIFO", skip_depth)
-    order.append(StreamNode("Thr_m", [f], [f_skip], thr_m_w, thr_m_w, n_out))
+        order.append(StreamNode("Pool", [f_o], [f_skip], 4 * cf_p, cf_p, n_out))
+        pool_w = cf_p
 
     # ---- concat (one output pixel per cycle: one word of each branch) -> activation threshold
     thr_a_w = cout // n["Thr_act"].pe
     f_a = link("FIFOmain", thr_c_w, "Concat", 1, f_main, n_out)
-    f_b = link("skipFIFO", thr_m_w, "Concat", 1, f_skip, n_out)
+    f_b = link("skipFIFO", pool_w, "Concat", 1, f_skip, n_out)
     f_cat = fifo("Concat->out")
     order.append(StreamNode("Concat", [f_a, f_b], [f_cat], 1, 1, n_out))
     f = link("Concat", 1, "Thr_act", thr_a_w, f_cat, n_out)
