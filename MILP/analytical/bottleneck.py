@@ -188,16 +188,18 @@ def _search_mvau(layer: LayerGeometry, bits: int, budget: int, weight_bits: int 
 
 
 
-def search_swg_pool(g_pool: LayerGeometry, bits: int, budget: int) -> dict:
+def search_swg_pool(g_pool: LayerGeometry, bits: int, budget: int, parallel_window: bool = False) -> dict:
     """FINN `Pool` route for a MaxPool (InferPool: depthwise ConvolutionInputGenerator + Pool_hls with PE), instead of StreamingMaxPool.
     Pool cycles (finn pool.py get_exp_cycles) = (C * K^2 / PE) * OH * OW with PE | C; the depthwise SWG (SIMD = PE) must also fit. No extra
     output cycle (StreamingMaxPool: 1.25 * H * W); one channel still gives 1 cycle per input pixel. Returns the smallest PE that fits the budget
-    (narrowest = cheapest). Pool LUT is provisional (comparators only, no calibration data)."""
+    (narrowest = cheapest). Pool LUT is provisional (comparators only, no calibration data).
+    parallel_window: the depthwise SWG emits a whole K x K window per word (SIMD must equal C, so PE = C), FINN's 'parallel' RTL mode with cycles =
+    input values + 2 and no per-window write phase; a DWC (K^2 * PE -> PE words) then feeds Pool_hls."""
     c, k2, ohw = g_pool.cin, g_pool.kh * g_pool.kw, g_pool.hout * g_pool.wout
     best = None
-    for pe in fcm.divisors(c):
+    for pe in ([c] if parallel_window else fcm.divisors(c)):
         pool_cycles = (c * k2 // pe) * ohw
-        swg_lut, swg_bram18, swg_uram18, swg_cycles = fcm._finn_swu(g_pool, bits, pe, True, False)
+        swg_lut, swg_bram18, swg_uram18, swg_cycles = fcm._finn_swu(g_pool, bits, pe, True, parallel_window)
         if best is None:
             best = (pe, pool_cycles, swg_cycles)
         if pool_cycles <= budget and swg_cycles <= budget:

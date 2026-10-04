@@ -123,6 +123,18 @@ class TestIntSim(unittest.TestCase):
         self.assertFalse(res.deadlock)
         self.assertEqual(len(res.out_times), 2 * 128 * 128)
 
+    def test_pool_route_parallel_window(self):
+        # parallel_window: SWG_p emits one 2x2 window per word (input-limited, values + 2 cycles), a DWC splits it for Pool_hls
+        r = model_int_bottleneck(**{**REF, "F": 69632}, pool_impl="swg_pool", pool_pw=True)
+        n = {x.name: x for x in r.nodes}
+        self.assertEqual(n["SWG_p"].frame_cycles, 256 * 256 + 2)
+        self.assertEqual(n["SWG_p"].out_width_bits, 4 * n["SWG_p"].in_width_bits)
+        self.assertIn("SWG_p->Pool", [d.edge for d in r.dwcs])
+        self.assertTrue(verify_with_sim(r)["ok"])
+        f = to_folding_config(r)
+        self.assertEqual(f["folding"]["swg_p"]["parallel_window"], 1)
+        self.assertIn(("swg_p", "dwc"), {(x["producer"], x["consumer"]) for x in f["fifos"]})
+
     def test_pool_route_verifies_and_exports_roles(self):
         r = model_int_bottleneck(**{**REF, "F": 69632}, pool_impl="swg_pool")
         v = verify_with_sim(r)

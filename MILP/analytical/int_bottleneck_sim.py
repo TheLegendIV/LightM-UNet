@@ -139,7 +139,9 @@ def simulate_int(
         cf_p = cin // n["SWG_p"].simd
         f = link("Thr_m", thr_m_w, "SWG_p", cf_p, f_tm, n_in)
         f_o = fifo("SWG_p->out")
-        order.append(Swg2Node("SWG_p", f, f_o, H, W, cf_p, 4 * cf_p, swg_cap_px(W, 2, 2, 2, 2), frames))
+        pw = bool(p.get("pool_pw"))
+        order.append(Swg2Node("SWG_p", f, f_o, H, W, cf_p, cf_p if pw else 4 * cf_p, swg_cap_px(W, 2, 2, 2, 2), frames))
+        f_o = link("SWG_p", cf_p, "Pool", 4 * cf_p, f_o, n_out) if pw else f_o       # parallel_window: one window per word, a DWC splits it for Pool_hls
         order.append(StreamNode("Pool", [f_o], [f_skip], 4 * cf_p, cf_p, n_out))
         pool_w = cf_p
 

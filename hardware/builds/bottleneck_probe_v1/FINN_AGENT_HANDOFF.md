@@ -394,3 +394,24 @@ earlier (post-pool) model and are left as they are. `identify_roles_init` alread
 `maxpool -> concat`. If the rate stays near 15.8 the FIFO mismatch was not the cause: then report the per-node busy / stall counts of `StreamingMaxPool_hls` and the Dup, and whether the real maxpool takes
 about 4 cycles per input pixel (the first probes' frame period was ~258.6k cycles = 3.95 per input pixel). The Pool-route twin (`init_..._int4_pool`) still has the old order; regenerate it with
 `make_int_folding_configs.py --pool-impl swg_pool --F 69632` after this set, if the result calls for it.
+
+## 19. InferPool-route initial-block probes (3 cases, INT4): `init_cin1_cout4_in256_int4_{pool,poolpw,poolpw81}_thrpre`  (`SET=intpool`, rtlsim + OOC)
+
+Result of section 18 (`SET=intpre`): the `StreamingMaxPool` route is 13.04 cyc/px (T 5.0) at all of INT4/6/8, even with every forced FIFO now on a real edge. The first Pool-route probe (`init_..._int4_pool`, old
+graph order) ran at 5.01 cyc/px (~82k cycles/frame) with the same conv branch and the same concat, so `StreamingMaxPool_hls` at one channel (~3.3 cycles per input pixel in the rtlsim; FINN estimates 1.25) is the
+prime suspect. The Pool route is therefore the init-block implementation we want; these three probes are the Pool route with the landed graph order (`Dup -> Thr_m -> SWG_p -> Pool -> Concat`):
+
+| Case | SWG_p | F (cyc/px at 16384 output px) | Purpose |
+|---|---|---|---|
+| `..._int4_pool_thrpre` | `parallel_window` 0, SIMD 1 | 81920 (5.0) | the first Pool probe's measured period was ~82k cycles/frame, so budget it as such: expect PASS if SWG_p/Pool are the 82k node |
+| `..._int4_poolpw_thrpre` | `parallel_window` 1 (one 2x2 window per word, DWC `4*PE*A -> PE*A` to `Pool_hls`) | 69632 (4.25) | FINN's `parallel` RTL SWG mode costs input values + 2 cycles with no per-window write phase; if the 82k came from the default-mode SWG this one should reach ~4.0-4.25 |
+| `..._int4_poolpw81_thrpre` | `parallel_window` 1 | 81920 (5.0) | same window mode at the looser budget; separates budget from window mode |
+
+Model (`int_bottleneck.py`, new `pool_pw` option; `make_int_folding_configs.py --pool-set` writes the jsons; 17 tests): nodes at 66,050 cycles/frame (SWG_p default mode) or 65,538 (parallel), Pool 65,536, Thr_m 65,536, conv
+branch unchanged (MVAU_c PE 1 x SIMD 9 at 49,152, already the cheapest fit at either budget). The sim gives 4.06 cyc/px for all three: it is node-limited (the SWG_p / Pool ~4.0 per output pixel) and cannot predict the
+82k, which is exactly what the probes are for.
+
+**Please report per case:** rtlsim cyc per OUTPUT pixel ((cycles - latency_cycles)/(N-1)/16384); the landed `swg_p` SIMD / `parallel_window` and `pool` PE (does FINN accept `parallel_window` 1 on a depthwise 2x2 stride-2
+window with Pool_hls behind it, and where does it insert the DWC?); the op names of the converted nodes (`Pool_hls`? `ConvolutionInputGenerator_rtl` with `depthwise`?). Run OOC for all three even if the old Pool probe crashed in
+Vivado (`TclStackFree: incorrect freePtr`): if it crashes again, try the `poolpw` variant, whose different graph may avoid it, and say which variants crash. If none of the three is at or under 5.0, report per-node busy / stall
+counts for `SWG_p` and `Pool_hls`.

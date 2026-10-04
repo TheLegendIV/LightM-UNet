@@ -39,9 +39,11 @@ fcm = reg.fcm
 
 def model_int_bottleneck(
     cin: int, cout: int, bits: int, height: int, width: int, F: int | None = None, T_out: float | None = None, pool_impl: str = "streaming",
+    pool_pw: bool = False,
 ) -> BottleneckResult:
     """cin -> cout initial block (cout > cin: conv branch makes cout - cin channels, maxpool branch cin), INPUT map height x width (even),
-    uniform INT `bits`. Budget: F frame cycles, or T_out cycles per OUTPUT pixel (F = T_out * height/2 * width/2)."""
+    uniform INT `bits`. Budget: F frame cycles, or T_out cycles per OUTPUT pixel (F = T_out * height/2 * width/2).
+    pool_pw: Pool route only, the depthwise window generator runs in parallel_window mode (one K x K window per word, a DWC feeds Pool_hls)."""
     if height % 2 or width % 2:
         raise ValueError("height and width must be even")
     if cout <= cin:
@@ -54,7 +56,7 @@ def model_int_bottleneck(
     T, T_in, A, ccv = F / px_out, F / px_in, bits, cout - cin
     res = BottleneckResult(params=dict(
         cin=cin, cmid=ccv, cout=cout, v=1, z=1, T=T, F=F, T_in=T_in, bits=bits, k=3, dilation=1, stride=2, height=H, width=W, hout=Ho, wout=Wo,
-        pad=1, block="init", skip_pad="n/a", skip_order="n/a", pad_group=None, pool_impl=pool_impl,
+        pad=1, block="init", skip_pad="n/a", skip_order="n/a", pad_group=None, pool_impl=pool_impl, pool_pw=pool_pw,
     ))
 
     g_mp = _geom("pool", cin, cin, H, W, Ho, Wo, k=2, s=2, op="MaxPool2d")
@@ -67,7 +69,7 @@ def model_int_bottleneck(
                              f"this is the minimum frame budget of the whole network")
         pe_pool, pool_first, pool_last = cin, "MaxPool", "MaxPool"
     else:
-        sp = search_swg_pool(g_mp, A, F)       # Pool_hls folded over channels; floor is 1 cycle per input pixel
+        sp = search_swg_pool(g_mp, A, F, parallel_window=pool_pw)       # Pool_hls folded over channels; floor is 1 cycle per input pixel
         pe_pool, pool_first, pool_last = sp["pe"], "SWG_p", "Pool"
     g_c = _geom("conv", cin, ccv, H, W, Ho, Wo, k=3, s=2, d=1, p=1)
     g_in = _geom("thr_in", cin, cin, H, W, H, W, op="Thresholding")
@@ -109,8 +111,8 @@ def model_int_bottleneck(
     if pool_impl == "streaming":
         nd.append(row("MaxPool", "StreamingMaxPool_hls", 0, 0, c_mp["cycles"], c_mp["total_lut"], c_mp["swu_bram18"], in_w=cin * A, out_w=cin * A))
     else:
-        nd.append(row("SWG_p", "ConvolutionInputGenerator depthwise 2x2 s2", 0, sp["pe"], sp["swg_cycles"], sp["swg_lut"], sp["swg_bram18"],
-                      sp["swg_uram18"], in_w=sp["pe"] * A, out_w=sp["pe"] * A))
+        nd.append(row("SWG_p", "ConvolutionInputGenerator depthwise 2x2 s2" + (" parallel_window" if pool_pw else ""), 0, sp["pe"], sp["swg_cycles"],
+                      sp["swg_lut"], sp["swg_bram18"], sp["swg_uram18"], in_w=sp["pe"] * A, out_w=sp["pe"] * A * (4 if pool_pw else 1)))
         nd.append(row("Pool", "Pool_hls", sp["pe"], 0, sp["pool_cycles"], sp["pool_lut"], in_w=sp["pe"] * A, out_w=sp["pe"] * A))
     nd.append(row("Concat", "StreamingConcat_hls", 0, 0, c_cat["cycles"], c_cat["total_lut"], in_w=cout * A, out_w=cout * A))
     nd.append(row("Thr_act", "Thresholding_rtl (BN+ReLU)", pe_ta, 0, c_ta["cycles"], c_ta["total_lut"], c_ta["thr_bram18"], in_w=pe_ta * A, out_w=pe_ta * A))
@@ -120,6 +122,8 @@ def model_int_bottleneck(
     _dwc("Dup->FMPad", pe_d * A, swu * A, cin, pe_d, swu, px_in, px_out, dw)
     _dwc("Dup->Thr_m", pe_d * A, pe_tm * A, cin, pe_d, pe_tm, px_in, px_out, dw)
     _dwc(f"Thr_m->{pool_first}", pe_tm * A, pe_pool * A, cin, pe_tm, pe_pool, px_in, px_out, dw)
+    if pool_impl == "swg_pool" and pool_pw:
+        _dwc("SWG_p->Pool", 4 * pe_pool * A, pe_pool * A, 4 * cin, 4 * pe_pool, pe_pool, px_out, px_out, dw)
     _dwc("MVAU_c->Thr_c", pe_c * c_cv["acc_bits"], tpe_c * c_cv["acc_bits"], ccv, pe_c, tpe_c, px_out, px_out, dw)
     _dwc("FIFOmain->Concat", tpe_c * A, ccv * A, ccv, tpe_c, ccv, px_out, px_out, dw)
     _dwc("skipFIFO->Concat", pe_pool * A, cin * A, cin, pe_pool, cin, px_out, px_out, dw)
@@ -256,7 +260,7 @@ def to_folding_config(r: BottleneckResult) -> dict:
         "fmpad": {"SIMD": n["SWG"].simd}, "swg": {"SIMD": n["SWG"].simd, "parallel_window": int(n["MVAU_c"].simd > p["cin"])},
         "mvau_c": {"PE": n["MVAU_c"].pe, "SIMD": n["MVAU_c"].simd}, "thr_c": {"PE": n["Thr_c"].pe, "depth_trigger_bram": block},
         **({"maxpool": {}} if p.get("pool_impl", "streaming") == "streaming" else
-           {"swg_p": {"SIMD": n["SWG_p"].simd, "parallel_window": 0}, "pool": {"PE": n["Pool"].pe}}),
+           {"swg_p": {"SIMD": n["SWG_p"].simd, "parallel_window": int(bool(p.get("pool_pw")))}, "pool": {"PE": n["Pool"].pe}}),
         "thr_m": {"PE": n["Thr_m"].pe, "depth_trigger_bram": block}, "concat": {},
         "thr_act": {"PE": n["Thr_act"].pe, "depth_trigger_bram": block},
     }
