@@ -56,6 +56,13 @@ class TestFnlModel(unittest.TestCase):
         with self.assertRaises(ValueError):
             model_fnl_block(4, 5, 4, 128, 128)
 
+    def test_nobias_variant_has_no_bias_node(self):
+        r = model_fnl_block(**REF, bias=False)
+        self.assertEqual([x.name for x in r.nodes], ["FMPadPix", "SWG_u", "MVAU_f"])
+        self.assertTrue(verify_with_sim(r)["ok"])
+        self.assertNotIn("bias", to_folding_config(r)["folding"])
+        self.assertLess(r.totals["lut"], self.r.totals["lut"])
+
     def test_bit_width_does_not_change_folding(self):
         for b in (6, 8):
             r = model_fnl_block(**{**REF, "bits": b})

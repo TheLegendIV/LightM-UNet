@@ -51,6 +51,16 @@ class TestUpModel(unittest.TestCase):
         self.assertEqual(self.n["Dup"].frame_cycles, 32 * 32 * 32 // self.n["Dup"].pe)
         self.assertEqual(self.n["Thr_p"].frame_cycles, 32 * 32 * (16 // self.n["Thr_p"].pe))
 
+    def test_join_pe_widens_only_the_join_chain(self):
+        base = model_up_bottleneck(**REF, skip_conv=False)
+        wide = model_up_bottleneck(**REF, skip_conv=False, join_pe=4)
+        pe = lambda r: {x.name: x.pe for x in r.nodes}
+        self.assertEqual((pe(base)["Thr_s"], pe(base)["Add"], pe(base)["Thr_out"]), (1, 1, 1))
+        self.assertEqual((pe(wide)["Thr_s"], pe(wide)["Add"], pe(wide)["Thr_out"]), (4, 4, 4))
+        for name in ("MVAU_p", "MVAU_r", "MVAU_u", "MVAU_e", "Thr_e"):
+            self.assertEqual(pe(base)[name], pe(wide)[name], name)
+        self.assertTrue(verify_with_sim(wide)["ok"])
+
     def test_noconv_variant_has_no_3x3(self):
         r = model_up_bottleneck(**REF, skip_conv=False)
         names = {x.name for x in r.nodes}

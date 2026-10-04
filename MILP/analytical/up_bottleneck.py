@@ -36,12 +36,19 @@ from bottleneck import (  # noqa: E402
 fcm = reg.fcm
 
 
+def _pe_at_least(channels: int, pe: int, floor: int) -> int:
+    """Smallest divisor of `channels` that is >= max(pe, floor)."""
+    return next(d for d in fcm.divisors(channels) if d >= max(pe, floor))
+
+
 def model_up_bottleneck(
     cin: int, cout: int, v: int, bits: int, height: int, width: int, F: int | None = None, T_out: float | None = None,
-    skip_conv: bool = True,
+    skip_conv: bool = True, join_pe: int = 1,
 ) -> BottleneckResult:
     """cin -> cout upsampling block, Cmid = cin/v, INPUT map height x width, output 2*height x 2*width, uniform INT `bits`.
-    Budget: F frame cycles, or T_out cycles per OUTPUT pixel (F = T_out * 4*height*width)."""
+    Budget: F frame cycles, or T_out cycles per OUTPUT pixel (F = T_out * 4*height*width).
+    join_pe: lower bound on the PE of the output-resolution join nodes (Thr_s of the noconv decoder, Add, Thr_out). The default 1 takes the narrowest PE that
+    fits F (89% busy at the U4 up4 size); a larger value gives the DWC / threshold / add chain slack (diagnostic probes `up_..._pe2`, `_pe4`)."""
     if cin % v:
         raise ValueError(f"Cin={cin} not divisible by v={v}")
     if (F is None) == (T_out is None):
@@ -53,7 +60,7 @@ def model_up_bottleneck(
     cmid, A = cin // v, bits
     res = BottleneckResult(params=dict(
         cin=cin, cmid=cmid, cout=cout, v=v, z=v, T=T, F=F, T_in=T_in, bits=bits, k=3, dilation=1, stride=1, height=H, width=W,
-        hout=Ho, wout=Wo, pad=1, block="up", skip_conv=skip_conv, skip_pad="n/a", skip_order="n/a", pad_group=None,
+        hout=Ho, wout=Wo, pad=1, block="up", skip_conv=skip_conv, join_pe=join_pe, skip_pad="n/a", skip_order="n/a", pad_group=None,
     ))
     if px_out > F:
         raise ValueError(f"F={F} is below the UpsampleNearestNeighbour floor of {px_out} cycles/frame (one output pixel per cycle, not foldable)")
@@ -81,12 +88,12 @@ def model_up_bottleneck(
         tpe_k = _min_pe(cout, px_out, F, "Thr_k")
         c_k = _retarget_threshold(c_k, g_k, A, tpe_k)
     else:
-        pe_ts = _min_pe(cout, px_out, F, "Thr_s")
+        pe_ts = _pe_at_least(cout, _min_pe(cout, px_out, F, "Thr_s"), join_pe)
         c_ts = fcm.threshold_node_cost(g_join, A, pe_ts)
 
     pe_d = _min_pe(cin, px_in, F, "Dup")
-    pe_a = _min_pe(cout, px_out, F, "Add")
-    pe_to = _min_pe(cout, px_out, F, "Thr_out")
+    pe_a = _pe_at_least(cout, _min_pe(cout, px_out, F, "Add"), join_pe)
+    pe_to = _pe_at_least(cout, _min_pe(cout, px_out, F, "Thr_out"), join_pe)
     c_dup = fcm.stream_node_cost("dup", g_dup, pe_d)
     c_up = fcm.stream_node_cost("upsample", g_upnn)
     c_add = fcm.stream_node_cost("add", g_join, pe_a)

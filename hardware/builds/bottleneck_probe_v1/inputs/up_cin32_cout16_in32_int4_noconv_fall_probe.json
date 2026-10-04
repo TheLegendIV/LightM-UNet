@@ -1,0 +1,29 @@
+{
+  "name": "up_cin32_cout16_in32_int4_noconv_fall",
+  "block": "up",
+  "cin": 32,
+  "cout": 16,
+  "v": 4,
+  "cmid": 8,
+  "height": 32,
+  "width": 32,
+  "hout": 64,
+  "wout": 64,
+  "bits": 4,
+  "seed": 0,
+  "skip_conv": false,
+  "decoder_type": "nearest_upsample",
+  "T_out": 18,
+  "F": 73728,
+  "op_counts": {
+    "Quant": 12,
+    "Conv": 3,
+    "BatchNormalization": 4,
+    "Relu": 3,
+    "Resize": 1,
+    "ConvTranspose": 1,
+    "Add": 1
+  },
+  "diag": "fall",
+  "join_pe": 1
+}

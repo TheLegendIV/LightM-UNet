@@ -335,3 +335,25 @@ wording of section 1 and the single "--ooc later" step of section 4.6). One run 
   FMPadding_Pixel SIMD when there is no Dup (final); MVAU divisibility asserts run over whichever `mvau_*` roles exist; Pool-route monkeypatch. `run_probes.sh` knows
   `SET=reg|dn|up|up5|int|pool|fnl`; `collect_probe_outputs.sh` and `compare_probe_vs_model.py` know all prefixes and `block == "final"`. `run_probes.sh` re-`docker cp`s everything on every launch --
   do not hand-edit the container copies.
+
+## 16. Diagnostic probes for the slow `noconv` upsampler (6 cases, INT4 only): `up_cin32_cout16_in32_int4_noconv_{pe2,pe4,fjoin,fupnn,fall,pe4fall}`  (`SET=upd`)
+
+From FINN_AGENT_FINAL_REPORT.md: `up_cin32_cout16_in32_int{4,6,8}_noconv` landed every PE/SIMD as predicted but measure 20.3-20.5 cyc/px (T = 18, model 17.6); the `conv` twin passes at 18.0.
+`noconv` is the decoder the network actually uses, so this is the next thing to explain. The six twins share the ONNX of `..._int4_noconv`; only the folding json differs
+(`make_up_diag_configs.py` writes them; each json has a `diag` block listing exactly what was overridden). Run them as a normal set (build + OOC, JOBS <= 4, section 15.1), **after** re-running
+the baseline `up_cin32_cout16_in32_int4_noconv` once so everything uses the same container state.
+
+| Probe | Change vs baseline | Tests |
+|---|---|---|
+| `_pe2`, `_pe4` | `Thr_s`, `Add`, `Thr_out` at PE 2 / 4 (baseline PE 1: 16 cyc/px = 89% of F, the `UpNN -> Thr_s` DWC is 64 -> 4 bit) | the join chain / its DWC has no slack at PE 1 (per-word overhead, bubbles) |
+| `_fjoin` | ext-side join FIFO `Thr_e -> Add` 17 -> 512 words (FINN's stock sizing wanted 484; ours was 17) | `Add` waits on the main branch while ext data piles up |
+| `_fupnn` | FIFO in front of `UpsampleNearestNeighbour` (`dwc -> upnn`) 8 -> 40 words (one input row), FIFO after it 8 -> 91 (FINN stock) | `mvau_p` cannot run ahead while the upsampler re-emits a row |
+| `_fall` | `_fjoin` + `_fupnn` | the two FIFO effects together |
+| `_pe4fall` | PE 4 + both FIFO changes | ceiling: if this is still > 18.5 the limiter is not in these suspects |
+
+**Reading the results (measure with (cycles - latency_cycles)/(N-1)/4096; target 18.0):**
+* a probe that reaches <= 18.4 names a cause; run the single-change probes before drawing conclusions from `_fall` / `_pe4fall`;
+* if only the PE probes recover, the join chain (DWC / Thresholding / AddStreams at PE 1) needs slack: report the real cycles per word of the 64 -> 4 bit DWC;
+* if only `_fjoin` / `_fupnn` recover, the join FIFO sizing in `up_bottleneck_sim.py` is wrong for `noconv` and the model needs fixing (report the max occupancy of `thr_e -> add` and `thr_s -> add`);
+* if nothing recovers, report per-node cycle counts of the stitched model (`AnnotateCycles` / per-node `get_exp_cycles` versus the rtlsim) and which FIFO is full or empty at the end of a frame.
+Also report `stock` vs `forced` depth per edge (the usual `stages.fifo`) and the real max occupancy of the join FIFOs. The model's own numbers for these twins are in each json (`predicted`).
