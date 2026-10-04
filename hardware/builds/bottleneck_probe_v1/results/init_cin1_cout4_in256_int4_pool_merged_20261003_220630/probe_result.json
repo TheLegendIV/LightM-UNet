@@ -1,0 +1,449 @@
+{
+  "case": "init_cin1_cout4_in256_int4_pool",
+  "tag": "merged",
+  "probe": {
+    "name": "init_cin1_cout4_in256_int4_pool",
+    "block": "init",
+    "cin": 1,
+    "cout": 4,
+    "cmid": 3,
+    "height": 256,
+    "width": 256,
+    "hout": 128,
+    "wout": 128,
+    "bits": 4,
+    "seed": 0,
+    "T_out": 4.25,
+    "F": 69632,
+    "op_counts": {
+      "Quant": 5,
+      "Conv": 1,
+      "MaxPool": 1,
+      "Concat": 1,
+      "BatchNormalization": 1,
+      "Relu": 1
+    },
+    "pool_impl": "pool"
+  },
+  "predicted": {
+    "T": 4.25,
+    "F": 69632,
+    "steady_cyc_px": 4.062744140625,
+    "latency_first_out": 536,
+    "frame_cycles": 199705,
+    "skip_fifo_words": 68,
+    "skip_fifo_width_bits": 4,
+    "main_fifo_words": 89,
+    "totals": {
+      "lut": 1750.0045311111112,
+      "bram18": 3.0,
+      "uram": 0.0,
+      "dsp": 9.0,
+      "dwc_lut": 16.5243,
+      "fifo_lut": 152,
+      "fifo_bram18": 3,
+      "fifo_uram": 0
+    },
+    "nodes": {
+      "thr_in": {
+        "op": "Thresholding_rtl (input quant)",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 4.0,
+        "frame_cycles": 65536,
+        "lut": 74.8378,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 4,
+        "out_width_bits": 4
+      },
+      "dup": {
+        "op": "DuplicateStreams",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 4.0,
+        "frame_cycles": 65536,
+        "lut": 115,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 4,
+        "out_width_bits": 4
+      },
+      "fmpad": {
+        "op": "FMPadding 3x3",
+        "pe": 0,
+        "simd": 1,
+        "cyc_px": 4.062744140625,
+        "frame_cycles": 66564,
+        "lut": 0.0,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 4,
+        "out_width_bits": 4
+      },
+      "swg": {
+        "op": "ConvolutionInputGenerator_rtl 3x3 s2",
+        "pe": 0,
+        "simd": 1,
+        "cyc_px": 4.0628662109375,
+        "frame_cycles": 66566,
+        "lut": 354.2556,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 0.0,
+        "in_width_bits": 4,
+        "out_width_bits": 4
+      },
+      "mvau_c": {
+        "op": "MVAU rtl 3x3 s2",
+        "pe": 1,
+        "simd": 9,
+        "cyc_px": 3.0,
+        "frame_cycles": 49152,
+        "lut": 290.6178311111111,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 9,
+        "in_width_bits": 36,
+        "out_width_bits": 12
+      },
+      "thr_c": {
+        "op": "Thresholding_rtl (branch quant)",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 3.0,
+        "frame_cycles": 49152,
+        "lut": 80.8378,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 12,
+        "out_width_bits": 4
+      },
+      "swg_p": {
+        "op": "ConvolutionInputGenerator depthwise 2x2 s2",
+        "pe": 0,
+        "simd": 1,
+        "cyc_px": 4.0313720703125,
+        "frame_cycles": 66050,
+        "lut": 354.2556,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 0.0,
+        "in_width_bits": 4,
+        "out_width_bits": 4
+      },
+      "pool": {
+        "op": "Pool_hls",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 4.0,
+        "frame_cycles": 65536,
+        "lut": 156,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 4,
+        "out_width_bits": 4
+      },
+      "thr_m": {
+        "op": "Thresholding_rtl (branch quant)",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 1.0,
+        "frame_cycles": 16384,
+        "lut": 74.8378,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 4,
+        "out_width_bits": 4
+      },
+      "concat": {
+        "op": "StreamingConcat_hls",
+        "pe": 0,
+        "simd": 0,
+        "cyc_px": 1.0,
+        "frame_cycles": 16384,
+        "lut": 0,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 16,
+        "out_width_bits": 16
+      },
+      "thr_act": {
+        "op": "Thresholding_rtl (BN+ReLU)",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 4.0,
+        "frame_cycles": 65536,
+        "lut": 80.8378,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 4,
+        "out_width_bits": 4
+      }
+    },
+    "dwcs": [
+      {
+        "edge": "FIFOmain->Concat",
+        "in_width": 4,
+        "out_width": 12,
+        "lut": 11.3061
+      },
+      {
+        "edge": "Concat->Thr_act",
+        "in_width": 16,
+        "out_width": 4,
+        "lut": 5.2182
+      }
+    ]
+  },
+  "stages": {
+    "convert": {
+      "ops": [
+        "ConvolutionInputGenerator_rtl",
+        "DuplicateStreams_hls",
+        "FMPadding_rtl",
+        "MVAU_rtl",
+        "Pool_hls",
+        "StreamingConcat_hls",
+        "Thresholding_rtl"
+      ],
+      "n_nodes": 11
+    },
+    "folding": {
+      "thr_in": {
+        "node": "Thresholding_rtl_0",
+        "op": "Thresholding_rtl",
+        "PE": 1
+      },
+      "dup": {
+        "node": "DuplicateStreams_hls_0",
+        "op": "DuplicateStreams_hls",
+        "PE": 1
+      },
+      "fmpad": {
+        "node": "FMPadding_rtl_0",
+        "op": "FMPadding_rtl",
+        "SIMD": 1
+      },
+      "swg": {
+        "node": "ConvolutionInputGenerator_rtl_0",
+        "op": "ConvolutionInputGenerator_rtl",
+        "SIMD": 1,
+        "parallel_window": 1
+      },
+      "mvau_c": {
+        "node": "MVAU_rtl_0",
+        "op": "MVAU_rtl",
+        "PE": 1,
+        "SIMD": 9
+      },
+      "thr_c": {
+        "node": "Thresholding_rtl_2",
+        "op": "Thresholding_rtl",
+        "PE": 1,
+        "depth_trigger_bram": 1024
+      },
+      "swg_p": {
+        "node": "ConvolutionInputGenerator_rtl_1",
+        "op": "ConvolutionInputGenerator_rtl",
+        "SIMD": 1,
+        "parallel_window": 0
+      },
+      "pool": {
+        "node": "Pool_hls_0",
+        "op": "Pool_hls",
+        "PE": 1
+      },
+      "thr_m": {
+        "node": "Thresholding_rtl_1",
+        "op": "Thresholding_rtl",
+        "PE": 1,
+        "depth_trigger_bram": 1024
+      },
+      "concat": {
+        "node": "StreamingConcat_hls_0",
+        "op": "StreamingConcat_hls"
+      },
+      "thr_act": {
+        "node": "Thresholding_rtl_3",
+        "op": "Thresholding_rtl",
+        "PE": 1,
+        "depth_trigger_bram": 1024
+      }
+    },
+    "fifo": [
+      {
+        "fifo": "StreamingFIFO_rtl_0",
+        "edge": [
+          null,
+          "thr_in"
+        ],
+        "stock_depth": 2,
+        "forced_depth": null,
+        "note": "edge not in prediction; stock depth kept"
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_1",
+        "edge": [
+          "thr_in",
+          "dup"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_2",
+        "edge": [
+          "dup",
+          "fmpad"
+        ],
+        "stock_depth": 1769,
+        "forced_depth": 260,
+        "is_skip": false,
+        "impl_style_forced_to_rtl": true
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_3",
+        "edge": [
+          "dup",
+          "thr_m"
+        ],
+        "stock_depth": 2,
+        "forced_depth": null,
+        "note": "edge not in prediction; stock depth kept"
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_4",
+        "edge": [
+          "thr_m",
+          "swg_p"
+        ],
+        "stock_depth": 256,
+        "forced_depth": null,
+        "note": "edge not in prediction; stock depth kept"
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_5",
+        "edge": [
+          "fmpad",
+          "swg"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_6",
+        "edge": [
+          "swg",
+          "mvau_c"
+        ],
+        "stock_depth": 42,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_7",
+        "edge": [
+          "swg_p",
+          "pool"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_8",
+        "edge": [
+          "mvau_c",
+          "thr_c"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_9",
+        "edge": [
+          "pool",
+          "concat"
+        ],
+        "stock_depth": 381,
+        "forced_depth": null,
+        "note": "edge not in prediction; stock depth kept"
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_10",
+        "edge": [
+          "thr_c",
+          "dwc"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 89,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_11",
+        "edge": [
+          "dwc",
+          "concat"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_12",
+        "edge": [
+          "concat",
+          "dwc"
+        ],
+        "stock_depth": 32,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_13",
+        "edge": [
+          "dwc",
+          "thr_act"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_14",
+        "edge": [
+          "thr_act",
+          null
+        ],
+        "stock_depth": 2,
+        "forced_depth": null,
+        "note": "edge not in prediction; stock depth kept"
+      }
+    ],
+    "rtlsim": {
+      "N_IN_TXNS": 196608,
+      "N_OUT_TXNS": 196608,
+      "cycles": 246078,
+      "N": 3,
+      "latency_cycles": 81974,
+      "runtime[ms]": 2.46078,
+      "throughput[images/s]": 1219.1256430887768,
+      "fclk[mhz]": 100.0,
+      "stable_throughput[images/s]": 1828.1090040462145,
+      "steady_cyc_per_pixel": 0.8346761067708334,
+      "target_cyc_per_pixel": 4.25
+    }
+  }
+}

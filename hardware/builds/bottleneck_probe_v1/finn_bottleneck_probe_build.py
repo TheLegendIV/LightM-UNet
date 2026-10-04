@@ -162,7 +162,7 @@ def identify_roles_down(model, probe: dict) -> dict:
         elif n.op_type.startswith("Pool"):          # InferPool route: depthwise SWG + Pool_hls (PE)
             roles["pool"] = n
         elif n.op_type.startswith("ConvolutionInputGenerator"):
-            ks = list(inst.get_nodeattr("ConvKernelSize"))
+            ks = list(inst.get_nodeattr("ConvKernelDim"))
             if ks[0] == 2:   # the reduce conv's 2x2 stride-2 window feeds an MVAU, the pooling window feeds a Pool node
                 c = _real_consumer(model, n)
                 roles["swg_p" if (c is not None and c.op_type.startswith("Pool")) else "swg_r"] = n
@@ -198,7 +198,7 @@ def identify_roles_up(model, probe: dict) -> dict:
             mw, mh = inst.get_nodeattr("MW"), inst.get_nodeattr("MH")
             prod = _real_producer(model, n)
             if prod is not None and prod.op_type.startswith("ConvolutionInputGenerator"):
-                ks = list(getCustomOp(prod).get_nodeattr("ConvKernelSize"))
+                ks = list(getCustomOp(prod).get_nodeattr("ConvKernelDim"))
                 key = "mvau_u" if ks[0] == 2 else "mvau_k"
             else:   # 1x1 MVAUs: classify by what follows (MVAU -> Thr -> next): UpNN = proj, FMPadding_Pixel = reduce, AddStreams = expand
                 nxt = _real_consumer(model, _real_consumer(model, n))
@@ -221,7 +221,7 @@ def identify_roles_up(model, probe: dict) -> dict:
         elif n.op_type.startswith("FMPadding"):
             roles["fmpad_k"] = n
         elif n.op_type.startswith("ConvolutionInputGenerator"):
-            ks = list(inst.get_nodeattr("ConvKernelSize"))
+            ks = list(inst.get_nodeattr("ConvKernelDim"))
             roles["swg_u" if ks[0] == 2 else "swg_k"] = n
     need = ["mvau_p", "mvau_r", "mvau_u", "mvau_e", "dup", "add", "upnn", "fmpadpix", "swg_u"]
     if probe.get("skip_conv"):
@@ -245,7 +245,8 @@ def identify_roles_up(model, probe: dict) -> dict:
 
 def identify_roles_init(model, probe: dict) -> dict:
     """Initial block (int_bottleneck.py): role -> node for thr_in, dup, fmpad, swg, mvau_c, thr_c, maxpool, thr_m, concat, thr_act.
-    thr_c / thr_m are the shared branch_quant thresholds after the conv and the maxpool, thr_act the BN + ReLU threshold after the concat."""
+    thr_c is the branch_quant threshold after the conv; thr_m is the branch_quant threshold BEFORE the maxpool (maxpool itself has no
+    output threshold -- it feeds StreamingConcat directly), thr_act the BN + ReLU threshold after the concat."""
     roles = {}
     for n in model.graph.node:
         if "MVAU" in n.op_type:
@@ -259,7 +260,7 @@ def identify_roles_init(model, probe: dict) -> dict:
         elif n.op_type.startswith("StreamingConcat"):
             roles["concat"] = n
         elif n.op_type.startswith("ConvolutionInputGenerator"):
-            ks = list(getCustomOp(n).get_nodeattr("ConvKernelSize"))
+            ks = list(getCustomOp(n).get_nodeattr("ConvKernelDim"))
             roles["swg_p" if ks[0] == 2 else "swg"] = n
         elif n.op_type.startswith("FMPadding"):
             roles["fmpad"] = n
@@ -267,7 +268,11 @@ def identify_roles_init(model, probe: dict) -> dict:
         if r not in roles:
             raise RuntimeError(f"role {r} not found in graph (found {sorted(roles)})")
     roles["thr_c"] = _real_consumer(model, roles["mvau_c"])
-    roles["thr_m"] = _real_consumer(model, roles["pool" if probe.get("pool_impl") == "pool" else "maxpool"])
+    if probe.get("pool_impl") == "pool":
+        # InferPool inserts a ConvolutionInputGenerator (swg_p) between the threshold and Pool
+        roles["thr_m"] = _real_producer(model, roles["swg_p"])
+    else:
+        roles["thr_m"] = _real_producer(model, roles["maxpool"])
     roles["thr_act"] = _real_consumer(model, roles["concat"])
     roles["thr_in"] = _real_producer(model, roles["dup"])
     for r, n in roles.items():

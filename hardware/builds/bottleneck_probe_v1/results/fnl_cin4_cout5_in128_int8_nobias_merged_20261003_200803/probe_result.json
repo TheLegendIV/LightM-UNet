@@ -1,0 +1,214 @@
+{
+  "case": "fnl_cin4_cout5_in128_int8_nobias",
+  "tag": "merged",
+  "probe": {
+    "name": "fnl_cin4_cout5_in128_int8_nobias",
+    "block": "final",
+    "cin": 4,
+    "cout": 5,
+    "cmid": 4,
+    "height": 128,
+    "width": 128,
+    "hout": 256,
+    "wout": 256,
+    "bits": 8,
+    "seed": 0,
+    "bias": false,
+    "T_out": 1.125,
+    "F": 73728,
+    "op_counts": {
+      "Quant": 2,
+      "ConvTranspose": 1
+    }
+  },
+  "predicted": {
+    "T": 1.125,
+    "F": 73728,
+    "steady_cyc_px": 1.0078277587890625,
+    "latency_first_out": 261,
+    "frame_cycles": 198150,
+    "skip_fifo_words": 0,
+    "skip_fifo_width_bits": 0,
+    "totals": {
+      "lut": 1508.0178,
+      "bram18": 0.0,
+      "uram": 0.0,
+      "dsp": 48.0,
+      "dwc_lut": 0,
+      "fifo_lut": 80,
+      "fifo_bram18": 0,
+      "fifo_uram": 0
+    },
+    "nodes": {
+      "fmpadpix": {
+        "op": "FMPadding_Pixel_hls",
+        "pe": 0,
+        "simd": 4,
+        "cyc_px": 1.0078277587890625,
+        "frame_cycles": 66049,
+        "lut": 0.0,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 32,
+        "out_width_bits": 32
+      },
+      "swg_u": {
+        "op": "ConvolutionInputGenerator_rtl 2x2",
+        "pe": 0,
+        "simd": 4,
+        "cyc_px": 1.0078582763671875,
+        "frame_cycles": 66051,
+        "lut": 521.4324,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 0.0,
+        "in_width_bits": 32,
+        "out_width_bits": 32
+      },
+      "mvau_f": {
+        "op": "MVAU rtl 2x2 (lowered ConvTranspose)",
+        "pe": 5,
+        "simd": 16,
+        "cyc_px": 1.0,
+        "frame_cycles": 65536,
+        "lut": 906.5853999999999,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 48,
+        "in_width_bits": 128,
+        "out_width_bits": 105
+      }
+    },
+    "dwcs": []
+  },
+  "stages": {
+    "convert": {
+      "ops": [
+        "ConvolutionInputGenerator_rtl",
+        "FMPadding_Pixel_hls",
+        "FMPadding_rtl",
+        "MVAU_rtl",
+        "Thresholding_rtl"
+      ],
+      "n_nodes": 5
+    },
+    "folding": {
+      "fmpadpix": {
+        "node": "FMPadding_Pixel_hls_0",
+        "op": "FMPadding_Pixel_hls",
+        "SIMD": 4
+      },
+      "swg_u": {
+        "node": "ConvolutionInputGenerator_rtl_0",
+        "op": "ConvolutionInputGenerator_rtl",
+        "SIMD": 4,
+        "parallel_window": 1
+      },
+      "mvau_f": {
+        "node": "MVAU_rtl_0",
+        "op": "MVAU_rtl",
+        "PE": 5,
+        "SIMD": 16
+      },
+      "thr_in": {
+        "node": "Thresholding_rtl_0",
+        "op": "Thresholding_rtl",
+        "PE": 4
+      }
+    },
+    "fifo": [
+      {
+        "fifo": "StreamingFIFO_rtl_0",
+        "edge": [
+          null,
+          "thr_in"
+        ],
+        "stock_depth": 8119,
+        "forced_depth": null,
+        "note": "edge not in prediction; stock depth kept"
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_1",
+        "edge": [
+          "thr_in",
+          "fmpadpix"
+        ],
+        "stock_depth": 16384,
+        "forced_depth": null,
+        "note": "edge not in prediction; stock depth kept"
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_2",
+        "edge": [
+          "fmpadpix",
+          null
+        ],
+        "stock_depth": 1754,
+        "forced_depth": null,
+        "note": "edge not in prediction; stock depth kept"
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_3",
+        "edge": [
+          null,
+          "swg_u"
+        ],
+        "stock_depth": 32,
+        "forced_depth": null,
+        "note": "edge not in prediction; stock depth kept"
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_4",
+        "edge": [
+          "swg_u",
+          "mvau_f"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_5",
+        "edge": [
+          "mvau_f",
+          null
+        ],
+        "stock_depth": 2,
+        "forced_depth": null,
+        "note": "edge not in prediction; stock depth kept"
+      }
+    ],
+    "rtlsim": {
+      "N_IN_TXNS": 49152,
+      "N_OUT_TXNS": 196350,
+      "cycles": 100197901,
+      "N": 3,
+      "latency_cycles": 66059,
+      "runtime[ms]": 1001.9790100000001,
+      "throughput[images/s]": 2.994074696235403,
+      "fclk[mhz]": 100.0,
+      "stable_throughput[images/s]": 2.996049947827785,
+      "steady_cyc_per_pixel": 2037.1875406901042,
+      "target_cyc_per_pixel": 1.125
+    },
+    "ooc": {
+      "vivado_proj_folder": "/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/synth_out_of_context_zhj9hosv/results_finn_design_wrapper",
+      "LUT": 3928.0,
+      "LUTRAM": 916.0,
+      "FF": 3084.0,
+      "DSP": 0.0,
+      "BRAM": 20.0,
+      "BRAM_18K": 1.0,
+      "BRAM_36K": 20.0,
+      "URAM": 1.0,
+      "Carry": 153.0,
+      "WNS": 5.502,
+      "Delay": 5.502,
+      "vivado_version": 2022.2,
+      "vivado_build_no": 3671981.0,
+      "": 0,
+      "fmax_mhz": 222.32103156958647
+    }
+  }
+}

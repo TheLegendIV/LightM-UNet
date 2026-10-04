@@ -1,0 +1,334 @@
+{
+  "case": "up_cin16_cout4_in64_int4_conv",
+  "tag": "merged",
+  "probe": {
+    "name": "up_cin16_cout4_in64_int4_conv",
+    "block": "up",
+    "cin": 16,
+    "cout": 4,
+    "v": 4,
+    "cmid": 4,
+    "height": 64,
+    "width": 64,
+    "hout": 128,
+    "wout": 128,
+    "bits": 4,
+    "seed": 0,
+    "skip_conv": true,
+    "decoder_type": "nearest_conv_upsample",
+    "T_out": 4.5,
+    "F": 73728,
+    "op_counts": {
+      "Quant": 14,
+      "Conv": 4,
+      "BatchNormalization": 5,
+      "Relu": 4,
+      "Resize": 1,
+      "ConvTranspose": 1,
+      "Add": 1
+    }
+  },
+  "predicted": {
+    "T": 4.5,
+    "F": 73728,
+    "steady_cyc_px": 4.3843994140625,
+    "latency_first_out": 1189,
+    "frame_cycles": 216286,
+    "skip_fifo_words": 519,
+    "skip_fifo_width_bits": 4,
+    "main_fifo_words": 5,
+    "totals": {
+      "lut": 3681.337897777778,
+      "bram18": 2.0,
+      "uram": 0.0,
+      "dsp": 64.0,
+      "dwc_lut": 78.273,
+      "fifo_lut": 421,
+      "fifo_bram18": 2,
+      "fifo_uram": 0
+    },
+    "nodes": {
+      "dup": {
+        "op": "DuplicateStreams",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 4.0,
+        "frame_cycles": 65536,
+        "lut": 115,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 4,
+        "out_width_bits": 4
+      },
+      "mvau_p": {
+        "op": "MVAU rtl 1x1 proj",
+        "pe": 1,
+        "simd": 4,
+        "cyc_px": 4.0,
+        "frame_cycles": 65536,
+        "lut": 236.04849333333334,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 4,
+        "in_width_bits": 16,
+        "out_width_bits": 13
+      },
+      "thr_p": {
+        "op": "Thresholding_rtl",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 1.0,
+        "frame_cycles": 16384,
+        "lut": 83.8378,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 13,
+        "out_width_bits": 4
+      },
+      "upnn": {
+        "op": "UpsampleNearestNeighbour_hls",
+        "pe": 0,
+        "simd": 0,
+        "cyc_px": 1.0,
+        "frame_cycles": 16384,
+        "lut": 0,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 16,
+        "out_width_bits": 16
+      },
+      "fmpad_k": {
+        "op": "FMPadding 3x3",
+        "pe": 0,
+        "simd": 4,
+        "cyc_px": 1.031494140625,
+        "frame_cycles": 16900,
+        "lut": 0.0,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 16,
+        "out_width_bits": 16
+      },
+      "swg_k": {
+        "op": "ConvolutionInputGenerator_rtl",
+        "pe": 0,
+        "simd": 4,
+        "cyc_px": 1.0316162109375,
+        "frame_cycles": 16902,
+        "lut": 409.9812,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 0.0,
+        "in_width_bits": 16,
+        "out_width_bits": 16
+      },
+      "mvau_k": {
+        "op": "MVAU rtl 3x3 skip conv",
+        "pe": 1,
+        "simd": 36,
+        "cyc_px": 4.0,
+        "frame_cycles": 65536,
+        "lut": 590.4038133333335,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 36,
+        "in_width_bits": 144,
+        "out_width_bits": 14
+      },
+      "thr_k": {
+        "op": "Thresholding_rtl",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 4.0,
+        "frame_cycles": 65536,
+        "lut": 83.8378,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 14,
+        "out_width_bits": 4
+      },
+      "mvau_r": {
+        "op": "MVAU rtl 1x1 reduce",
+        "pe": 1,
+        "simd": 4,
+        "cyc_px": 4.0,
+        "frame_cycles": 65536,
+        "lut": 236.04849333333334,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 4,
+        "in_width_bits": 16,
+        "out_width_bits": 13
+      },
+      "thr_r": {
+        "op": "Thresholding_rtl",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 1.0,
+        "frame_cycles": 16384,
+        "lut": 83.8378,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 13,
+        "out_width_bits": 4
+      },
+      "fmpadpix": {
+        "op": "FMPadding_Pixel_hls",
+        "pe": 0,
+        "simd": 4,
+        "cyc_px": 1.01568603515625,
+        "frame_cycles": 16641,
+        "lut": 0.0,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 16,
+        "out_width_bits": 16
+      },
+      "swg_u": {
+        "op": "ConvolutionInputGenerator_rtl 2x2",
+        "pe": 0,
+        "simd": 4,
+        "cyc_px": 1.01580810546875,
+        "frame_cycles": 16643,
+        "lut": 362.2164,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 0.0,
+        "in_width_bits": 16,
+        "out_width_bits": 16
+      },
+      "mvau_u": {
+        "op": "MVAU rtl 2x2 (lowered ConvTranspose)",
+        "pe": 1,
+        "simd": 16,
+        "cyc_px": 4.0,
+        "frame_cycles": 65536,
+        "lut": 368.6727066666667,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 16,
+        "in_width_bits": 64,
+        "out_width_bits": 13
+      },
+      "thr_u": {
+        "op": "Thresholding_rtl",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 4.0,
+        "frame_cycles": 65536,
+        "lut": 83.8378,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 13,
+        "out_width_bits": 4
+      },
+      "mvau_e": {
+        "op": "MVAU rtl 1x1 expand",
+        "pe": 1,
+        "simd": 4,
+        "cyc_px": 4.0,
+        "frame_cycles": 65536,
+        "lut": 234.66699111111112,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 4,
+        "in_width_bits": 16,
+        "out_width_bits": 11
+      },
+      "thr_e": {
+        "op": "Thresholding_rtl",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 4.0,
+        "frame_cycles": 65536,
+        "lut": 81.8378,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 11,
+        "out_width_bits": 4
+      },
+      "add": {
+        "op": "AddStreams",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 4.0,
+        "frame_cycles": 65536,
+        "lut": 131,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 4,
+        "out_width_bits": 5
+      },
+      "thr_out": {
+        "op": "Thresholding_rtl (join)",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 4.0,
+        "frame_cycles": 65536,
+        "lut": 80.8378,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 5,
+        "out_width_bits": 4
+      }
+    },
+    "dwcs": [
+      {
+        "edge": "Dup->MVAU_p",
+        "in_width": 4,
+        "out_width": 16,
+        "lut": 15.6546
+      },
+      {
+        "edge": "Thr_p->UpNN",
+        "in_width": 4,
+        "out_width": 16,
+        "lut": 15.6546
+      },
+      {
+        "edge": "Dup->MVAU_r",
+        "in_width": 4,
+        "out_width": 16,
+        "lut": 15.6546
+      },
+      {
+        "edge": "Thr_r->FMPadPix",
+        "in_width": 4,
+        "out_width": 16,
+        "lut": 15.6546
+      },
+      {
+        "edge": "Thr_u->MVAU_e",
+        "in_width": 4,
+        "out_width": 16,
+        "lut": 15.6546
+      }
+    ]
+  },
+  "stages": {
+    "convert": {
+      "ops": [
+        "AddStreams_hls",
+        "ConvolutionInputGenerator_rtl",
+        "DuplicateStreams_hls",
+        "FMPadding_Pixel_hls",
+        "FMPadding_rtl",
+        "MVAU_rtl",
+        "Thresholding_rtl",
+        "UpsampleNearestNeighbour_hls"
+      ],
+      "n_nodes": 20
+    }
+  }
+}

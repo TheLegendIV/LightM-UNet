@@ -292,6 +292,206 @@
         "op": "Thresholding_rtl",
         "PE": 1
       }
+    },
+    "fifo": [
+      {
+        "fifo": "StreamingFIFO_rtl_0",
+        "edge": [
+          null,
+          "thr_in"
+        ],
+        "stock_depth": 2,
+        "forced_depth": null,
+        "note": "edge not in prediction; stock depth kept"
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_1",
+        "edge": [
+          "thr_in",
+          "dup"
+        ],
+        "stock_depth": 2,
+        "forced_depth": null,
+        "note": "edge not in prediction; stock depth kept"
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_2",
+        "edge": [
+          "dup",
+          "thr_s"
+        ],
+        "stock_depth": 7481,
+        "forced_depth": 4,
+        "is_skip": false,
+        "impl_style_forced_to_rtl": true
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_3",
+        "edge": [
+          "dup",
+          "dwc"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 4,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_4",
+        "edge": [
+          "dwc",
+          "mvau_r"
+        ],
+        "stock_depth": 8192,
+        "forced_depth": 4,
+        "is_skip": false,
+        "impl_style_forced_to_rtl": true
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_5",
+        "edge": [
+          "thr_s",
+          "add"
+        ],
+        "stock_depth": 32768,
+        "forced_depth": 4416,
+        "is_skip": true,
+        "impl_style_forced_to_rtl": true
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_6",
+        "edge": [
+          "mvau_r",
+          "thr_r"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_7",
+        "edge": [
+          "thr_r",
+          "dwc"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_8",
+        "edge": [
+          "dwc",
+          "fmpad"
+        ],
+        "stock_depth": 32,
+        "forced_depth": 6,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_9",
+        "edge": [
+          "fmpad",
+          "swg"
+        ],
+        "stock_depth": 279,
+        "forced_depth": 4,
+        "is_skip": false,
+        "impl_style_forced_to_rtl": true
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_10",
+        "edge": [
+          "swg",
+          "mvau_m"
+        ],
+        "stock_depth": 2955,
+        "forced_depth": 4,
+        "is_skip": false,
+        "impl_style_forced_to_rtl": true
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_11",
+        "edge": [
+          "mvau_m",
+          "thr_m"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_12",
+        "edge": [
+          "thr_m",
+          "dwc"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_13",
+        "edge": [
+          "dwc",
+          "mvau_e"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_14",
+        "edge": [
+          "mvau_e",
+          "thr_e"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_15",
+        "edge": [
+          "thr_e",
+          "add"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_16",
+        "edge": [
+          "add",
+          "thr_out"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_17",
+        "edge": [
+          "thr_out",
+          null
+        ],
+        "stock_depth": 2,
+        "forced_depth": null,
+        "note": "edge not in prediction; stock depth kept"
+      }
+    ],
+    "rtlsim": {
+      "N_IN_TXNS": 196608,
+      "N_OUT_TXNS": 196608,
+      "cycles": 491135,
+      "N": 6,
+      "latency_cycles": 82570,
+      "runtime[ms]": 4.91135,
+      "throughput[images/s]": 1221.6600323739908,
+      "fclk[mhz]": 100.0,
+      "stable_throughput[images/s]": 1468.554575159399,
+      "steady_cyc_per_pixel": 66.49820963541669,
+      "target_cyc_per_pixel": 72
     }
   }
 }

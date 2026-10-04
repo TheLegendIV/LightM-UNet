@@ -1,0 +1,110 @@
+{
+  "case": "fnl_cin4_cout5_in128_int4_bias",
+  "tag": "merged",
+  "probe": {
+    "name": "fnl_cin4_cout5_in128_int4_bias",
+    "block": "final",
+    "cin": 4,
+    "cout": 5,
+    "cmid": 4,
+    "height": 128,
+    "width": 128,
+    "hout": 256,
+    "wout": 256,
+    "bits": 4,
+    "seed": 0,
+    "bias": true,
+    "T_out": 1.125,
+    "F": 73728,
+    "op_counts": {
+      "Quant": 3,
+      "ConvTranspose": 1
+    }
+  },
+  "predicted": {
+    "T": 1.125,
+    "F": 73728,
+    "steady_cyc_px": 1.0078277587890625,
+    "latency_first_out": 263,
+    "frame_cycles": 198152,
+    "skip_fifo_words": 0,
+    "skip_fifo_width_bits": 0,
+    "totals": {
+      "lut": 2275.7980666666667,
+      "bram18": 0.0,
+      "uram": 0.0,
+      "dsp": 48.0,
+      "dwc_lut": 0,
+      "fifo_lut": 121,
+      "fifo_bram18": 0,
+      "fifo_uram": 0
+    },
+    "nodes": {
+      "fmpadpix": {
+        "op": "FMPadding_Pixel_hls",
+        "pe": 0,
+        "simd": 4,
+        "cyc_px": 1.0078277587890625,
+        "frame_cycles": 66049,
+        "lut": 0.0,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 16,
+        "out_width_bits": 16
+      },
+      "swg_u": {
+        "op": "ConvolutionInputGenerator_rtl 2x2",
+        "pe": 0,
+        "simd": 4,
+        "cyc_px": 1.0078582763671875,
+        "frame_cycles": 66051,
+        "lut": 409.9812,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 0.0,
+        "in_width_bits": 16,
+        "out_width_bits": 16
+      },
+      "mvau_f": {
+        "op": "MVAU rtl 2x2 (lowered ConvTranspose)",
+        "pe": 5,
+        "simd": 16,
+        "cyc_px": 1.0,
+        "frame_cycles": 65536,
+        "lut": 1089.8168666666668,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 48,
+        "in_width_bits": 64,
+        "out_width_bits": 65
+      },
+      "bias": {
+        "op": "ChannelwiseOp_hls (bias add)",
+        "pe": 5,
+        "simd": 0,
+        "cyc_px": 1.0,
+        "frame_cycles": 65536,
+        "lut": 655,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 65,
+        "out_width_bits": 65
+      }
+    },
+    "dwcs": []
+  },
+  "stages": {
+    "convert": {
+      "ops": [
+        "ConvolutionInputGenerator_rtl",
+        "FMPadding_Pixel_hls",
+        "FMPadding_rtl",
+        "MVAU_rtl",
+        "Thresholding_rtl"
+      ],
+      "n_nodes": 5
+    }
+  }
+}

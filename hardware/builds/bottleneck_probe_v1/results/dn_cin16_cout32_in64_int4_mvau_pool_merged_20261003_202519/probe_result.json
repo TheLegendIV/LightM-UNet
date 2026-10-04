@@ -1,0 +1,680 @@
+{
+  "case": "dn_cin16_cout32_in64_int4_mvau_pool",
+  "tag": "merged",
+  "probe": {
+    "name": "dn_cin16_cout32_in64_int4_mvau_pool",
+    "block": "down",
+    "cin": 16,
+    "cout": 32,
+    "v": 4,
+    "cmid": 8,
+    "height": 64,
+    "width": 64,
+    "hout": 32,
+    "wout": 32,
+    "bits": 4,
+    "seed": 0,
+    "skip_pad": "mvau",
+    "skip_order": "pad_thr",
+    "T_out": 72,
+    "F": 73728,
+    "op_counts": {
+      "Quant": 11,
+      "MaxPool": 1,
+      "Conv": 4,
+      "BatchNormalization": 3,
+      "Relu": 3,
+      "Add": 1
+    },
+    "pool_impl": "pool"
+  },
+  "predicted": {
+    "T": 72.0,
+    "F": 73728,
+    "steady_cyc_px": 72.005859375,
+    "latency_first_out": 3774,
+    "frame_cycles": 224513,
+    "skip_fifo_words": 1421,
+    "skip_fifo_width_bits": 4,
+    "totals": {
+      "lut": 4192.614433333334,
+      "bram18": 1.0,
+      "uram": 0.0,
+      "dsp": 28.0,
+      "dwc_lut": 113.9307,
+      "fifo_lut": 508,
+      "fifo_bram18": 1,
+      "fifo_uram": 0
+    },
+    "nodes": {
+      "dup": {
+        "op": "DuplicateStreams",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 64.0,
+        "frame_cycles": 65536,
+        "lut": 115,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 4,
+        "out_width_bits": 4
+      },
+      "swg_r": {
+        "op": "ConvolutionInputGenerator_rtl 2x2 s2",
+        "pe": 0,
+        "simd": 8,
+        "cyc_px": 8.12890625,
+        "frame_cycles": 8324,
+        "lut": 521.4324,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 0.0,
+        "in_width_bits": 32,
+        "out_width_bits": 32
+      },
+      "mvau_r": {
+        "op": "MVAU rtl 2x2 s2",
+        "pe": 1,
+        "simd": 8,
+        "cyc_px": 64.0,
+        "frame_cycles": 65536,
+        "lut": 281.6380666666667,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 8,
+        "in_width_bits": 32,
+        "out_width_bits": 15
+      },
+      "thr_r": {
+        "op": "Thresholding_rtl",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 8.0,
+        "frame_cycles": 8192,
+        "lut": 98.8378,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 15,
+        "out_width_bits": 4
+      },
+      "fmpad": {
+        "op": "FMPadding 3x3",
+        "pe": 0,
+        "simd": 8,
+        "cyc_px": 1.12890625,
+        "frame_cycles": 1156,
+        "lut": 0.0,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 32,
+        "out_width_bits": 32
+      },
+      "swg_m": {
+        "op": "ConvolutionInputGenerator_rtl",
+        "pe": 0,
+        "simd": 8,
+        "cyc_px": 9.0654296875,
+        "frame_cycles": 9283,
+        "lut": 362.2164,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 0.0,
+        "in_width_bits": 32,
+        "out_width_bits": 32
+      },
+      "mvau_m": {
+        "op": "MVAU rtl 3x3",
+        "pe": 1,
+        "simd": 8,
+        "cyc_px": 72.0,
+        "frame_cycles": 73728,
+        "lut": 281.6380666666667,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 8,
+        "in_width_bits": 32,
+        "out_width_bits": 15
+      },
+      "thr_m": {
+        "op": "Thresholding_rtl",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 8.0,
+        "frame_cycles": 8192,
+        "lut": 98.8378,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 15,
+        "out_width_bits": 4
+      },
+      "mvau_e": {
+        "op": "MVAU rtl 1x1",
+        "pe": 1,
+        "simd": 4,
+        "cyc_px": 64.0,
+        "frame_cycles": 65536,
+        "lut": 235.35774222222224,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 4,
+        "in_width_bits": 16,
+        "out_width_bits": 12
+      },
+      "thr_e": {
+        "op": "Thresholding_rtl",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 32.0,
+        "frame_cycles": 32768,
+        "lut": 159.83780000000002,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 12,
+        "out_width_bits": 4
+      },
+      "swg_p": {
+        "op": "ConvolutionInputGenerator depthwise 2x2 s2",
+        "pe": 0,
+        "simd": 2,
+        "cyc_px": 40.015625,
+        "frame_cycles": 40976,
+        "lut": 513.4716,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 0.0,
+        "in_width_bits": 8,
+        "out_width_bits": 8
+      },
+      "pool": {
+        "op": "Pool_hls",
+        "pe": 2,
+        "simd": 0,
+        "cyc_px": 32.0,
+        "frame_cycles": 32768,
+        "lut": 192,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 8,
+        "out_width_bits": 8
+      },
+      "mvau_s": {
+        "op": "MVAU rtl 1x1 identity (INT8 w)",
+        "pe": 1,
+        "simd": 8,
+        "cyc_px": 64.0,
+        "frame_cycles": 65536,
+        "lut": 236.7404577777778,
+        "bram18": 0,
+        "uram": 0,
+        "dsp": 8,
+        "in_width_bits": 32,
+        "out_width_bits": 17
+      },
+      "thr_s": {
+        "op": "Thresholding_rtl (skip)",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 32.0,
+        "frame_cycles": 32768,
+        "lut": 197.83780000000002,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 17,
+        "out_width_bits": 4
+      },
+      "add": {
+        "op": "AddStreams",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 32.0,
+        "frame_cycles": 32768,
+        "lut": 131,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 4,
+        "out_width_bits": 5
+      },
+      "thr_out": {
+        "op": "Thresholding_rtl (join)",
+        "pe": 1,
+        "simd": 0,
+        "cyc_px": 32.0,
+        "frame_cycles": 32768,
+        "lut": 144.83780000000002,
+        "bram18": 0.0,
+        "uram": 0.0,
+        "dsp": 0.0,
+        "in_width_bits": 5,
+        "out_width_bits": 4
+      }
+    },
+    "dwcs": [
+      {
+        "edge": "Dup->SWG_r",
+        "in_width": 4,
+        "out_width": 32,
+        "lut": 30.439500000000002
+      },
+      {
+        "edge": "Thr_r->FMPad",
+        "in_width": 4,
+        "out_width": 32,
+        "lut": 30.439500000000002
+      },
+      {
+        "edge": "Thr_m->MVAU_e",
+        "in_width": 4,
+        "out_width": 16,
+        "lut": 15.6546
+      },
+      {
+        "edge": "Dup->SWG_p",
+        "in_width": 4,
+        "out_width": 8,
+        "lut": 7.8273
+      },
+      {
+        "edge": "Pool->MVAU_s",
+        "in_width": 8,
+        "out_width": 32,
+        "lut": 29.5698
+      }
+    ]
+  },
+  "stages": {
+    "convert": {
+      "ops": [
+        "AddStreams_hls",
+        "ConvolutionInputGenerator_rtl",
+        "DuplicateStreams_hls",
+        "FMPadding_rtl",
+        "MVAU_rtl",
+        "Pool_hls",
+        "Thresholding_rtl"
+      ],
+      "n_nodes": 17
+    },
+    "folding": {
+      "dup": {
+        "node": "DuplicateStreams_hls_0",
+        "op": "DuplicateStreams_hls",
+        "PE": 1
+      },
+      "swg_r": {
+        "node": "ConvolutionInputGenerator_rtl_0",
+        "op": "ConvolutionInputGenerator_rtl",
+        "SIMD": 8,
+        "parallel_window": 0
+      },
+      "mvau_r": {
+        "node": "MVAU_rtl_0",
+        "op": "MVAU_rtl",
+        "PE": 1,
+        "SIMD": 8
+      },
+      "thr_r": {
+        "node": "Thresholding_rtl_1",
+        "op": "Thresholding_rtl",
+        "PE": 1,
+        "depth_trigger_bram": 1024
+      },
+      "fmpad": {
+        "node": "FMPadding_rtl_0",
+        "op": "FMPadding_rtl",
+        "SIMD": 8
+      },
+      "swg_m": {
+        "node": "ConvolutionInputGenerator_rtl_2",
+        "op": "ConvolutionInputGenerator_rtl",
+        "SIMD": 8,
+        "parallel_window": 0
+      },
+      "mvau_m": {
+        "node": "MVAU_rtl_2",
+        "op": "MVAU_rtl",
+        "PE": 1,
+        "SIMD": 8
+      },
+      "thr_m": {
+        "node": "Thresholding_rtl_3",
+        "op": "Thresholding_rtl",
+        "PE": 1,
+        "depth_trigger_bram": 1024
+      },
+      "mvau_e": {
+        "node": "MVAU_rtl_3",
+        "op": "MVAU_rtl",
+        "PE": 1,
+        "SIMD": 4
+      },
+      "thr_e": {
+        "node": "Thresholding_rtl_4",
+        "op": "Thresholding_rtl",
+        "PE": 1,
+        "depth_trigger_bram": 1024
+      },
+      "swg_p": {
+        "node": "ConvolutionInputGenerator_rtl_1",
+        "op": "ConvolutionInputGenerator_rtl",
+        "SIMD": 2,
+        "parallel_window": 0
+      },
+      "pool": {
+        "node": "Pool_hls_0",
+        "op": "Pool_hls",
+        "PE": 2
+      },
+      "thr_s": {
+        "node": "Thresholding_rtl_2",
+        "op": "Thresholding_rtl",
+        "PE": 1,
+        "depth_trigger_bram": 1024
+      },
+      "add": {
+        "node": "AddStreams_hls_0",
+        "op": "AddStreams_hls",
+        "PE": 1
+      },
+      "thr_out": {
+        "node": "Thresholding_rtl_5",
+        "op": "Thresholding_rtl",
+        "PE": 1,
+        "depth_trigger_bram": 1024
+      },
+      "mvau_s": {
+        "node": "MVAU_rtl_1",
+        "op": "MVAU_rtl",
+        "PE": 1,
+        "SIMD": 8
+      },
+      "thr_in": {
+        "node": "Thresholding_rtl_0",
+        "op": "Thresholding_rtl",
+        "PE": 1
+      }
+    },
+    "fifo": [
+      {
+        "fifo": "StreamingFIFO_rtl_0",
+        "edge": [
+          null,
+          "thr_in"
+        ],
+        "stock_depth": 2,
+        "forced_depth": null,
+        "note": "edge not in prediction; stock depth kept"
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_1",
+        "edge": [
+          "thr_in",
+          "dup"
+        ],
+        "stock_depth": 2,
+        "forced_depth": null,
+        "note": "edge not in prediction; stock depth kept"
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_2",
+        "edge": [
+          "dup",
+          "dwc"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_3",
+        "edge": [
+          "dup",
+          "dwc"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_4",
+        "edge": [
+          "dwc",
+          "swg_p"
+        ],
+        "stock_depth": 32,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_5",
+        "edge": [
+          "dwc",
+          "swg_r"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 4,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_6",
+        "edge": [
+          "swg_r",
+          "mvau_r"
+        ],
+        "stock_depth": 130,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_7",
+        "edge": [
+          "swg_p",
+          "pool"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_8",
+        "edge": [
+          "pool",
+          "dwc"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_9",
+        "edge": [
+          "mvau_r",
+          "thr_r"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_10",
+        "edge": [
+          "dwc",
+          "mvau_s"
+        ],
+        "stock_depth": 32,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_11",
+        "edge": [
+          "thr_r",
+          "dwc"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_12",
+        "edge": [
+          "mvau_s",
+          "thr_s"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_13",
+        "edge": [
+          "dwc",
+          "fmpad"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 35,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_14",
+        "edge": [
+          "thr_s",
+          "add"
+        ],
+        "stock_depth": 8285,
+        "forced_depth": 1421,
+        "is_skip": true,
+        "impl_style_forced_to_rtl": true
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_15",
+        "edge": [
+          "fmpad",
+          "swg_m"
+        ],
+        "stock_depth": 60,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_16",
+        "edge": [
+          "swg_m",
+          "mvau_m"
+        ],
+        "stock_depth": 2273,
+        "forced_depth": 2,
+        "is_skip": false,
+        "impl_style_forced_to_rtl": true
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_17",
+        "edge": [
+          "mvau_m",
+          "thr_m"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_18",
+        "edge": [
+          "thr_m",
+          "dwc"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_19",
+        "edge": [
+          "dwc",
+          "mvau_e"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_20",
+        "edge": [
+          "mvau_e",
+          "thr_e"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_21",
+        "edge": [
+          "thr_e",
+          "add"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_22",
+        "edge": [
+          "add",
+          "thr_out"
+        ],
+        "stock_depth": 2,
+        "forced_depth": 2,
+        "is_skip": false
+      },
+      {
+        "fifo": "StreamingFIFO_rtl_23",
+        "edge": [
+          "thr_out",
+          null
+        ],
+        "stock_depth": 2,
+        "forced_depth": null,
+        "note": "edge not in prediction; stock depth kept"
+      }
+    ],
+    "rtlsim": {
+      "N_IN_TXNS": 196608,
+      "N_OUT_TXNS": 98304,
+      "cycles": 224565,
+      "N": 3,
+      "latency_cycles": 77109,
+      "runtime[ms]": 2.24565,
+      "throughput[images/s]": 1335.9161044686393,
+      "fclk[mhz]": 100.0,
+      "stable_throughput[images/s]": 2034.505208333333,
+      "steady_cyc_per_pixel": 12.000000000000002,
+      "target_cyc_per_pixel": 72.0
+    },
+    "ooc": {
+      "vivado_proj_folder": "/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/synth_out_of_context_77dwx64t/results_finn_design_wrapper",
+      "LUT": 3302.0,
+      "LUTRAM": 771.0,
+      "FF": 3604.0,
+      "DSP": 0.0,
+      "BRAM": 0.0,
+      "BRAM_18K": 1.0,
+      "BRAM_36K": 0.0,
+      "URAM": 0.0,
+      "Carry": 72.0,
+      "WNS": 6.916,
+      "Delay": 6.916,
+      "vivado_version": 2022.2,
+      "vivado_build_no": 3671981.0,
+      "": 0,
+      "fmax_mhz": 324.254215304799
+    }
+  }
+}
