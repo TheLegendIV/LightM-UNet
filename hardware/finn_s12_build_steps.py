@@ -601,21 +601,42 @@ def _find_init_block_extra_nodes(kernel_model, stage, dup_node, conv_path_head):
         thr_act = _real_consumer(kernel_model, concat)
         if thr_act is not None and thr_act.op_type in THRESH_OP_TYPES:
             by_name[f"{stage}.thr_act"] = thr_act.name
-            by_name[f"{stage}.act"] = thr_act.name
     return by_name
+
+
+def _find_dn_block_maxpool(kernel_model, dup_node, entry_head):
+    """'dn'-kind block's StreamingMaxPool, found on the Dup's OTHER output branch (not the one feeding
+    entry_head, the reduce.0 leaf's own FMPad/SWG/MVAU) per dn_bottleneck.py's skip-path topology:
+        Dup -+-> entry_head (reduce.0's own FMPad/SWG/MVAU) ...
+             +-> MaxPool -> Thr_s (already resolved via _find_block_join_nodes as '<stage>.skip_quant'/'thr_s')"""
+    for out_tensor in dup_node.output:
+        c = kernel_model.find_consumer(out_tensor)
+        while c is not None and c.op_type.startswith("StreamingFIFO"):
+            c = kernel_model.find_consumer(c.output[0])
+        if c is not None and (entry_head is None or c.name != entry_head.name) and c.op_type.startswith("StreamingMaxPool"):
+            return c
+    return None
+
+
+def _find_up_block_upnn(kernel_model, thr_p_node):
+    """'up'-kind block's UpsampleNearestNeighbour, immediately downstream of main_proj's own Thr_p
+    (Dup -> MVAU_p -> Thr_p -> UpNN -> ...; per up_bottleneck.py's topology docstring)."""
+    c = _real_consumer(kernel_model, thr_p_node)
+    if c is not None and c.op_type.startswith("UpsampleNearestNeighbour"):
+        return c
+    return None
 
 
 def build_partition_role_nodes(kernel_model, logical_names, per_layer):
     """Stage-qualified role name (e.g. 'stage3.4.mvau_r', 'stage3.4.thr_r', 'stage3.4.dup') -> real FINN node
     name, for every weight-bearing layer in this partition. Covers each block's entry/mid/exit MVAU and their
     OWN Thresholding (mvau_r/thr_r, mvau_m/thr_m, mvau_e/thr_e, mvau_p/thr_p, mvau_u/thr_u, mvau_c/thr_c,
-    mvau_f), the dense-conv's FMPadding/SWU (fmpad/swg_m, via _find_dense_swu_fmpad, now resolved for 'init'
-    kind too), each block's Dup (DuplicateStreams feeding its entry MVAU), and -- for 'init' kind only --
-    its own thr_in/thr_m/maxpool/concat/thr_act (_find_init_block_extra_nodes). Does NOT cover
-    add/skip_quant/residual_add/out_act -- see _find_block_join_nodes. Best-effort: 'dn'/'up' kind blocks'
-    own extra internal nodes (mvau_s, fmpad_c, upnn, swg_u, ...) are still not resolved here -- intra-block
-    FIFOs on those edges are left on FINN's autosized depth (see build_partition_folding_config's fifo_plan
-    print for the match rate)."""
+    mvau_f), the dense-conv's FMPadding/SWU (fmpad/swg_m, via _find_dense_swu_fmpad, resolved for 'init' kind
+    too; 'up' kind's own 2x2-lowered conv gets fmpadpix/swg_u the same way), each block's Dup (feeding its
+    entry MVAU), 'dn' kind's own skip-path MaxPool (_find_dn_block_maxpool), 'up' kind's own
+    UpsampleNearestNeighbour (_find_up_block_upnn), and -- for 'init' kind only -- its own
+    thr_in/thr_m/maxpool/concat/thr_act (_find_init_block_extra_nodes). Does NOT cover
+    add/skip_quant/residual_add/out_act -- see _find_block_join_nodes."""
     weight_nodes = [n for n in kernel_model.graph.node if n.op_type in WEIGHT_OP_TYPES]
     by_name: dict[str, str] = {}
     for node, logical_name in zip(weight_nodes, logical_names):
@@ -646,6 +667,14 @@ def build_partition_role_nodes(kernel_model, logical_names, per_layer):
                 by_name[f"{stage}.swg"] = swu_node.name
             if fmpad_node is not None:
                 by_name[f"{stage}.fmpad"] = fmpad_node.name
+        elif leaf == "up.0":
+            # up_bottleneck.py's 2x2-lowered transposed conv: FMPadPix -> SWG_u -> MVAU_u (role names
+            # 'fmpadpix'/'swg_u' per its own _ROLE_OF/to_folding_config -- distinct names from the dense-conv case above).
+            fmpad_node, swu_node = _find_dense_swu_fmpad(kernel_model, node)
+            if swu_node is not None:
+                by_name[f"{stage}.swg_u"] = swu_node.name
+            if fmpad_node is not None:
+                by_name[f"{stage}.fmpadpix"] = fmpad_node.name
         kind = _block_kind_of_stage(stage)
         if leaf == _ENTRY_LEAF_BY_KIND.get(kind):
             # 'init' kind's entry leaf ('conv') has FMPad/SWG/DWC between Dup and the MVAU itself; every
@@ -655,6 +684,14 @@ def build_partition_role_nodes(kernel_model, logical_names, per_layer):
                 by_name[f"{stage}.dup"] = dup.name
                 if kind == "init":
                     by_name.update(_find_init_block_extra_nodes(kernel_model, stage, dup, fmpad_node or swu_node))
+                elif kind == "dn":
+                    maxpool = _find_dn_block_maxpool(kernel_model, dup, fmpad_node or swu_node or node)
+                    if maxpool is not None:
+                        by_name[f"{stage}.maxpool"] = maxpool.name
+        if leaf == "main_proj.0" and thr is not None:
+            upnn = _find_up_block_upnn(kernel_model, thr)
+            if upnn is not None:
+                by_name[f"{stage}.upnn"] = upnn.name
     return by_name
 
 
@@ -674,9 +711,21 @@ def _find_block_join_nodes(kernel_model, logical_names, prev_block=None):
         if kind == "out_act":
             by_name[f"{block}.thr_out"] = node_name
             by_name[f"{block}.out_act"] = node_name  # net_fold.py's intra/inter_block_fifos role name for this node
-    for key in list(by_name):   # thr_out fallback: no out_act found -> alias to residual_add instead
+    for key in list(by_name):
+        # thr_out/out_act fallback: hardware/finn_compose_thresholds.py's step_compose_consecutive_thresholds
+        # (wired into the real preamble) merges the real residual_add + out_act Thresholding nodes into ONE
+        # node, so _find_join_thresholds above never finds a SEPARATE out_act node and 'kind == "out_act"'
+        # above never fires -- without this fallback 'down1.out_act' (etc.) is simply absent from role_by_name,
+        # which net_fold.py's inter_block_fifos producer field always uses for the dup-transition edge
+        # ('<block>.out_act' -> '<next_block>.dup'), silently dropping every one of those FIFOs to
+        # fully-unresolved (NOT the producer-only inter-block convention -- it never even gets that far).
+        # net_fold.py's own extra_entry() calls residual_add a zero-cost placeholder "merged into" out_act
+        # (merged_into=...+'out_act'), so aliasing BOTH names to the one real merged node matches that
+        # convention exactly.
         if key.endswith(".residual_add"):
-            by_name.setdefault(f"{key[: -len('.residual_add')]}.thr_out", by_name[key])
+            block = key[: -len(".residual_add")]
+            by_name.setdefault(f"{block}.thr_out", by_name[key])
+            by_name.setdefault(f"{block}.out_act", by_name[key])
     adds = [n for n in kernel_model.graph.node if n.op_type.startswith("AddStreams")]
     blocks = [ln[: -len(".expand.0")] for ln in logical_names if ln.endswith(".expand.0")]
     if len(adds) == len(blocks):

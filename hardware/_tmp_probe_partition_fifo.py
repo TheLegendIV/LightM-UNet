@@ -25,7 +25,7 @@ sys.path.insert(0, "/home/thelegendiv/finn/notebooks/enet")
 PREAMBLE_DIR = ("/home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/"
                 "S12_dense_256_u4_analytical_v1_finn_calibrated_rtl_mvau_256x256_composed_preamble_20261005_164026")
 BRIDGE_DIR = ("/home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/"
-              "S12_dense_256_u4_analytical_v1_finn_calibrated_composed_milpfold_partition0_1_6_20261005_165320")
+              "S12_dense_256_u4_analytical_v1_finn_calibrated_composed_dupjoinfix_milpfold_partition0_1_6_20261005_201522")
 PROBE_OUT = "/tmp/_tmp_probe_partition_fifo_out"
 os.makedirs(PROBE_OUT, exist_ok=True)
 os.environ["FINN_BUILD_DIR"] = os.path.join(PROBE_OUT, "finn_build_tmp")
