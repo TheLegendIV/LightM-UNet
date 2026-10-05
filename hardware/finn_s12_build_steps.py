@@ -898,8 +898,21 @@ def build_partition_folding_config(partition_model_fn, sdp_node_name, logical_na
             aliases_of_node.setdefault(node_name, set()).add(role)
         role_of_node = {v: k for k, v in role_by_name.items()}
 
+        def _resolved_role(role):
+            # usually role IS the bridge's role string already; net_fold.py's extra_nodes also carries each
+            # node's own "canonical_role" ('<consuming stage>.<kind>') for the rare case (dup) where its MILP
+            # name disagrees with that convention (producer-qualified instead of consumer-qualified).
+            if role in role_by_name:
+                return role
+            if extra_nodes is not None:
+                canonical = (extra_nodes.get(role) or {}).get("canonical_role")
+                if canonical in role_by_name:
+                    return canonical
+            return None
+
         def _aliases(role):
-            node_name = role_by_name.get(role)
+            resolved = _resolved_role(role)
+            node_name = role_by_name.get(resolved) if resolved is not None else None
             return aliases_of_node.get(node_name, {role}) if node_name is not None else {role}
 
         def _dwc_resolvable(role):
@@ -909,10 +922,13 @@ def build_partition_folding_config(partition_model_fn, sdp_node_name, logical_na
             # bridge-time resolvable without needing a literal role_by_name entry.
             return isinstance(role, str) and role.endswith(".dwc")
 
+        def _role_ok(role):
+            return _resolved_role(role) is not None or _dwc_resolvable(role)
+
         wanted, wanted_by_producer, unresolved = {}, {}, []
         for f in (intra_block_fifos or []):
             pr, cn = f["producer"], f["consumer"]
-            if (pr in role_by_name or _dwc_resolvable(pr)) and (cn in role_by_name or _dwc_resolvable(cn)):
+            if _role_ok(pr) and _role_ok(cn):
                 for pr_alias in _aliases(pr):
                     for cn_alias in _aliases(cn):
                         wanted[f"{pr_alias}=>{cn_alias}"] = f
@@ -920,7 +936,7 @@ def build_partition_folding_config(partition_model_fn, sdp_node_name, logical_na
                 unresolved.append([pr, cn])
         for f in (inter_block_fifos or []):
             pr, cn = f["producer"], f["consumer"]
-            pr_ok, cn_ok = (pr in role_by_name or _dwc_resolvable(pr)), (cn in role_by_name or _dwc_resolvable(cn))
+            pr_ok, cn_ok = _role_ok(pr), _role_ok(cn)
             if pr_ok and cn_ok:
                 for pr_alias in _aliases(pr):
                     for cn_alias in _aliases(cn):

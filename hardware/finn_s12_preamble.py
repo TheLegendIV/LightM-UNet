@@ -30,6 +30,7 @@ from qonnx.core.modelwrapper import ModelWrapper  # noqa: E402
 from qonnx.custom_op.registry import getCustomOp  # noqa: E402
 from finn_enet_convert_to_hw_rtl_mvau import step_enet_convert_to_hw_rtl_mvau  # noqa: E402
 from finn_s12_build_steps import check_dangling_nodes, install_relaxed_stage_boundaries  # noqa: E402
+from finn_compose_thresholds import step_compose_consecutive_thresholds  # noqa: E402
 
 install_relaxed_stage_boundaries()
 
@@ -43,7 +44,11 @@ def main():
     idx_convert = base.enet_ip_partitioned_8way_steps.index(base.step_enet_convert_to_hw)
     idx_partition = base.enet_ip_partitioned_8way_steps.index(base.assign_stage_partition_ids_8way)
     steps = list(base.enet_ip_partitioned_8way_steps[: idx_partition + 1])
-    steps[idx_convert] = step_enet_convert_to_hw_rtl_mvau
+    # collapse residual_add->out_act (and any skip_quant/pool_quant chain) into one MultiThreshold
+    # BEFORE hw conversion, so the real graph matches the analytical model's single Thr_out node
+    # (validated 2026-10-05: 168->141 MultiThreshold, all 27 AddStreams get exactly 1 threshold after).
+    steps.insert(idx_convert, step_compose_consecutive_thresholds)
+    steps[idx_convert + 1] = step_enet_convert_to_hw_rtl_mvau
     print("Steps to run:", [s if isinstance(s, str) else s.__name__ for s in steps])
     cfg = dataclasses.replace(
         base.cfg_stitched_ip_partitioned_8way,

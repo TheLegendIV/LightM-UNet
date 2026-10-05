@@ -217,7 +217,12 @@ def _x_entry(node, pe, simd, ram_style, bits, cycles, lut, bram, dsp=0, uram=0.0
     return {
         "kind": node.kind, "stage": node.geom.stage, "pe": pe, "simd": simd, "ram_style": ram_style, "weight_bits": w, "act_bits": a,
         "bit_sources": list(node.bit_sources), "channels": node.geom.cout, "cycles": cycles, "lut_calibrated": lut, "bram18k_calibrated": bram,
-        "dsp": dsp, "uram18": uram, **extra,
+        "dsp": dsp, "uram18": uram,
+        # dup's own MILP name is producer-qualified ('<producer>.dup', see layer_topology.DUP_SUFFIX) while its
+        # stage is the CONSUMING block -- every other extra node's name already equals "<stage>.<kind>", so this
+        # is a no-op alias for them and the real fix only for dup. Consumers (e.g. the FINN FIFO bridge) should
+        # match role names through this field instead of each inventing their own name-mangling convention.
+        "canonical_role": f"{node.geom.stage}.{node.kind}", **extra,
     }
 
 
