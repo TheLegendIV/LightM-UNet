@@ -14,15 +14,15 @@ Pipeline (the MILP's own plumbing is reused, nothing is re-derived):
      expand_layer_bits.py then expands the bits to the per-quantizer-site file (layer_bits_SITES_<tag>.json).
   4. Blocks are realised and their INTERNAL FIFOs sized to minimum memory (each block's verify_with_sim; stored as top-level `intra_block_fifos`, treated as a
      black box from here on). Then the INTER-block FIFOs (top-level `inter_block_fifos`, one per dataflow edge that leaves a block, each block owns the FIFO at its
-     output) are sized by net_fifo.py: block i + FIFO(D) + block i+1 are simulated together with a saturated source, and the smallest D whose last-frame period meets the
-     global target (--fifo-target-fps, default --fps) is kept; a closing whole-net run checks the sized chain (interface depths doubled until it holds).
-     --inter-fifo standard restores the old rule (one BRAM18 per edge, 6 bit x 2048, no simulation).
+     output) are all fixed at depth 2 by default (--inter-fifo-depth; FINN's RemoveShallowFIFOs deletes such FIFOs); --whole-net-check optionally simulates the chain to confirm the target.
+     --inter-fifo sim sizes them instead with net_fifo.py: block i + FIFO(D) + block i+1 simulated together with a saturated source, smallest D whose
+     last-frame period meets --fifo-target-fps (default --fps), then the whole-net check. --inter-fifo standard: one BRAM18 per edge (6 bit x 2048), no simulation.
   5. enet_dataflow_<tag>.onnx: every hardware node, DWC and FIFO of the sized design as one ONNX graph (net_onnx.py) for a visual check in Netron.
 
 Rate policy:
   * every node's cycles per frame <= F = clock / fps (250 fps at 100 MHz = 400,000 cycles); the analytical search takes the largest cycle count that
     fits, so each stage is matched to the target;
-  * optional latency cap --max-latency-ms (the MILP's measure: sum of every node's cycles per frame / clock): the per-node budget is bisected down until it holds;
+  * optional latency cap --max-latency-ms (latency = cycles to the FIRST OUTPUT PIXEL, summed over the blocks' first-in -> first-out latencies / clock): the per-node budget is bisected down until it holds;
   * "downstream faster than upstream": block k gets budget min(F, max(floor * F, R * slowest_{k-1})), R = --dsr-ratio (the MILP's own DSR ratio, default
     1.04), floor = --budget-floor. A node that cannot be slowed (the lattice of legal (PE, SIMD) pairs) keeps the chain from relaxing past the floor,
     and the achieved MILP DSR ratio (cycles per output element, downstream vs. upstream) is reported in _diagnostics.chain_rate_imbalance.
@@ -400,7 +400,8 @@ def assemble(a, ctx, F_top: int, compute_intra_fifos: bool = False, keep_blocks:
             "total_bram18k_with_all_fifos": total_bram + fifo_bram + intra_fifo_bram,
             "intra_block_fifo_warnings": intra_fifo_warnings,
             "total_uram18": total_uram, "xczu7ev_uram_budget": XCZU7EV["URAM"], "uram_pct_of_budget": 100 * total_uram / XCZU7EV["URAM"],
-            "total_cycles": total_cycles, "latency_ms": total_cycles / (a.clock_mhz * 1e3),
+            "total_cycles": total_cycles, "sum_of_node_cycles_ms": total_cycles / (a.clock_mhz * 1e3),
+            "latency_first_out_cycles": rough_latency, "latency_ms": rough_latency / (a.clock_mhz * 1e3),
             "total_dsp": total_dsp, "xczu7ev_dsp_budget": XCZU7EV["DSP"], "dsp_pct_of_budget": 100 * total_dsp / XCZU7EV["DSP"],
             "bottleneck_node": bott, "bottleneck_cycles": node_cycles[bott],
             "max_node_cycles": int(a.clock_mhz * 1e6 / a.fps), "per_node_budget_used": F_top, "target_fps": a.fps, "clock_mhz": a.clock_mhz,
@@ -409,7 +410,8 @@ def assemble(a, ctx, F_top: int, compute_intra_fifos: bool = False, keep_blocks:
                            "sum_of_block_first_out_latencies_cycles": rough_latency, "block_profile": profile,
                            "mvau_cycle_mismatches_vs_milp_cost_model": mismatches},
             "note": "Folding assembled from the analytical per-block models (U4 widths), costed with the MILP's own layer_cost_pe_simd / extra_node_options. Not an ILP solve. "
-                    "latency_ms is the MILP's measure (sum of every node's cycles per frame / clock); sum_of_block_first_out_latencies_cycles is the pipeline-fill estimate.",
+                    "latency_ms = cycles from the first input pixel to the first output pixel (sum over blocks of each block model's first-in -> first-out latency / clock); "
+                    "total_cycles / sum_of_node_cycles_ms is the MILP's work-per-frame measure (every node's cycles summed), kept for the MILP schema, NOT a latency.",
         },
         "dataflow_graph": {
             "input": [finn_milp.IN_CHANNELS, *finn_milp.INPUT_HW], "edges": dmap,
@@ -460,18 +462,28 @@ def size_inter_block_fifos(result: dict, blocks: list, a, F_target: int) -> list
     Rewrites result["inter_block_fifos"] / diagnostics; returns [dict(depth, width_bits, max_occ, period)] per interface for the ONNX export."""
     import net_fifo
     from bottleneck import fifo_memory
-    print(f"sizing {len(blocks) - 1} inter-block FIFOs by pair simulation: smallest depth with last-frame period <= {F_target * (1 + a.fifo_slack):.0f} cycles/frame", flush=True)
-    sized = net_fifo.size_interfaces(blocks, F_target, a.fifo_slack, workers=a.workers)
+    fixed = a.inter_fifo == "fixed"
+    if fixed:
+        print(f"{len(blocks) - 1} inter-block FIFOs fixed at depth {a.inter_fifo_depth}", flush=True)
+        sized = [dict(depth=a.inter_fifo_depth, status="fixed", period=None, max_occ=0, sims=0, tested={}) for _ in range(len(blocks) - 1)]
+    else:
+        print(f"sizing {len(blocks) - 1} inter-block FIFOs by pair simulation: smallest depth with last-frame period <= {F_target * (1 + a.fifo_slack):.0f} cycles/frame", flush=True)
+        sized = net_fifo.size_interfaces(blocks, F_target, a.fifo_slack, workers=a.workers)
     scale, whole = 1, None
-    if not a.no_whole_check:
+    if a.whole_net_check:
         while True:
             depths = [max(net_fifo.MIN_DEPTH, s["depth"] * scale) for s in sized]
             print(f"whole-net check with interface depths x{scale} ...", flush=True)
             whole = net_fifo.run_whole(blocks, depths, F_target)
             print(f"  last-frame period {whole['period']} (target {F_target}), deadlock {whole['deadlock']}", flush=True)
-            if whole["ok"] or scale >= 8:
+            if whole["ok"] or scale >= 8 or fixed:
                 break
             scale *= 2
+        if fixed:
+            for s_, occ in zip(sized, whole["iface_max"]):
+                s_["max_occ"] = occ
+            if not whole["ok"]:
+                print(f"WARNING: whole-net run misses the target with every inter-block FIFO fixed at depth {a.inter_fifo_depth}", flush=True)
         whole = {k: whole[k] for k in ("ok", "deadlock", "period", "periods", "first_out", "target")} | {"depth_scale": scale}
     else:
         depths = [s["depth"] for s in sized]
@@ -486,7 +498,7 @@ def size_inter_block_fifos(result: dict, blocks: list, a, F_target: int) -> list
         m = fifo_memory(e["width_bits"], d)
         e.pop("aspect", None)
         e.update(depth=d, mem=m["mem"], depth_alloc=int(m["depth_alloc"]), bram18=int(m["bram18"]), lut=int(m["lut"]), uram18=int(m["uram"]),
-                 efficiency=round(m["efficiency"], 3), max_occ=s["max_occ"], sizing="pair_simulation", sizing_status=s["status"], pair_period_cycles=s["period"])
+                 efficiency=round(m["efficiency"], 3), max_occ=s["max_occ"], sizing=("fixed" if fixed else "pair_simulation"), sizing_status=s["status"], pair_period_cycles=s["period"])
         out.append(dict(depth=d, width_bits=e["width_bits"], max_occ=s["max_occ"], period=s["period"]))
     fl = result["inter_block_fifos"]
     dg = result["_diagnostics"]
@@ -494,9 +506,11 @@ def size_inter_block_fifos(result: dict, blocks: list, a, F_target: int) -> list
     dg["inter_block_fifo_lut"] = sum(f.get("lut", 0) for f in fl)
     dg["inter_block_fifo_uram18"] = sum(f.get("uram18", 0) for f in fl)
     dg["total_bram18k_with_inter_block_fifos"] = dg["total_bram18k_calibrated"] + dg["inter_block_fifo_bram18"]
+    dg["total_bram18k_with_all_fifos"] = dg["total_bram18k_with_inter_block_fifos"] + dg.get("intra_block_fifo_bram18", 0)
     dg["fifo_sizing"] = dict(
-        method="pair simulation: block i (saturated input, verified intra-block FIFOs replayed unchanged) -> FIFO(D) -> block i+1; smallest D with last-frame "
-               "period <= target * (1 + slack); then a whole-net run", target_cycles_per_frame=F_target, slack=a.fifo_slack, min_depth=net_fifo.MIN_DEPTH,
+        method=(f"every inter-block FIFO fixed at depth {a.inter_fifo_depth}" if fixed else
+                "pair simulation: block i (saturated input, verified intra-block FIFOs replayed unchanged) -> FIFO(D) -> block i+1; smallest D with last-frame "
+                "period <= target * (1 + slack); then a whole-net run"), target_cycles_per_frame=F_target, slack=a.fifo_slack, min_depth=net_fifo.MIN_DEPTH,
         pairs=[dict(src=blocks[i][0], dst=blocks[i + 1][0], **s) for i, s in enumerate(sized)], whole_net=whole, unmatched_interfaces=unmatched)
     return out
 
@@ -533,7 +547,7 @@ def main() -> int:
     ap.add_argument("--fps", type=float, default=250.0, help="throughput target: every node's cycles per frame <= clock / fps")
     ap.add_argument("--clock-mhz", type=float, default=100.0)
     ap.add_argument("--max-latency-ms", type=float, default=None,
-                    help="MILP latency cap (sum of all node cycles per frame / clock): the per-node budget is lowered (bisection) until it holds")
+                    help="latency cap = time to the first output pixel (sum of the blocks' first-in -> first-out latencies / clock): the per-node budget is lowered (bisection) until it holds")
     ap.add_argument("--dsr-ratio", type=float, default=1.04, help="tolerance of the downstream-faster ratchet (MILP --dsr-ratio default of the S12 runs)")
     ap.add_argument("--budget-floor", type=float, default=0.6, help="the ratchet never tightens a block below this fraction of the per-node budget")
     ap.add_argument("--no-ratchet", action="store_true", help="every block gets the full per-node budget (stages matched to it, no downstream-faster rule)")
@@ -544,12 +558,14 @@ def main() -> int:
                     help="skip verify_with_sim/to_folding_config per block inside assemble() -- leaves intra_block_fifos "
                          "empty from that pass (superseded by the richer verify_blocks/intra_block_report pass below "
                          "unless --no-verify is also given)")
-    ap.add_argument("--inter-fifo", choices=("sim", "standard"), default="sim",
-                    help="inter-block FIFO depths: 'sim' = smallest depth per block pair that sustains the target (net_fifo.py, default); 'standard' = one BRAM18 each")
+    ap.add_argument("--inter-fifo", choices=("fixed", "sim", "standard"), default="fixed",
+                    help="inter-block FIFO depths: 'fixed' = --inter-fifo-depth words each (default); 'sim' = smallest depth per block pair that "
+                         "sustains --fifo-target-fps (net_fifo.py); 'standard' = one BRAM18 each")
+    ap.add_argument("--inter-fifo-depth", type=int, default=2, help="depth of every inter-block FIFO for --inter-fifo fixed (2 = what FINN's RemoveShallowFIFOs deletes)")
     ap.add_argument("--fifo-target-fps", type=float, default=None, help="rate the inter-block FIFOs must sustain (default: --fps, i.e. the global requirement)")
     ap.add_argument("--fifo-slack", type=float, default=0.0, help="accepted last-frame period overshoot of the pair / whole-net runs over the target")
     ap.add_argument("--workers", type=int, default=min(8, os.cpu_count() or 1), help="parallel block verifications / pair simulations")
-    ap.add_argument("--no-whole-check", action="store_true", help="skip the closing whole-net simulation (slow)")
+    ap.add_argument("--whole-net-check", action="store_true", help="run a closing whole-net simulation of the chained blocks with the inter-block depths (slow, ~10 min; off by default)")
     ap.add_argument("--no-verify", action="store_true", help="skip block verification, intra-block FIFO report, FIFO sizing and the ONNX picture (implies --inter-fifo standard)")
     ap.add_argument("--no-onnx", action="store_true", help="skip the whole-net ONNX picture")
     a = ap.parse_args()
@@ -561,12 +577,12 @@ def main() -> int:
     F = int(a.clock_mhz * 1e6 / a.fps)
     cap = a.max_latency_ms * a.clock_mhz * 1e3 if a.max_latency_ms else None
     print(f"throughput target {a.fps:g} fps @ {a.clock_mhz:g} MHz -> every node <= {F} cycles/frame"
-          + (f"; latency cap {a.max_latency_ms:g} ms -> sum of node cycles <= {cap:.0f}" if cap else "")
+          + (f"; latency cap {a.max_latency_ms:g} ms -> first output pixel within {cap:.0f} cycles" if cap else "")
           + f"; INT{a.bits} uniform; {len(geoms)} layers, {len(extras)} extra nodes", flush=True)
 
     result = assemble(a, ctx, F, keep_blocks=True)
     final_F_top = F
-    if cap is not None and result["_diagnostics"]["total_cycles"] > cap:
+    if cap is not None and result["_diagnostics"]["latency_first_out_cycles"] > cap:
         lo, hi = 81_920, F       # hi violates the cap; lo = the init maxpool floor (not foldable). Find the largest per-node budget in [lo, hi) that holds
         while True:
             try:
@@ -574,14 +590,14 @@ def main() -> int:
                 break
             except ValueError:   # some block's own floor (maxpool, UpsampleNearestNeighbour, FMPadding_Pixel) is above lo
                 lo = int(lo * 1.05)
-        if best["_diagnostics"]["total_cycles"] > cap:
-            raise SystemExit(f"latency cap {a.max_latency_ms} ms infeasible: even at a per-node budget of {lo} cycles the sum is "
+        if best["_diagnostics"]["latency_first_out_cycles"] > cap:
+            raise SystemExit(f"latency cap {a.max_latency_ms} ms infeasible: even at a per-node budget of {lo} cycles the first output pixel takes "
                              f"{best['_diagnostics']['latency_ms']:.1f} ms")
         while hi - lo > max(500, lo // 50):
             mid = (lo + hi) // 2
             trial = assemble(a, ctx, mid, keep_blocks=True)
-            ok = trial["_diagnostics"]["total_cycles"] <= cap
-            print(f"  per-node budget {mid:7d}: sum {trial['_diagnostics']['latency_ms']:6.1f} ms  {'ok' if ok else 'over'}", flush=True)
+            ok = trial["_diagnostics"]["latency_first_out_cycles"] <= cap
+            print(f"  per-node budget {mid:7d}: first-out {trial['_diagnostics']['latency_ms']:6.1f} ms  {'ok' if ok else 'over'}", flush=True)
             if ok:
                 lo, best = mid, trial
             else:
@@ -601,7 +617,7 @@ def main() -> int:
         blocks = verify_blocks(blocks, a.workers)
         intra_block_report(blocks, result)
         ifaces = None
-        if a.inter_fifo == "sim":
+        if a.inter_fifo in ("fixed", "sim"):
             ftarget = int(a.clock_mhz * 1e6 / (a.fifo_target_fps or a.fps))
             ifaces = size_inter_block_fifos(result, blocks, a, ftarget)
         if not a.no_onnx:
@@ -630,7 +646,7 @@ def main() -> int:
         print(f"  {pr['block']:12s} {pr['kind']:5s} budget {pr['budget']:7d}  slowest foldable {pr['slowest_foldable']:7d}")
     print(f"\nper-node budget used {d['per_node_budget_used']}  LUT {d['total_lut_calibrated']:.0f} ({d['lut_pct_of_budget']:.1f}%)  "
           f"BRAM18 {d['total_bram18k_calibrated']:.0f} + {d['inter_block_fifo_bram18']} inter-block FIFO  DSP {d['total_dsp']:.0f} ({d['dsp_pct_of_budget']:.1f}%)")
-    print(f"bottleneck {d['bottleneck_node']} {d['bottleneck_cycles']} cyc -> {d['fps']:.1f} fps @ {a.clock_mhz:g} MHz; latency (sum of node cycles) {d['latency_ms']:.1f} ms; "
+    print(f"bottleneck {d['bottleneck_node']} {d['bottleneck_cycles']} cyc -> {d['fps']:.1f} fps @ {a.clock_mhz:g} MHz; latency to first output pixel {d['latency_ms']:.2f} ms (sum of node cycles {d['sum_of_node_cycles_ms']:.1f} ms, not a latency); "
           f"pipeline-fill estimate {d['analytical']['sum_of_block_first_out_latencies_cycles'] / (a.clock_mhz * 1e3):.2f} ms")
     print(f"DSR (cycles per output element): max {cri.get('max_ratio')} median {cri.get('median_ratio')};  MVAU cycle mismatches vs MILP cost model: "
           f"{len(d['analytical']['mvau_cycle_mismatches_vs_milp_cost_model'])}")
@@ -642,7 +658,7 @@ def main() -> int:
     if "fifo_sizing" in d:
         fs = d["fifo_sizing"]
         depths = sorted(f["depth"] for f in result["inter_block_fifos"])
-        print(f"inter-block FIFOs (pair simulation, target {fs['target_cycles_per_frame']} cyc/frame): depths min {depths[0]} median {depths[len(depths) // 2]} max {depths[-1]}; "
+        print(f"inter-block FIFOs ({'fixed' if 'fixed' in fs['method'] else 'pair simulation'}, target {fs['target_cycles_per_frame']} cyc/frame): depths min {depths[0]} median {depths[len(depths) // 2]} max {depths[-1]}; "
               f"{d['inter_block_fifo_bram18']} BRAM18 + {d['inter_block_fifo_lut']} LUT + {d['inter_block_fifo_uram18']} URAM; whole-net check: {fs['whole_net']}")
     if onnx_info:
         print(f"wrote {onnx_info['path']}: {onnx_info['nodes']} nodes ({onnx_info['fifos']} FIFOs, {onnx_info['dwcs']} DWCs)")

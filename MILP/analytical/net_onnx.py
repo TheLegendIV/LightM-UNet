@@ -96,7 +96,7 @@ def export_net_onnx(blocks: list, interfaces: list, path: str, summary: str = ""
             f_if = dict(depth=itf["depth"], bits=itf["width_bits"], max_occ=itf.get("max_occ", 0), producer=f"{stage}", consumer=nxt[0])
             t = f"iface{i}:{stage}->{nxt[0]}"
             nodes.append(_fifo_node(helper, f"{stage}->{nxt[0]}", out_tensor, t, f_if,       # always drawn: it marks the block boundary
-                                    dict(inter_block=1, period_cycles=int(itf.get("period", 0)), removed_by_finn_if_depth_le_2=int(itf["depth"] <= 2)), stage=stage))
+                                    dict(inter_block=1, period_cycles=int(itf.get("period") or 0), removed_by_finn_if_depth_le_2=int(itf["depth"] <= 2)), stage=stage))
             n_fifo += 1
             if int(f_next["bits"]) != int(f_sink["bits"]):
                 t2 = f"iface{i}:dwc"

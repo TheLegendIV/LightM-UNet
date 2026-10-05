@@ -9,7 +9,7 @@ Not an ILP solve: the folds come from `bottleneck.py`, `dn_/up_/int_bottleneck.p
 
 | Folder | Targets | Result (model) |
 |---|---|---|
-| `int6_fps250_lat200/` | throughput 250 fps @ 100 MHz (every node <= 400,000 cycles/frame), latency <= 200 ms (MILP measure: sum of node cycles / clock), downstream no slower than upstream | 76.6k LUT (33.2%), 241 DSP (13.9%), 62 BRAM18 in the nodes; FIFOs and DWCs on top: intra-block 143 BRAM18 + 8.5k LUT, inter-block 28 x depth 2 (392 LUT, 0 BRAM18), DWC 1.6k LUT; slowest node 147.7k cycles (677 fps), whole-net simulation 225,240 cycles/frame (444 fps), latency 169.5 ms |
+| `int6_fps250_lat200/` | throughput 250 fps @ 100 MHz (every node <= 400,000 cycles/frame), latency to first output pixel <= 200 ms, downstream no slower than upstream, inter-block FIFOs fixed at depth 2 | 87.1k LUT (37.8%), 205 BRAM18 (32.9%), 0 URAM, 241 DSP (13.9%): nodes 76.6k LUT / 62 BRAM18, intra-block FIFOs 8.5k LUT / 143 BRAM18, DWCs 1.6k LUT, inter-block FIFOs 392 LUT; slowest node 147.7k cycles (677 fps); latency to first output pixel 9.9 ms |
 
 Files per run (`final` tag, as in `S12_dense_256_fullwidth_joinsdist_v1/*/`):
 `layer_bits_folding_final.json` (status / layer_weight_bits / layer_act_bits / per_layer / extra_nodes / _diagnostics / dataflow_graph, plus the extra top-level keys
@@ -21,15 +21,14 @@ Regenerate: `python3 MILP/analytical/net_fold.py --bits 6 --fps 250 --clock-mhz 
 (in `lightmunet_dev`; `--no-ratchet` drops the downstream-faster rule; with the 200 ms cap both settle on the same design because the legal (PE, SIMD) steps are coarse).
 
 ## Notes
-* Latency in `_diagnostics.latency_ms` is the MILP's measure (every node's cycles summed). The pipeline-fill estimate from the block models is ~10 ms
-  (`_diagnostics.analytical.sum_of_block_first_out_latencies_cycles`).
+* Latency is the time to the FIRST OUTPUT PIXEL: the sum over blocks of each block model's first-in -> first-out latency (`_diagnostics.latency_ms`, 9.9 ms; the chained
+  whole-net simulation measured 6.7 ms, so the sum is a conservative bound). The MILP's "sum of every node's cycles" (169.5 ms, `sum_of_node_cycles_ms`, `total_cycles`) is kept for the
+  MILP schema only: it is total work per frame, not a latency, because the blocks run concurrently. `--max-latency-ms 200` applies to the first-output latency and does not bind here.
 * Downstream-faster rule: block k gets budget min(F, max(0.6 F, 1.04 x slowest foldable node of block k-1)). Achieved MILP DSR (cycles per output element,
   worst downstream / own) is 144 max, 16 median: element-rate matching needs the MILP solve itself.
-* Inter-block FIFOs: each block owns the FIFO at its output. `net_fifo.py` sizes them by simulating block i + FIFO(D) + block i+1 with a saturated source and keeping the
-  smallest D whose last-frame period meets the global target (400,000 cycles/frame), after every block was realised and its internal FIFOs sized by `verify_with_sim`
-  (replayed as a black box). Result: every interface needs only depth 2 (FINN's RemoveShallowFIFOs would delete it): the blocks run 1.8-2.7x faster than the target, so
-  nothing has to buffer. A closing whole-net run with all 28 depths at 2 sustains 225,240 cycles/frame (target 400,000). The depths are only as loose as the target:
-  `--fifo-target-fps` re-sizes them for a tighter rate (a target below what a block pair can do is reported as `block_limited`, with the occupancy it would need).
+* Inter-block FIFOs: each block owns the FIFO at its output and every one is FIXED at depth 2 (`--inter-fifo fixed`, `--inter-fifo-depth 2`; FINN's RemoveShallowFIFOs deletes such FIFOs, so the
+  cost is ~0). An earlier pair-simulation search (`--inter-fifo sim`, `net_fifo.py`) found depth 2 sufficient at the 400,000 cycles/frame target for all 28 pairs, and one whole-net
+  simulation with all 28 at depth 2 sustained 225,240 cycles/frame (target 400,000, no deadlock); the default run does not repeat that (`--whole-net-check` is opt-in).
   `--inter-fifo standard` gives the old one-BRAM18-per-edge rule (28 BRAM18). The memory that matters is inside the blocks: skip FIFOs and the prefetch FIFOs in front of
   every FMPadding (143 BRAM18 + 8.5k LUT in `intra_block_fifos`, depth > 2 only). See "FIFOs" below: all of it is a specification that no current build step applies.
 * The initial block's branch-quant threshold sits UPSTREAM of its maxpool (`initial.pool_quant`, MILP kind `pool_quant`, added to the MILP itself on 2026-10-05 so the
