@@ -182,6 +182,7 @@ if [ "$FINAL_EPOCH" -ge "$ENET_EPOCHS" ]; then
         --bottlenecks 4,8,8,2,1
         --decoder-type nearest_upsample
         --use-asymmetric 0
+        --use-prelu 0
         --context-pattern dense_dilation
         --separable-dilated 0
         --quant-bits 32
