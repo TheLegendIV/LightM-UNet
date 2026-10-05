@@ -117,8 +117,9 @@ def simulate_int(
     order.append(FmPadNode("FMPad", f, f_o, H, W, 1, cf, frames))
     f_o2 = fifo("SWG->out")
     cap_px = 3 * (W + 2) - 6                              # finn_cost_model._finn_swu: buffer_min + (sh-1)*win - kh*kw, win = padded width
-    order.append(SwgStrNode("SWG", f_o, f_o2, H + 2, W + 2, 3, 2, cf, sf, cap_px, frames))
-    f = link("SWG", sf, "MVAU_c", sf, f_o2, n_out)
+    par = n["MVAU_c"].simd > cin                            # parallel_window: the SWG emits one window (cf words) per output pixel, a DWC splits it into sf words
+    order.append(SwgStrNode("SWG", f_o, f_o2, H + 2, W + 2, 3, 2, cf, cf if par else sf, cap_px, frames))
+    f = link("SWG", cf if par else sf, "MVAU_c", sf, f_o2, n_out)
     f_o = fifo("MVAU_c->out")
     order.append(MvauNode("MVAU_c", f, f_o, sf, nf, n_out))
     f = link("MVAU_c", nf, "Thr_c", thr_c_w, f_o, n_out)

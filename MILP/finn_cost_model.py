@@ -421,16 +421,20 @@ def threshold_node_cost(
 # build), assumed linear in PE -- PROVISIONAL, see finn_cost_model.md.
 _ADDSTREAMS_LUT_PER_PE = 131
 _DUPSTREAMS_LUT_PER_PE = 115
-STREAM_NODE_KINDS = ("add", "dup", "concat", "upsample")
-FOLDABLE_STREAM_KINDS = ("add", "dup")  # PE | channels; concat/upsample: all channels per cycle, not foldable
+# LabelSelect (the network's final argmax over the output channels, one label per pixel): FINN reads PE channel values per cycle and keeps a running
+# (max value, index) pair, so a pixel takes ceil(labels / PE) cycles. NO real or HLS-estimate data exists yet: the LUT per PE lane below is a placeholder
+# (one accumulator-wide comparator + max register + index mux, ~20-bit logits) and is to be replaced by a FINN probe (see FINN_AGENT_HANDOFF.md).
+_LABELSELECT_LUT_PER_PE = 64
+STREAM_NODE_KINDS = ("add", "dup", "concat", "upsample", "argmax")
+FOLDABLE_STREAM_KINDS = ("add", "dup", "argmax")  # PE | channels (argmax: PE | labels); concat/upsample: all channels per cycle, not foldable
 
 
 def stream_node_cost(kind: str, layer: LayerGeometry, pe: int = 1) -> dict:
     """Cycles (FINN v0.10.1 get_exp_cycles) and LUT of a stream node. `layer`
-    carries the node's output shape."""
+    carries the node's output shape; for "argmax" (LabelSelect) it carries the INPUT channel count (= the number of labels) in `cout` and the pixel grid."""
     if kind in FOLDABLE_STREAM_KINDS:
         cycles = layer.hout * layer.wout * math.ceil(layer.cout / pe)
-        lut = pe * (_ADDSTREAMS_LUT_PER_PE if kind == "add" else _DUPSTREAMS_LUT_PER_PE)
+        lut = pe * {"add": _ADDSTREAMS_LUT_PER_PE, "dup": _DUPSTREAMS_LUT_PER_PE, "argmax": _LABELSELECT_LUT_PER_PE}[kind]
     elif kind in ("concat", "upsample"):
         cycles, lut = layer.hout * layer.wout, 0
     else:

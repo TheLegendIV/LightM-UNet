@@ -68,25 +68,30 @@ class UpNNNode:
 
 
 class FmPadPixelNode:
-    def __init__(self, name, inp: Fifo, out: Fifo, h: int, w: int, cf: int, frames: int = 1):
-        self.name, self.inp, self.out, self.h, self.w, self.cf, self.frames = name, inp, out, h, w, cf, frames
-        self.hp, self.wp = 2 * h + 1, 2 * w + 1
+    """FMPadding_Pixel: stride-2 zero insertion. edge_pad=True (legacy): ONE node emitting the (2h+1) x (2w+1) grid with the border, real pixels at odd positions, LOCAL ids.
+    edge_pad=False (the real FINN graph, partitions 5-7 of the S12-256 build): the (2h-1) x (2w-1) grid, real pixels at even positions, GLOBAL ids; a FmPadNode(pad=1) behind it
+    adds the border (FMPadding_rtl)."""
+
+    def __init__(self, name, inp: Fifo, out: Fifo, h: int, w: int, cf: int, frames: int = 1, edge_pad: bool = True):
+        self.name, self.inp, self.out, self.h, self.w, self.cf, self.frames, self.edge_pad = name, inp, out, h, w, cf, frames, edge_pad
+        self.hp, self.wp = (2 * h + 1, 2 * w + 1) if edge_pad else (2 * h - 1, 2 * w - 1)
         self.q = self.wd = self.f = 0
 
     def step(self, t: int) -> int:
         if self.f >= self.frames:
             return IDLE
         r, c = divmod(self.q, self.wp)
-        real = r % 2 == 1 and c % 2 == 1
+        off = 1 if self.edge_pad else 0
+        real = r % 2 == off and c % 2 == off
         if real and not self.inp.q:
             return STARVED
         if not self.out.space():
             return BLOCKED
         if real:
             pid, _ = self.inp.q.popleft()
-            expect = self.f * self.h * self.w + ((r - 1) // 2) * self.w + (c - 1) // 2
+            expect = self.f * self.h * self.w + ((r - off) // 2) * self.w + (c - off) // 2
             assert pid == expect, f"{self.name}: input pixel {pid}, expected {expect}"
-        self.out.push((self.q, self.wd))
+        self.out.push((self.q if self.edge_pad else self.f * self.hp * self.wp + self.q, self.wd))
         self.wd += 1
         if self.wd == self.cf:
             self.wd, self.q = 0, self.q + 1
@@ -221,10 +226,13 @@ def simulate_up(
     sf_u, nf_u, thr_u_w = 4 * cmid // n["MVAU_u"].simd, cmid // n["MVAU_u"].pe, cmid // n["Thr_u"].pe
     f = link("Thr_r", thr_r_w, "FMPadPix", cf_u, f_o, n_in)
     f_o = fifo("FMPadPix->out")
-    order.append(FmPadPixelNode("FMPadPix", f, f_o, H, W, cf_u, frames))
+    order.append(FmPadPixelNode("FMPadPix", f, f_o, H, W, cf_u, frames, edge_pad=False))
+    f_pad = fifo("FMPad_u->out")
+    order.append(FmPadNode("FMPad_u", f_o, f_pad, 2 * H - 1, 2 * W - 1, 1, cf_u, frames))
     f_o2 = fifo("SWG_u->out")
-    order.append(SwgGenNode("SWG_u", f_o, f_o2, 2 * H + 1, 2 * W + 1, 2, cf_u, sf_u, swg_slack_px, frames))
-    f = link("SWG_u", sf_u, "MVAU_u", sf_u, f_o2, n_out)
+    par_u = n["MVAU_u"].simd > cmid                         # parallel_window: the SWG emits one window (cf_u words) per output pixel, a DWC splits it into sf_u words
+    order.append(SwgGenNode("SWG_u", f_pad, f_o2, 2 * H + 1, 2 * W + 1, 2, cf_u, cf_u if par_u else sf_u, swg_slack_px, frames))
+    f = link("SWG_u", cf_u if par_u else sf_u, "MVAU_u", sf_u, f_o2, n_out)
     f_o = fifo("MVAU_u->out")
     order.append(MvauNode("MVAU_u", f, f_o, sf_u, nf_u, n_out))
     f = link("MVAU_u", nf_u, "Thr_u", thr_u_w, f_o, n_out)

@@ -187,6 +187,7 @@ ADD_SUFFIX = ".add"
 DUP_SUFFIX = ".dup"
 CONCAT_SUFFIX = ".concat"
 UPSAMPLE_SUFFIX = ".upsample"
+ARGMAX_SUFFIX = ".argmax"        # <network output>.argmax: the final LabelSelect over the output channels (one label per pixel)
 POOL_QUANT_SUFFIX = "_quant"     # <pool>_quant: the branch-quant threshold UPSTREAM of a maxpool that feeds a concat (initial.pool_quant)
 _ADD_TARGETS = (operator.add, torch.add)
 
@@ -246,6 +247,7 @@ def compute_dataflow_graph(model: nn.Module) -> tuple[dict[str, list[str]], dict
       residual_add  the add's output quant                    <block>.residual_add
       out_act       block-final activation                    <block>.out_act
       dup           DuplicateStreams on every fork            <producer>.dup
+      argmax        LabelSelect over the output channels      <network output>.argmax
 
     compute_predecessor_map is unchanged and still drives bit resolution and
     act sensitivity. prelu_variant="nonneg_block" (one activation object shared
@@ -353,6 +355,12 @@ def compute_dataflow_graph(model: nn.Module) -> tuple[dict[str, list[str]], dict
         dataflow[quant] = dataflow[pool]
         dataflow[pool] = [quant]
         kinds[quant] = "pool_quant"
+
+    # The deployed network ends in an argmax over its output channels (FINN LabelSelect): one virtual node behind every network output (a node nothing consumes).
+    consumed = {p for preds in dataflow.values() for p in preds}
+    for out in [n for n in dataflow if n not in consumed and n in conv_names]:
+        dataflow[out + ARGMAX_SUFFIX] = [out]
+        kinds[out + ARGMAX_SUFFIX] = "argmax"
 
     consumers: dict[str, list[str]] = {}
     for name, preds in dataflow.items():

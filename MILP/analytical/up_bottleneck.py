@@ -123,7 +123,9 @@ def model_up_bottleneck(
     add_bits = A + 1
     acc = {k: c["acc_bits"] for k, c in (("p", c_p), ("r", c_r), ("u", c_u), ("e", c_e))}
     swu_u, cf_u = c_u["simd_swu"], math.ceil(cmid / c_u["simd_swu"])
-    pad_pix_cycles = (Ho + 1) * (Wo + 1) * cf_u
+    par_u = simd_u > cmid                                 # parallel_window: one 2x2 window per SWG word, a DWC narrows it to the MVAU's SIMD
+    pad_pix_cycles = (Ho - 1) * (Wo - 1) * cf_u          # FMPadding_Pixel: zero insertion only, (2H-1)^2 grid
+    pad_edge_cycles = (Ho + 1) * (Wo + 1) * cf_u         # FMPadding_rtl behind it: the pad-1 border, (2H+1)^2 grid
 
     def row(name, op, pe, simd, frame_cycles, lut=0.0, bram=0.0, uram=0.0, dsp=0.0, in_w=0, out_w=0):
         return NodeResult(name=name, op=op, pe=pe, simd=simd, cyc_px=frame_cycles / px_out, frame_cycles=int(frame_cycles),
@@ -152,8 +154,9 @@ def model_up_bottleneck(
                   c_r["mvu_dsp"], in_w=simd_r * A, out_w=pe_r * acc["r"]))
     nd.append(row("Thr_r", "Thresholding_rtl", tpe_r, 0, px_in * (cmid // tpe_r), c_r["thr_lut"], c_r["thr_bram18"], in_w=tpe_r * acc["r"], out_w=tpe_r * A))
     nd.append(row("FMPadPix", "FMPadding_Pixel_hls", 0, swu_u, pad_pix_cycles, in_w=swu_u * A, out_w=swu_u * A))
-    nd.append(row("SWG_u", "ConvolutionInputGenerator_rtl 2x2", 0, swu_u, c_u["swu_cycles"], c_u["swu_lut"], c_u["swu_bram18"], c_u["swu_uram18"],
-                  in_w=swu_u * A, out_w=swu_u * A))
+    nd.append(row("FMPad_u", "FMPadding_rtl (pad 1)", 0, swu_u, pad_edge_cycles, in_w=swu_u * A, out_w=swu_u * A))
+    nd.append(row("SWG_u", "ConvolutionInputGenerator_rtl 2x2" + (" parallel_window" if par_u else ""), 0, swu_u, c_u["swu_cycles"], c_u["swu_lut"],
+                  c_u["swu_bram18"], c_u["swu_uram18"], in_w=swu_u * A, out_w=swu_u * A * (4 if par_u else 1)))
     nd.append(row("MVAU_u", "MVAU rtl 2x2 (lowered ConvTranspose)", pe_u, simd_u, c_u["mvu_cycles"], c_u["mvu_lut"], c_u["wm_bram18"], c_u["wm_uram18"],
                   c_u["mvu_dsp"], in_w=simd_u * A, out_w=pe_u * acc["u"]))
     nd.append(row("Thr_u", "Thresholding_rtl", tpe_u, 0, px_out * (cmid // tpe_u), c_u["thr_lut"], c_u["thr_bram18"], in_w=tpe_u * acc["u"], out_w=tpe_u * A))
@@ -176,6 +179,8 @@ def model_up_bottleneck(
     _dwc("Dup->MVAU_r", pe_d * A, simd_r * A, cin, pe_d, simd_r, px_in, px_out, dw)
     _dwc("MVAU_r->Thr_r", pe_r * acc["r"], tpe_r * acc["r"], cmid, pe_r, tpe_r, px_in, px_out, dw)
     _dwc("Thr_r->FMPadPix", tpe_r * A, swu_u * A, cmid, tpe_r, swu_u, px_in, px_out, dw)
+    if par_u:
+        _dwc("SWG_u->MVAU_u", 4 * swu_u * A, simd_u * A, 4 * cmid, 4 * swu_u, simd_u, px_out, px_out, dw)
     _dwc("MVAU_u->Thr_u", pe_u * acc["u"], tpe_u * acc["u"], cmid, pe_u, tpe_u, px_out, px_out, dw)
     _dwc("Thr_u->MVAU_e", tpe_u * A, simd_e * A, cmid, tpe_u, simd_e, px_out, px_out, dw)
     _dwc("MVAU_e->Thr_e", pe_e * acc["e"], tpe_e * acc["e"], cout, pe_e, tpe_e, px_out, px_out, dw)
@@ -236,7 +241,7 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
     cf_u = p["cmid"] // n["SWG_u"].simd
     ext_w = p["cout"] // r.skip_fifo.pe
     main_w = p["cout"] // (n["Thr_k"].pe if conv else n["Thr_s"].pe)
-    emap0 = {"FMPadPix": 2 * cf_u + 2}
+    emap0 = {"FMPadPix": 2 * cf_u + 2, "FMPad_u": 2 * cf_u + 2}
     if conv:
         emap0["FMPad_k"] = (p["wout"] + 2) * cf_k + 2
     pad_out = (p["wout"] + 2) * cf_k + 2
@@ -289,7 +294,7 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
 
 def _branches(r: BottleneckResult) -> dict:
     main = ["MVAU_p", "Thr_p", "UpNN"] + (["FMPad_k", "SWG_k", "MVAU_k", "Thr_k"] if r.params["skip_conv"] else ["Thr_s"])
-    ext = ["MVAU_r", "Thr_r", "FMPadPix", "SWG_u", "MVAU_u", "Thr_u", "MVAU_e", "Thr_e"]
+    ext = ["MVAU_r", "Thr_r", "FMPadPix", "FMPad_u", "SWG_u", "MVAU_u", "Thr_u", "MVAU_e", "Thr_e"]
     return dict(shared=["Dup"], main=main, ext=ext, join=["Add", "Thr_out"])
 
 
@@ -336,7 +341,7 @@ def rate_report(r: BottleneckResult, with_sim: bool = True) -> str:
 
 _ROLE_OF = {
     "Dup": "dup", "MVAU_p": "mvau_p", "Thr_p": "thr_p", "UpNN": "upnn", "FMPad_k": "fmpad_k", "SWG_k": "swg_k", "MVAU_k": "mvau_k",
-    "Thr_k": "thr_k", "Thr_s": "thr_s", "MVAU_r": "mvau_r", "Thr_r": "thr_r", "FMPadPix": "fmpadpix", "SWG_u": "swg_u", "MVAU_u": "mvau_u",
+    "Thr_k": "thr_k", "Thr_s": "thr_s", "MVAU_r": "mvau_r", "Thr_r": "thr_r", "FMPadPix": "fmpadpix", "FMPad_u": "fmpad_u", "SWG_u": "swg_u", "MVAU_u": "mvau_u",
     "Thr_u": "thr_u", "MVAU_e": "mvau_e", "Thr_e": "thr_e", "Add": "add", "Thr_out": "thr_out",
 }
 
@@ -356,6 +361,7 @@ def to_folding_config(r: BottleneckResult) -> dict:
         "upnn": {},
         "mvau_r": {"PE": n["MVAU_r"].pe, "SIMD": n["MVAU_r"].simd}, "thr_r": {"PE": n["Thr_r"].pe, "depth_trigger_bram": block},
         "fmpadpix": {"SIMD": n["SWG_u"].simd},
+        "fmpad_u": {"SIMD": n["SWG_u"].simd},
         "swg_u": {"SIMD": n["SWG_u"].simd, "parallel_window": int(n["MVAU_u"].simd > cmid)},
         "mvau_u": {"PE": n["MVAU_u"].pe, "SIMD": n["MVAU_u"].simd}, "thr_u": {"PE": n["Thr_u"].pe, "depth_trigger_bram": block},
         "mvau_e": {"PE": n["MVAU_e"].pe, "SIMD": n["MVAU_e"].simd}, "thr_e": {"PE": n["Thr_e"].pe, "depth_trigger_bram": block},
@@ -395,7 +401,7 @@ def to_folding_config(r: BottleneckResult) -> dict:
 
 _OP_LABEL = {
     "Dup": "DuplicateStreams_hls", "MVAU_p": "MVAU_rtl", "MVAU_r": "MVAU_rtl", "MVAU_u": "MVAU_rtl", "MVAU_e": "MVAU_rtl", "MVAU_k": "MVAU_rtl",
-    "UpNN": "UpsampleNearestNeighbour_hls", "FMPad_k": "FMPadding_rtl", "FMPadPix": "FMPadding_Pixel_hls",
+    "UpNN": "UpsampleNearestNeighbour_hls", "FMPad_k": "FMPadding_rtl", "FMPadPix": "FMPadding_Pixel_hls", "FMPad_u": "FMPadding_rtl",
     "SWG_k": "ConvolutionInputGenerator_rtl", "SWG_u": "ConvolutionInputGenerator_rtl", "Add": "AddStreams_hls",
 }
 
@@ -415,7 +421,7 @@ def export_onnx(r: BottleneckResult, path: str) -> None:
     node_shape = {
         "Dup": (cin, H, W), "MVAU_p": (cout, H, W), "Thr_p": (cout, H, W), "UpNN": (cout, Ho, Wo), "FMPad_k": (cout, Ho + 2, Wo + 2),
         "SWG_k": (9 * cout, Ho, Wo), "MVAU_k": (cout, Ho, Wo), "Thr_k": (cout, Ho, Wo), "Thr_s": (cout, Ho, Wo), "MVAU_r": (cmid, H, W),
-        "Thr_r": (cmid, H, W), "FMPadPix": (cmid, Ho + 1, Wo + 1), "SWG_u": (4 * cmid, Ho, Wo), "MVAU_u": (cmid, Ho, Wo), "Thr_u": (cmid, Ho, Wo),
+        "Thr_r": (cmid, H, W), "FMPadPix": (cmid, Ho - 1, Wo - 1), "FMPad_u": (cmid, Ho + 1, Wo + 1), "SWG_u": (4 * cmid, Ho, Wo), "MVAU_u": (cmid, Ho, Wo), "Thr_u": (cmid, Ho, Wo),
         "MVAU_e": (cout, Ho, Wo), "Thr_e": (cout, Ho, Wo), "Add": (cout, Ho, Wo), "Thr_out": (cout, Ho, Wo),
     }
     ends = {"Source", "Sink"}

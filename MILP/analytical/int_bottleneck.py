@@ -91,6 +91,7 @@ def model_int_bottleneck(
     c_cat = fcm.stream_node_cost("concat", g_cat)
     c_ta = fcm.threshold_node_cost(g_act, A, pe_ta)
     swu = c_cv["simd_swu"]
+    par = simd_c > cin                                    # parallel_window: one 3x3 window per SWG word, a DWC narrows it to the MVAU's SIMD
 
     def row(name, op, pe, simd, frame_cycles, lut=0.0, bram=0.0, uram=0.0, dsp=0.0, in_w=0, out_w=0):
         return NodeResult(name=name, op=op, pe=pe, simd=simd, cyc_px=frame_cycles / px_out, frame_cycles=int(frame_cycles),
@@ -100,8 +101,8 @@ def model_int_bottleneck(
     nd.append(row("Thr_in", "Thresholding_rtl (input quant)", pe_ti, 0, c_ti["cycles"], c_ti["total_lut"], c_ti["thr_bram18"], in_w=pe_ti * A, out_w=pe_ti * A))
     nd.append(row("Dup", "DuplicateStreams", pe_d, 0, c_dup["cycles"], c_dup["total_lut"], in_w=pe_d * A, out_w=pe_d * A))
     nd.append(row("FMPad", "FMPadding 3x3", 0, swu, c_cv["fmpad_cycles"], in_w=swu * A, out_w=swu * A))
-    nd.append(row("SWG", "ConvolutionInputGenerator_rtl 3x3 s2", 0, swu, c_cv["swu_cycles"], c_cv["swu_lut"], c_cv["swu_bram18"], c_cv["swu_uram18"],
-                  in_w=swu * A, out_w=swu * A))
+    nd.append(row("SWG", "ConvolutionInputGenerator_rtl 3x3 s2" + (" parallel_window" if par else ""), 0, swu, c_cv["swu_cycles"], c_cv["swu_lut"],
+                  c_cv["swu_bram18"], c_cv["swu_uram18"], in_w=swu * A, out_w=swu * A * (9 if par else 1)))
     nd.append(row("MVAU_c", "MVAU rtl 3x3 s2", pe_c, simd_c, c_cv["mvu_cycles"], c_cv["mvu_lut"], c_cv["wm_bram18"], c_cv["wm_uram18"], c_cv["mvu_dsp"],
                   in_w=simd_c * A, out_w=pe_c * c_cv["acc_bits"]))
     nd.append(row("Thr_c", "Thresholding_rtl (branch quant)", tpe_c, 0, px_out * (ccv // tpe_c), c_cv["thr_lut"], c_cv["thr_bram18"],
@@ -120,6 +121,8 @@ def model_int_bottleneck(
     dw = res.dwcs
     _dwc("Thr_in->Dup", pe_ti * A, pe_d * A, cin, pe_ti, pe_d, px_in, px_out, dw)
     _dwc("Dup->FMPad", pe_d * A, swu * A, cin, pe_d, swu, px_in, px_out, dw)
+    if par:
+        _dwc("SWG->MVAU_c", 9 * swu * A, simd_c * A, 9 * cin, 9 * swu, simd_c, px_out, px_out, dw)
     _dwc("Dup->Thr_m", pe_d * A, pe_tm * A, cin, pe_d, pe_tm, px_in, px_out, dw)
     _dwc(f"Thr_m->{pool_first}", pe_tm * A, pe_pool * A, cin, pe_tm, pe_pool, px_in, px_out, dw)
     if pool_impl == "swg_pool" and pool_pw:

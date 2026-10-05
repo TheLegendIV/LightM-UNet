@@ -13,7 +13,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from bottleneck_sim import UNBOUNDED, Fifo, MvauNode, Sink, Source, SimResult, StreamNode, run_network  # noqa: E402,F401
+from bottleneck_sim import UNBOUNDED, Fifo, FmPadNode, MvauNode, Sink, Source, SimResult, StreamNode, run_network  # noqa: E402,F401
 from up_bottleneck_sim import FmPadPixelNode, SwgGenNode  # noqa: E402
 
 
@@ -48,10 +48,13 @@ def simulate_fnl(
     f_src = fifo("src->FMPadPix")
     order.append(Source("Source", f_src, n_in, cf, inject_interval))
     f_o = fifo("FMPadPix->out")
-    order.append(FmPadPixelNode("FMPadPix", f_src, f_o, H, W, cf, frames))
+    order.append(FmPadPixelNode("FMPadPix", f_src, f_o, H, W, cf, frames, edge_pad=False))
+    f_pad = fifo("FMPad_u->out")
+    order.append(FmPadNode("FMPad_u", f_o, f_pad, Ho - 1, Wo - 1, 1, cf, frames))
     f_o2 = fifo("SWG_u->out")
-    order.append(SwgGenNode("SWG_u", f_o, f_o2, Ho + 1, Wo + 1, 2, cf, sf, swg_slack_px, frames))
-    f = link("SWG_u", sf, "MVAU_f", sf, f_o2, n_out)
+    par = n["MVAU_f"].simd > cin                            # parallel_window: the SWG emits one window (cf words) per output pixel, a DWC splits it into sf words
+    order.append(SwgGenNode("SWG_u", f_pad, f_o2, Ho + 1, Wo + 1, 2, cf, cf if par else sf, swg_slack_px, frames))
+    f = link("SWG_u", cf if par else sf, "MVAU_f", sf, f_o2, n_out)
     f_o = fifo("MVAU_f->out")
     order.append(MvauNode("MVAU_f", f, f_o, sf, nf, n_out))
     if "Bias" in n:
@@ -60,7 +63,14 @@ def simulate_fnl(
         order.append(StreamNode("Bias", [f], [f_out], bias_w, bias_w, n_out))
     else:
         f_out = f_o
-    sink = Sink("Sink", f_out, bias_w)
+    sink_w = bias_w
+    if "LabelSelect" in n:                      # the deployed net ends in an argmax over the channels: cout / PE words in, ONE label word out per pixel
+        la_w = cout // n["LabelSelect"].pe
+        f = link("Bias" if "Bias" in n else "MVAU_f", bias_w, "LabelSelect", la_w, f_out, n_out)
+        f_out = fifo("LabelSelect->out")
+        order.append(StreamNode("LabelSelect", [f], [f_out], la_w, 1, n_out))
+        sink_w = 1
+    sink = Sink("Sink", f_out, sink_w)
     order.append(sink)
     return run_network(r, order, fifos, sink, n_out, inject_interval, 0, fifo_depth, None, fifo_depths, max_cycles,
                        px_per_frame=(Ho * Wo if frames > 1 else None), elastic_map=elastic_map)

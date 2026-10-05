@@ -152,7 +152,7 @@ PAD_MVAU_BITS = (2, 8)  # (weight, act) for the downsampling zero-pad MVAU -- PR
 EXTRA_OP_LABEL = {
     **{kind: "Thresholding_rtl" for kind in THRESHOLD_KINDS},
     "add": "AddStreams_hls", "dup": "DuplicateStreams_hls", "concat": "StreamingConcat_hls",
-    "upsample": "UpsampleNearestNeighbour_hls", "pad_mvau": "MVAU_rtl",
+    "upsample": "UpsampleNearestNeighbour_hls", "pad_mvau": "MVAU_rtl", "argmax": "LabelSelect_hls",
 }
 
 
@@ -225,6 +225,9 @@ def _node_shape(
             if name in preds and consumer in geom:
                 g = geom[consumer]
                 return g.cin, g.hin, g.win
+    if kind == "argmax":          # geometry carries the INPUT channels (the labels) and the pixel grid; the output stream is one label per pixel
+        g = geom[dataflow_map[name][0]]
+        return g.cout, g.hout, g.wout
     block = name.rsplit(".", 1)[0]
     return act_shapes[block + OUT_ACT_SUFFIX]
 
@@ -531,6 +534,9 @@ def solve_joint_perlayer(
     # finn_milp.md "Rate coherence" for why they were merged, then split again).
     topology = dataflow_map if dataflow_map is not None else predecessor_map
     fixed_cycle_names = {name for name, terms in layer_cycle_terms.items() if len({c for _, c in terms}) == 1}
+    # The final argmax (LabelSelect) emits ONE label per pixel from a C-channel input: its output element count is C times smaller than its input's, so the
+    # element-rate DSR (cycles per OUTPUT element) of a full-rate argmax is C x that of the final conv by construction. Exempt like the fixed-cycle nodes.
+    fixed_cycle_names |= {node.geom.name for node in extra_nodes if node.kind == "argmax"}
     n_join_constraints = 0
     n_chain_rate_constraints = 0
     if (pbi_ratio is not None or dsr_ratio is not None) and topology is None:

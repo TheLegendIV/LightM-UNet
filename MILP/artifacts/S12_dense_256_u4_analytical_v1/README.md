@@ -9,7 +9,7 @@ Not an ILP solve: the folds come from `bottleneck.py`, `dn_/up_/int_bottleneck.p
 
 | Folder | Targets | Result (model) |
 |---|---|---|
-| `int6_fps250_lat200/` | throughput 250 fps @ 100 MHz (every node <= 400,000 cycles/frame), latency to first output pixel <= 200 ms, downstream no slower than upstream, inter-block FIFOs fixed at depth 2 | 87.1k LUT (37.8%), 205 BRAM18 (32.9%), 0 URAM, 241 DSP (13.9%): nodes 76.6k LUT / 62 BRAM18, intra-block FIFOs 8.5k LUT / 143 BRAM18, DWCs 1.6k LUT, inter-block FIFOs 392 LUT; slowest node 147.7k cycles (677 fps); latency to first output pixel 9.9 ms |
+| `int6_fps250_lat200/` | throughput 250 fps @ 100 MHz (every node <= 400,000 cycles/frame), latency to first output pixel <= 200 ms, downstream no slower than upstream, inter-block FIFOs fixed at depth 2 | 88.0k LUT (38.2%), 205 BRAM18 (32.9%), 0 URAM, 241 DSP (13.9%): nodes 76.9k LUT (incl. the final argmax) / 62 BRAM18, intra-block FIFOs 9.0k LUT / 143 BRAM18, DWCs 1.7k LUT, inter-block FIFOs 392 LUT; slowest node 147.7k cycles (677 fps); latency to first output pixel 9.9 ms |
 
 Files per run (`final` tag, as in `S12_dense_256_fullwidth_joinsdist_v1/*/`):
 `layer_bits_folding_final.json` (status / layer_weight_bits / layer_act_bits / per_layer / extra_nodes / _diagnostics / dataflow_graph, plus the extra top-level keys
@@ -30,7 +30,7 @@ Regenerate: `python3 MILP/analytical/net_fold.py --bits 6 --fps 250 --clock-mhz 
   cost is ~0). An earlier pair-simulation search (`--inter-fifo sim`, `net_fifo.py`) found depth 2 sufficient at the 400,000 cycles/frame target for all 28 pairs, and one whole-net
   simulation with all 28 at depth 2 sustained 225,240 cycles/frame (target 400,000, no deadlock); the default run does not repeat that (`--whole-net-check` is opt-in).
   `--inter-fifo standard` gives the old one-BRAM18-per-edge rule (28 BRAM18). The memory that matters is inside the blocks: skip FIFOs and the prefetch FIFOs in front of
-  every FMPadding (143 BRAM18 + 8.5k LUT in `intra_block_fifos`, depth > 2 only). See "FIFOs" below: all of it is a specification that no current build step applies.
+  every FMPadding (143 BRAM18 + 9.0k LUT in `intra_block_fifos`, depth > 2 only). See "FIFOs" below: all of it is a specification that no current build step applies.
 * The initial block's branch-quant threshold sits UPSTREAM of its maxpool (`initial.pool_quant`, MILP kind `pool_quant`, added to the MILP itself on 2026-10-05 so the
   MILP and the analytical model agree: 65,536 cycles, 88 LUT at INT6). Not representable in the MILP schema: the InferPool route of the initial block (StreamingMaxPool is
   used) and the final layer's bias (FINN does not lower it; the no-bias layer is folded).
@@ -72,3 +72,9 @@ What this means for this folder:
 
 Status: the specification (`inter_block_fifos`, `intra_block_fifos`) exists and is verified in simulation; the bridge that merges it into the FINN folding config and the
 `auto_fifo_depths=False` build are not written yet.
+
+## Final block (2026-10-06 update)
+The final block now matches the real FINN lowering (hardware/builds/S12_dense_256_u4_analytical_v1/probes/partition7_fifo_check_20261005_222226):
+`FMPadding_Pixel -> FMPadding_rtl (pad 1) -> SWG 2x2 (parallel_window) -> DWC 96->48 -> MVAU_f -> ChannelwiseOp bias -> LabelSelect (argmax, PE 5, UINT8 label)`.
+`extra_nodes["final.argmax"]` (kind `argmax`, 65,536 cycles at PE 5, LUT is a placeholder until a FINN probe exists). `intra_block_fifos` is the flat per-FIFO list the FINN bridge reads;
+the per-block summary is `block_verification`. Every inter-block FIFO is fixed at depth 2.

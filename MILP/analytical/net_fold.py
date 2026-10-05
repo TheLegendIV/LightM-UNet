@@ -81,7 +81,7 @@ def xopts(node):
 
 THR_RAM_STYLE = "block"              # the analytical models price every standalone threshold with ram_style="block" (depth_trigger_bram 1024 in the probes)
 _BRAM18_ASPECTS = ((1, 16384), (2, 8192), (4, 4096), (9, 2048), (18, 1024), (36, 512))   # UG573 table 1-10 (width, depth)
-FOLDABLE = ("MVAU", "Thr", "Add", "Dup")
+FOLDABLE = ("MVAU", "Thr", "Add", "Dup", "Label")
 
 
 # ---------------------------------------------------------------------------------------------- block bookkeeping
@@ -161,11 +161,13 @@ def run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool =
         xf["initial.input_quant"] = (n["Thr_in"].pe, 1, THR_RAM_STYLE)
         xf["initial.act"] = (n["Thr_act"].pe, 1, THR_RAM_STYLE)
         xf["initial.pool_quant"] = (n["Thr_m"].pe, 1, THR_RAM_STYLE)       # the branch-quant threshold UPSTREAM of the maxpool (MILP kind pool_quant)
-    else:   # final (LayerQuantEnetFINN final_bias=True does not lower to hardware: the probes use the no-bias layer)
+    else:   # final: the real build (partition 7) has the bias ChannelwiseOp (INT16 -> INT17, PE 1) and a LabelSelect argmax behind the MVAU; neither the bias
+        # (no MILP node yet) nor the intra-block DWC / FIFO nodes are MILP entries, only final.argmax is (kind argmax)
         f = geom["final"]
-        r = model_fnl_block(f.cin, f.cout, bits, f.hin, f.win, F=F_k, bias=False)
+        r = model_fnl_block(f.cin, f.cout, bits, f.hin, f.win, F=F_k, bias=True, argmax=True)
         n = {x.name: x for x in r.nodes}
         lf["final"] = (n["MVAU_f"].pe, n["MVAU_f"].simd, None, n["MVAU_f"].frame_cycles)
+        xf["final.argmax"] = (n["LabelSelect"].pe, 1, None)
     slowest = max(x.frame_cycles for x in r.nodes if x.name.startswith(FOLDABLE))
     fifos, fifo_warning = (_intra_block_fifos(kind, r, stage) if compute_fifos else ([], None))
     return r, lf, xf, slowest, fifos, fifo_warning
@@ -516,7 +518,7 @@ def size_inter_block_fifos(result: dict, blocks: list, a, F_target: int) -> list
 
 
 def intra_block_report(blocks: list, result: dict) -> None:
-    """Store what the block verification decided (depths of the internal FIFOs, DWCs) next to the folding: FINN has to be told these too."""
+    """Store the per-block verification summary (verified depths of the internal FIFOs above 2, DWCs, warnings) under `block_verification`."""
     rep, tot = {}, dict(fifo_lut=0.0, fifo_bram18=0.0, fifo_uram18=0.0, dwc_lut=0.0)
     for stage, kind, r in blocks:
         g, costs = r.fifo_graph, r.fifo_costs
@@ -529,7 +531,7 @@ def intra_block_report(blocks: list, result: dict) -> None:
         for k in ("fifo_lut", "fifo_bram18", "dwc_lut"):
             tot[k] += r.totals[k]
         tot["fifo_uram18"] += r.totals["fifo_uram"]
-    result["intra_block_fifos"] = rep
+    result["block_verification"] = rep          # per-block summary; intra_block_fifos stays the FLAT per-FIFO list the FINN bridge reads (assemble(compute_intra_fifos=True))
     result["_diagnostics"]["intra_block_fifo_totals"] = tot
 
 

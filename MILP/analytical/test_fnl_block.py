@@ -30,7 +30,7 @@ class TestFnlModel(unittest.TestCase):
 
     def test_no_skip_no_threshold(self):
         self.assertIsNone(self.r.skip_fifo)
-        self.assertEqual([x.name for x in self.r.nodes], ["FMPadPix", "SWG_u", "MVAU_f", "Bias"])
+        self.assertEqual([x.name for x in self.r.nodes], ["FMPadPix", "FMPad_u", "SWG_u", "MVAU_f", "Bias", "LabelSelect"])
         self.assertEqual(sum(1 for x in self.r.nodes if "Thresholding" in x.op), 0)
 
     def test_every_node_within_frame_budget(self):
@@ -44,7 +44,8 @@ class TestFnlModel(unittest.TestCase):
         self.assertEqual(m.dsp, 48)
 
     def test_fmpad_pixel_floor(self):
-        self.assertEqual(self.n["FMPadPix"].frame_cycles, 257 * 257)       # (2H+1)(2W+1) with SIMD = Cin
+        self.assertEqual(self.n["FMPadPix"].frame_cycles, 255 * 255)       # FMPadding_Pixel: (2H-1)^2 zero insertion only, SIMD = Cin
+        self.assertEqual(self.n["FMPad_u"].frame_cycles, 257 * 257)        # FMPadding_rtl behind it: the pad-1 border, (2H+1)^2
 
     def test_floor_rejected(self):
         with self.assertRaises(ValueError):
@@ -58,10 +59,31 @@ class TestFnlModel(unittest.TestCase):
 
     def test_nobias_variant_has_no_bias_node(self):
         r = model_fnl_block(**REF, bias=False)
-        self.assertEqual([x.name for x in r.nodes], ["FMPadPix", "SWG_u", "MVAU_f"])
+        self.assertEqual([x.name for x in r.nodes], ["FMPadPix", "FMPad_u", "SWG_u", "MVAU_f", "LabelSelect"])
         self.assertTrue(verify_with_sim(r)["ok"])
         self.assertNotIn("bias", to_folding_config(r)["folding"])
         self.assertLess(r.totals["lut"], self.r.totals["lut"])
+
+    def test_argmax_pe_follows_the_budget(self):
+        a = self.n["LabelSelect"]                    # F = 73728: 5 labels per pixel at PE 1 would need 327,680 cycles -> PE 5, one pixel per cycle
+        acc = self.n["MVAU_f"].out_width_bits // self.n["MVAU_f"].pe          # accumulator bits; the bias add makes it acc + 1 (INT16 -> INT17 in the real build)
+        self.assertEqual((a.pe, a.frame_cycles, a.out_width_bits, a.in_width_bits), (5, PX_OUT, 8, 5 * (acc + 1)))
+        loose = {x.name: x for x in model_fnl_block(**{**REF, "F": 400000}).nodes}["LabelSelect"]
+        self.assertEqual((loose.pe, loose.frame_cycles), (1, 5 * PX_OUT))          # the cheapest PE that fits the 250 fps budget
+        self.assertLessEqual(max(x.frame_cycles for x in self.r.nodes), REF["F"])
+
+    def test_argmax_can_be_left_out(self):
+        r = model_fnl_block(**REF, argmax=False)
+        self.assertNotIn("LabelSelect", [x.name for x in r.nodes])
+        self.assertLess(r.totals["lut"], self.r.totals["lut"])
+        self.assertLess(r.latency_first_out_cycles, self.r.latency_first_out_cycles)
+
+    def test_argmax_dwc_only_when_the_pe_differs(self):
+        loose = model_fnl_block(**{**REF, "F": 400000})
+        n = {x.name: x for x in loose.nodes}
+        edges = [d.edge for d in loose.dwcs]
+        self.assertEqual("Bias->LabelSelect" in edges, n["Bias"].pe != n["LabelSelect"].pe)
+        self.assertEqual([d for d in self.r.dwcs if "LabelSelect" in d.edge], [] if self.n["Bias"].pe == self.n["LabelSelect"].pe else self.r.dwcs[-1:])
 
     def test_bit_width_does_not_change_folding(self):
         for b in (6, 8):
@@ -101,15 +123,24 @@ class TestFnlSim(unittest.TestCase):
 
     def test_rate_report(self):
         txt = rate_report(self.r)
-        for name in ("FMPadPix", "SWG_u", "MVAU_f", "Bias"):
+        for name in ("FMPadPix", "FMPad_u", "SWG_u", "MVAU_f", "Bias", "LabelSelect"):
             self.assertIn(name, txt)
 
     def test_folding_config(self):
         c = to_folding_config(self.r)
-        self.assertEqual(set(c["folding"]), {"fmpadpix", "swg_u", "mvau_f", "bias"})
+        self.assertEqual(set(c["folding"]), {"fmpadpix", "fmpad_u", "swg_u", "mvau_f", "bias", "label_select"})
         self.assertEqual((c["folding"]["mvau_f"]["PE"], c["folding"]["mvau_f"]["SIMD"]), (5, 16))
         self.assertTrue(all(f["depth"] >= 2 for f in c["fifos"]))
         self.assertEqual(c["predicted"]["skip_fifo_words"], 0)
+
+    def test_argmax_delivers_one_label_per_pixel_and_meets_the_budget(self):
+        s = simulate_fnl(self.r, inject_interval=0, fifo_depth=2, elastic_map={"FMPadPix": 4}, frames=2)
+        self.assertFalse(s.deadlock)
+        self.assertEqual(len(s.out_times), 2 * PX_OUT)                      # sink counts ONE word per pixel now (the label)
+        loose = model_fnl_block(**{**REF, "F": 400000})                     # LabelSelect at PE 1 (5 cycles per pixel) is the slowest node here
+        verify_with_sim(loose)
+        self.assertTrue(loose.verification["ok"])
+        self.assertAlmostEqual(loose.verification["steady_cyc_px"], 400000 / PX_OUT, delta=0.2 * 400000 / PX_OUT)
 
     def test_other_bit_widths(self):
         for b in (6, 8):

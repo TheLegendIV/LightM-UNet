@@ -34,12 +34,15 @@ fcm = reg.fcm
 
 
 def model_fnl_block(
-    cin: int, cout: int, bits: int, height: int, width: int, F: int | None = None, T_out: float | None = None, bias: bool = True,
+    cin: int, cout: int, bits: int, height: int, width: int, F: int | None = None, T_out: float | None = None, bias: bool = True, argmax: bool = True,
 ) -> BottleneckResult:
     """cin -> cout final transposed conv (K = S = 2), INPUT map height x width, output 2*height x 2*width, uniform INT `bits`.
     Budget: F frame cycles, or T_out cycles per OUTPUT pixel (F = T_out * 4*height*width).
     bias=True (LayerQuantEnetFINN default, Int32Bias) adds the integer bias add after the MVAU; bias=False is the final layer of the production
-    export (finn_enet_prod_export.py), which has none."""
+    export (finn_enet_prod_export.py), which has none.
+    argmax=True appends the deployed network's final argmax over the `cout` output channels (FINN LabelSelect, one label per pixel): foldable PE | cout,
+    ceil(cout / PE) cycles per output pixel, input = the stream before it (MVAU_f or Bias), output one UINT8 label per pixel (as in the real FINN build:
+    hardware/builds/S12_dense_256_u4_analytical_v1/probes/partition7_fifo_check_20261005_222226)."""
     if (F is None) == (T_out is None):
         raise ValueError("give exactly one of F (frame cycles) or T_out (cycles per output pixel)")
     H, W, Ho, Wo = height, width, 2 * height, 2 * width
@@ -48,7 +51,7 @@ def model_fnl_block(
     T, T_in, A = F / px_out, F / px_in, bits
     res = BottleneckResult(params=dict(
         cin=cin, cmid=cin, cout=cout, v=1, z=1, T=T, F=F, T_in=T_in, bits=bits, k=2, dilation=1, stride=2, height=H, width=W, hout=Ho, wout=Wo, pad=0,
-        block="final", skip_pad="n/a", skip_order="n/a", pad_group=None, bias=bias,
+        block="final", skip_pad="n/a", skip_order="n/a", pad_group=None, bias=bias, argmax=argmax,
     ))
     if px_out > F:
         raise ValueError(f"F={F} is below the final layer's floor of {px_out} cycles/frame (one output pixel per cycle)")
@@ -60,8 +63,12 @@ def model_fnl_block(
     c_f = dict(c_f, total_lut=c_f["total_lut"] - c_f["thr_lut"], thr_lut=0.0, thr_bram18=0.0, thr_uram18=0.0)
     pe_b = _min_pe(cout, px_out, F, "Bias") if bias else None
     c_b = fcm.stream_node_cost("add", g_b, pe_b) if bias else None   # ChannelwiseOp add: priced like AddStreams (provisional)
+    g_a = _geom("argmax", cout, cout, Ho, Wo, Ho, Wo, op="LabelSelect_hls")
+    pe_a = _min_pe(cout, px_out, F, "LabelSelect") if argmax else None
+    c_a = fcm.stream_node_cost("argmax", g_a, pe_a) if argmax else None
     swu = c_f["simd_swu"]
     cf = math.ceil(cin / swu)
+    par = simd_f > cin                                    # parallel_window: one 2x2 window per SWG word, a DWC narrows it to the MVAU's SIMD (real build: 96 -> 48 bits)
     acc = c_f["acc_bits"]
 
     def row(name, op, pe, simd, frame_cycles, lut=0.0, bram=0.0, uram=0.0, dsp=0.0, in_w=0, out_w=0):
@@ -69,28 +76,39 @@ def model_fnl_block(
                           lut=lut, bram18=bram, uram=uram, dsp=dsp, in_width_bits=in_w, out_width_bits=out_w)
 
     nd = res.nodes
-    nd.append(row("FMPadPix", "FMPadding_Pixel_hls", 0, swu, (Ho + 1) * (Wo + 1) * cf, in_w=swu * A, out_w=swu * A))
-    nd.append(row("SWG_u", "ConvolutionInputGenerator_rtl 2x2", 0, swu, c_f["swu_cycles"], c_f["swu_lut"], c_f["swu_bram18"], c_f["swu_uram18"],
-                  in_w=swu * A, out_w=swu * A))
+    nd.append(row("FMPadPix", "FMPadding_Pixel_hls", 0, swu, (Ho - 1) * (Wo - 1) * cf, in_w=swu * A, out_w=swu * A))      # zero insertion only: (2H-1)^2 grid
+    nd.append(row("FMPad_u", "FMPadding_rtl (pad 1)", 0, swu, (Ho + 1) * (Wo + 1) * cf, in_w=swu * A, out_w=swu * A))      # the pad-1 border: (2H+1)^2 grid
+    nd.append(row("SWG_u", "ConvolutionInputGenerator_rtl 2x2" + (" parallel_window" if par else ""), 0, swu, c_f["swu_cycles"], c_f["swu_lut"],
+                  c_f["swu_bram18"], c_f["swu_uram18"], in_w=swu * A, out_w=swu * A * (4 if par else 1)))
     nd.append(row("MVAU_f", "MVAU rtl 2x2 (lowered ConvTranspose)", pe_f, simd_f, c_f["mvu_cycles"], c_f["mvu_lut"], c_f["wm_bram18"], c_f["wm_uram18"],
                   c_f["mvu_dsp"], in_w=simd_f * A, out_w=pe_f * acc))
+    if par:
+        _dwc("SWG_u->MVAU_f", 4 * swu * A, simd_f * A, 4 * cin, 4 * swu, simd_f, px_out, px_out, res.dwcs)
     if bias:
-        nd.append(row("Bias", "ChannelwiseOp_hls (bias add)", pe_b, 0, c_b["cycles"], c_b["total_lut"], in_w=pe_b * acc, out_w=pe_b * acc))
+        nd.append(row("Bias", "ChannelwiseOp_hls (bias add)", pe_b, 0, c_b["cycles"], c_b["total_lut"], in_w=pe_b * acc, out_w=pe_b * (acc + 1)))     # real build: INT16 -> INT17
         _dwc("MVAU_f->Bias", pe_f * acc, pe_b * acc, cout, pe_f, pe_b, px_out, px_out, res.dwcs)
+    if argmax:
+        last_name, last_pe = ("Bias", pe_b) if bias else ("MVAU_f", pe_f)
+        acc_in = acc + 1 if bias else acc                  # real build (partition 7): ChannelwiseOp INT16 -> INT17 feeds LabelSelect; LabelSelect emits a UINT8 label
+        nd.append(row("LabelSelect", "LabelSelect_hls (argmax)", pe_a, 0, c_a["cycles"], c_a["total_lut"], in_w=pe_a * acc_in, out_w=8))
+        _dwc(f"{last_name}->LabelSelect", last_pe * acc_in, pe_a * acc_in, cout, last_pe, pe_a, px_out, px_out, res.dwcs)
     for d in res.dwcs:
         if d.cyc_px > T + 1e-9:
             res.warnings.append(f"DWC {d.edge} needs {d.cyc_px:.2f} cyc/px (output pixels) > T_out={T:.2f}")
     res.skip_fifo = None
-    res.latency_first_out_cycles = int(math.ceil(2 * (Wo + 1) * cf + nd[2].cyc_px + (cout / pe_b if bias else 0) + 8))
+    mv = next(x for x in nd if x.name == "MVAU_f")
+    res.latency_first_out_cycles = int(math.ceil(2 * (Wo + 1) * cf + mv.cyc_px + (cout / pe_b if bias else 0) + (cout / pe_a if argmax else 0) + 8))
     res.frame_cycles = int(res.latency_first_out_cycles + (px_out - 1) * T)
     dwc_lut = sum(d.lut for d in res.dwcs)
     res.totals = dict(lut=sum(x.lut for x in nd) + dwc_lut, bram18=sum(x.bram18 for x in nd), uram=sum(x.uram for x in nd),
                       dsp=sum(x.dsp for x in nd), dwc_lut=dwc_lut)
-    res.balance = dict(max_cyc_px=nd[2].cyc_px, min_cyc_px=nd[2].cyc_px, min_over_max=1.0, mean_util=nd[2].cyc_px / T, scope="MVAU_f")
+    res.balance = dict(max_cyc_px=mv.cyc_px, min_cyc_px=mv.cyc_px, min_over_max=1.0, mean_util=mv.cyc_px / T, scope="MVAU_f")
     if max(x.frame_cycles for x in nd) > F:
         res.warnings.append(f"slowest node {max(x.frame_cycles for x in nd)} cycles/frame exceeds F={F}")
     res.warnings.append("FMPadding_Pixel and ChannelwiseOp LUTs are not calibrated in finn_cost_model (priced 0 / like AddStreams); the MVAU counts the MACs "
                         "on inserted zeros")
+    if argmax:
+        res.warnings.append("LabelSelect (argmax) LUT is a placeholder (finn_cost_model._LABELSELECT_LUT_PER_PE): no FINN estimate or probe data yet")
     return res
 
 
@@ -103,7 +121,7 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
     p = r.params
     T = p["T"]
     cf = p["cin"] // next(x for x in r.nodes if x.name == "SWG_u").simd
-    emap0 = {"FMPadPix": 2 * cf + 2}
+    emap0 = {"FMPadPix": 2 * cf + 2, "FMPad_u": 2 * cf + 2}
     sat, tries, emap = None, 0, dict(emap0)
     for tries, (es, _, um) in enumerate(_SIZING_SCHEDULE[:max_tries], 1):
         depth = fifo_depth * um
@@ -158,7 +176,7 @@ def rate_report(r: BottleneckResult, with_sim: bool = True) -> str:
     return "\n".join(lines)
 
 
-_ROLE_OF = {"FMPadPix": "fmpadpix", "SWG_u": "swg_u", "MVAU_f": "mvau_f", "Bias": "bias"}
+_ROLE_OF = {"FMPadPix": "fmpadpix", "FMPad_u": "fmpad_u", "SWG_u": "swg_u", "MVAU_f": "mvau_f", "Bias": "bias", "LabelSelect": "label_select"}
 
 
 def to_folding_config(r: BottleneckResult) -> dict:
@@ -167,10 +185,12 @@ def to_folding_config(r: BottleneckResult) -> dict:
         raise RuntimeError("run verify_with_sim(result) before to_folding_config")
     p = r.params
     n = {x.name: x for x in r.nodes}
-    fold = {"fmpadpix": {"SIMD": n["SWG_u"].simd}, "swg_u": {"SIMD": n["SWG_u"].simd, "parallel_window": int(n["MVAU_f"].simd > p["cin"])},
+    fold = {"fmpadpix": {"SIMD": n["SWG_u"].simd}, "fmpad_u": {"SIMD": n["SWG_u"].simd}, "swg_u": {"SIMD": n["SWG_u"].simd, "parallel_window": int(n["MVAU_f"].simd > p["cin"])},
             "mvau_f": {"PE": n["MVAU_f"].pe, "SIMD": n["MVAU_f"].simd}}
     if "Bias" in n:
         fold["bias"] = {"PE": n["Bias"].pe}
+    if "LabelSelect" in n:
+        fold["label_select"] = {"PE": n["LabelSelect"].pe}
     role = lambda name: "dwc" if name.startswith("DWC(") else _ROLE_OF.get(name, name.lower())
     fifos = []
     for name, f in r.fifo_graph["fifos"].items():
@@ -192,7 +212,7 @@ def to_folding_config(r: BottleneckResult) -> dict:
     )
 
 
-_OP_LABEL = {"FMPadPix": "FMPadding_Pixel_hls", "SWG_u": "ConvolutionInputGenerator_rtl", "MVAU_f": "MVAU_rtl", "Bias": "ChannelwiseOp_hls"}
+_OP_LABEL = {"FMPadPix": "FMPadding_Pixel_hls", "FMPad_u": "FMPadding_rtl", "SWG_u": "ConvolutionInputGenerator_rtl", "MVAU_f": "MVAU_rtl", "Bias": "ChannelwiseOp_hls", "LabelSelect": "LabelSelect_hls"}
 
 
 def export_onnx(r: BottleneckResult, path: str) -> None:
@@ -206,7 +226,7 @@ def export_onnx(r: BottleneckResult, path: str) -> None:
     H, W, Ho, Wo, cin, cout = p["height"], p["width"], p["hout"], p["wout"], p["cin"], p["cout"]
     by_name = {x.name: x for x in r.nodes}
     slowest = max(x.frame_cycles for x in r.nodes)
-    node_shape = {"FMPadPix": (cin, Ho + 1, Wo + 1), "SWG_u": (4 * cin, Ho, Wo), "MVAU_f": (cout, Ho, Wo), "Bias": (cout, Ho, Wo)}
+    node_shape = {"FMPadPix": (cin, Ho - 1, Wo - 1), "FMPad_u": (cin, Ho + 1, Wo + 1), "SWG_u": (4 * cin, Ho, Wo), "MVAU_f": (cout, Ho, Wo), "Bias": (cout, Ho, Wo), "LabelSelect": (1, Ho, Wo)}
     last = r.nodes[-1].name
     ends = {"Source", "Sink"}
     fifos = {k: f for k, f in g["fifos"].items() if f["producer"] not in ends and f["consumer"] not in ends}
