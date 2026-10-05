@@ -23,6 +23,7 @@ from qonnx.util.basic import calculate_matvec_accumulator_range, roundup_to_inte
 import finn_stage_partition  # noqa: E402
 from finn.builder.build_dataflow_steps import step_specialize_layers, step_target_fps_parallelization  # noqa: E402
 from finn.transformation.fpgadataflow.minimize_weight_bit_width import MinimizeWeightBitWidth  # noqa: E402
+from finn.transformation.fpgadataflow.set_fifo_depths import reset_implementation  # noqa: E402
 from finn.util.fpgadataflow import is_fpgadataflow_node  # noqa: E402
 
 WEIGHT_OP_TYPES = ("MVAU_hls", "MVAU_rtl", "VVAU_hls", "VVAU_rtl")
@@ -483,14 +484,309 @@ def _previous_block_name(conv_order_file, first_logical_name):
     return None
 
 
+# ----------------------------------------------------------------- FIFO depth bridge (MILP intra/inter_block_fifos)
+# Transparent when walking producer/consumer chains to find a FIFO's real neighbours -- DWC is its OWN role ("dwc",
+# see _role_name_of), not skipped, same convention as bottleneck_probe_v1/finn_bottleneck_probe_build.py.
+_SKIP_FIFO_OPS = ("StreamingFIFO",)
+
+
+def _real_producer(model, node):
+    p = model.find_producer(node.input[0])
+    while p is not None and p.op_type.startswith(_SKIP_FIFO_OPS):
+        p = model.find_producer(p.input[0])
+    return p
+
+
+def _real_consumer(model, node):
+    c = model.find_consumer(node.output[0])
+    while c is not None and c.op_type.startswith(_SKIP_FIFO_OPS):
+        c = model.find_consumer(c.output[0])
+    return c
+
+
+# Same as above but ALSO transparent through a real DWC node -- used only as a last-resort fallback when a
+# FIFO is directly adjacent to a real DWC and net_fold.py modeled this edge as a single direct hop (no
+# explicit 'dwc' role at all for this particular pair), so the only way to find a matching 'wanted' entry is
+# to walk past the DWC to the true far-side role on both sides of it (see step_force_fifo_depths_from_milp).
+_SKIP_FIFO_DWC_OPS = _SKIP_FIFO_OPS + ("StreamingDataWidthConverter",)
+
+
+def _real_producer_skip_dwc(model, node):
+    p = model.find_producer(node.input[0])
+    while p is not None and p.op_type.startswith(_SKIP_FIFO_DWC_OPS):
+        p = model.find_producer(p.input[0])
+    return p
+
+
+def _real_consumer_skip_dwc(model, node):
+    c = model.find_consumer(node.output[0])
+    while c is not None and c.op_type.startswith(_SKIP_FIFO_DWC_OPS):
+        c = model.find_consumer(c.output[0])
+    return c
+
+
+def _role_name_of(node, role_of_node: dict):
+    if node is None:
+        return None
+    if node.op_type.startswith("StreamingDataWidthConverter"):
+        return "dwc"
+    return role_of_node.get(node.name)
+
+
+# per_layer-key leaf suffix (as built by MILP/analytical/net_fold.py's run_block/put calls) -> (mvau role, thr role)
+_LEAF_ROLES = {
+    "reduce.0": ("mvau_r", "thr_r"), "conv": ("mvau_m", "thr_m"), "conv.0": ("mvau_m", "thr_m"),
+    "expand.0": ("mvau_e", "thr_e"), "main_proj.0": ("mvau_p", "thr_p"), "up.0": ("mvau_u", "thr_u"),
+}
+# the leaf whose MVAU is fed directly by the block's own Dup/DuplicateStreams, per block kind
+_ENTRY_LEAF_BY_KIND = {"reg": "reduce.0", "dn": "reduce.0", "up": "main_proj.0", "init": "conv"}
+
+
+def _block_kind_of_stage(stage: str) -> str:
+    if stage == "initial":
+        return "init"
+    if stage == "final":
+        return "final"
+    if stage.startswith("down"):
+        return "dn"
+    if stage.startswith("up"):
+        return "up"
+    return "reg"
+
+
+def _stage_leaf(json_key: str):
+    """json_key ('stage3.4.reduce.0', 'initial.conv', 'final') -> (stage, leaf), e.g. ('stage3.4', 'reduce.0')."""
+    if json_key == "final":
+        return "final", "final"
+    for leaf in _LEAF_ROLES:
+        suffix = f".{leaf}"
+        if json_key.endswith(suffix):
+            return json_key[: -len(suffix)], leaf
+    return None, None
+
+
+def _find_init_block_extra_nodes(kernel_model, stage, dup_node, conv_path_head):
+    """'init'-kind block's non-weight-bearing extra nodes (thr_in, thr_m, maxpool, concat, thr_act),
+    resolved by walking out from the already-found Dup node per int_bottleneck.py's topology:
+        Thr_in -> Dup -+-> [conv_path_head: FMPad or SWG, already resolved by the caller] -> ... -+
+                       +-> Thr_m -> MaxPool -------------------------------------------------------+-> Concat -> Thr_act
+    Also registers net_fold.py's own MILP extra-node names (input_quant/act/pool_quant, see net_fold.py's
+    'init' kind xf[...] entries) as aliases for the same real nodes -- inter_block_fifos is keyed by those,
+    not by int_bottleneck.py's _ROLE_OF names (which intra_block_fifos uses)."""
+    by_name: dict[str, str] = {}
+    thr_in = _real_producer(kernel_model, dup_node)
+    if thr_in is not None and thr_in.op_type in THRESH_OP_TYPES:
+        by_name[f"{stage}.thr_in"] = thr_in.name
+        by_name[f"{stage}.input_quant"] = thr_in.name
+    pool_head = None
+    for out_tensor in dup_node.output:
+        c = kernel_model.find_consumer(out_tensor)
+        while c is not None and c.op_type.startswith("StreamingFIFO"):
+            c = kernel_model.find_consumer(c.output[0])
+        if c is not None and (conv_path_head is None or c.name != conv_path_head.name):
+            pool_head = c
+    maxpool = None
+    if pool_head is not None and pool_head.op_type in THRESH_OP_TYPES:
+        by_name[f"{stage}.thr_m"] = pool_head.name
+        by_name[f"{stage}.pool_quant"] = pool_head.name
+        maxpool = _real_consumer(kernel_model, pool_head)
+    elif pool_head is not None and pool_head.op_type.startswith("StreamingMaxPool"):
+        maxpool = pool_head
+    concat = None
+    if maxpool is not None and maxpool.op_type.startswith("StreamingMaxPool"):
+        by_name[f"{stage}.maxpool"] = maxpool.name
+        concat = _real_consumer(kernel_model, maxpool)
+    if concat is not None and concat.op_type.startswith("StreamingConcat"):
+        by_name[f"{stage}.concat"] = concat.name
+        thr_act = _real_consumer(kernel_model, concat)
+        if thr_act is not None and thr_act.op_type in THRESH_OP_TYPES:
+            by_name[f"{stage}.thr_act"] = thr_act.name
+            by_name[f"{stage}.act"] = thr_act.name
+    return by_name
+
+
+def build_partition_role_nodes(kernel_model, logical_names, per_layer):
+    """Stage-qualified role name (e.g. 'stage3.4.mvau_r', 'stage3.4.thr_r', 'stage3.4.dup') -> real FINN node
+    name, for every weight-bearing layer in this partition. Covers each block's entry/mid/exit MVAU and their
+    OWN Thresholding (mvau_r/thr_r, mvau_m/thr_m, mvau_e/thr_e, mvau_p/thr_p, mvau_u/thr_u, mvau_c/thr_c,
+    mvau_f), the dense-conv's FMPadding/SWU (fmpad/swg_m, via _find_dense_swu_fmpad, now resolved for 'init'
+    kind too), each block's Dup (DuplicateStreams feeding its entry MVAU), and -- for 'init' kind only --
+    its own thr_in/thr_m/maxpool/concat/thr_act (_find_init_block_extra_nodes). Does NOT cover
+    add/skip_quant/residual_add/out_act -- see _find_block_join_nodes. Best-effort: 'dn'/'up' kind blocks'
+    own extra internal nodes (mvau_s, fmpad_c, upnn, swg_u, ...) are still not resolved here -- intra-block
+    FIFOs on those edges are left on FINN's autosized depth (see build_partition_folding_config's fifo_plan
+    print for the match rate)."""
+    weight_nodes = [n for n in kernel_model.graph.node if n.op_type in WEIGHT_OP_TYPES]
+    by_name: dict[str, str] = {}
+    for node, logical_name in zip(weight_nodes, logical_names):
+        entry, json_key = _resolve_folding_entry(logical_name, per_layer)
+        if entry is None or json_key is None:
+            continue
+        stage, leaf = _stage_leaf(json_key)
+        if stage is None:
+            continue
+        if leaf == "final":
+            by_name[f"{stage}.mvau_f"] = node.name
+            continue
+        mvau_role, thr_role = _LEAF_ROLES[leaf]
+        if leaf == "conv" and stage == "initial":
+            mvau_role, thr_role = "mvau_c", "thr_c"
+        by_name[f"{stage}.{mvau_role}"] = node.name
+        thr = _find_following_thresholding(kernel_model, node)
+        if thr is not None:
+            by_name[f"{stage}.{thr_role}"] = thr.name
+        fmpad_node = swu_node = None
+        if leaf in ("conv", "conv.0"):
+            fmpad_node, swu_node = _find_dense_swu_fmpad(kernel_model, node)
+            if swu_node is not None:
+                # net_fold.py role names for this SWU differ by block kind: dn_bottleneck.py -> 'swg_m',
+                # bottleneck.py (reg kind) -> plain 'swg' (its _ROLE_OF maps FINN's own 'SWG_m' var name to
+                # role string 'swg'). Register both so either producer looks it up.
+                by_name[f"{stage}.swg_m"] = swu_node.name
+                by_name[f"{stage}.swg"] = swu_node.name
+            if fmpad_node is not None:
+                by_name[f"{stage}.fmpad"] = fmpad_node.name
+        kind = _block_kind_of_stage(stage)
+        if leaf == _ENTRY_LEAF_BY_KIND.get(kind):
+            # 'init' kind's entry leaf ('conv') has FMPad/SWG/DWC between Dup and the MVAU itself; every
+            # other kind's entry MVAU is fed directly by Dup.
+            dup = _real_producer(kernel_model, fmpad_node or swu_node or node)
+            if dup is not None and dup.op_type.startswith("DuplicateStreams"):
+                by_name[f"{stage}.dup"] = dup.name
+                if kind == "init":
+                    by_name.update(_find_init_block_extra_nodes(kernel_model, stage, dup, fmpad_node or swu_node))
+    return by_name
+
+
+def _find_block_join_nodes(kernel_model, logical_names, prev_block=None):
+    """role -> node bridge for the residual-join nodes the MILP's inter/intra_block_fifos reference as
+    '<block>.add' / '<block>.skip_quant' (='<block>.thr_s') / '<block>.residual_add' / '<block>.out_act'
+    (aliased to '<block>.thr_out' -- the block's externally-visible output, what the NEXT block's Dup is fed
+    by; net_fold.py's per-block sim calls this one conceptual node 'Thr_out'). Reuses _find_join_thresholds
+    (proven) for residual_add/out_act/skip_quant; adds the AddStreams node itself via the same
+    adds/expand.0-blocks zip that function uses internally."""
+    by_name: dict[str, str] = {}
+    joins = _find_join_thresholds(kernel_model, logical_names, prev_block)
+    for node_name, (block, kind) in joins.items():
+        by_name[f"{block}.{kind}"] = node_name
+        if kind == "skip_quant":
+            by_name[f"{block}.thr_s"] = node_name
+        if kind == "out_act":
+            by_name[f"{block}.thr_out"] = node_name
+            by_name[f"{block}.out_act"] = node_name  # net_fold.py's intra/inter_block_fifos role name for this node
+    for key in list(by_name):   # thr_out fallback: no out_act found -> alias to residual_add instead
+        if key.endswith(".residual_add"):
+            by_name.setdefault(f"{key[: -len('.residual_add')]}.thr_out", by_name[key])
+    adds = [n for n in kernel_model.graph.node if n.op_type.startswith("AddStreams")]
+    blocks = [ln[: -len(".expand.0")] for ln in logical_names if ln.endswith(".expand.0")]
+    if len(adds) == len(blocks):
+        for add, block in zip(adds, blocks):
+            by_name[f"{block}.add"] = add.name
+    return by_name
+
+
+def step_force_fifo_depths_from_milp(model, fifo_plan: dict, min_depth: int = 2, skip_scale: float = 1.0):
+    """After FINN's own (autosized) step_set_fifo_depths, overwrite StreamingFIFO* node depths with the
+    MILP/analytical per-block-simulated ones (fifo_plan's 'wanted', keyed '<producer_role>=><consumer_role>'),
+    matched by role identity via fifo_plan's 'role_of_node' (node name -> role string) + _real_producer/
+    _real_consumer. Edges with no match keep FINN's autosized depth (safety net -- same pattern as
+    hardware/builds/bottleneck_probe_v1/finn_bottleneck_probe_build.py's step_force_fifo_depths, generalized
+    from one isolated block to a whole partition's worth of block instances)."""
+    role_of_node = fifo_plan["role_of_node"]
+    wanted = {tuple(k.split("=>", 1)): v for k, v in fifo_plan["wanted"].items()}
+    wanted_by_producer = fifo_plan.get("wanted_by_producer", {})
+    n_total = n_forced = n_forced_virtual_dwc = n_forced_producer_only = n_forced_dwc_bridge = 0
+    report = []
+    for n in model.graph.node:
+        if not n.op_type.startswith("StreamingFIFO"):
+            continue
+        n_total += 1
+        inst = getCustomOp(n)
+        prod, cons = _real_producer(model, n), _real_consumer(model, n)
+        pr_role, cn_role = _role_name_of(prod, role_of_node), _role_name_of(cons, role_of_node)
+        # a DWC node has no stage of its own -- borrow it from whichever side already resolved to a real role
+        if pr_role == "dwc" and cn_role and cn_role != "dwc" and "." in cn_role:
+            pr_role = f"{cn_role.rsplit('.', 1)[0]}.dwc"
+        elif cn_role == "dwc" and pr_role and pr_role != "dwc" and "." in pr_role:
+            cn_role = f"{pr_role.rsplit('.', 1)[0]}.dwc"
+        stock = inst.get_nodeattr("depth")
+        entry = dict(fifo=n.name, producer_role=pr_role, consumer_role=cn_role, stock_depth=stock, forced_depth=None)
+        f = wanted.get((pr_role, cn_role)) if (pr_role and cn_role) else None
+        producer_only = False
+        if f is None and cons is None and pr_role:
+            # partition's own last FIFO -- its real consumer lives in a not-yet-built partition, so there's no
+            # node here to pair against. Convention: an inter-block FIFO belongs to the block that emits it, so
+            # match by producer role alone instead of leaving this on FINN's autosized depth.
+            f = wanted_by_producer.get(pr_role)
+            producer_only = f is not None
+        dwc_bridge = False
+        if f is None and (
+            (prod is not None and prod.op_type.startswith("StreamingDataWidthConverter"))
+            or (cons is not None and cons.op_type.startswith("StreamingDataWidthConverter"))
+        ):
+            # net_fold.py doesn't consistently model an explicit 'dwc' role on every edge a real DWC can land
+            # on -- some edges are modeled as one direct pr_role->cn_role hop with no dwc stage at all, even
+            # though FINN's real InsertDWC did materialize a DWC there. Walk past the real DWC node (on
+            # whichever side it sits) to the true far-side role and retry a direct lookup; the same modeled
+            # depth is then forced onto BOTH real FIFOs flanking that DWC.
+            true_pr_role, true_cn_role = pr_role, cn_role
+            if prod is not None and prod.op_type.startswith("StreamingDataWidthConverter"):
+                true_pr_role = _role_name_of(_real_producer_skip_dwc(model, n), role_of_node)
+            if cons is not None and cons.op_type.startswith("StreamingDataWidthConverter"):
+                true_cn_role = _role_name_of(_real_consumer_skip_dwc(model, n), role_of_node)
+            if true_pr_role and true_cn_role and true_pr_role != "dwc" and true_cn_role != "dwc":
+                f = wanted.get((true_pr_role, true_cn_role))
+                dwc_bridge = f is not None
+        virtual_dwc = False
+        if f is None and pr_role and cn_role and not pr_role.endswith(".dwc") and not cn_role.endswith(".dwc"):
+            # net_fold.py's per-block sim always models an explicit DWC stage between certain role pairs; FINN's
+            # real InsertDWC only materializes one when widths actually differ, so the real edge here can be a
+            # direct pr_role->cn_role hop with no 'dwc' node in between. Collapse the sim's two-edge chain
+            # (pr_role->dwc, dwc->cn_role) into this one real edge, using the larger of the two depths.
+            stage = pr_role.rsplit(".", 1)[0]
+            leg1, leg2 = wanted.get((pr_role, f"{stage}.dwc")), wanted.get((f"{stage}.dwc", cn_role))
+            if leg1 is not None and leg2 is not None:
+                f = leg1 if leg1["depth"] >= leg2["depth"] else leg2
+                virtual_dwc = True
+        if f is not None:
+            depth = max(min_depth, int(round(f["depth"] * (skip_scale if f.get("is_skip") else 1.0))))
+            inst.set_nodeattr("depth", depth)
+            entry["forced_depth"] = depth
+            if inst.get_nodeattr("impl_style") != "rtl":
+                inst.set_nodeattr("impl_style", "rtl")
+                reset_implementation(inst)
+                entry["impl_style_forced_to_rtl"] = True
+            if virtual_dwc:
+                entry["forced_via_virtual_dwc_collapse"] = True
+                n_forced_virtual_dwc += 1
+            if producer_only:
+                entry["forced_via_producer_only_inter_block"] = True
+                n_forced_producer_only += 1
+            if dwc_bridge:
+                entry["forced_via_dwc_bridge"] = True
+                n_forced_dwc_bridge += 1
+            n_forced += 1
+        report.append(entry)
+    print(f"[force fifo depths from MILP] forced {n_forced}/{n_total} StreamingFIFO node(s) "
+          f"({n_forced_virtual_dwc} via virtual-DWC collapse, {n_forced_dwc_bridge} via walk-past-DWC bridge, "
+          f"{n_forced_producer_only} via producer-only inter-block "
+          f"convention); {n_total - n_forced} left on FINN's autosized depth")
+    return model, report
+
+
 def build_partition_folding_config(partition_model_fn, sdp_node_name, logical_names, per_layer, cfg, tag="",
-                                    extra_nodes=None, conv_order_file=None):
+                                    extra_nodes=None, conv_order_file=None,
+                                    inter_block_fifos=None, intra_block_fifos=None):
     """MILP per_layer (pe/simd/simd_swu/thr_pe/thr_ram_style) -> FINN folding
     config keyed by the node names step_apply_folding_config will see.
     extra_nodes (the MILP folding json's own "extra_nodes" dict) + conv_order_file (the FULL,
     cross-partition conv_order.json) are optional: when both given, also bridges the residual-join
     Thresholding nodes' (skip_quant/residual_add/out_act) depth_trigger_bram from their own
-    ram_style -- without them, join thresholds are left on Vivado auto placement."""
+    ram_style -- without them, join thresholds are left on Vivado auto placement.
+    inter_block_fifos/intra_block_fifos (the MILP folding json's own top-level lists) are also optional:
+    when either is given, this ALSO resolves a FIFO-forcing plan (same role-identity bridge, reusing this
+    function's own kernel_model) for step_force_fifo_depths_from_milp -- returned as a second value instead
+    of None. Returns (folding_config, fifo_plan_or_None)."""
     log = f"[bridge {tag}]"
     kernel_model = ModelWrapper(partition_model_fn)
     kernel_model = step_specialize_layers(kernel_model, cfg)
@@ -586,4 +882,61 @@ def build_partition_folding_config(partition_model_fn, sdp_node_name, logical_na
         print(f"{log} WARNING: need BOTH extra_nodes and conv_order_file to bridge join thresholds -- got "
               f"extra_nodes={extra_nodes is not None} conv_order_file={conv_order_file is not None}, skipping")
 
-    return folding_config
+    fifo_plan = None
+    if inter_block_fifos is not None or intra_block_fifos is not None:
+        role_by_name = build_partition_role_nodes(kernel_model, logical_names, per_layer)
+        prev_block = _previous_block_name(conv_order_file, logical_names[0]) if (conv_order_file and logical_names) else None
+        role_by_name.update(_find_block_join_nodes(kernel_model, logical_names, prev_block))
+        # Several real nodes are registered under more than one role string (int_bottleneck.py's _ROLE_OF name
+        # AND net_fold.py's own MILP xf name for the SAME node, e.g. 'initial.thr_act' / 'initial.act' both ->
+        # the init block's output Thresholding) -- intra_block_fifos and inter_block_fifos don't consistently
+        # agree on which alias they use for a given node, so role_of_node (used at runtime) can only surface
+        # ONE alias per node, but 'wanted'/'wanted_by_producer' below are populated under EVERY alias so a
+        # match succeeds no matter which alias runtime happens to resolve to.
+        aliases_of_node: dict = {}
+        for role, node_name in role_by_name.items():
+            aliases_of_node.setdefault(node_name, set()).add(role)
+        role_of_node = {v: k for k, v in role_by_name.items()}
+
+        def _aliases(role):
+            node_name = role_by_name.get(role)
+            return aliases_of_node.get(node_name, {role}) if node_name is not None else {role}
+
+        def _dwc_resolvable(role):
+            # a DWC node has no fixed identity in role_by_name (a stage can have several real DWC instances) --
+            # it's resolved dynamically at runtime by borrowing the stage from whichever side is a real role
+            # (see step_force_fifo_depths_from_milp), so any '<stage>.dwc'-suffixed role is treated as
+            # bridge-time resolvable without needing a literal role_by_name entry.
+            return isinstance(role, str) and role.endswith(".dwc")
+
+        wanted, wanted_by_producer, unresolved = {}, {}, []
+        for f in (intra_block_fifos or []):
+            pr, cn = f["producer"], f["consumer"]
+            if (pr in role_by_name or _dwc_resolvable(pr)) and (cn in role_by_name or _dwc_resolvable(cn)):
+                for pr_alias in _aliases(pr):
+                    for cn_alias in _aliases(cn):
+                        wanted[f"{pr_alias}=>{cn_alias}"] = f
+            else:
+                unresolved.append([pr, cn])
+        for f in (inter_block_fifos or []):
+            pr, cn = f["producer"], f["consumer"]
+            pr_ok, cn_ok = (pr in role_by_name or _dwc_resolvable(pr)), (cn in role_by_name or _dwc_resolvable(cn))
+            if pr_ok and cn_ok:
+                for pr_alias in _aliases(pr):
+                    for cn_alias in _aliases(cn):
+                        wanted[f"{pr_alias}=>{cn_alias}"] = f
+            elif pr_ok:
+                # convention: an inter-block FIFO belongs to the block that emits it, so it's still resolvable
+                # by producer role alone when the consumer's block lives in a different (not yet built) partition.
+                for pr_alias in _aliases(pr):
+                    wanted_by_producer[pr_alias] = f
+            else:
+                unresolved.append([pr, cn])
+        all_fifos = (inter_block_fifos or []) + (intra_block_fifos or [])
+        print(f"{log} FIFO role bridge: {len(role_by_name)} role(s) resolved; {len(wanted)}/{len(all_fifos)} FIFO "
+              f"spec(s) matched to a real node pair, {len(wanted_by_producer)} more matchable via producer-only "
+              f"inter-block convention ({len(unresolved)} fully unresolved)")
+        fifo_plan = {"role_of_node": role_of_node, "wanted": wanted, "wanted_by_producer": wanted_by_producer,
+                     "unresolved": unresolved}
+
+    return folding_config, fifo_plan

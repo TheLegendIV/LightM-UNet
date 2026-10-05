@@ -46,10 +46,22 @@ from finn_milp import (  # noqa: E402
 from milp_outputs import compute_branch_imbalance_report, compute_chain_rate_imbalance_report  # noqa: E402
 
 from bottleneck import _retarget_threshold, model_bottleneck  # noqa: E402
+from bottleneck import to_folding_config as _fold_reg, verify_with_sim as _verify_reg  # noqa: E402
 from dn_bottleneck import model_dn_bottleneck  # noqa: E402
+from dn_bottleneck import to_folding_config as _fold_dn, verify_with_sim as _verify_dn  # noqa: E402
 from fnl_block import model_fnl_block  # noqa: E402
+from fnl_block import to_folding_config as _fold_final, verify_with_sim as _verify_final  # noqa: E402
 from int_bottleneck import model_int_bottleneck  # noqa: E402
+from int_bottleneck import to_folding_config as _fold_init, verify_with_sim as _verify_init  # noqa: E402
 from up_bottleneck import model_up_bottleneck  # noqa: E402
+from up_bottleneck import to_folding_config as _fold_up, verify_with_sim as _verify_up  # noqa: E402
+
+# per-block-kind (verify_with_sim, to_folding_config) pair -- same schema from every module (see each
+# module's own to_folding_config docstring: "same schema as bottleneck.to_folding_config").
+_VERIFY_FOLD = {
+    "reg": (_verify_reg, _fold_reg), "dn": (_verify_dn, _fold_dn), "up": (_verify_up, _fold_up),
+    "init": (_verify_init, _fold_init), "final": (_verify_final, _fold_final),
+}
 
 _XOPT_CACHE: dict = {}
 
@@ -88,8 +100,12 @@ def block_kind(stage: str) -> str:
     return "reg"
 
 
-def run_block(stage: str, geom: dict, bits: int, F_k: int):
-    """Analytical model of one block at budget F_k cycles per frame -> (BlockResult, layer folds, extra folds)."""
+def run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool = False):
+    """Analytical model of one block at budget F_k cycles per frame -> (BlockResult, layer folds, extra folds,
+    slowest, intra-block FIFOs, FIFO-verification warning). compute_fifos runs verify_with_sim + to_folding_config
+    on top of the same chosen BottleneckResult (same PE/SIMD/bits as lf/xf) to also get this block's OWN FIFO depths
+    (skip FIFO, FMPad prefetch, ...) -- off by default since it is only needed once per final config, not on every
+    bisection trial in main()'s latency-cap search."""
     kind = block_kind(stage)
     lf: dict[str, tuple] = {}     # MILP layer name -> (pe, simd, thr_pe or None, analytical frame cycles of the MVAU)
     xf: dict[str, tuple] = {}     # MILP extra node name -> (pe, simd, ram_style or None)
@@ -146,7 +162,32 @@ def run_block(stage: str, geom: dict, bits: int, F_k: int):
         n = {x.name: x for x in r.nodes}
         lf["final"] = (n["MVAU_f"].pe, n["MVAU_f"].simd, None, n["MVAU_f"].frame_cycles)
     slowest = max(x.frame_cycles for x in r.nodes if x.name.startswith(FOLDABLE))
-    return r, lf, xf, slowest
+    fifos, fifo_warning = (_intra_block_fifos(kind, r, stage) if compute_fifos else ([], None))
+    return r, lf, xf, slowest, fifos, fifo_warning
+
+
+def _intra_block_fifos(kind: str, r, stage: str) -> tuple[list[dict], str | None]:
+    """verify_with_sim(r) + to_folding_config(r)['fifos'], stage-qualified (role names -> '<stage>.<role>') so every
+    block's FIFOs land in one flat, uniquely-named list. Soft-fails (returns [] + a warning string) if the simulation
+    does not converge -- same pattern as the mvau_cycle_mismatches diagnostic, surfaced not silently dropped."""
+    verify_fn, fold_fn = _VERIFY_FOLD[kind]
+    try:
+        verify_fn(r)
+    except RuntimeError as e:
+        return [], f"{stage}: verify_with_sim failed -- {e}"
+    cfg = fold_fn(r)
+    fifos = [
+        {
+            "stage": stage, "name": f"{stage}.{f['name'].replace(' ', '_')}",
+            "producer": f"{stage}.{f['producer']}", "consumer": f"{stage}.{f['consumer']}",
+            "producer_node": f["producer_node"], "consumer_node": f["consumer_node"],
+            "depth": f["depth"], "width_bits": f["width_bits"], "max_occupancy": f["max_occupancy"],
+            "is_skip": f["is_skip"], "mem": f.get("mem"), "finn_impl": f.get("finn_impl"),
+            "mem_bram18": f.get("mem_bram18", 0), "mem_lut": f.get("mem_lut", 0),
+        }
+        for f in cfg["fifos"]
+    ]
+    return fifos, None
 
 
 # ---------------------------------------------------------------------------------------------- MILP-format entries
@@ -251,9 +292,12 @@ def write_sites(config: str, folding_json: Path, sites_json: Path) -> None:
 
 
 # ---------------------------------------------------------------------------------------------- assembly
-def assemble(a, ctx, F_top: int):
+def assemble(a, ctx, F_top: int, compute_intra_fifos: bool = False):
     """One whole-network assembly with per-node budget F_top (cycles per frame): the analytical models per block (optionally ratcheted so that every
-    block is no slower than the one before it), costed with the MILP functions. Returns the MILP-layout result dict."""
+    block is no slower than the one before it), costed with the MILP functions. Returns the MILP-layout result dict.
+    compute_intra_fifos additionally verifies+sizes every block's OWN (skip / prefetch / ...) FIFOs via each block
+    module's verify_with_sim + to_folding_config -- only pass True on the final chosen F_top (expensive per block,
+    and pointless to repeat on every latency-cap bisection trial in main())."""
     geoms, extras, geom, xnode, dmap, kinds = ctx
     per_layer: dict[str, dict] = {}
     extra_out: dict[str, dict] = {}
@@ -261,10 +305,15 @@ def assemble(a, ctx, F_top: int):
     slowest_prev = None
     mismatches = []
     rough_latency = 0
+    intra_fifos: list[dict] = []
+    intra_fifo_warnings: list[str] = []
     for stage in block_order(geoms):
         kind = block_kind(stage)
         F_k = F_top if (a.no_ratchet or slowest_prev is None) else int(min(F_top, max(a.budget_floor * F_top, a.dsr_ratio * slowest_prev)))
-        r, lf, xf, slowest = run_block(stage, geom, a.bits, F_k)
+        r, lf, xf, slowest, fifos, fifo_warning = run_block(stage, geom, a.bits, F_k, compute_fifos=compute_intra_fifos)
+        intra_fifos.extend(fifos)
+        if fifo_warning:
+            intra_fifo_warnings.append(fifo_warning)
         rough_latency += r.latency_first_out_cycles
         for lname, (pe, simd, thr_pe, an_cycles) in lf.items():
             e = layer_entry(geom[lname], a.bits, pe, simd, thr_pe, stage, no_thr=(lname == "final"))
@@ -315,6 +364,7 @@ def assemble(a, ctx, F_top: int):
     total_dsp = sum(v["total_dsp"] for v in L) + sum(v["dsp"] for v in X)
     total_cycles = sum(v["cycles"] for v in L + X)
     fifo_bram = sum(f["bram18"] for f in fifos)
+    intra_fifo_bram = sum(f["mem_bram18"] for f in intra_fifos)
     node_cycles = {**{n: v["cycles"] for n, v in per_layer.items()}, **{n: v["cycles"] for n, v in extra_out.items()}}
     bott = max(node_cycles, key=node_cycles.get)
     hardware_nodes = [*geoms, *(n.geom for n in extras)]
@@ -325,11 +375,15 @@ def assemble(a, ctx, F_top: int):
         "per_layer": per_layer,
         "extra_nodes": extra_out,
         "inter_block_fifos": fifos,
+        "intra_block_fifos": intra_fifos,
         "_diagnostics": {
             "n_layers": len(per_layer), "n_extra_nodes": len(extra_out), "force_dsp": True, "min_resources": True,
             "total_lut_calibrated": total_lut, "xczu7ev_lut_budget": XCZU7EV["LUT"], "lut_pct_of_budget": 100 * total_lut / XCZU7EV["LUT"],
             "total_bram18k_calibrated": total_bram, "xczu7ev_bram18k_budget": XCZU7EV["BRAM_18K"], "bram_pct_of_budget": 100 * total_bram / XCZU7EV["BRAM_18K"],
-            "inter_block_fifo_bram18": fifo_bram, "total_bram18k_with_inter_block_fifos": total_bram + fifo_bram,
+            "inter_block_fifo_bram18": fifo_bram, "intra_block_fifo_bram18": intra_fifo_bram,
+            "total_bram18k_with_inter_block_fifos": total_bram + fifo_bram,
+            "total_bram18k_with_all_fifos": total_bram + fifo_bram + intra_fifo_bram,
+            "intra_block_fifo_warnings": intra_fifo_warnings,
             "total_uram18": total_uram, "xczu7ev_uram_budget": XCZU7EV["URAM"], "uram_pct_of_budget": 100 * total_uram / XCZU7EV["URAM"],
             "total_cycles": total_cycles, "latency_ms": total_cycles / (a.clock_mhz * 1e3),
             "total_dsp": total_dsp, "xczu7ev_dsp_budget": XCZU7EV["DSP"], "dsp_pct_of_budget": 100 * total_dsp / XCZU7EV["DSP"],
@@ -375,6 +429,9 @@ def main() -> int:
     ap.add_argument("--tag", default="final", help="file tag: layer_bits_folding_<tag>.json / layer_bits_SITES_<tag>.json (S12 artifacts use 'final')")
     ap.add_argument("--out-dir", type=Path, required=True)
     ap.add_argument("--no-sites", action="store_true", help="skip the expand_layer_bits.py step")
+    ap.add_argument("--no-intra-fifos", action="store_true",
+                    help="skip verify_with_sim/to_folding_config per block -- leaves intra_block_fifos empty (faster, "
+                         "e.g. for quick re-solves of per_layer/extra_nodes only)")
     a = ap.parse_args()
 
     finn_milp.load_config(a.config)
@@ -388,6 +445,7 @@ def main() -> int:
           + f"; INT{a.bits} uniform; {len(geoms)} layers, {len(extras)} extra nodes", flush=True)
 
     result = assemble(a, ctx, F)
+    final_F_top = F
     if cap is not None and result["_diagnostics"]["total_cycles"] > cap:
         lo, hi = 81_920, F       # hi violates the cap; lo = the init maxpool floor (not foldable). Find the largest per-node budget in [lo, hi) that holds
         while True:
@@ -409,6 +467,10 @@ def main() -> int:
             else:
                 hi = mid
         result = best
+        final_F_top = lo
+    if not a.no_intra_fifos:
+        print("Computing intra-block FIFO depths (verify_with_sim per block, final per-node budget only)...", flush=True)
+        result = assemble(a, ctx, final_F_top, compute_intra_fifos=True)
     finalize_reports(result)
     d = result["_diagnostics"]
 
@@ -432,6 +494,11 @@ def main() -> int:
           f"pipeline-fill estimate {d['analytical']['sum_of_block_first_out_latencies_cycles'] / (a.clock_mhz * 1e3):.2f} ms")
     print(f"DSR (cycles per output element): max {cri.get('max_ratio')} median {cri.get('median_ratio')};  MVAU cycle mismatches vs MILP cost model: "
           f"{len(d['analytical']['mvau_cycle_mismatches_vs_milp_cost_model'])}")
+    if not a.no_intra_fifos:
+        print(f"intra-block FIFOs: {len(result['intra_block_fifos'])} edges, {d['intra_block_fifo_bram18']} BRAM18"
+              + (f"  -- {len(d['intra_block_fifo_warnings'])} block(s) FAILED verify_with_sim: {d['intra_block_fifo_warnings']}"
+                 if d["intra_block_fifo_warnings"] else ""))
+        print(f"total BRAM18 with ALL FIFOs (inter + intra block): {d['total_bram18k_with_all_fifos']:.0f}")
     print(f"wrote {out}")
     return 0
 

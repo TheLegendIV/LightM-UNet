@@ -92,6 +92,7 @@ from finn_s12_build_steps import (  # noqa: E402
     step_allocate_uram_fifos,
     step_fix_weight_dtype_bipolar_bug,
     step_force_dsp,
+    step_force_fifo_depths_from_milp,
     step_minimize_bit_width_standalone_thresh_aware,
 )
 
@@ -99,9 +100,13 @@ install_relaxed_stage_boundaries()
 
 
 def _build_one_partition(fn, cfg, prefix, folding_file, idx, full, fold_suffix, tag, build_dir,
-                          allocate_uram=False, uram_budget_blocks=None):
+                          allocate_uram=False, uram_budget_blocks=None, fifo_plan=None):
     """full=True: 8-way flow (IP named <prefix>, SynthOutOfContext -> report/ooc_synth_partition_<i>.json).
-    full=False: standalone flow (default "finn_design" IP name, required by stock rtlsim's hardcoded wrapper name)."""
+    full=False: standalone flow (default "finn_design" IP name, required by stock rtlsim's hardcoded wrapper name).
+    fifo_plan (this partition's bridged MILP inter_block_fifos/intra_block_fifos, see
+    finn_s12_build_steps.build_partition_folding_config) is applied AFTER FINN's own autosized
+    step_set_fifo_depths -- matched edges get the MILP/analytical-sim depth, unmatched edges keep
+    FINN's autosized one (not a hardcoded depth=2 fallback)."""
     if build_dir:
         part_build_dir = os.path.join(build_dir, prefix.rstrip("_"))
         os.makedirs(part_build_dir, exist_ok=True)
@@ -125,6 +130,11 @@ def _build_one_partition(fn, cfg, prefix, folding_file, idx, full, fold_suffix, 
     m = step_hw_codegen(m, cfg)
     m = step_hw_ipgen(m, cfg)
     m = step_set_fifo_depths(m, cfg)
+    if fifo_plan is not None:
+        m, fifo_report = step_force_fifo_depths_from_milp(m, fifo_plan)
+        report_dir = os.path.dirname(fn) if full else cfg.output_dir
+        with open(os.path.join(report_dir, f"fifo_force_report_partition_{idx}.json"), "w") as f:
+            json.dump(fifo_report, f, indent=2)
     if allocate_uram:
         # MUST run before SplitLargeFIFOs -- see step_allocate_uram_fifos's own docstring.
         budget = (uram_budget_blocks or URAM_BUDGET_BLOCKS) // URAM_PARTITIONS
@@ -233,16 +243,28 @@ def main():
         extra_nodes = folding_block.get("extra_nodes")
         if extra_nodes is None:
             print("WARNING: folding json has no extra_nodes -- join thresholds left on Vivado auto placement")
+        inter_block_fifos = folding_block.get("inter_block_fifos")
+        intra_block_fifos = folding_block.get("intra_block_fifos")
+        if not inter_block_fifos and not intra_block_fifos:
+            print("WARNING: folding json has no inter_block_fifos/intra_block_fifos -- all FIFOs left on FINN's autosized depth")
         logical = load_partition_logical_names(_args.preamble_dir, _args.conv_order)
+        fifo_plans = {i: None for i in part_ids}
         for i in part_ids:
-            fc = build_partition_folding_config(
+            fc, fifo_plan = build_partition_folding_config(
                 getCustomOp(sdp_nodes[i]).get_nodeattr("model"), sdp_nodes[i].name, logical[i][0], per_layer,
                 cfg, tag=f"p{i}", extra_nodes=extra_nodes, conv_order_file=_args.conv_order,
+                inter_block_fifos=inter_block_fifos, intra_block_fifos=intra_block_fifos,
             )
             folding_files[i] = os.path.join(output_dir, f"hawq_folding_config_partition{i}.json")
             with open(folding_files[i], "w") as f:
                 json.dump(fc, f, indent=2)
             print(f"[partition {i}] saved bridged folding config ({len(fc) - 1} entries): {folding_files[i]}")
+            if fifo_plan is not None:
+                fifo_plans[i] = fifo_plan
+                fifo_plan_file = os.path.join(output_dir, f"fifo_plan_partition{i}.json")
+                with open(fifo_plan_file, "w") as f:
+                    json.dump(fifo_plan, f, indent=2)
+                print(f"[partition {i}] saved FIFO plan ({len(fifo_plan['wanted'])} matched): {fifo_plan_file}")
     if _args.bridge_only:
         return
 
@@ -254,7 +276,7 @@ def main():
             os.makedirs(pcfg.output_dir, exist_ok=True)
         jobs.append((getCustomOp(sdp_nodes[i]).get_nodeattr("model"), pcfg, sdp_nodes[i].name + "_",
                      folding_files[i], i, full, fold_suffix, _args.tag, build_dir,
-                     _args.allocate_uram, _args.uram_budget_blocks))
+                     _args.allocate_uram, _args.uram_budget_blocks, fifo_plans.get(i) if _args.folding_json else None))
 
     results = {}
     if len(jobs) == 1:

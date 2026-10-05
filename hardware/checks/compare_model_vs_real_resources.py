@@ -13,10 +13,10 @@ finn_milp.py actually applies `calibrated_lut`/`calibrated_bram18k`:
     de-bundle that calibrated figure back into separate SWU/MVAU/Thresholding
     numbers, which would silently misattribute the calibration factor), PLUS
     every extra_nodes entry whose kind is a standalone Thresholding_rtl node
-    not fused to a per_layer conv (input_quant/act/out_act/residual_add/
-    skip_quant) or an extra MVAU-shaped node (pad_mvau) -- these all land in
-    the same real op_type pool as the per_layer ones, with no way to tell
-    them apart in the CSV, so they're combined here too.
+    not fused to a per_layer conv (input_quant/pool_quant/act/out_act/
+    residual_add/skip_quant) or an extra MVAU-shaped node (pad_mvau) -- these
+    all land in the same real op_type pool as the per_layer ones, with no way
+    to tell them apart in the CSV, so they're combined here too.
   - "AddStreams"/"DuplicateStreams"/"Concat"/"Upsample"/"MaxPool": each is
     exactly one extra_nodes kind (add/dup/concat/upsample/maxpool), and each
     extra_nodes entry is calibrated individually (never bundled with
@@ -49,7 +49,7 @@ from collections import defaultdict
 # nodes -- NOT their own real node_kind, they land in the same conv_stack
 # pool as per_layer's bundled thr_lut/mvu_lut in the real CSV.
 CONV_STACK_EXTRA_KINDS = {
-    "input_quant", "act", "out_act", "residual_add", "skip_quant", "pad_mvau",
+    "input_quant", "pool_quant", "act", "out_act", "residual_add", "skip_quant", "pad_mvau",
 }
 # extra_nodes kinds that DO map 1:1 onto their own real node_kind.
 STANDALONE_EXTRA_KIND_TO_REAL_KIND = {
