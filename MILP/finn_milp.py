@@ -135,7 +135,7 @@ def trace_layer_geometry(model: torch.nn.Module, input_hw: tuple[int, int], in_c
 
 # ---- Extra hardware nodes with no conv/pool module (see finn_milp.md "Dataflow graph") ----
 
-THRESHOLD_KINDS = ("skip_quant", "residual_add", "out_act", "input_quant", "act")
+THRESHOLD_KINDS = ("skip_quant", "residual_add", "out_act", "input_quant", "act", "pool_quant")
 # skip_quant/residual_add share the add's single quantizer with the main operand (expand.0's output threshold): one shared
 # QuantEltwiseAdd quantizer serves both operands (same bits AND scale) and FINN's AddStreams has a single inputDataType,
 # so their bits are tied to expand.0's act bits (the network follows act_bits["residual_add"], see
@@ -217,6 +217,9 @@ def _node_shape(
         return _node_shape(dataflow_map[name][0], dataflow_map, kinds, geom, act_shapes, input_shape)
     if kind in ("act", "concat"):
         return act_shapes[name[: -len(CONCAT_SUFFIX)] + ACT_SUFFIX if kind == "concat" else name]
+    if kind == "pool_quant":      # the threshold sees the maxpool's INPUT tensor (full resolution)
+        g = geom[name[: -len("_quant")]]
+        return g.cin, g.hin, g.win
     if kind == "upsample":
         for consumer, preds in dataflow_map.items():
             if name in preds and consumer in geom:

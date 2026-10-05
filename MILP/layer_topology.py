@@ -187,6 +187,7 @@ ADD_SUFFIX = ".add"
 DUP_SUFFIX = ".dup"
 CONCAT_SUFFIX = ".concat"
 UPSAMPLE_SUFFIX = ".upsample"
+POOL_QUANT_SUFFIX = "_quant"     # <pool>_quant: the branch-quant threshold UPSTREAM of a maxpool that feeds a concat (initial.pool_quant)
 _ADD_TARGETS = (operator.add, torch.add)
 
 
@@ -236,6 +237,9 @@ def compute_dataflow_graph(model: nn.Module) -> tuple[dict[str, list[str]], dict
       input_quant   network-input quantizer (placeholder)     <scope>.input_quant
       concat        StreamingConcat (torch.cat)               <scope>.concat
       act           InitialBlock activation after the concat  <scope>.act
+      pool_quant    InitialBlock branch-quant threshold on the maxpool branch, UPSTREAM of the maxpool
+                    (FINN's streamline step MoveMaxPoolPastMultiThreshold swaps the exported MaxPool -> Quant
+                    into Thr -> MaxPool; the landed graphs of the init probes confirm it)   <pool>_quant
       upsample      UpsampleNearestNeighbour (F.interpolate)  <scope>.upsample
       skip_quant    skip-operand requant, skip path w/o conv  <block>.skip_quant
       add           AddStreams                                <block>.add
@@ -339,6 +343,16 @@ def compute_dataflow_graph(model: nn.Module) -> tuple[dict[str, list[str]], dict
         dataflow[prefix + ADD_SUFFIX] = _dedupe(join)
         kinds[prefix + ADD_SUFFIX] = "add"
         dataflow[prefix + RESIDUAL_ADD_SUFFIX] = [prefix + ADD_SUFFIX]
+
+    # A maxpool that feeds a concat directly (the initial block's pool branch) gets the branch-quant threshold in FRONT of it: Dup -> Thr -> MaxPool -> Concat.
+    concat_inputs = {p for name, preds in dataflow.items() if kinds.get(name) == "concat" for p in preds}
+    pool_names = [name for node, name in tracked.items()
+                  if node.op == "call_module" and isinstance(named_modules.get(node.target), nn.MaxPool2d) and name in concat_inputs]
+    for pool in pool_names:
+        quant = pool + POOL_QUANT_SUFFIX
+        dataflow[quant] = dataflow[pool]
+        dataflow[pool] = [quant]
+        kinds[quant] = "pool_quant"
 
     consumers: dict[str, list[str]] = {}
     for name, preds in dataflow.items():

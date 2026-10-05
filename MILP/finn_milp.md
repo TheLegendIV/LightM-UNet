@@ -120,6 +120,7 @@ model code — not exported ONNX graphs.
 | kind | FINN op | folding (v0.10.1) | cycles | resources | bits |
 |---|---|---|---|---|---|
 | `input_quant` | Thresholding_rtl | PE \| C | H·W·⌈C/PE⌉ | threshold fit | `max(sources)` = deployed site (`initial.conv`) |
+| `pool_quant` (InitialBlock) | Thresholding_rtl | PE \| C | H_in·W_in·⌈C/PE⌉ (the maxpool's INPUT size: 4× the output pixels) | threshold fit | `max(<block>.pool)` |
 | `concat` | StreamingConcat_hls | none (all channels/cycle) | H·W | 0 (unknown) | — |
 | `act` (InitialBlock) | Thresholding_rtl | PE \| C | H·W·⌈C/PE⌉ | threshold fit | `max(initial.conv, initial.pool)` |
 | `skip_quant` | Thresholding_rtl | PE \| C | H·W·⌈C/PE⌉ | threshold fit | fixed 8 |
@@ -556,3 +557,10 @@ cost model's calibration, not a certified hardware guarantee.
   block's `expand.0` act bits (one shared add quantizer, FINN `AddStreams` single `inputDataType`) and join thresholds
   (`skip_quant`/`residual_add`/`out_act`) are LUTRAM-only. Removed `--tie-residual-bits`, `--joins-distributed`,
   `--allow-lut-mult`, `--require-simd-ge-pe`; renamed `--hard-*-fraction` -> `--max-*-fraction`; added `--min-dsr`.
+- 2026-10-05: new extra-node kind `pool_quant` (Thresholding_rtl, the InitialBlock's branch-quant threshold on the maxpool branch) UPSTREAM of the maxpool:
+  `Dup -> initial.pool_quant -> initial.pool -> Concat`. FINN's streamline step `MoveMaxPoolPastMultiThreshold` (hardware/finn_enet_build.py) swaps the exported
+  `MaxPool -> Quant` into `Quant -> MaxPool`, which the landed graphs of the init probes (FIFO edge lists, `Thresholding_rtl_1` ahead of the pool) confirm. It sees
+  the full-resolution pool input, so it costs H_in*W_in cycles (4x the output pixels) and was missing from every solve before this date (the analytical
+  per-block model `MILP/analytical/int_bottleneck.py` already had it). Touches `layer_topology.compute_dataflow_graph`, `finn_milp.THRESHOLD_KINDS/_node_shape`,
+  `expand_layer_bits` (act-source rule only, no new quantizer site) and `test_dataflow_graph.py`. Old artifacts under `MILP/artifacts/` were solved without it
+  (one node fewer, 88 LUT and 65,536 cycles less); the S12 bridge (`build_partition_folding_config`) does not apply a PE to it, like `input_quant` / `act`.

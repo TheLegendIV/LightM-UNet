@@ -88,7 +88,7 @@ from nnunetv2.nets.LayerQuantENet import layer_names_for  # noqa: E402
 # matched as a whole two-segment tail, never truncated to just ".2".
 ACT_SUFFIXES_ORDERED = (
     "reduce.2", "reduce.3", "conv_bn_act.2", "conv.2", "up.2", "skip_resize_conv.2",
-    "input_quant", "residual_add", "out_act", "act",
+    "input_quant", "residual_add", "out_act", "act", "pool_quant",
 )
 
 
@@ -176,6 +176,9 @@ def resolve_act_sources(
         return _conv_bn_act_local_source(block_prefix, layer_weight_bits)
     if suffix == "input_quant":
         return [f"{block_prefix}.conv"]
+    if suffix == "pool_quant":
+        # MILP-only hardware node (no quantizer site): the maxpool-branch threshold upstream of <block>.pool, bits of the stream the pool reads.
+        return [f"{block_prefix}.pool"]
     if suffix == "act":
         # InitialBlock's own trailing act, downstream of torch.cat([conv(x), pool(x)]) -- both local.
         return [f"{block_prefix}.conv", f"{block_prefix}.pool"]
