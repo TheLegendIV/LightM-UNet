@@ -3335,6 +3335,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "initial.input_quant",
       "bits_rule": "max_of_sources"
     },
     "initial.concat": {
@@ -3352,6 +3353,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "initial.concat",
       "bits_rule": "n/a"
     },
     "initial.act": {
@@ -3372,6 +3374,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "initial.act",
       "bits_rule": "max_of_sources"
     },
     "initial.pool_quant": {
@@ -3391,6 +3394,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "initial.pool_quant",
       "bits_rule": "max_of_sources"
     },
     "initial.input_quant.dup": {
@@ -3408,6 +3412,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "initial.dup",
       "bits_rule": "n/a"
     },
     "down1.out_act": {
@@ -3428,6 +3433,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "down1.out_act",
       "bits_rule": "max_of_sources"
     },
     "down1.residual_add": {
@@ -3447,6 +3453,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "down1.residual_add",
       "merged_into": "down1.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -3467,6 +3474,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "down1.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "down1.add": {
@@ -3484,6 +3492,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "down1.add",
       "bits_rule": "n/a"
     },
     "initial.act.dup": {
@@ -3501,6 +3510,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "down1.dup",
       "bits_rule": "n/a"
     },
     "down1.skip_pad": {
@@ -3518,6 +3528,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 2,
       "uram18": 0,
+      "canonical_role": "down1.pad_mvau",
       "threshold_in": "skip_quant",
       "bits_rule": "n/a"
     },
@@ -3540,6 +3551,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular1.0.out_act",
       "bits_rule": "max_of_sources"
     },
     "regular1.0.residual_add": {
@@ -3559,6 +3571,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular1.0.residual_add",
       "merged_into": "regular1.0.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -3579,6 +3592,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular1.0.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "regular1.0.add": {
@@ -3596,6 +3610,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular1.0.add",
       "bits_rule": "n/a"
     },
     "down1.out_act.dup": {
@@ -3613,6 +3628,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular1.0.dup",
       "bits_rule": "n/a"
     },
     "regular1.1.out_act": {
@@ -3633,6 +3649,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular1.1.out_act",
       "bits_rule": "max_of_sources"
     },
     "regular1.1.residual_add": {
@@ -3652,6 +3669,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular1.1.residual_add",
       "merged_into": "regular1.1.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -3672,6 +3690,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular1.1.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "regular1.1.add": {
@@ -3689,6 +3708,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular1.1.add",
       "bits_rule": "n/a"
     },
     "regular1.0.out_act.dup": {
@@ -3706,6 +3726,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular1.1.dup",
       "bits_rule": "n/a"
     },
     "regular1.2.out_act": {
@@ -3726,6 +3747,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular1.2.out_act",
       "bits_rule": "max_of_sources"
     },
     "regular1.2.residual_add": {
@@ -3745,6 +3767,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular1.2.residual_add",
       "merged_into": "regular1.2.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -3765,6 +3788,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular1.2.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "regular1.2.add": {
@@ -3782,6 +3806,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular1.2.add",
       "bits_rule": "n/a"
     },
     "regular1.1.out_act.dup": {
@@ -3799,6 +3824,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular1.2.dup",
       "bits_rule": "n/a"
     },
     "regular1.3.out_act": {
@@ -3819,6 +3845,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular1.3.out_act",
       "bits_rule": "max_of_sources"
     },
     "regular1.3.residual_add": {
@@ -3838,6 +3865,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular1.3.residual_add",
       "merged_into": "regular1.3.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -3858,6 +3886,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular1.3.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "regular1.3.add": {
@@ -3875,6 +3904,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular1.3.add",
       "bits_rule": "n/a"
     },
     "regular1.2.out_act.dup": {
@@ -3892,6 +3922,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular1.3.dup",
       "bits_rule": "n/a"
     },
     "down2.out_act": {
@@ -3912,6 +3943,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "down2.out_act",
       "bits_rule": "max_of_sources"
     },
     "down2.residual_add": {
@@ -3931,6 +3963,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "down2.residual_add",
       "merged_into": "down2.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -3951,6 +3984,7 @@
       "bram18k_calibrated": 2.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "down2.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "down2.add": {
@@ -3968,6 +4002,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "down2.add",
       "bits_rule": "n/a"
     },
     "regular1.3.out_act.dup": {
@@ -3985,6 +4020,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "down2.dup",
       "bits_rule": "n/a"
     },
     "down2.skip_pad": {
@@ -4002,6 +4038,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 4,
       "uram18": 0,
+      "canonical_role": "down2.pad_mvau",
       "threshold_in": "skip_quant",
       "bits_rule": "n/a"
     },
@@ -4024,6 +4061,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.0.out_act",
       "bits_rule": "max_of_sources"
     },
     "stage2.0.residual_add": {
@@ -4043,6 +4081,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.0.residual_add",
       "merged_into": "stage2.0.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -4063,6 +4102,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.0.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "stage2.0.add": {
@@ -4080,6 +4120,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.0.add",
       "bits_rule": "n/a"
     },
     "down2.out_act.dup": {
@@ -4097,6 +4138,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.0.dup",
       "bits_rule": "n/a"
     },
     "stage2.1.out_act": {
@@ -4117,6 +4159,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.1.out_act",
       "bits_rule": "max_of_sources"
     },
     "stage2.1.residual_add": {
@@ -4136,6 +4179,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.1.residual_add",
       "merged_into": "stage2.1.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -4156,6 +4200,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.1.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "stage2.1.add": {
@@ -4173,6 +4218,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.1.add",
       "bits_rule": "n/a"
     },
     "stage2.0.out_act.dup": {
@@ -4190,6 +4236,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.1.dup",
       "bits_rule": "n/a"
     },
     "stage2.2.out_act": {
@@ -4210,6 +4257,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.2.out_act",
       "bits_rule": "max_of_sources"
     },
     "stage2.2.residual_add": {
@@ -4229,6 +4277,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.2.residual_add",
       "merged_into": "stage2.2.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -4249,6 +4298,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.2.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "stage2.2.add": {
@@ -4266,6 +4316,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.2.add",
       "bits_rule": "n/a"
     },
     "stage2.1.out_act.dup": {
@@ -4283,6 +4334,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.2.dup",
       "bits_rule": "n/a"
     },
     "stage2.3.out_act": {
@@ -4303,6 +4355,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.3.out_act",
       "bits_rule": "max_of_sources"
     },
     "stage2.3.residual_add": {
@@ -4322,6 +4375,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.3.residual_add",
       "merged_into": "stage2.3.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -4342,6 +4396,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.3.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "stage2.3.add": {
@@ -4359,6 +4414,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.3.add",
       "bits_rule": "n/a"
     },
     "stage2.2.out_act.dup": {
@@ -4376,6 +4432,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.3.dup",
       "bits_rule": "n/a"
     },
     "stage2.4.out_act": {
@@ -4396,6 +4453,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.4.out_act",
       "bits_rule": "max_of_sources"
     },
     "stage2.4.residual_add": {
@@ -4415,6 +4473,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.4.residual_add",
       "merged_into": "stage2.4.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -4435,6 +4494,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.4.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "stage2.4.add": {
@@ -4452,6 +4512,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.4.add",
       "bits_rule": "n/a"
     },
     "stage2.3.out_act.dup": {
@@ -4469,6 +4530,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.4.dup",
       "bits_rule": "n/a"
     },
     "stage2.5.out_act": {
@@ -4489,6 +4551,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.5.out_act",
       "bits_rule": "max_of_sources"
     },
     "stage2.5.residual_add": {
@@ -4508,6 +4571,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.5.residual_add",
       "merged_into": "stage2.5.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -4528,6 +4592,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.5.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "stage2.5.add": {
@@ -4545,6 +4610,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.5.add",
       "bits_rule": "n/a"
     },
     "stage2.4.out_act.dup": {
@@ -4562,6 +4628,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.5.dup",
       "bits_rule": "n/a"
     },
     "stage2.6.out_act": {
@@ -4582,6 +4649,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.6.out_act",
       "bits_rule": "max_of_sources"
     },
     "stage2.6.residual_add": {
@@ -4601,6 +4669,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.6.residual_add",
       "merged_into": "stage2.6.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -4621,6 +4690,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.6.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "stage2.6.add": {
@@ -4638,6 +4708,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.6.add",
       "bits_rule": "n/a"
     },
     "stage2.5.out_act.dup": {
@@ -4655,6 +4726,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.6.dup",
       "bits_rule": "n/a"
     },
     "stage2.7.out_act": {
@@ -4675,6 +4747,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.7.out_act",
       "bits_rule": "max_of_sources"
     },
     "stage2.7.residual_add": {
@@ -4694,6 +4767,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.7.residual_add",
       "merged_into": "stage2.7.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -4714,6 +4788,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.7.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "stage2.7.add": {
@@ -4731,6 +4806,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.7.add",
       "bits_rule": "n/a"
     },
     "stage2.6.out_act.dup": {
@@ -4748,6 +4824,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage2.7.dup",
       "bits_rule": "n/a"
     },
     "stage3.0.out_act": {
@@ -4768,6 +4845,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.0.out_act",
       "bits_rule": "max_of_sources"
     },
     "stage3.0.residual_add": {
@@ -4787,6 +4865,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.0.residual_add",
       "merged_into": "stage3.0.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -4807,6 +4886,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.0.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "stage3.0.add": {
@@ -4824,6 +4904,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.0.add",
       "bits_rule": "n/a"
     },
     "stage2.7.out_act.dup": {
@@ -4841,6 +4922,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.0.dup",
       "bits_rule": "n/a"
     },
     "stage3.1.out_act": {
@@ -4861,6 +4943,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.1.out_act",
       "bits_rule": "max_of_sources"
     },
     "stage3.1.residual_add": {
@@ -4880,6 +4963,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.1.residual_add",
       "merged_into": "stage3.1.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -4900,6 +4984,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.1.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "stage3.1.add": {
@@ -4917,6 +5002,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.1.add",
       "bits_rule": "n/a"
     },
     "stage3.0.out_act.dup": {
@@ -4934,6 +5020,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.1.dup",
       "bits_rule": "n/a"
     },
     "stage3.2.out_act": {
@@ -4954,6 +5041,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.2.out_act",
       "bits_rule": "max_of_sources"
     },
     "stage3.2.residual_add": {
@@ -4973,6 +5061,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.2.residual_add",
       "merged_into": "stage3.2.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -4993,6 +5082,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.2.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "stage3.2.add": {
@@ -5010,6 +5100,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.2.add",
       "bits_rule": "n/a"
     },
     "stage3.1.out_act.dup": {
@@ -5027,6 +5118,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.2.dup",
       "bits_rule": "n/a"
     },
     "stage3.3.out_act": {
@@ -5047,6 +5139,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.3.out_act",
       "bits_rule": "max_of_sources"
     },
     "stage3.3.residual_add": {
@@ -5066,6 +5159,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.3.residual_add",
       "merged_into": "stage3.3.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -5086,6 +5180,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.3.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "stage3.3.add": {
@@ -5103,6 +5198,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.3.add",
       "bits_rule": "n/a"
     },
     "stage3.2.out_act.dup": {
@@ -5120,6 +5216,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.3.dup",
       "bits_rule": "n/a"
     },
     "stage3.4.out_act": {
@@ -5140,6 +5237,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.4.out_act",
       "bits_rule": "max_of_sources"
     },
     "stage3.4.residual_add": {
@@ -5159,6 +5257,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.4.residual_add",
       "merged_into": "stage3.4.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -5179,6 +5278,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.4.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "stage3.4.add": {
@@ -5196,6 +5296,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.4.add",
       "bits_rule": "n/a"
     },
     "stage3.3.out_act.dup": {
@@ -5213,6 +5314,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.4.dup",
       "bits_rule": "n/a"
     },
     "stage3.5.out_act": {
@@ -5233,6 +5335,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.5.out_act",
       "bits_rule": "max_of_sources"
     },
     "stage3.5.residual_add": {
@@ -5252,6 +5355,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.5.residual_add",
       "merged_into": "stage3.5.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -5272,6 +5376,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.5.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "stage3.5.add": {
@@ -5289,6 +5394,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.5.add",
       "bits_rule": "n/a"
     },
     "stage3.4.out_act.dup": {
@@ -5306,6 +5412,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.5.dup",
       "bits_rule": "n/a"
     },
     "stage3.6.out_act": {
@@ -5326,6 +5433,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.6.out_act",
       "bits_rule": "max_of_sources"
     },
     "stage3.6.residual_add": {
@@ -5345,6 +5453,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.6.residual_add",
       "merged_into": "stage3.6.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -5365,6 +5474,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.6.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "stage3.6.add": {
@@ -5382,6 +5492,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.6.add",
       "bits_rule": "n/a"
     },
     "stage3.5.out_act.dup": {
@@ -5399,6 +5510,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.6.dup",
       "bits_rule": "n/a"
     },
     "stage3.7.out_act": {
@@ -5419,6 +5531,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.7.out_act",
       "bits_rule": "max_of_sources"
     },
     "stage3.7.residual_add": {
@@ -5438,6 +5551,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.7.residual_add",
       "merged_into": "stage3.7.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -5458,6 +5572,7 @@
       "bram18k_calibrated": 1.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.7.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "stage3.7.add": {
@@ -5475,6 +5590,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.7.add",
       "bits_rule": "n/a"
     },
     "stage3.6.out_act.dup": {
@@ -5492,6 +5608,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "stage3.7.dup",
       "bits_rule": "n/a"
     },
     "up4.upsample": {
@@ -5509,6 +5626,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "up4.upsample",
       "bits_rule": "n/a"
     },
     "up4.out_act": {
@@ -5529,6 +5647,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "up4.out_act",
       "bits_rule": "max_of_sources"
     },
     "up4.residual_add": {
@@ -5548,6 +5667,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "up4.residual_add",
       "merged_into": "up4.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -5568,6 +5688,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "up4.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "up4.add": {
@@ -5585,6 +5706,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "up4.add",
       "bits_rule": "n/a"
     },
     "stage3.7.out_act.dup": {
@@ -5602,6 +5724,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "up4.dup",
       "bits_rule": "n/a"
     },
     "regular4.0.out_act": {
@@ -5622,6 +5745,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular4.0.out_act",
       "bits_rule": "max_of_sources"
     },
     "regular4.0.residual_add": {
@@ -5641,6 +5765,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular4.0.residual_add",
       "merged_into": "regular4.0.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -5661,6 +5786,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular4.0.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "regular4.0.add": {
@@ -5678,6 +5804,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular4.0.add",
       "bits_rule": "n/a"
     },
     "up4.out_act.dup": {
@@ -5695,6 +5822,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular4.0.dup",
       "bits_rule": "n/a"
     },
     "regular4.1.out_act": {
@@ -5715,6 +5843,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular4.1.out_act",
       "bits_rule": "max_of_sources"
     },
     "regular4.1.residual_add": {
@@ -5734,6 +5863,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular4.1.residual_add",
       "merged_into": "regular4.1.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -5754,6 +5884,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular4.1.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "regular4.1.add": {
@@ -5771,6 +5902,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular4.1.add",
       "bits_rule": "n/a"
     },
     "regular4.0.out_act.dup": {
@@ -5788,6 +5920,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular4.1.dup",
       "bits_rule": "n/a"
     },
     "up5.upsample": {
@@ -5805,6 +5938,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "up5.upsample",
       "bits_rule": "n/a"
     },
     "up5.out_act": {
@@ -5825,6 +5959,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "up5.out_act",
       "bits_rule": "max_of_sources"
     },
     "up5.residual_add": {
@@ -5844,6 +5979,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "up5.residual_add",
       "merged_into": "up5.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -5864,6 +6000,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "up5.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "up5.add": {
@@ -5881,6 +6018,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "up5.add",
       "bits_rule": "n/a"
     },
     "regular4.1.out_act.dup": {
@@ -5898,6 +6036,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "up5.dup",
       "bits_rule": "n/a"
     },
     "regular5.0.out_act": {
@@ -5918,6 +6057,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular5.0.out_act",
       "bits_rule": "max_of_sources"
     },
     "regular5.0.residual_add": {
@@ -5937,6 +6077,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular5.0.residual_add",
       "merged_into": "regular5.0.out_act",
       "bits_rule": "max_of_sources"
     },
@@ -5957,6 +6098,7 @@
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular5.0.skip_quant",
       "bits_rule": "max_of_sources"
     },
     "regular5.0.add": {
@@ -5974,6 +6116,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular5.0.add",
       "bits_rule": "n/a"
     },
     "up5.out_act.dup": {
@@ -5991,6 +6134,7 @@
       "bram18k_calibrated": 0,
       "dsp": 0,
       "uram18": 0.0,
+      "canonical_role": "regular5.0.dup",
       "bits_rule": "n/a"
     }
   },
@@ -5999,6 +6143,8 @@
       "name": "regular5.0.out_act->final",
       "producer": "regular5.0.out_act",
       "consumer": "final",
+      "src_block": "regular5.0",
+      "dst_block": "final",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6013,6 +6159,8 @@
       "name": "initial.act->initial.act.dup",
       "producer": "initial.act",
       "consumer": "initial.act.dup",
+      "src_block": "initial",
+      "dst_block": "down1",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6027,6 +6175,8 @@
       "name": "down1.out_act->down1.out_act.dup",
       "producer": "down1.out_act",
       "consumer": "down1.out_act.dup",
+      "src_block": "down1",
+      "dst_block": "regular1.0",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6041,6 +6191,8 @@
       "name": "regular1.0.out_act->regular1.0.out_act.dup",
       "producer": "regular1.0.out_act",
       "consumer": "regular1.0.out_act.dup",
+      "src_block": "regular1.0",
+      "dst_block": "regular1.1",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6055,6 +6207,8 @@
       "name": "regular1.1.out_act->regular1.1.out_act.dup",
       "producer": "regular1.1.out_act",
       "consumer": "regular1.1.out_act.dup",
+      "src_block": "regular1.1",
+      "dst_block": "regular1.2",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6069,6 +6223,8 @@
       "name": "regular1.2.out_act->regular1.2.out_act.dup",
       "producer": "regular1.2.out_act",
       "consumer": "regular1.2.out_act.dup",
+      "src_block": "regular1.2",
+      "dst_block": "regular1.3",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6083,6 +6239,8 @@
       "name": "regular1.3.out_act->regular1.3.out_act.dup",
       "producer": "regular1.3.out_act",
       "consumer": "regular1.3.out_act.dup",
+      "src_block": "regular1.3",
+      "dst_block": "down2",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6097,6 +6255,8 @@
       "name": "down2.out_act->down2.out_act.dup",
       "producer": "down2.out_act",
       "consumer": "down2.out_act.dup",
+      "src_block": "down2",
+      "dst_block": "stage2.0",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6111,6 +6271,8 @@
       "name": "stage2.0.out_act->stage2.0.out_act.dup",
       "producer": "stage2.0.out_act",
       "consumer": "stage2.0.out_act.dup",
+      "src_block": "stage2.0",
+      "dst_block": "stage2.1",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6125,6 +6287,8 @@
       "name": "stage2.1.out_act->stage2.1.out_act.dup",
       "producer": "stage2.1.out_act",
       "consumer": "stage2.1.out_act.dup",
+      "src_block": "stage2.1",
+      "dst_block": "stage2.2",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6139,6 +6303,8 @@
       "name": "stage2.2.out_act->stage2.2.out_act.dup",
       "producer": "stage2.2.out_act",
       "consumer": "stage2.2.out_act.dup",
+      "src_block": "stage2.2",
+      "dst_block": "stage2.3",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6153,6 +6319,8 @@
       "name": "stage2.3.out_act->stage2.3.out_act.dup",
       "producer": "stage2.3.out_act",
       "consumer": "stage2.3.out_act.dup",
+      "src_block": "stage2.3",
+      "dst_block": "stage2.4",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6167,6 +6335,8 @@
       "name": "stage2.4.out_act->stage2.4.out_act.dup",
       "producer": "stage2.4.out_act",
       "consumer": "stage2.4.out_act.dup",
+      "src_block": "stage2.4",
+      "dst_block": "stage2.5",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6181,6 +6351,8 @@
       "name": "stage2.5.out_act->stage2.5.out_act.dup",
       "producer": "stage2.5.out_act",
       "consumer": "stage2.5.out_act.dup",
+      "src_block": "stage2.5",
+      "dst_block": "stage2.6",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6195,6 +6367,8 @@
       "name": "stage2.6.out_act->stage2.6.out_act.dup",
       "producer": "stage2.6.out_act",
       "consumer": "stage2.6.out_act.dup",
+      "src_block": "stage2.6",
+      "dst_block": "stage2.7",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6209,6 +6383,8 @@
       "name": "stage2.7.out_act->stage2.7.out_act.dup",
       "producer": "stage2.7.out_act",
       "consumer": "stage2.7.out_act.dup",
+      "src_block": "stage2.7",
+      "dst_block": "stage3.0",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6223,6 +6399,8 @@
       "name": "stage3.0.out_act->stage3.0.out_act.dup",
       "producer": "stage3.0.out_act",
       "consumer": "stage3.0.out_act.dup",
+      "src_block": "stage3.0",
+      "dst_block": "stage3.1",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6237,6 +6415,8 @@
       "name": "stage3.1.out_act->stage3.1.out_act.dup",
       "producer": "stage3.1.out_act",
       "consumer": "stage3.1.out_act.dup",
+      "src_block": "stage3.1",
+      "dst_block": "stage3.2",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6251,6 +6431,8 @@
       "name": "stage3.2.out_act->stage3.2.out_act.dup",
       "producer": "stage3.2.out_act",
       "consumer": "stage3.2.out_act.dup",
+      "src_block": "stage3.2",
+      "dst_block": "stage3.3",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6265,6 +6447,8 @@
       "name": "stage3.3.out_act->stage3.3.out_act.dup",
       "producer": "stage3.3.out_act",
       "consumer": "stage3.3.out_act.dup",
+      "src_block": "stage3.3",
+      "dst_block": "stage3.4",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6279,6 +6463,8 @@
       "name": "stage3.4.out_act->stage3.4.out_act.dup",
       "producer": "stage3.4.out_act",
       "consumer": "stage3.4.out_act.dup",
+      "src_block": "stage3.4",
+      "dst_block": "stage3.5",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6293,6 +6479,8 @@
       "name": "stage3.5.out_act->stage3.5.out_act.dup",
       "producer": "stage3.5.out_act",
       "consumer": "stage3.5.out_act.dup",
+      "src_block": "stage3.5",
+      "dst_block": "stage3.6",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6307,6 +6495,8 @@
       "name": "stage3.6.out_act->stage3.6.out_act.dup",
       "producer": "stage3.6.out_act",
       "consumer": "stage3.6.out_act.dup",
+      "src_block": "stage3.6",
+      "dst_block": "stage3.7",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6321,6 +6511,8 @@
       "name": "stage3.7.out_act->stage3.7.out_act.dup",
       "producer": "stage3.7.out_act",
       "consumer": "stage3.7.out_act.dup",
+      "src_block": "stage3.7",
+      "dst_block": "up4",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6335,6 +6527,8 @@
       "name": "up4.out_act->up4.out_act.dup",
       "producer": "up4.out_act",
       "consumer": "up4.out_act.dup",
+      "src_block": "up4",
+      "dst_block": "regular4.0",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6349,6 +6543,8 @@
       "name": "regular4.0.out_act->regular4.0.out_act.dup",
       "producer": "regular4.0.out_act",
       "consumer": "regular4.0.out_act.dup",
+      "src_block": "regular4.0",
+      "dst_block": "regular4.1",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6363,6 +6559,8 @@
       "name": "regular4.1.out_act->regular4.1.out_act.dup",
       "producer": "regular4.1.out_act",
       "consumer": "regular4.1.out_act.dup",
+      "src_block": "regular4.1",
+      "dst_block": "up5",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,
@@ -6377,6 +6575,8 @@
       "name": "up5.out_act->up5.out_act.dup",
       "producer": "up5.out_act",
       "consumer": "up5.out_act.dup",
+      "src_block": "up5",
+      "dst_block": "regular5.0",
       "width_bits": 6,
       "mem": "bram",
       "depth": 2048,

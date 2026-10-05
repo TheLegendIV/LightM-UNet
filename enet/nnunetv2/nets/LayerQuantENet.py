@@ -78,6 +78,39 @@ def _residual_add_quant(bits: int) -> qnn.QuantEltwiseAdd:
     q = Int8ActPerTensorFloat.let(bit_width=bits)
     return qnn.QuantEltwiseAdd(input_quant=q, output_quant=q, return_quant_tensor=True)
 
+from nnunetv2.nets.ENet import (
+    CONTEXT_STAGE_PATTERN,
+    DENSE_DILATION_PATTERN,
+    DENSE_DILATION_HALF_PATTERN,
+    DENSE_DILATION_REG_INTERLEAVED_PATTERN,
+    DENSE_DILATION_REG_INTERLEAVED_DOUBLE_MID_PATTERN,
+    DENSE_DILATION_D2_PROJECTED_PATTERN,
+    DENSE_DILATION_D8_D16_PROJECTED_PATTERN,
+    DENSE_DILATION_D2_REGULAR_PATTERN,
+    DENSE_DILATION_REG_TRAILING_PATTERN,
+)
+from nnunetv2.nets.QuantENet import (
+    _quant_act,
+    _quant_block_act,
+    _quant_conv2d,
+    QuantDecomposedLeakyAct,
+    QuantFusedLeakyAct,
+)
+
+VALID_CONTEXT_PATTERNS = (
+    "default", "dense_dilation", "dense_dilation_half", "dense_dilation_reg_interleaved",
+    "dense_dilation_reg_interleaved_double_mid",
+    "dense_dilation_d2_projected", "dense_dilation_d8_d16_projected",
+    "dense_dilation_d2_regular", "dense_dilation_reg_trailing",
+)
+
+# QuantDecomposedLeakyAct/QuantFusedLeakyAct contain their OWN internal
+# QuantIdentity/QuantReLU submodules (pre_quant/act_pos/out_quant) -- a flat
+# isinstance-filtered named_modules() walk would wrongly also match those,
+# inflating one real site into 3-4 spurious ones. _first_match_modules below
+# stops descending the instant a module itself matches one of these types.
+ACT_SITE_TYPES = (qnn.QuantReLU, qnn.QuantIdentity, QuantDecomposedLeakyAct, QuantFusedLeakyAct, qnn.QuantEltwiseAdd)
+
 
 def _first_match_modules(
     module: nn.Module, types: tuple[type, ...], prefix: str = "", _memo: set[int] | None = None,

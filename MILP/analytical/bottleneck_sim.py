@@ -33,6 +33,7 @@ from bottleneck import BottleneckResult, model_bottleneck  # noqa: E402
 BUSY, STARVED, BLOCKED, IDLE = 0, 1, 2, 3
 STATE_NAMES = ("busy", "starved", "blocked", "idle")
 UNBOUNDED = 10 ** 9
+CAPTURE: dict = {"out": None}     # set "out" to a list: run_network then only builds the network, appends it there and returns None (net_fifo.py)
 
 
 class Fifo:
@@ -417,6 +418,9 @@ def run_network(
     for name, d in (fifo_depths or {}).items():
         fifos[name].depth = d
         graph["fifos"][name]["depth"] = d
+    if CAPTURE["out"] is not None:                 # net_fifo: hand the built (not yet run) network to the chain driver
+        CAPTURE["out"].append(dict(order=order, fifos=fifos, sink=sink, N=N, graph=graph, px_per_frame=px_per_frame))
+        return None
 
     names = [n.name for n in order]
     limit = max_cycles or int(6 * (r.frame_cycles + N * max(inject_interval, 1)) + 20000)

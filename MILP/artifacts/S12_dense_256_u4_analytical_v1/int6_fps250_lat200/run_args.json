@@ -8,7 +8,14 @@
   "budget_floor": "0.6",
   "no_ratchet": "False",
   "tag": "final",
-  "out_dir": "..\\artifacts\\S12_dense_256_u4_analytical_v1\\int6_fps250_lat200",
+  "out_dir": "MILP\\artifacts\\S12_dense_256_u4_analytical_v1\\int6_fps250_lat200",
   "no_sites": "False",
-  "no_intra_fifos": "False"
+  "no_intra_fifos": "False",
+  "inter_fifo": "sim",
+  "fifo_target_fps": "None",
+  "fifo_slack": "0.0",
+  "workers": "8",
+  "no_whole_check": "False",
+  "no_verify": "True",
+  "no_onnx": "False"
 }
