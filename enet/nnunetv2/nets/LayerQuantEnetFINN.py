@@ -111,6 +111,9 @@ def _residual_add_quant(bits: int) -> qnn.QuantEltwiseAdd:
     q = Int8ActPerTensorFloat.let(bit_width=bits)
     return qnn.QuantEltwiseAdd(input_quant=q, output_quant=q, return_quant_tensor=True)
 
+from nnunetv2.nets.QuantENet import _quant_conv2d, _quant_act, _quant_block_act
+from nnunetv2.nets.LayerQuantENet import _make_layer_shallow_stage, _make_layer_context_stage, _local_single
+
 
 # ---------------------------------------------------------------------------
 # FINN-safe block substitutes -- initial, down1/down2 and up4/up5 need one
