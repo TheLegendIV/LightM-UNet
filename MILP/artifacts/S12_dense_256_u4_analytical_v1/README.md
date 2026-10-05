@@ -9,11 +9,13 @@ Not an ILP solve: the folds come from `bottleneck.py`, `dn_/up_/int_bottleneck.p
 
 | Folder | Targets | Result (model) |
 |---|---|---|
-| `int6_fps250_lat200/` | throughput 250 fps @ 100 MHz (every node <= 400,000 cycles/frame), latency <= 200 ms (MILP measure: sum of node cycles / clock), downstream no slower than upstream | 92.7k LUT (40.2%), 241 DSP (13.9%), 10 BRAM18 + 28 inter-block FIFO BRAM18, 677 fps, latency 181 ms |
+| `int6_fps250_lat200/` | throughput 250 fps @ 100 MHz (every node <= 400,000 cycles/frame), latency <= 200 ms (MILP measure: sum of node cycles / clock), downstream no slower than upstream | 76.6k LUT (33.2%), 241 DSP (13.9%), 62 BRAM18 in the nodes; FIFOs and DWCs on top: intra-block 143 BRAM18 + 8.5k LUT, inter-block 28 x depth 2 (392 LUT, 0 BRAM18), DWC 1.6k LUT; slowest node 147.7k cycles (677 fps), whole-net simulation 225,240 cycles/frame (444 fps), latency 169.5 ms |
 
 Files per run (`final` tag, as in `S12_dense_256_fullwidth_joinsdist_v1/*/`):
-`layer_bits_folding_final.json` (status / layer_weight_bits / layer_act_bits / per_layer / extra_nodes / _diagnostics / dataflow_graph, plus the extra top-level key
-`inter_block_fifos`), `layer_bits_SITES_final.json` (per-quantizer-site bits, builds `LayerQuantEnetFINN`), `block_profile_final.csv`, `run_args.json`.
+`layer_bits_folding_final.json` (status / layer_weight_bits / layer_act_bits / per_layer / extra_nodes / _diagnostics / dataflow_graph, plus the extra top-level keys
+`inter_block_fifos` and `intra_block_fifos`; the sizing record is `_diagnostics.fifo_sizing`), `layer_bits_SITES_final.json` (per-quantizer-site bits, builds `LayerQuantEnetFINN`),
+`block_profile_final.csv`, `run_args.json`, and `enet_dataflow_final.onnx` (the whole sized design as one graph, open it in Netron: FINN op names, PE / SIMD / cycles / LUT /
+BRAM per node, every DWC, every FIFO with depth / width / memory; intra-block FIFOs of depth <= 2 are not drawn because FINN removes them, inter-block FIFOs always are).
 
 Regenerate: `python3 MILP/analytical/net_fold.py --bits 6 --fps 250 --clock-mhz 100 --max-latency-ms 200 --out-dir MILP/artifacts/S12_dense_256_u4_analytical_v1/int6_fps250_lat200`
 (in `lightmunet_dev`; `--no-ratchet` drops the downstream-faster rule; with the 200 ms cap both settle on the same design because the legal (PE, SIMD) steps are coarse).
@@ -23,14 +25,20 @@ Regenerate: `python3 MILP/analytical/net_fold.py --bits 6 --fps 250 --clock-mhz 
   (`_diagnostics.analytical.sum_of_block_first_out_latencies_cycles`).
 * Downstream-faster rule: block k gets budget min(F, max(0.6 F, 1.04 x slowest foldable node of block k-1)). Achieved MILP DSR (cycles per output element,
   worst downstream / own) is 144 max, 16 median: element-rate matching needs the MILP solve itself.
-* Inter-block FIFOs: one per dataflow edge that leaves a block, all 6 bit x 2048 in one BRAM18 (9-bit aspect, 67% efficient). See "FIFOs" below: they are a
-  specification that no current build step applies.
+* Inter-block FIFOs: each block owns the FIFO at its output. `net_fifo.py` sizes them by simulating block i + FIFO(D) + block i+1 with a saturated source and keeping the
+  smallest D whose last-frame period meets the global target (400,000 cycles/frame), after every block was realised and its internal FIFOs sized by `verify_with_sim`
+  (replayed as a black box). Result: every interface needs only depth 2 (FINN's RemoveShallowFIFOs would delete it): the blocks run 1.8-2.7x faster than the target, so
+  nothing has to buffer. A closing whole-net run with all 28 depths at 2 sustains 225,240 cycles/frame (target 400,000). The depths are only as loose as the target:
+  `--fifo-target-fps` re-sizes them for a tighter rate (a target below what a block pair can do is reported as `block_limited`, with the occupancy it would need).
+  `--inter-fifo standard` gives the old one-BRAM18-per-edge rule (28 BRAM18). The memory that matters is inside the blocks: skip FIFOs and the prefetch FIFOs in front of
+  every FMPadding (143 BRAM18 + 8.5k LUT in `intra_block_fifos`, depth > 2 only). See "FIFOs" below: all of it is a specification that no current build step applies.
 * The initial block's branch-quant threshold sits UPSTREAM of its maxpool (`initial.pool_quant`, MILP kind `pool_quant`, added to the MILP itself on 2026-10-05 so the
   MILP and the analytical model agree: 65,536 cycles, 88 LUT at INT6). Not representable in the MILP schema: the InferPool route of the initial block (StreamingMaxPool is
   used) and the final layer's bias (FINN does not lower it; the no-bias layer is folded).
 * Cross-check against the MILP solve itself on the same config (`finn_milp.py --candidate-bits 6 --force-dsp --min-resources --target-fps 250 --max-latency-ms 200`):
-  92.4k LUT, 119 DSP, 339 fps, 19.97M cycles. The analytical assembly lands within 0.4% of the MILP's LUT; it spends more DSP (241) and runs faster (677 fps) because of
-  the downstream-faster rule and the coarse (PE, SIMD) steps, where the MILP only has to meet the target.
+  92.4k LUT, 119 DSP, 339 fps, 19.97M cycles. Before net_fold priced every threshold like the analytical models (ram_style block) the assembly was within 0.4% of that LUT
+  figure (92.7k); it is now 17% below it (76.6k). It spends more DSP (241) and runs faster (677 fps) because of the downstream-faster rule and the coarse (PE, SIMD) steps,
+  where the MILP only has to meet the target.
 * `LayerQuantENet.py` lost its import block, `VALID_CONTEXT_PATTERNS` and `ACT_SITE_TYPES` in commit 66e0590e8b (present at b16b35468a); `net_fold.py` injects them
   in-process to run `expand_layer_bits.py`. The file itself is untouched.
 
@@ -52,16 +60,16 @@ How FINN takes manual depths: build with `auto_fifo_depths=False` and put the si
 What this means for this folder:
 * `layer_bits_folding_final.json` carries the FOLDING (per_layer / extra_nodes) in the MILP schema; the S12 bridge (`build_partition_folding_config` in
   `hardware/finn_s12_build_steps.py`) turns that into the FINN folding config. It does not write FIFO entries and the S12 build runs the FINN autosizer, so as it stands
-  `inter_block_fifos` is ignored. Both have to change before a build: the bridge must add a `StreamingFIFO_*` entry (`depth`, `ram_style`, `impl_style`) for every FIFO, and the
-  build must run with `auto_fifo_depths=False`.
+  `inter_block_fifos` / `intra_block_fifos` are ignored. Both have to change before a build: the bridge must add a `StreamingFIFO_*` entry (`depth`, `ram_style`, `impl_style`)
+  for every FIFO listed there (the `mem` field says srl -> `rtl`, bram / uram -> `vivado` with `ram_style` block / ultra), and the build must run with `auto_fifo_depths=False`.
 * Every FIFO needs an entry, not only the 28 inter-block ones. With autosizing off, a FIFO without an entry keeps the default depth 2. That is fine on a straight
   pipeline path, but the residual joins (skip FIFO into the `Add`, `FIFO main`, the next-frame prefetch FIFO in front of every `FMPadding`) need the deep values the
-  analytical block sims compute; they are in each block's `to_folding_config()['fifos']` (role-keyed) and are NOT yet merged into this network file.
-  Width converters (`StreamingDataWidthConverter_*`) sit between the FIFOs and have their own `inFIFODepths` / `outFIFODepths` bookkeeping in the FINN config.
+  analytical block sims compute; they are stored per block under `intra_block_fifos[<block>].fifos` (producer / consumer are the analytical node names, `Source` / `Sink` ends
+  are the inter-block FIFOs). Width converters (`StreamingDataWidthConverter_*`) sit between the FIFOs and have their own `inFIFODepths` / `outFIFODepths` bookkeeping in the FINN config.
 * FIFO node names (`StreamingFIFO_rtl_<n>`) exist only after `InsertFIFO` on the converted graph, so the entries have to be matched by producer / consumer node at build
   time (as `step_force_fifo_depths` does in `hardware/builds/bottleneck_probe_v1/finn_bottleneck_probe_build.py`), not written ahead of time.
 * A forced depth only takes effect on an edge that exists in the landed graph, and the build must list the edges that found no entry ("edge not in prediction").
-* The standard inter-block FIFO is 6 bit x 2048 in one BRAM18 (`vivado` impl, ram_style block). It is only a buffer between blocks: it does not replace the deep join FIFOs.
+* The old standard inter-block FIFO (`--inter-fifo standard`) is 6 bit x 2048 in one BRAM18 (`vivado` impl, ram_style block). It is only a buffer between blocks: it does not replace the deep join FIFOs.
 
-Status: the specification (`inter_block_fifos`) exists; the intra-block depths exist per block in the probe jsons; the bridge, the merged per-FIFO list and the
+Status: the specification (`inter_block_fifos`, `intra_block_fifos`) exists and is verified in simulation; the bridge that merges it into the FINN folding config and the
 `auto_fifo_depths=False` build are not written yet.

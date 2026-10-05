@@ -5999,533 +5999,393 @@
       "name": "regular5.0.out_act->final",
       "producer": "regular5.0.out_act",
       "consumer": "final",
-      "src_block": "regular5.0",
-      "dst_block": "final",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 2,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 198276
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "initial.act->initial.act.dup",
       "producer": "initial.act",
       "consumer": "initial.act.dup",
-      "src_block": "initial",
-      "dst_block": "down1",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 2,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 211534
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "down1.out_act->down1.out_act.dup",
       "producer": "down1.out_act",
       "consumer": "down1.out_act.dup",
-      "src_block": "down1",
-      "dst_block": "regular1.0",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 1,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 151544
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "regular1.0.out_act->regular1.0.out_act.dup",
       "producer": "regular1.0.out_act",
       "consumer": "regular1.0.out_act.dup",
-      "src_block": "regular1.0",
-      "dst_block": "regular1.1",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 1,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 147706
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "regular1.1.out_act->regular1.1.out_act.dup",
       "producer": "regular1.1.out_act",
       "consumer": "regular1.1.out_act.dup",
-      "src_block": "regular1.1",
-      "dst_block": "regular1.2",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 1,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 147706
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "regular1.2.out_act->regular1.2.out_act.dup",
       "producer": "regular1.2.out_act",
       "consumer": "regular1.2.out_act.dup",
-      "src_block": "regular1.2",
-      "dst_block": "regular1.3",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 1,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 147706
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "regular1.3.out_act->regular1.3.out_act.dup",
       "producer": "regular1.3.out_act",
       "consumer": "regular1.3.out_act.dup",
-      "src_block": "regular1.3",
-      "dst_block": "down2",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 2,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 178592
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "down2.out_act->down2.out_act.dup",
       "producer": "down2.out_act",
       "consumer": "down2.out_act.dup",
-      "src_block": "down2",
-      "dst_block": "stage2.0",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 2,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 147626
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "stage2.0.out_act->stage2.0.out_act.dup",
       "producer": "stage2.0.out_act",
       "consumer": "stage2.0.out_act.dup",
-      "src_block": "stage2.0",
-      "dst_block": "stage2.1",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 2,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 147986
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "stage2.1.out_act->stage2.1.out_act.dup",
       "producer": "stage2.1.out_act",
       "consumer": "stage2.1.out_act.dup",
-      "src_block": "stage2.1",
-      "dst_block": "stage2.2",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 2,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 148898
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "stage2.2.out_act->stage2.2.out_act.dup",
       "producer": "stage2.2.out_act",
       "consumer": "stage2.2.out_act.dup",
-      "src_block": "stage2.2",
-      "dst_block": "stage2.3",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 2,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 151490
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "stage2.3.out_act->stage2.3.out_act.dup",
       "producer": "stage2.3.out_act",
       "consumer": "stage2.3.out_act.dup",
-      "src_block": "stage2.3",
-      "dst_block": "stage2.4",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 2,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 151490
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "stage2.4.out_act->stage2.4.out_act.dup",
       "producer": "stage2.4.out_act",
       "consumer": "stage2.4.out_act.dup",
-      "src_block": "stage2.4",
-      "dst_block": "stage2.5",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 2,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 147986
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "stage2.5.out_act->stage2.5.out_act.dup",
       "producer": "stage2.5.out_act",
       "consumer": "stage2.5.out_act.dup",
-      "src_block": "stage2.5",
-      "dst_block": "stage2.6",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 2,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 148898
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "stage2.6.out_act->stage2.6.out_act.dup",
       "producer": "stage2.6.out_act",
       "consumer": "stage2.6.out_act.dup",
-      "src_block": "stage2.6",
-      "dst_block": "stage2.7",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 2,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 151490
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "stage2.7.out_act->stage2.7.out_act.dup",
       "producer": "stage2.7.out_act",
       "consumer": "stage2.7.out_act.dup",
-      "src_block": "stage2.7",
-      "dst_block": "stage3.0",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 2,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 151490
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "stage3.0.out_act->stage3.0.out_act.dup",
       "producer": "stage3.0.out_act",
       "consumer": "stage3.0.out_act.dup",
-      "src_block": "stage3.0",
-      "dst_block": "stage3.1",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 2,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 147986
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "stage3.1.out_act->stage3.1.out_act.dup",
       "producer": "stage3.1.out_act",
       "consumer": "stage3.1.out_act.dup",
-      "src_block": "stage3.1",
-      "dst_block": "stage3.2",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 2,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 148898
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "stage3.2.out_act->stage3.2.out_act.dup",
       "producer": "stage3.2.out_act",
       "consumer": "stage3.2.out_act.dup",
-      "src_block": "stage3.2",
-      "dst_block": "stage3.3",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 2,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 151490
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "stage3.3.out_act->stage3.3.out_act.dup",
       "producer": "stage3.3.out_act",
       "consumer": "stage3.3.out_act.dup",
-      "src_block": "stage3.3",
-      "dst_block": "stage3.4",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 2,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 151490
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "stage3.4.out_act->stage3.4.out_act.dup",
       "producer": "stage3.4.out_act",
       "consumer": "stage3.4.out_act.dup",
-      "src_block": "stage3.4",
-      "dst_block": "stage3.5",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 2,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 147986
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "stage3.5.out_act->stage3.5.out_act.dup",
       "producer": "stage3.5.out_act",
       "consumer": "stage3.5.out_act.dup",
-      "src_block": "stage3.5",
-      "dst_block": "stage3.6",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 2,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 148898
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "stage3.6.out_act->stage3.6.out_act.dup",
       "producer": "stage3.6.out_act",
       "consumer": "stage3.6.out_act.dup",
-      "src_block": "stage3.6",
-      "dst_block": "stage3.7",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 2,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 151490
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "stage3.7.out_act->stage3.7.out_act.dup",
       "producer": "stage3.7.out_act",
       "consumer": "stage3.7.out_act.dup",
-      "src_block": "stage3.7",
-      "dst_block": "up4",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 2,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 183373
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "up4.out_act->up4.out_act.dup",
       "producer": "up4.out_act",
       "consumer": "up4.out_act.dup",
-      "src_block": "up4",
-      "dst_block": "regular4.0",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 2,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 177186
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "regular4.0.out_act->regular4.0.out_act.dup",
       "producer": "regular4.0.out_act",
       "consumer": "regular4.0.out_act.dup",
-      "src_block": "regular4.0",
-      "dst_block": "regular4.1",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 1,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 147706
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "regular4.1.out_act->regular4.1.out_act.dup",
       "producer": "regular4.1.out_act",
       "consumer": "regular4.1.out_act.dup",
-      "src_block": "regular4.1",
-      "dst_block": "up5",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 2,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 194364
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     },
     {
       "name": "up5.out_act->up5.out_act.dup",
       "producer": "up5.out_act",
       "consumer": "up5.out_act.dup",
-      "src_block": "up5",
-      "dst_block": "regular5.0",
       "width_bits": 6,
-      "mem": "srl",
-      "depth": 2,
-      "bram18": 0,
-      "efficiency": 0.027,
-      "depth_alloc": 2,
-      "lut": 14,
-      "uram18": 0,
-      "max_occ": 2,
-      "sizing": "pair_simulation",
-      "sizing_status": "ok",
-      "pair_period_cycles": 193482
+      "mem": "bram",
+      "depth": 2048,
+      "bram18": 1,
+      "aspect": [
+        9,
+        2048
+      ],
+      "efficiency": 0.667
     }
   ],
   "_diagnostics": {
@@ -6539,8 +6399,8 @@
     "total_bram18k_calibrated": 62.0,
     "xczu7ev_bram18k_budget": 624,
     "bram_pct_of_budget": 9.935897435897436,
-    "inter_block_fifo_bram18": 0,
-    "total_bram18k_with_inter_block_fifos": 62.0,
+    "inter_block_fifo_bram18": 28,
+    "total_bram18k_with_inter_block_fifos": 90.0,
     "total_uram18": 0.0,
     "xczu7ev_uram_budget": 96,
     "uram_pct_of_budget": 0.0,
@@ -7112,371 +6972,6 @@
           "worst_downstream_rate": 18.0
         }
       ]
-    },
-    "intra_block_fifo_totals": {
-      "fifo_lut": 8525.0,
-      "fifo_bram18": 143.0,
-      "fifo_uram18": 0.0,
-      "dwc_lut": 1598.5086000000013
-    },
-    "inter_block_fifo_lut": 392,
-    "inter_block_fifo_uram18": 0,
-    "fifo_sizing": {
-      "method": "pair simulation: block i (saturated input, verified intra-block FIFOs replayed unchanged) -> FIFO(D) -> block i+1; smallest D with last-frame period <= target * (1 + slack); then a whole-net run",
-      "target_cycles_per_frame": 400000,
-      "slack": 0.0,
-      "min_depth": 2,
-      "pairs": [
-        {
-          "src": "initial",
-          "dst": "down1",
-          "depth": 2,
-          "status": "ok",
-          "period": 211534,
-          "max_occ": 2,
-          "sims": 1,
-          "tested": {
-            "2": 211534
-          }
-        },
-        {
-          "src": "down1",
-          "dst": "regular1.0",
-          "depth": 2,
-          "status": "ok",
-          "period": 151544,
-          "max_occ": 1,
-          "sims": 1,
-          "tested": {
-            "2": 151544
-          }
-        },
-        {
-          "src": "regular1.0",
-          "dst": "regular1.1",
-          "depth": 2,
-          "status": "ok",
-          "period": 147706,
-          "max_occ": 1,
-          "sims": 1,
-          "tested": {
-            "2": 147706
-          }
-        },
-        {
-          "src": "regular1.1",
-          "dst": "regular1.2",
-          "depth": 2,
-          "status": "ok",
-          "period": 147706,
-          "max_occ": 1,
-          "sims": 1,
-          "tested": {
-            "2": 147706
-          }
-        },
-        {
-          "src": "regular1.2",
-          "dst": "regular1.3",
-          "depth": 2,
-          "status": "ok",
-          "period": 147706,
-          "max_occ": 1,
-          "sims": 1,
-          "tested": {
-            "2": 147706
-          }
-        },
-        {
-          "src": "regular1.3",
-          "dst": "down2",
-          "depth": 2,
-          "status": "ok",
-          "period": 178592,
-          "max_occ": 2,
-          "sims": 1,
-          "tested": {
-            "2": 178592
-          }
-        },
-        {
-          "src": "down2",
-          "dst": "stage2.0",
-          "depth": 2,
-          "status": "ok",
-          "period": 147626,
-          "max_occ": 2,
-          "sims": 1,
-          "tested": {
-            "2": 147626
-          }
-        },
-        {
-          "src": "stage2.0",
-          "dst": "stage2.1",
-          "depth": 2,
-          "status": "ok",
-          "period": 147986,
-          "max_occ": 2,
-          "sims": 1,
-          "tested": {
-            "2": 147986
-          }
-        },
-        {
-          "src": "stage2.1",
-          "dst": "stage2.2",
-          "depth": 2,
-          "status": "ok",
-          "period": 148898,
-          "max_occ": 2,
-          "sims": 1,
-          "tested": {
-            "2": 148898
-          }
-        },
-        {
-          "src": "stage2.2",
-          "dst": "stage2.3",
-          "depth": 2,
-          "status": "ok",
-          "period": 151490,
-          "max_occ": 2,
-          "sims": 1,
-          "tested": {
-            "2": 151490
-          }
-        },
-        {
-          "src": "stage2.3",
-          "dst": "stage2.4",
-          "depth": 2,
-          "status": "ok",
-          "period": 151490,
-          "max_occ": 2,
-          "sims": 1,
-          "tested": {
-            "2": 151490
-          }
-        },
-        {
-          "src": "stage2.4",
-          "dst": "stage2.5",
-          "depth": 2,
-          "status": "ok",
-          "period": 147986,
-          "max_occ": 2,
-          "sims": 1,
-          "tested": {
-            "2": 147986
-          }
-        },
-        {
-          "src": "stage2.5",
-          "dst": "stage2.6",
-          "depth": 2,
-          "status": "ok",
-          "period": 148898,
-          "max_occ": 2,
-          "sims": 1,
-          "tested": {
-            "2": 148898
-          }
-        },
-        {
-          "src": "stage2.6",
-          "dst": "stage2.7",
-          "depth": 2,
-          "status": "ok",
-          "period": 151490,
-          "max_occ": 2,
-          "sims": 1,
-          "tested": {
-            "2": 151490
-          }
-        },
-        {
-          "src": "stage2.7",
-          "dst": "stage3.0",
-          "depth": 2,
-          "status": "ok",
-          "period": 151490,
-          "max_occ": 2,
-          "sims": 1,
-          "tested": {
-            "2": 151490
-          }
-        },
-        {
-          "src": "stage3.0",
-          "dst": "stage3.1",
-          "depth": 2,
-          "status": "ok",
-          "period": 147986,
-          "max_occ": 2,
-          "sims": 1,
-          "tested": {
-            "2": 147986
-          }
-        },
-        {
-          "src": "stage3.1",
-          "dst": "stage3.2",
-          "depth": 2,
-          "status": "ok",
-          "period": 148898,
-          "max_occ": 2,
-          "sims": 1,
-          "tested": {
-            "2": 148898
-          }
-        },
-        {
-          "src": "stage3.2",
-          "dst": "stage3.3",
-          "depth": 2,
-          "status": "ok",
-          "period": 151490,
-          "max_occ": 2,
-          "sims": 1,
-          "tested": {
-            "2": 151490
-          }
-        },
-        {
-          "src": "stage3.3",
-          "dst": "stage3.4",
-          "depth": 2,
-          "status": "ok",
-          "period": 151490,
-          "max_occ": 2,
-          "sims": 1,
-          "tested": {
-            "2": 151490
-          }
-        },
-        {
-          "src": "stage3.4",
-          "dst": "stage3.5",
-          "depth": 2,
-          "status": "ok",
-          "period": 147986,
-          "max_occ": 2,
-          "sims": 1,
-          "tested": {
-            "2": 147986
-          }
-        },
-        {
-          "src": "stage3.5",
-          "dst": "stage3.6",
-          "depth": 2,
-          "status": "ok",
-          "period": 148898,
-          "max_occ": 2,
-          "sims": 1,
-          "tested": {
-            "2": 148898
-          }
-        },
-        {
-          "src": "stage3.6",
-          "dst": "stage3.7",
-          "depth": 2,
-          "status": "ok",
-          "period": 151490,
-          "max_occ": 2,
-          "sims": 1,
-          "tested": {
-            "2": 151490
-          }
-        },
-        {
-          "src": "stage3.7",
-          "dst": "up4",
-          "depth": 2,
-          "status": "ok",
-          "period": 183373,
-          "max_occ": 2,
-          "sims": 1,
-          "tested": {
-            "2": 183373
-          }
-        },
-        {
-          "src": "up4",
-          "dst": "regular4.0",
-          "depth": 2,
-          "status": "ok",
-          "period": 177186,
-          "max_occ": 2,
-          "sims": 1,
-          "tested": {
-            "2": 177186
-          }
-        },
-        {
-          "src": "regular4.0",
-          "dst": "regular4.1",
-          "depth": 2,
-          "status": "ok",
-          "period": 147706,
-          "max_occ": 1,
-          "sims": 1,
-          "tested": {
-            "2": 147706
-          }
-        },
-        {
-          "src": "regular4.1",
-          "dst": "up5",
-          "depth": 2,
-          "status": "ok",
-          "period": 194364,
-          "max_occ": 2,
-          "sims": 1,
-          "tested": {
-            "2": 194364
-          }
-        },
-        {
-          "src": "up5",
-          "dst": "regular5.0",
-          "depth": 2,
-          "status": "ok",
-          "period": 193482,
-          "max_occ": 2,
-          "sims": 1,
-          "tested": {
-            "2": 193482
-          }
-        },
-        {
-          "src": "regular5.0",
-          "dst": "final",
-          "depth": 2,
-          "status": "ok",
-          "period": 198276,
-          "max_occ": 2,
-          "sims": 1,
-          "tested": {
-            "2": 198276
-          }
-        }
-      ],
-      "whole_net": {
-        "ok": true,
-        "deadlock": false,
-        "period": 225240,
-        "periods": [
-          225240,
-          225240
-        ],
-        "first_out": 673762,
-        "target": 400000,
-        "depth_scale": 1
-      },
-      "unmatched_interfaces": 0
     }
   },
   "dataflow_graph": {
@@ -9750,1849 +9245,6 @@
       "up5.out_act.dup": "dup",
       "down1.skip_pad": "pad_mvau",
       "down2.skip_pad": "pad_mvau"
-    }
-  },
-  "intra_block_fifos": {
-    "initial": {
-      "kind": "init",
-      "verified": true,
-      "steady_cyc_px": 10.9283447265625,
-      "T": 24.4140625,
-      "fifos": [
-        {
-          "name": "Dup->conv",
-          "producer": "Dup",
-          "consumer": "FMPad",
-          "width_bits": 6,
-          "depth": 260,
-          "max_occ": 260,
-          "mem": "bram",
-          "depth_alloc": 512,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        },
-        {
-          "name": "FIFO main",
-          "producer": "Thr_c",
-          "consumer": "DWC(FIFOmain->Concat)",
-          "width_bits": 6,
-          "depth": 4,
-          "max_occ": 1,
-          "mem": "srl",
-          "depth_alloc": 4,
-          "lut": 14,
-          "bram18": 0,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 10,
-      "dwcs": [
-        {
-          "edge": "FIFOmain->Concat",
-          "in_width": 6,
-          "out_width": 18,
-          "lut": 16.5243
-        },
-        {
-          "edge": "Concat->Thr_act",
-          "in_width": 24,
-          "out_width": 6,
-          "lut": 6.9576
-        }
-      ],
-      "warnings": [
-        "maxpool floor: F >= 81920 cycles/frame for this input size; MaxPool runs at 20% of F. Concat / MaxPool LUTs are provisional in finn_cost_model"
-      ]
-    },
-    "down1": {
-      "kind": "dn",
-      "verified": true,
-      "steady_cyc_px": 36.998046875,
-      "T": 58.59375,
-      "fifos": [
-        {
-          "name": "Dup->main",
-          "producer": "Dup",
-          "consumer": "SWG_r",
-          "width_bits": 6,
-          "depth": 184,
-          "max_occ": 184,
-          "mem": "bram",
-          "depth_alloc": 256,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        },
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 12,
-          "depth": 131,
-          "max_occ": 131,
-          "mem": "bram",
-          "depth_alloc": 256,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 1202,
-          "max_occ": 1202,
-          "mem": "bram",
-          "depth_alloc": 2048,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 18,
-      "dwcs": [
-        {
-          "edge": "MVAU_r->Thr_r",
-          "in_width": 34,
-          "out_width": 17,
-          "lut": 15.6546
-        },
-        {
-          "edge": "Thr_r->FMPad",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "MVAU_m->Thr_m",
-          "in_width": 36,
-          "out_width": 18,
-          "lut": 16.5243
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Dup->MaxPool",
-          "in_width": 6,
-          "out_width": 24,
-          "lut": 22.6122
-        },
-        {
-          "edge": "MaxPool->MVAU_s",
-          "in_width": 24,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 55% of F: no (PE, SIMD) divisor pair lands exactly on F",
-        "MVAU_m runs at 61% of F: no (PE, SIMD) divisor pair lands exactly on F",
-        "MVAU_e runs at 55% of F: no (PE, SIMD) divisor pair lands exactly on F",
-        "MVAU_s runs at 55% of F: no (PE, SIMD) divisor pair lands exactly on F",
-        "skip FIFO raised from 1088 to 1202 words by simulation"
-      ]
-    },
-    "regular1.0": {
-      "kind": "reg",
-      "verified": true,
-      "steady_cyc_px": 36.06103515625,
-      "T": 58,
-      "fifos": [
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 12,
-          "depth": 134,
-          "max_occ": 134,
-          "mem": "bram",
-          "depth_alloc": 256,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 1120,
-          "max_occ": 1120,
-          "mem": "bram",
-          "depth_alloc": 2048,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 14,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->SWG_m",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "MVAU_m->Thr_m",
-          "in_width": 36,
-          "out_width": 18,
-          "lut": 16.5243
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 32.0 < T=58 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_m runs at 36.0 < T=58 cyc/px (62%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_e runs at 32.0 < T=58 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T"
-      ]
-    },
-    "regular1.1": {
-      "kind": "reg",
-      "verified": true,
-      "steady_cyc_px": 36.06103515625,
-      "T": 58,
-      "fifos": [
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 12,
-          "depth": 134,
-          "max_occ": 134,
-          "mem": "bram",
-          "depth_alloc": 256,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 1120,
-          "max_occ": 1120,
-          "mem": "bram",
-          "depth_alloc": 2048,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 14,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->SWG_m",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "MVAU_m->Thr_m",
-          "in_width": 36,
-          "out_width": 18,
-          "lut": 16.5243
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 32.0 < T=58 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_m runs at 36.0 < T=58 cyc/px (62%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_e runs at 32.0 < T=58 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T"
-      ]
-    },
-    "regular1.2": {
-      "kind": "reg",
-      "verified": true,
-      "steady_cyc_px": 36.06103515625,
-      "T": 58,
-      "fifos": [
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 12,
-          "depth": 134,
-          "max_occ": 134,
-          "mem": "bram",
-          "depth_alloc": 256,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 1120,
-          "max_occ": 1120,
-          "mem": "bram",
-          "depth_alloc": 2048,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 14,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->SWG_m",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "MVAU_m->Thr_m",
-          "in_width": 36,
-          "out_width": 18,
-          "lut": 16.5243
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 32.0 < T=58 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_m runs at 36.0 < T=58 cyc/px (62%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_e runs at 32.0 < T=58 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T"
-      ]
-    },
-    "regular1.3": {
-      "kind": "reg",
-      "verified": true,
-      "steady_cyc_px": 36.06103515625,
-      "T": 58,
-      "fifos": [
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 12,
-          "depth": 134,
-          "max_occ": 134,
-          "mem": "bram",
-          "depth_alloc": 256,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 1120,
-          "max_occ": 1120,
-          "mem": "bram",
-          "depth_alloc": 2048,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 14,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->SWG_m",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "MVAU_m->Thr_m",
-          "in_width": 36,
-          "out_width": 18,
-          "lut": 16.5243
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 32.0 < T=58 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_m runs at 36.0 < T=58 cyc/px (62%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_e runs at 32.0 < T=58 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T"
-      ]
-    },
-    "down2": {
-      "kind": "dn",
-      "verified": true,
-      "steady_cyc_px": 144.013671875,
-      "T": 234.375,
-      "fifos": [
-        {
-          "name": "Dup->DWC->SWG_r",
-          "producer": "DWC(Dup->SWG_r)",
-          "consumer": "SWG_r",
-          "width_bits": 12,
-          "depth": 223,
-          "max_occ": 223,
-          "mem": "bram",
-          "depth_alloc": 256,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        },
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 24,
-          "depth": 70,
-          "max_occ": 70,
-          "mem": "bram",
-          "depth_alloc": 128,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 1258,
-          "max_occ": 1258,
-          "mem": "bram",
-          "depth_alloc": 2048,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 18,
-      "dwcs": [
-        {
-          "edge": "Dup->SWG_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "MVAU_r->Thr_r",
-          "in_width": 38,
-          "out_width": 19,
-          "lut": 17.394000000000002
-        },
-        {
-          "edge": "Thr_r->FMPad",
-          "in_width": 6,
-          "out_width": 24,
-          "lut": 22.6122
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Dup->MaxPool",
-          "in_width": 6,
-          "out_width": 96,
-          "lut": 86.97
-        },
-        {
-          "edge": "MaxPool->MVAU_s",
-          "in_width": 96,
-          "out_width": 24,
-          "lut": 22.6122
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 55% of F: no (PE, SIMD) divisor pair lands exactly on F",
-        "MVAU_m runs at 61% of F: no (PE, SIMD) divisor pair lands exactly on F",
-        "MVAU_e runs at 55% of F: no (PE, SIMD) divisor pair lands exactly on F",
-        "MVAU_s runs at 55% of F: no (PE, SIMD) divisor pair lands exactly on F",
-        "skip FIFO raised from 1152 to 1258 words by simulation"
-      ]
-    },
-    "stage2.0": {
-      "kind": "reg",
-      "verified": true,
-      "steady_cyc_px": 144.166015625,
-      "T": 234,
-      "fifos": [
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 24,
-          "depth": 134,
-          "max_occ": 134,
-          "mem": "bram",
-          "depth_alloc": 256,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 2208,
-          "max_occ": 2208,
-          "mem": "bram",
-          "depth_alloc": 4096,
-          "lut": 0,
-          "bram18": 2,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 13,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->SWG_m",
-          "in_width": 6,
-          "out_width": 24,
-          "lut": 22.6122
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_m runs at 144.0 < T=234 cyc/px (62%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_e runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T"
-      ]
-    },
-    "stage2.1": {
-      "kind": "reg",
-      "verified": true,
-      "steady_cyc_px": 144.517578125,
-      "T": 234,
-      "fifos": [
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 24,
-          "depth": 268,
-          "max_occ": 268,
-          "mem": "bram",
-          "depth_alloc": 512,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 4352,
-          "max_occ": 4352,
-          "mem": "bram",
-          "depth_alloc": 8192,
-          "lut": 0,
-          "bram18": 3,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 13,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->SWG_m",
-          "in_width": 6,
-          "out_width": 24,
-          "lut": 22.6122
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_m runs at 144.0 < T=234 cyc/px (62%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_e runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T"
-      ]
-    },
-    "stage2.2": {
-      "kind": "reg",
-      "verified": true,
-      "steady_cyc_px": 145.408203125,
-      "T": 234,
-      "fifos": [
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 24,
-          "depth": 532,
-          "max_occ": 532,
-          "mem": "bram",
-          "depth_alloc": 1024,
-          "lut": 0,
-          "bram18": 2,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 8640,
-          "max_occ": 8640,
-          "mem": "bram",
-          "depth_alloc": 16384,
-          "lut": 0,
-          "bram18": 6,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 13,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->SWG_m",
-          "in_width": 6,
-          "out_width": 24,
-          "lut": 22.6122
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_m runs at 144.0 < T=234 cyc/px (62%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_e runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T"
-      ]
-    },
-    "stage2.3": {
-      "kind": "reg",
-      "verified": true,
-      "steady_cyc_px": 147.939453125,
-      "T": 234,
-      "fifos": [
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 24,
-          "depth": 1060,
-          "max_occ": 1060,
-          "mem": "bram",
-          "depth_alloc": 2048,
-          "lut": 0,
-          "bram18": 3,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 17280,
-          "max_occ": 17280,
-          "mem": "bram",
-          "depth_alloc": 32768,
-          "lut": 0,
-          "bram18": 12,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 13,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->SWG_m",
-          "in_width": 6,
-          "out_width": 24,
-          "lut": 22.6122
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_m runs at 144.0 < T=234 cyc/px (62%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_e runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T"
-      ]
-    },
-    "stage2.4": {
-      "kind": "reg",
-      "verified": true,
-      "steady_cyc_px": 144.166015625,
-      "T": 234,
-      "fifos": [
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 24,
-          "depth": 134,
-          "max_occ": 134,
-          "mem": "bram",
-          "depth_alloc": 256,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 2208,
-          "max_occ": 2208,
-          "mem": "bram",
-          "depth_alloc": 4096,
-          "lut": 0,
-          "bram18": 2,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 13,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->SWG_m",
-          "in_width": 6,
-          "out_width": 24,
-          "lut": 22.6122
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_m runs at 144.0 < T=234 cyc/px (62%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_e runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T"
-      ]
-    },
-    "stage2.5": {
-      "kind": "reg",
-      "verified": true,
-      "steady_cyc_px": 144.517578125,
-      "T": 234,
-      "fifos": [
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 24,
-          "depth": 268,
-          "max_occ": 268,
-          "mem": "bram",
-          "depth_alloc": 512,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 4352,
-          "max_occ": 4352,
-          "mem": "bram",
-          "depth_alloc": 8192,
-          "lut": 0,
-          "bram18": 3,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 13,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->SWG_m",
-          "in_width": 6,
-          "out_width": 24,
-          "lut": 22.6122
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_m runs at 144.0 < T=234 cyc/px (62%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_e runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T"
-      ]
-    },
-    "stage2.6": {
-      "kind": "reg",
-      "verified": true,
-      "steady_cyc_px": 145.408203125,
-      "T": 234,
-      "fifos": [
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 24,
-          "depth": 532,
-          "max_occ": 532,
-          "mem": "bram",
-          "depth_alloc": 1024,
-          "lut": 0,
-          "bram18": 2,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 8640,
-          "max_occ": 8640,
-          "mem": "bram",
-          "depth_alloc": 16384,
-          "lut": 0,
-          "bram18": 6,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 13,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->SWG_m",
-          "in_width": 6,
-          "out_width": 24,
-          "lut": 22.6122
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_m runs at 144.0 < T=234 cyc/px (62%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_e runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T"
-      ]
-    },
-    "stage2.7": {
-      "kind": "reg",
-      "verified": true,
-      "steady_cyc_px": 147.939453125,
-      "T": 234,
-      "fifos": [
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 24,
-          "depth": 1060,
-          "max_occ": 1060,
-          "mem": "bram",
-          "depth_alloc": 2048,
-          "lut": 0,
-          "bram18": 3,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 17280,
-          "max_occ": 17280,
-          "mem": "bram",
-          "depth_alloc": 32768,
-          "lut": 0,
-          "bram18": 12,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 13,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->SWG_m",
-          "in_width": 6,
-          "out_width": 24,
-          "lut": 22.6122
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_m runs at 144.0 < T=234 cyc/px (62%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_e runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T"
-      ]
-    },
-    "stage3.0": {
-      "kind": "reg",
-      "verified": true,
-      "steady_cyc_px": 144.166015625,
-      "T": 234,
-      "fifos": [
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 24,
-          "depth": 134,
-          "max_occ": 134,
-          "mem": "bram",
-          "depth_alloc": 256,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 2208,
-          "max_occ": 2208,
-          "mem": "bram",
-          "depth_alloc": 4096,
-          "lut": 0,
-          "bram18": 2,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 13,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->SWG_m",
-          "in_width": 6,
-          "out_width": 24,
-          "lut": 22.6122
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_m runs at 144.0 < T=234 cyc/px (62%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_e runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T"
-      ]
-    },
-    "stage3.1": {
-      "kind": "reg",
-      "verified": true,
-      "steady_cyc_px": 144.517578125,
-      "T": 234,
-      "fifos": [
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 24,
-          "depth": 268,
-          "max_occ": 268,
-          "mem": "bram",
-          "depth_alloc": 512,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 4352,
-          "max_occ": 4352,
-          "mem": "bram",
-          "depth_alloc": 8192,
-          "lut": 0,
-          "bram18": 3,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 13,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->SWG_m",
-          "in_width": 6,
-          "out_width": 24,
-          "lut": 22.6122
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_m runs at 144.0 < T=234 cyc/px (62%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_e runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T"
-      ]
-    },
-    "stage3.2": {
-      "kind": "reg",
-      "verified": true,
-      "steady_cyc_px": 145.408203125,
-      "T": 234,
-      "fifos": [
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 24,
-          "depth": 532,
-          "max_occ": 532,
-          "mem": "bram",
-          "depth_alloc": 1024,
-          "lut": 0,
-          "bram18": 2,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 8640,
-          "max_occ": 8640,
-          "mem": "bram",
-          "depth_alloc": 16384,
-          "lut": 0,
-          "bram18": 6,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 13,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->SWG_m",
-          "in_width": 6,
-          "out_width": 24,
-          "lut": 22.6122
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_m runs at 144.0 < T=234 cyc/px (62%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_e runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T"
-      ]
-    },
-    "stage3.3": {
-      "kind": "reg",
-      "verified": true,
-      "steady_cyc_px": 147.939453125,
-      "T": 234,
-      "fifos": [
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 24,
-          "depth": 1060,
-          "max_occ": 1060,
-          "mem": "bram",
-          "depth_alloc": 2048,
-          "lut": 0,
-          "bram18": 3,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 17280,
-          "max_occ": 17280,
-          "mem": "bram",
-          "depth_alloc": 32768,
-          "lut": 0,
-          "bram18": 12,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 13,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->SWG_m",
-          "in_width": 6,
-          "out_width": 24,
-          "lut": 22.6122
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_m runs at 144.0 < T=234 cyc/px (62%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_e runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T"
-      ]
-    },
-    "stage3.4": {
-      "kind": "reg",
-      "verified": true,
-      "steady_cyc_px": 144.166015625,
-      "T": 234,
-      "fifos": [
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 24,
-          "depth": 134,
-          "max_occ": 134,
-          "mem": "bram",
-          "depth_alloc": 256,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 2208,
-          "max_occ": 2208,
-          "mem": "bram",
-          "depth_alloc": 4096,
-          "lut": 0,
-          "bram18": 2,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 13,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->SWG_m",
-          "in_width": 6,
-          "out_width": 24,
-          "lut": 22.6122
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_m runs at 144.0 < T=234 cyc/px (62%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_e runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T"
-      ]
-    },
-    "stage3.5": {
-      "kind": "reg",
-      "verified": true,
-      "steady_cyc_px": 144.517578125,
-      "T": 234,
-      "fifos": [
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 24,
-          "depth": 268,
-          "max_occ": 268,
-          "mem": "bram",
-          "depth_alloc": 512,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 4352,
-          "max_occ": 4352,
-          "mem": "bram",
-          "depth_alloc": 8192,
-          "lut": 0,
-          "bram18": 3,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 13,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->SWG_m",
-          "in_width": 6,
-          "out_width": 24,
-          "lut": 22.6122
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_m runs at 144.0 < T=234 cyc/px (62%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_e runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T"
-      ]
-    },
-    "stage3.6": {
-      "kind": "reg",
-      "verified": true,
-      "steady_cyc_px": 145.408203125,
-      "T": 234,
-      "fifos": [
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 24,
-          "depth": 532,
-          "max_occ": 532,
-          "mem": "bram",
-          "depth_alloc": 1024,
-          "lut": 0,
-          "bram18": 2,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 8640,
-          "max_occ": 8640,
-          "mem": "bram",
-          "depth_alloc": 16384,
-          "lut": 0,
-          "bram18": 6,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 13,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->SWG_m",
-          "in_width": 6,
-          "out_width": 24,
-          "lut": 22.6122
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_m runs at 144.0 < T=234 cyc/px (62%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_e runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T"
-      ]
-    },
-    "stage3.7": {
-      "kind": "reg",
-      "verified": true,
-      "steady_cyc_px": 147.939453125,
-      "T": 234,
-      "fifos": [
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 24,
-          "depth": 1060,
-          "max_occ": 1060,
-          "mem": "bram",
-          "depth_alloc": 2048,
-          "lut": 0,
-          "bram18": 3,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 17280,
-          "max_occ": 17280,
-          "mem": "bram",
-          "depth_alloc": 32768,
-          "lut": 0,
-          "bram18": 12,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 13,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->SWG_m",
-          "in_width": 6,
-          "out_width": 24,
-          "lut": 22.6122
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_m runs at 144.0 < T=234 cyc/px (62%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_e runs at 128.0 < T=234 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T"
-      ]
-    },
-    "up4": {
-      "kind": "up",
-      "verified": true,
-      "steady_cyc_px": 42.9296875,
-      "T": 58.59375,
-      "fifos": [
-        {
-          "name": "FIFO main",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 638,
-          "max_occ": 635,
-          "mem": "bram",
-          "depth_alloc": 1024,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        },
-        {
-          "name": "Thr_r->DWC->FMPadPix",
-          "producer": "DWC(Thr_r->FMPadPix)",
-          "consumer": "FMPadPix",
-          "width_bits": 48,
-          "depth": 4,
-          "max_occ": 4,
-          "mem": "srl",
-          "depth_alloc": 4,
-          "lut": 56,
-          "bram18": 0,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_e",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 17,
-          "max_occ": 1,
-          "mem": "srl",
-          "depth_alloc": 17,
-          "lut": 14,
-          "bram18": 0,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 18,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_p",
-          "in_width": 6,
-          "out_width": 24,
-          "lut": 22.6122
-        },
-        {
-          "edge": "Thr_p->UpNN",
-          "in_width": 6,
-          "out_width": 96,
-          "lut": 86.97
-        },
-        {
-          "edge": "UpNN->Thr_s",
-          "in_width": 96,
-          "out_width": 6,
-          "lut": 8.697000000000001
-        },
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->FMPadPix",
-          "in_width": 6,
-          "out_width": 48,
-          "lut": 44.3547
-        },
-        {
-          "edge": "Thr_u->MVAU_e",
-          "in_width": 6,
-          "out_width": 24,
-          "lut": 22.6122
-        }
-      ],
-      "warnings": [
-        "MVAU_p runs at 55% of F: no (PE, SIMD) divisor pair lands exactly on F",
-        "MVAU_r runs at 55% of F: no (PE, SIMD) divisor pair lands exactly on F",
-        "MVAU_u runs at 55% of F: no (PE, SIMD) divisor pair lands exactly on F",
-        "MVAU_e runs at 55% of F: no (PE, SIMD) divisor pair lands exactly on F",
-        "FMPadPix / FMPad_k / UpNN LUT are not calibrated in finn_cost_model (priced 0 or provisional); MVAU_u counts the MACs on inserted zeros (FINN lowers ConvTranspose to zero insertion + conv)",
-        "skip FIFO set from the analytic 32 to 17 words by simulation"
-      ]
-    },
-    "regular4.0": {
-      "kind": "reg",
-      "verified": true,
-      "steady_cyc_px": 36.06103515625,
-      "T": 58,
-      "fifos": [
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 12,
-          "depth": 134,
-          "max_occ": 134,
-          "mem": "bram",
-          "depth_alloc": 256,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 1120,
-          "max_occ": 1120,
-          "mem": "bram",
-          "depth_alloc": 2048,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 14,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->SWG_m",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "MVAU_m->Thr_m",
-          "in_width": 36,
-          "out_width": 18,
-          "lut": 16.5243
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 32.0 < T=58 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_m runs at 36.0 < T=58 cyc/px (62%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_e runs at 32.0 < T=58 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T"
-      ]
-    },
-    "regular4.1": {
-      "kind": "reg",
-      "verified": true,
-      "steady_cyc_px": 36.06103515625,
-      "T": 58,
-      "fifos": [
-        {
-          "name": "Thr_r->DWC->FMPad",
-          "producer": "DWC(Thr_r->FMPad)",
-          "consumer": "FMPad",
-          "width_bits": 12,
-          "depth": 134,
-          "max_occ": 134,
-          "mem": "bram",
-          "depth_alloc": 256,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 1120,
-          "max_occ": 1120,
-          "mem": "bram",
-          "depth_alloc": 2048,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 14,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->SWG_m",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "MVAU_m->Thr_m",
-          "in_width": 36,
-          "out_width": 18,
-          "lut": 16.5243
-        },
-        {
-          "edge": "Thr_m->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_r runs at 32.0 < T=58 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_m runs at 36.0 < T=58 cyc/px (62%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_e runs at 32.0 < T=58 cyc/px (55%): no (PE, SIMD) divisor pair lands exactly on T"
-      ]
-    },
-    "up5": {
-      "kind": "up",
-      "verified": true,
-      "steady_cyc_px": 11.8092041015625,
-      "T": 14.6484375,
-      "fifos": [
-        {
-          "name": "FIFO main",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 297,
-          "max_occ": 294,
-          "mem": "bram",
-          "depth_alloc": 512,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        },
-        {
-          "name": "Thr_r->DWC->FMPadPix",
-          "producer": "DWC(Thr_r->FMPadPix)",
-          "consumer": "FMPadPix",
-          "width_bits": 12,
-          "depth": 6,
-          "max_occ": 6,
-          "mem": "srl",
-          "depth_alloc": 6,
-          "lut": 20,
-          "bram18": 0,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_e",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 5,
-          "max_occ": 1,
-          "mem": "srl",
-          "depth_alloc": 5,
-          "lut": 14,
-          "bram18": 0,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 19,
-      "dwcs": [
-        {
-          "edge": "Dup->MVAU_p",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_p->UpNN",
-          "in_width": 6,
-          "out_width": 24,
-          "lut": 22.6122
-        },
-        {
-          "edge": "UpNN->Thr_s",
-          "in_width": 24,
-          "out_width": 6,
-          "lut": 6.9576
-        },
-        {
-          "edge": "Dup->MVAU_r",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "Thr_r->FMPadPix",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        },
-        {
-          "edge": "MVAU_u->Thr_u",
-          "in_width": 68,
-          "out_width": 17,
-          "lut": 16.5243
-        },
-        {
-          "edge": "Thr_u->MVAU_e",
-          "in_width": 6,
-          "out_width": 12,
-          "lut": 11.3061
-        }
-      ],
-      "warnings": [
-        "MVAU_p runs at 55% of F: no (PE, SIMD) divisor pair lands exactly on F",
-        "MVAU_r runs at 55% of F: no (PE, SIMD) divisor pair lands exactly on F",
-        "MVAU_u runs at 55% of F: no (PE, SIMD) divisor pair lands exactly on F",
-        "MVAU_e runs at 55% of F: no (PE, SIMD) divisor pair lands exactly on F",
-        "FMPadPix / FMPad_k / UpNN LUT are not calibrated in finn_cost_model (priced 0 or provisional); MVAU_u counts the MACs on inserted zeros (FINN lowers ConvTranspose to zero insertion + conv)",
-        "skip FIFO set from the analytic 8 to 5 words by simulation"
-      ]
-    },
-    "regular5.0": {
-      "kind": "reg",
-      "verified": true,
-      "steady_cyc_px": 9.02374267578125,
-      "T": 14,
-      "fifos": [
-        {
-          "name": "Thr_r->out",
-          "producer": "Thr_r",
-          "consumer": "FMPad",
-          "width_bits": 6,
-          "depth": 132,
-          "max_occ": 132,
-          "mem": "bram",
-          "depth_alloc": 256,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        },
-        {
-          "name": "skip FIFO",
-          "producer": "Thr_s",
-          "consumer": "Add",
-          "width_bits": 6,
-          "depth": 564,
-          "max_occ": 564,
-          "mem": "bram",
-          "depth_alloc": 1024,
-          "lut": 0,
-          "bram18": 1,
-          "uram18": 0
-        }
-      ],
-      "n_fifos_depth_le_2_removed_by_finn": 10,
-      "dwcs": [],
-      "warnings": [
-        "MVAU_r runs at 4.0 < T=14 cyc/px (29%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_m runs at 9.0 < T=14 cyc/px (64%): no (PE, SIMD) divisor pair lands exactly on T",
-        "MVAU_e runs at 4.0 < T=14 cyc/px (29%): no (PE, SIMD) divisor pair lands exactly on T"
-      ]
-    },
-    "final": {
-      "kind": "final",
-      "verified": true,
-      "steady_cyc_px": 2.003936767578125,
-      "T": 3.662109375,
-      "fifos": [],
-      "n_fifos_depth_le_2_removed_by_finn": 2,
-      "dwcs": [],
-      "warnings": [
-        "FMPadding_Pixel and ChannelwiseOp LUTs are not calibrated in finn_cost_model (priced 0 / like AddStreams); the MVAU counts the MACs on inserted zeros"
-      ]
     }
   }
 }
