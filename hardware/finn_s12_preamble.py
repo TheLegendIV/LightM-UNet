@@ -18,6 +18,11 @@ sys.path.insert(0, "/home/thelegendiv/finn/notebooks/enet")
 _parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 _parser.add_argument("model_name", help="onnx basename in notebooks/enet/ (without .onnx)")
 _parser.add_argument("--tag", required=True, help="output dir prefix, e.g. S12_dense_nearest_upsample_512_hwsweep_wm_dsr_off")
+_parser.add_argument(
+    "--no-argmax", dest="argmax", action="store_false",
+    help="skip the per-pixel top-1 in-PL argmax (step_insert_argmax_output/LabelSelect) and keep "
+         "the raw 5-channel logit output instead. Default on.",
+)
 _args = _parser.parse_args()
 
 # finn_enet_ip_build_partitioned_8way reads sys.argv[1]/[2] at import time.
@@ -29,7 +34,9 @@ import finn.builder.build_dataflow as build  # noqa: E402
 from qonnx.core.modelwrapper import ModelWrapper  # noqa: E402
 from qonnx.custom_op.registry import getCustomOp  # noqa: E402
 from finn_enet_convert_to_hw_rtl_mvau import step_enet_convert_to_hw_rtl_mvau  # noqa: E402
-from finn_s12_build_steps import check_dangling_nodes, install_relaxed_stage_boundaries  # noqa: E402
+from finn_s12_build_steps import (  # noqa: E402
+    check_dangling_nodes, install_relaxed_stage_boundaries, step_insert_argmax_output,
+)
 from finn_compose_thresholds import step_compose_consecutive_thresholds  # noqa: E402
 
 install_relaxed_stage_boundaries()
@@ -49,6 +56,12 @@ def main():
     # (validated 2026-10-05: 168->141 MultiThreshold, all 27 AddStreams get exactly 1 threshold after).
     steps.insert(idx_convert, step_compose_consecutive_thresholds)
     steps[idx_convert + 1] = step_enet_convert_to_hw_rtl_mvau
+    if _args.argmax:
+        # before stage-partition assignment: the new LabelSelect node's topological position
+        # (after `final`'s ChannelwiseOp) puts it in partition 7 via assign_stage_partition_ids_8way's
+        # own index-based fallback, same as any other trailing node.
+        steps.insert(idx_convert + 2, step_insert_argmax_output)
+    print("argmax:", _args.argmax)
     print("Steps to run:", [s if isinstance(s, str) else s.__name__ for s in steps])
     cfg = dataclasses.replace(
         base.cfg_stitched_ip_partitioned_8way,

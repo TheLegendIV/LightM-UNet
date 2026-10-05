@@ -135,6 +135,70 @@ def step_force_dsp(model, cfg=None):
     return model
 
 
+def step_insert_argmax_output(model, cfg=None):
+    """Append a per-pixel top-1 (argmax over the 5 class channels) to the real
+    network output, converting `final`'s 5-channel logit map (the standalone
+    ChannelwiseOp bias-add after `final`'s MVAU) into a 1-channel class-index
+    map in-PL via FINN's LabelSelect HW op, instead of exporting raw logits
+    for CPU-side argmax. Must run after convert_to_hw (LabelSelect only comes
+    from lowering a TopK node) and before stage-partition assignment (so the
+    new node's topological position places it in partition 7 alongside
+    up5/regular5/final, same as assign_stage_partition_ids_8way's own
+    index-based `else: pid = 7` fallback already does for any trailing node).
+
+    At this pipeline stage the DECLARED graph output is still float32/NCHW
+    (matching the original PyTorch export's I/O convention) -- convert_to_hw
+    leaves a Transpose(NHWC->NCHW)+Mul(dequant scale) "glue" pair between the
+    real last HW node (ChannelwiseOp_0, raw-integer NHWC) and graph.output
+    (validated 2026-10-05: naively running InsertTopK against graph.output
+    directly argmaxes over the Mul's NCHW tensor -- wrong axis, picks over W
+    instead of channels). Walk back past that glue first; argmax must consume
+    the real HW tensor directly, and the float rescale is meaningless once
+    the output is a discrete class index, so the glue is dropped afterward.
+
+    qonnx's InsertTopK also pops whatever tensor was graph.output[0]'s
+    ValueInfoProto out of graph.output (to replace it with the new TopK
+    indices output) without re-registering it anywhere else, leaving it
+    shape/dtype-less for the very next transform (InferLabelSelectLayer) that
+    needs to read them back off the now-intermediate tensor -- restored
+    explicitly below before InferLabelSelectLayer runs."""
+    from qonnx.transformation.insert_topk import InsertTopK
+    from qonnx.transformation.infer_shapes import InferShapes
+    from finn.transformation.fpgadataflow.convert_to_hw_layers import InferLabelSelectLayer
+
+    real_out = model.graph.output[0].name
+    glue_nodes = []
+    producer = model.find_producer(real_out)
+    while producer is not None and producer.domain == "":
+        glue_nodes.append(producer)
+        real_out = producer.input[0]
+        producer = model.find_producer(real_out)
+
+    # repoint graph.output at the real HW tensor, reusing its existing (correctly-shaped/
+    # NHWC-laid-out) value_info entry so InsertTopK's axis=-1 targets the channel dim
+    vi_idx = next(i for i, vi in enumerate(model.graph.value_info) if vi.name == real_out)
+    del model.graph.output[0]
+    model.graph.output.insert(0, model.graph.value_info.pop(vi_idx))
+
+    out_shape = model.get_tensor_shape(real_out)
+    out_dtype = model.get_tensor_datatype(real_out)
+    model = model.transform(InsertTopK(k=1, axis=-1))
+    model.set_tensor_shape(real_out, out_shape)
+    model.set_tensor_datatype(real_out, out_dtype)
+    model = model.transform(InferLabelSelectLayer())
+    model = model.transform(InferShapes())
+    model = model.transform(InferDataTypes())
+
+    for n in glue_nodes:
+        model.graph.node.remove(n)
+
+    n_labelselect = sum(1 for node in model.graph.node if node.op_type == "LabelSelect")
+    print(f"[step_insert_argmax_output] inserted {n_labelselect} LabelSelect node(s), "
+          f"dropped {len(glue_nodes)} float-dequant glue node(s) ({[n.op_type for n in glue_nodes]}); "
+          f"new output shape={model.get_tensor_shape(model.graph.output[0].name)}")
+    return model
+
+
 def step_fix_weight_dtype_bipolar_bug(model, cfg=None):
     """MinimizeWeightBitWidth picks BIPOLAR from weights.min() alone."""
     n_fixed = 0
