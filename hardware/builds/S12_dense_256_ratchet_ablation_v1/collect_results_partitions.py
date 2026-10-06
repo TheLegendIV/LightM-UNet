@@ -56,6 +56,10 @@ def describe(tag: str) -> str:
     base = tag.removeprefix("ratchet_ablation_")
     if base in DESC:
         return DESC[base]
+    m = re.fullmatch(r"ratchet_(\d+pct|off)_simfifo", base)
+    if m:
+        return (f"MILP folding of arm ratchet_{m.group(1)} with every FIFO depth taken from the analytical cycle simulation of that folding (net_explicit.py; grown until the "
+                "whole-net chain does not deadlock), inter-block FIFOs depth 2 unless grown.")
     if base == "analytical_25pct_finnfifo":
         return "Analytical-flow folding (as analytical_25pct) with FINN's OWN FIFO autosizing (largefifo_rtlsim): no FIFO depths forced by the bridge."
     if base == "analytical_25pct":

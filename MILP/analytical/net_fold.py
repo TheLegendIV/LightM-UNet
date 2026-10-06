@@ -106,12 +106,20 @@ def block_kind(stage: str) -> str:
     return "reg"
 
 
-def run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool = False, prev_output: str | None = None):
+def run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool = False, prev_output: str | None = None, explicit: dict | None = None):
     """Analytical model of one block at budget F_k cycles per frame -> (BlockResult, layer folds, extra folds,
     slowest, intra-block FIFOs, FIFO-verification warning). compute_fifos runs verify_with_sim + to_folding_config
     on top of the same chosen BottleneckResult (same PE/SIMD/bits as lf/xf) to also get this block's OWN FIFO depths
     (skip FIFO, FMPad prefetch, ...) -- off by default since it is only needed once per final config, not on every
-    bisection trial in main()'s latency-cap search."""
+    bisection trial in main()'s latency-cap search.
+    explicit: given folds instead of the budget search (bottleneck.explicit_folds; net_explicit.py simulates a MILP folding this way); F_k is then only the
+    block's rate target for the simulation check."""
+    from bottleneck import explicit_folds
+    with explicit_folds(explicit or {}):
+        return _run_block(stage, geom, bits, F_k, compute_fifos, prev_output)
+
+
+def _run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool, prev_output: str | None):
     kind = block_kind(stage)
     lf: dict[str, tuple] = {}     # MILP layer name -> (pe, simd, thr_pe or None, analytical frame cycles of the MVAU)
     xf: dict[str, tuple] = {}     # MILP extra node name -> (pe, simd, ram_style or None)

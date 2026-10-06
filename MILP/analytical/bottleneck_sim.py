@@ -284,6 +284,7 @@ class SimResult:
     params: dict = field(default_factory=dict)
     graph: dict = field(default_factory=dict)  # nodes (topological), io, fifos (depth/bits/producer/consumer)
     frame_periods: list = field(default_factory=list)   # cycles between consecutive frame completions (frames > 1)
+    full_fifos: list = field(default_factory=list)      # names of the FIFOs at capacity when the run ended (the blocked chain of a deadlock)
 
     def fractions(self, name: str, window: tuple | None = None) -> dict:
         a, b = window if window else (0, self.cycles)
@@ -463,7 +464,7 @@ def run_network(
         latency_first_out=(done[0] if done else -1), steady_cyc_px=steady, node_names=names, states=states,
         steady_window=(a, b), fifo_max={n: f.max_occ for n, f in fifos.items()}, params=dict(
             inject_interval=inject_interval, skip_depth=skip_depth, fifo_depth=fifo_depth),
-        graph=graph, frame_periods=periods,
+        graph=graph, frame_periods=periods, full_fifos=[n for n, f in fifos.items() if len(f.q) >= f.depth],
     )
 
 

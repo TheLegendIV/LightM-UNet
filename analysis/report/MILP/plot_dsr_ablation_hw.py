@@ -26,6 +26,9 @@ BUILD = REPO_ROOT / "hardware/builds/S12_dense_nearest_upsample_512_hwsweep_part
 ART = REPO_ROOT / "MILP/artifacts/S12_dense_dsr_ablation_v1"
 OUT = Path(__file__).resolve().parent / "figures" / "dsr_ablation_hw_resources.png"
 OUT_CSV = Path(__file__).resolve().parent / "dsr_ablation_hw_table.csv"
+# U4 analytical-flow partition 2 (non-deadlocked full 8-way build), real post-synth row of the ratchet-ablation dump.
+ANALYTICAL_CSV = REPO_ROOT / "hardware/builds/S12_dense_256_ratchet_ablation_v1/resource_dump_partition2.csv"
+ANALYTICAL_ARM = "partition2_baseline"
 
 LUT_TOT, DSP_TOT, BRAM36_TOT = 230400, 1728, 312  # XCZU7EV
 # (label, build tag, artifact dir or None)
@@ -95,6 +98,16 @@ def load(tag: str, art: str | None) -> dict:
     }
 
 
+def load_analytical() -> dict:
+    """Real LUT/LUTRAM/DSP of the U4 analytical partition 2 from the dump CSV. Not in the dump (so the bar is
+    skipped, value None): FIFO BRAM, FPS, and hence BRAM Computation (the dump's BRAM total includes the FIFOs)."""
+    with open(ANALYTICAL_CSV, newline="") as f:
+        r = next(r for r in csv.DictReader(f) if r["arm"] == ANALYTICAL_ARM)
+    return {"LUT": 100 * float(r["LUT"]) / LUT_TOT, "LUTRAM": 100 * float(r["LUTRAM"]) / LUT_TOT,
+            "DSP": 100 * float(r["DSP_real"]) / DSP_TOT, "BRAM": None, "FIFO BRAM": None,
+            "fps": None, "fifo_bits": None}
+
+
 TABLE_HEADER = [
     "est_LUT_pct", "real_LUT_pct", "LUT_err_pct",
     "est_DSP_pct", "real_DSP_pct", "DSP_err_pct",
@@ -108,14 +121,18 @@ def table_row(r) -> list:
     """Real BRAM here excludes FIFO BRAM (the MILP's BRAM estimate does not model FIFOs).
     err_pct = (real - est) / est * 100; blank when there is no estimate."""
     def trio(est, real):
+        if real is None:
+            return ["", "", ""]
         if est is None:
             return ["", f"{real:.2f}", ""]
         err = f"{100 * (real - est) / est:.1f}" if est else "n/a (est = 0)"
         return [f"{est:.2f}", f"{real:.2f}", err]
     g = r.get
     return (trio(g("est_LUT"), r["LUT"]) + trio(g("est_DSP"), r["DSP"])
-            + trio(g("est_BRAM"), r["BRAM"] - r["FIFO BRAM"])
-            + [f"{r['FIFO BRAM']:.2f}", f"{r['fifo_bits']:.0f}", f"{r['LUTRAM']:.2f}"] + trio(g("est_fps"), r["fps"]))
+            + trio(g("est_BRAM"), None if r["BRAM"] is None else r["BRAM"] - r["FIFO BRAM"])
+            + ["" if r["FIFO BRAM"] is None else f"{r['FIFO BRAM']:.2f}",
+               "" if r["fifo_bits"] is None else f"{r['fifo_bits']:.0f}", f"{r['LUTRAM']:.2f}"]
+            + trio(g("est_fps"), r["fps"]))
 
 
 def write_table(path, id_header, ids, rows) -> None:
@@ -135,15 +152,18 @@ def draw_bars(ax, rows, w) -> None:
         ("LUT", col["LUT"], [r["LUT"] for r in rows]),
         ("LUTRAM", col["LUTRAM"], [r["LUTRAM"] for r in rows]),
         ("DSP", col["DSP"], [r["DSP"] for r in rows]),
-        ("BRAM Computation", col["BRAM"], [r["BRAM"] - r["FIFO BRAM"] for r in rows]),
+        ("BRAM Computation", col["BRAM"], [None if r["BRAM"] is None else r["BRAM"] - r["FIFO BRAM"] for r in rows]),
         ("BRAM FIFO", col["FIFO BRAM"], [r["FIFO BRAM"] for r in rows]),
     ]
-    for j, (name, color, vals) in enumerate(bars):
-        ax.bar([i + (j - 2) * w for i in n], vals, w, color=color, label=name, edgecolor=SURFACE, zorder=3)
-    top = [max(v[i] for _, _, v in bars) for i in n]
+    for j, (name, color, vals) in enumerate(bars):  # a missing resource (None) skips that bar
+        idx = [i for i in n if vals[i] is not None]
+        ax.bar([i + (j - 2) * w for i in idx], [vals[i] for i in idx], w, color=color, label=name,
+               edgecolor=SURFACE, zorder=3)
+    top = [max(v[i] for _, _, v in bars if v[i] is not None) for i in n]
     for i, r in enumerate(rows):
-        ax.text(i, top[i] + 1.0, f"{r['fps']:.0f} FPS", ha="center", va="bottom",
-                color=INK, fontsize=9, fontweight="bold")
+        if r["fps"] is not None:
+            ax.text(i, top[i] + 1.0, f"{r['fps']:.0f} FPS", ha="center", va="bottom",
+                    color=INK, fontsize=9, fontweight="bold")
     ax.set_ylim(0, max(top) * 1.15)
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.2), ncol=5, frameon=True, facecolor=SURFACE,
               edgecolor="#c3c2b7", fontsize=8.5, labelcolor=SECONDARY_INK)
@@ -152,18 +172,19 @@ def draw_bars(ax, rows, w) -> None:
 def main() -> int:
     import matplotlib.pyplot as plt
 
-    rows = [load(t, a) for _, t, a in VARIANTS]
-    for (lab, *_), r in zip(VARIANTS, rows):
+    variants = VARIANTS + [("Analytical", None, None)]
+    rows = [load(t, a) for _, t, a in VARIANTS] + [load_analytical()]
+    for (lab, *_), r in zip(variants, rows):
         print(lab.replace("\n", " "), {k: round(v, 2) if v else v for k, v in r.items()})
 
-    write_table(OUT_CSV, ["variant"], [[lab.replace("\n", " ")] for lab, *_ in VARIANTS], rows)
+    write_table(OUT_CSV, ["variant"], [[lab.replace("\n", " ")] for lab, *_ in variants], rows)
     print(f"Wrote {OUT_CSV}")
 
     w = 0.16
     fig, ax = plt.subplots(figsize=(9.5, 5.2), facecolor=SURFACE)
     _style_axes(ax)
     draw_bars(ax, rows, w)
-    ax.set_xticks(range(len(rows)), [v[0] for v in VARIANTS])
+    ax.set_xticks(range(len(rows)), [v[0] for v in variants])
     ax.set_ylabel("% of XCZU7EV", color=INK, fontsize=10, fontweight="bold")
     ax.set_xlabel("DSR Setting", color=INK, fontsize=10, fontweight="bold")
     ax.set_title("Post Synthesis Resource Utilization vs DSR at Fixed Target FPS and Uniform INT4 Quantization", color=INK, fontsize=10.5, fontweight="bold")

@@ -11,7 +11,12 @@ import json
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-ARMS = ["ratchet_1pct", "ratchet_25pct", "ratchet_100pct", "ratchet_200pct", "ratchet_off", "analytical_25pct", "analytical_25pct_finnfifo"]
+MILP_ARMS = ["ratchet_1pct", "ratchet_25pct", "ratchet_100pct", "ratchet_200pct", "ratchet_off"]
+ARMS = [*MILP_ARMS, "analytical_25pct", "analytical_25pct_finnfifo", *[f"{a}_simfifo" for a in MILP_ARMS]]
+# <arm>_simfifo (net_explicit.py / run_simfifo.sh): the MILP arm's folding simulated in the analytical block models, FIFO lists replaced by the simulated ones. Same folding, own build.
+SIMFIFO = {f"{a}_simfifo": a for a in MILP_ARMS}
+# the hardware builds still to run (arms_to_build.txt): the five simulated-FIFO variants. The original MILP arms, analytical_25pct and its finnfifo variant, and the FINN auto-fold control were already built.
+BUILD_ONLY = list(SIMFIFO)
 # hardware-only variants: same folding as their base arm, but the folding json is written WITHOUT the FIFO lists, so the FINN bridge forces nothing and FINN's own rtlsim autosizer sets every FIFO depth
 VARIANTS = {"analytical_25pct_finnfifo": "analytical_25pct"}
 WWIDTH_MAX, BITS = 72, 6
@@ -102,7 +107,7 @@ def main():
             n_dwcs = sum(len(b["dwcs"]) for b in d["block_verification"].values())
             n_fifos = sum(1 for f in d.get("intra_block_fifos", []) if f["depth"] > 2)
         fp = fingerprint(d)
-        groups.setdefault(fp if arm not in VARIANTS else f"{fp}:{arm}", []).append(arm)         # a variant always gets its own build
+        groups.setdefault(fp if (arm not in VARIANTS and arm not in SIMFIFO) else f"{fp}:{arm}", []).append(arm)         # a variant (FIFO-stripped / simulated FIFOs) always gets its own build
         bad = ratchet_violations(d)
         weights = {n: v["simd"] * v["weight_bits"] for n, v in d["per_layer"].items() if not n.endswith(".pool")}   # the analytical pad-MVAU (INT8 weights) is capped in its search too
         rc = _ratchet_cfg(d)
@@ -129,7 +134,7 @@ def main():
         w.writeheader()
         w.writerows(rows)
     (HERE / "arm_groups.json").write_text(json.dumps(groups, indent=1))
-    build = [arms[0] for arms in sorted(groups.values(), key=lambda a: ARMS.index(a[0]))]
+    build = [arms[0] for arms in sorted(groups.values(), key=lambda a: ARMS.index(a[0])) if arms[0] in BUILD_ONLY]
     (HERE / "arms_to_build.txt").write_text("\n".join(build) + "\n")
     with open(HERE / "arm_build_map.csv", "w", newline="") as fh:         # arm -> the build that represents it (identical foldings share one build)
         w = csv.writer(fh)

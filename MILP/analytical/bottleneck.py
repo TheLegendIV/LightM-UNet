@@ -19,6 +19,7 @@ Run: python3 bottleneck.py --cin 32 --k 3 --dilation 8 --stride 1 --v 4 --z 4 --
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import math
 import os
@@ -145,8 +146,30 @@ def _geom(name, cin, cout, hin, win, hout, wout, k=1, s=1, d=1, p=0, op="Conv2d"
     )
 
 
+_EXPLICIT: dict = {}   # fold overrides of explicit_folds(): MVAU layer name -> (pe, simd), stream-node role (Thr_r, Dup, ...) -> pe
+
+
+@contextlib.contextmanager
+def explicit_folds(folds: dict):
+    """Run the block models with GIVEN folds instead of searching them from a cycle budget (net_explicit.py: simulate a MILP folding).
+    Keys: the `layer.name` of every `_search_mvau` call ('reduce', 'mid', 'expand', 'skip_mvau', 'proj', 'up', 'skipconv', 'conv', 'final') -> (pe, simd);
+    the `what` of every `_min_pe` call ('Thr_r', 'Thr_m', 'Thr_e', 'Thr_s', 'Dup', 'Add', 'Thr_out', 'Thr_p', 'Thr_u', 'Thr_k', 'Thr_in', 'Thr_c', 'Thr_act', 'Bias', 'LabelSelect') -> pe.
+    The cycle budget, the weight-width cap and the block-specific extra checks are NOT applied to an explicit fold; only legality (PE | channels, SIMD | Cin*k*k, the MILP's lattice) is. A block model must be given every key it asks for or none of them (a missing key falls back to the search)."""
+    global _EXPLICIT
+    old, _EXPLICIT = _EXPLICIT, dict(folds)
+    try:
+        yield
+    finally:
+        _EXPLICIT = old
+
+
 def _min_pe(channels: int, pixels: int, budget: int, what: str) -> int:
     """Smallest PE | channels with pixels*channels/PE <= budget (narrowest = cheapest, closest to the target)."""
+    if what in _EXPLICIT:
+        pe = _EXPLICIT[what]
+        if pe < 1 or channels % pe:
+            raise ValueError(f"explicit fold {what}: PE={pe} does not divide {channels} channels")
+        return pe
     for pe in fcm.divisors(channels):
         if pixels * (channels // pe) <= budget:
             return pe
@@ -169,6 +192,13 @@ def _search_mvau(layer: LayerGeometry, bits: int, budget: int, weight_bits: int 
     """(PE, SIMD, cost) with the largest cycles <= budget (fully balanced = cycles == budget);
     ties broken by BRAM then LUT. weight_bits defaults to bits. SIMD * weight_bits <= WWIDTH_MAX when that cap is set."""
     wb = bits if weight_bits is None else weight_bits
+    if layer.name in _EXPLICIT:
+        pe, simd = _EXPLICIT[layer.name]
+        if pe < 1 or layer.cout % pe:
+            raise ValueError(f"explicit fold {layer.name}: PE={pe} does not divide Cout={layer.cout}")
+        if simd < 1 or (layer.cin * layer.kh * layer.kw) % simd:     # the MILP lattice: any divisor of MW = Cin*k*k (the SWG then runs at gcd-based simd_swu behind a DWC)
+            raise ValueError(f"explicit fold {layer.name}: SIMD={simd} does not divide MW={layer.cin * layer.kh * layer.kw}")
+        return pe, simd, fcm.layer_cost_pe_simd_auto_ram(layer, wb, bits, pe, simd, force_dsp=True)
     best = None
     for pe in fcm.divisors(layer.cout):
         for simd in _simd_candidates(layer.cin, layer.kh):
@@ -475,7 +505,7 @@ def _fifo_attrs(r: "BottleneckResult", fname: str) -> dict:
 
 
 # escalation schedule: (elastic scale, FIFO after FMPad holds the next frame's padding, uniform depth multiplier)
-_SIZING_SCHEDULE = ((1, False, 1), (1, True, 1), (2, True, 1), (2, True, 2), (4, True, 2), (4, True, 4))
+_SIZING_SCHEDULE = ((1, False, 1), (1, True, 1), (2, True, 1), (2, True, 2), (4, True, 2), (4, True, 4), (8, True, 8), (8, True, 16))   # last two: only reached by a block that fails at x4
 
 
 def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02, max_tries: int = 8, shrink: bool = True,
@@ -541,7 +571,7 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
     r.verification = dict(
         ok=ok, steady_cyc_px=sat.steady_cyc_px, latency_first_out=paced.latency_first_out, frame_cycles=sat.cycles,
         skip_needed_words=need, elastic_depth=elastic, uniform_depth=depth, tries=tries, deadlock=sat.deadlock,
-        frame_periods=sat.frame_periods,
+        frame_periods=sat.frame_periods, full_fifos=sat.full_fifos,
     )
     finalize_fifo_costs(r, fifo_mem)
     if not ok:

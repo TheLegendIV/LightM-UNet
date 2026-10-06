@@ -145,7 +145,7 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
     r.fifo_graph = graph
     r.verification = dict(
         ok=ok, steady_cyc_px=sat.steady_cyc_px, latency_first_out=paced.latency_first_out, frame_cycles=sat.cycles, uniform_depth=depth,
-        tries=tries, deadlock=sat.deadlock, elastic_depth=emap.get("FMPadPix"), skip_needed_words=0, frame_periods=sat.frame_periods,
+        tries=tries, deadlock=sat.deadlock, elastic_depth=emap.get("FMPadPix"), skip_needed_words=0, frame_periods=sat.frame_periods, full_fifos=sat.full_fifos,
     )
     finalize_fifo_costs(r, fifo_mem)
     if not ok:

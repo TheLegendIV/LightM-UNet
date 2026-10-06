@@ -15,6 +15,7 @@ FIFO / DWC modelling on (`--model-fifos`), no latency cap (the MILP's sum of nod
 | `ratchet_off` | `--ratchet-pct none` | no rate rule (element-rate DSR is off by default) |
 | `analytical_25pct` | `MILP/analytical/net_fold.py --ratchet-pct 25 --ratchet-floor 0.33 --mvau-wwidth-max 72` (`run_analytical_arm.sh`) | **analytical flow**, not the MILP: same net / bits / fps / width cap / floor |
 | `analytical_25pct_finnfifo` | the SAME folding as `analytical_25pct`, folding json written WITHOUT the FIFO lists (by `summarize_arms.py`) | **hardware-only variant**: the bridge forces nothing, FINN's own rtlsim autosizer (`largefifo_rtlsim`) sets every FIFO depth |
+| `ratchet_<arm>_simfifo` (5 arms) | the MILP arm's folding, unchanged, with FIFO lists from `MILP/analytical/net_explicit.py` (`run_simfifo.sh`) | **hardware-only variant**: the MILP folding simulated in the analytical block models, every FIFO sized by simulation and grown until the chained whole net does not deadlock; see `fifo_sim_report.md` |
 | `ratchet_ablation_finn_autofold` | none: FINN's own `step_target_fps_parallelization` (250 fps, `mvau_wwidth_max` 72) | **built on hardware**, not a MILP arm |
 
 (The first sweep used 1/2/4/8/16 %: 1, 2, 4 and 8 % gave the identical folding and 16 % was a second one, so the sweep was widened to 1/25/(50)/100/200 %; the 50 % arm gave the same folding as 25 % and was dropped.)
@@ -74,3 +75,26 @@ partition-2 OOC builds of the five distinct foldings plus the FINN auto-fold con
 * FINN still runs its rtlsim FIFO autosizer before the MILP depths are forced (`step_force_fifo_depths_from_milp`): FIFOs that the MILP does not list keep FINN's autosized depth, which inflates the BRAM of the hardware
   numbers relative to the MILP's FIFO model. The bridge reports matched / unresolved FIFOs (`fifo_force_report_partition_<i>.json`).
 * The argmax PE and the FMPadding_Pixel SIMD are not applied by the bridge (only matters for partitions 5-7).
+
+## Whole-net simulation check (analytical design only)
+
+`net_fold.py --whole-net-check` (all 29 verified blocks chained, saturated input, 3 frames, every inter-block FIFO at depth 2) on `analytical_25pct`: no deadlock, last-frame period 210,958 cycles (474 fps, target 400,000),
+first output pixel at 672,900 cycles (6.7 ms). Only this design can be checked this way: the block models choose their own folding from a budget and cannot take a MILP / FINN folding as input, and FINN's own FIFO
+sizing is not modelled. Hardware result reported for these probes: every probe deadlocked except `analytical_25pct` (including the FINN auto-fold control and `analytical_25pct_finnfifo`), i.e. the only build where every
+FIFO of the partition was forced from the simulation passed.
+
+## FIFO simulation of the MILP arms (`<arm>_simfifo`, 2026-10-06)
+
+The hardware probes of the five MILP arms deadlocked; their FIFO lists were closed-form estimates (skip + prefetch + DWC only) and the designs had never been simulated. `MILP/analytical/net_explicit.py`
+(`run_simfifo.sh`, `summarize_simfifo.py`) feeds each arm's folding unchanged into the analytical block models and simulators (`bottleneck.explicit_folds`), sizes every FIFO of every block by simulation (3 frames, saturated input,
+budget = the block's slowest MILP node, the usual sizing schedule extended to uniform x16), then chains all 29 blocks (inter-block FIFOs depth 2) and grows the full FIFOs on a deadlock. Pass = no deadlock and period <= 400,000
+cycles/frame. Results: `fifo_sim_report.md` (per arm and FIFO class), `fifo_changes.csv` (per FIFO: MILP depth / BRAM18 / LUT next to the simulated ones), `<arm>_simfifo/layer_bits_folding_<arm>_simfifo.json` (folding identical,
+`intra_block_fifos` = every simulated FIFO with `milp_depth`, `fifo_sim`, `fifo_model_estimate`).
+
+* No arm deadlocked with all inter-block FIFOs at depth 2; every chain passed in round 1 (periods 327,899 for 1 % / 25 %, 362,022 / 366,938 / 369,446 for 100 % / 200 % / off). Nothing was grown by the chain: the MILP lists simply left
+  most FIFOs unsized. Hardware deadlocks therefore point at FIFOs the MILP did not list and FINN autosized (the sim now lists and sizes all of them), not at a design that deadlocks with correct depths.
+* Intra-block FIFO BRAM18: MILP estimate 91 -> simulated 146 (1 %), 147 (25 %), 187 (100 %, 200 %, off). Skip FIFOs stay near the MILP estimate (median 2336 -> 2339..2480 words); prefetch FIFOs shrink or stay (538 -> 344..538)
+  except the dilated stage2/3 blocks; the new memory is the FIFOs the MILP does not price: FMPad -> SWG and Thr_r -> FMPad of the dilated convs (12-24k words, 12 BRAM18 each) and other intra-block FIFOs (50-64 BRAM18).
+* Window-fill gap: the dilated convs (stage2.x/3.x with dilation 8 / 16) cannot reach their own cycle budget at any depth (+3 ... +15 %: one frame's window fill per frame); they are accepted since their period is still under 400,000.
+* The bias of the final block is simulated at PE 1 (no MILP node; the real build uses 1): 327,680 cycles/frame (305 fps), which bounds every arm's chain period from below; the argmax PE of the MILP arms is not the limit.
+* The simulation cannot see FINN's own FIFO autosizer or DWC buffering inside FINN RTL: a passing sim does not guarantee that the hardware build passes.
