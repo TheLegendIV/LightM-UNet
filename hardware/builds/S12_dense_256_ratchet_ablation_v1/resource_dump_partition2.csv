@@ -1,0 +1,10 @@
+arm,source_build,LUT,LUTRAM,FF,BRAM,DSP_json,DSP_real,fmax_mhz,WNS,rtlsim_status
+ratchet_1pct,S12_dense_256_ratchet_ablation_v1,18077,4559,16264,8,0,25,248.20,5.971,deadlock
+ratchet_25pct,S12_dense_256_ratchet_ablation_v1,18396,4609,16919,8,0,20,231.54,5.681,deadlock
+ratchet_100pct,S12_dense_256_ratchet_ablation_v1,16614,4579,13749,8,0,15,255.04,6.079,deadlock
+ratchet_200pct,S12_dense_256_ratchet_ablation_v1,16614,4579,13749,8,0,15,255.04,6.079,deadlock
+ratchet_off,S12_dense_256_ratchet_ablation_v1,16614,4579,13749,8,0,15,255.04,6.079,deadlock
+analytical_25pct,S12_dense_256_ratchet_ablation_v1,15765,4896,14078,14,0,40,255.43,6.085,ok
+analytical_25pct_finnfifo,S12_dense_256_ratchet_ablation_v1,13856,4070,13544,5,0,40,276.63,6.385,deadlock
+ratchet_ablation_finn_autofold,S12_dense_256_ratchet_ablation_v1,12918,4385,13459,28,0,20,213.90,5.325,deadlock
+partition2_baseline,S12_dense_256_u4_analytical_v1_8way,15676,4854,14066,14,0,40,225.94,5.574,ok (full 8-way build, no deadlock)
