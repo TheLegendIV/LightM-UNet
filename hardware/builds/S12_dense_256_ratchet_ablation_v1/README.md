@@ -12,7 +12,8 @@ Partition-2 OOC builds for the ratchet ablation of the 256x256 S12 dense nearest
 | `ratchet_100pct` | MILP folding C | ratchet_100pct |
 | `ratchet_200pct` | MILP folding D | ratchet_200pct |
 | `ratchet_off` | MILP folding E | ratchet_off |
-| `analytical_25pct` | analytical-flow folding F (net_fold.py) | analytical_25pct |
+| `analytical_25pct` | analytical-flow folding F (net_fold.py), FIFO depths forced from the analytical simulation | analytical_25pct |
+| `analytical_25pct_finnfifo` | same folding F, folding json WITHOUT the FIFO lists (the bridge prints "no inter_block_fifos/intra_block_fifos" and forces nothing): FINN's rtlsim FIFO autosizer decides every depth | analytical_25pct_finnfifo |
 | `ratchet_ablation_finn_autofold` | none: FINN `step_target_fps_parallelization`, `--target-fps 250 --mvau-wwidth-max 72` | FINN auto-fold control |
 
 The list comes from `MILP/artifacts/S12_dense_256_ratchet_ablation_v1/arms_to_build.txt` (rerun `summarize_arms.py` after re-solving: if two arms stop sharing a folding they get their own build).
