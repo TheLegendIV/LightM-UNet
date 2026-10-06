@@ -194,5 +194,23 @@ class TestFifoMemory(unittest.TestCase):
         self.assertGreaterEqual(t["fifo_uram"], r.skip_fifo.mem_uram)
 
 
+class TestWwidthCap(unittest.TestCase):
+    """bottleneck.WWIDTH_MAX = FINN's mvau_wwidth_max: SIMD * weight_bits of every searched MVAU stays under it."""
+
+    def test_cap_is_respected_and_changes_the_fold(self):
+        import bottleneck as bn
+        free = model_bottleneck(**REF)
+        n_free = {x.name: x for x in free.nodes}
+        self.assertGreater(max(n_free[k].simd for k in ("MVAU_r", "MVAU_m", "MVAU_e")) * REF["bits"], 12)       # the free fold is wider than the cap used below
+        bn.WWIDTH_MAX = 12
+        try:
+            capped = model_bottleneck(**REF)
+        finally:
+            bn.WWIDTH_MAX = None
+        for k in ("MVAU_r", "MVAU_m", "MVAU_e"):
+            self.assertLessEqual({x.name: x for x in capped.nodes}[k].simd * REF["bits"], 12, k)
+        self.assertIsNone(bn.WWIDTH_MAX)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

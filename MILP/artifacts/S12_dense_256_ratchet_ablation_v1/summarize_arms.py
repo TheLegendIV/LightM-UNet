@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-ARMS = ["ratchet_1pct", "ratchet_25pct", "ratchet_100pct", "ratchet_200pct", "ratchet_off"]
+ARMS = ["ratchet_1pct", "ratchet_25pct", "ratchet_100pct", "ratchet_200pct", "ratchet_off", "analytical_25pct"]
 WWIDTH_MAX, BITS = 72, 6
 
 
@@ -26,9 +26,18 @@ def fingerprint(d):
     return hashlib.sha1(json.dumps(items).encode()).hexdigest()[:10]
 
 
+def _ratchet_cfg(d):
+    """MILP arm: _diagnostics.ratchet; analytical arm (net_fold.py): _diagnostics.analytical.{ratchet_pct, ratchet_floor} (its native rule is block to block; the edge check below is the MILP's node rule)."""
+    g = d["_diagnostics"]
+    if "ratchet" in g:
+        return g["ratchet"]
+    a = g["analytical"]
+    return dict(pct=a["ratchet_pct"], floor=a["ratchet_floor"], n_constraints=None)
+
+
 def ratchet_violations(d):
     """Edges (nearest compute ancestor -> compute node) that break cycles[C] <= max(floor * F, (1 + pct/100) * cycles[P]); same node set as finn_milp.py."""
-    r = d["_diagnostics"]["ratchet"]
+    r = _ratchet_cfg(d)
     if r["pct"] is None:
         return None
     F = d["_diagnostics"]["max_node_cycles"]
@@ -70,17 +79,27 @@ def main():
         g = d["_diagnostics"]
         fm = g.get("fifo_model", {}).get("totals", {})
         inter = d.get("inter_block_fifos", [])
-        fifo_lut = fm.get("lut", 0) + fm.get("dwc_lut", 0) + sum(f["lut"] for f in inter)
+        if "fifo_model" in g:                                   # MILP arm: total_* already include the priced FIFOs and DWCs
+            fifo_lut = fm.get("lut", 0) + fm.get("dwc_lut", 0) + sum(f["lut"] for f in inter)
+            lut_total, bram_total, fifo_bram = g["total_lut_calibrated"], g["total_bram18k_calibrated"], fm.get("bram18", 0)
+            n_dwcs, n_fifos = len(d.get("dwcs", [])), len(d.get("intra_block_fifos", []))
+        else:                                                   # analytical arm: nodes only in total_*, simulated FIFOs / DWCs on top
+            it = g["intra_block_fifo_totals"]
+            fifo_lut = it["fifo_lut"] + it["dwc_lut"] + g["inter_block_fifo_lut"]
+            lut_total, bram_total, fifo_bram = g["total_lut_calibrated"] + fifo_lut, g["total_bram18k_with_all_fifos"], it["fifo_bram18"]
+            n_dwcs = sum(len(b["dwcs"]) for b in d["block_verification"].values())
+            n_fifos = sum(1 for f in d["intra_block_fifos"] if f["depth"] > 2)
         fp = fingerprint(d)
         groups.setdefault(fp, []).append(arm)
         bad = ratchet_violations(d)
-        weights = {n: v["simd"] * v["weight_bits"] for n, v in d["per_layer"].items() if not n.endswith(".pool")}
+        weights = {n: v["simd"] * v["weight_bits"] for n, v in d["per_layer"].items() if not n.endswith(".pool")}   # the analytical pad-MVAU (INT8 weights) is capped in its search too
+        rc = _ratchet_cfg(d)
         row.update(
-            ratchet_pct=g["ratchet"]["pct"], ratchet_floor=g["ratchet"]["floor"], ratchet_constraints=g["ratchet"]["n_constraints"],
-            lut_total=round(g["total_lut_calibrated"]), lut_nodes=round(g["total_lut_calibrated"] - fifo_lut), lut_fifo_dwc=round(fifo_lut),
-            bram18=g["total_bram18k_calibrated"], bram18_fifos=fm.get("bram18", 0), dsp=g["total_dsp"],
+            ratchet_pct=rc["pct"], ratchet_floor=rc["floor"], ratchet_constraints=rc["n_constraints"],
+            lut_total=round(lut_total), lut_nodes=round(lut_total - fifo_lut), lut_fifo_dwc=round(fifo_lut),
+            bram18=bram_total, bram18_fifos=fifo_bram, dsp=g["total_dsp"],
             slowest_node=g["bottleneck_node"], slowest_cycles=g["bottleneck_cycles"], fps=round(1e8 / g["bottleneck_cycles"], 1),
-            sum_node_cycles_ms=round(g["total_cycles"] / 1e5, 1), n_dwcs=len(d.get("dwcs", [])), n_fifos_gt2=len(d.get("intra_block_fifos", [])),
+            sum_node_cycles_ms=round(g["total_cycles"] / 1e5, 1), n_dwcs=n_dwcs, n_fifos_gt2=n_fifos,
             layers_diff_vs_off=(sum((v["pe"], v["simd"]) != (off["per_layer"][n]["pe"], off["per_layer"][n]["simd"]) for n, v in d["per_layer"].items())
                                 if off and off["status"] == "Optimal" else None),
             fingerprint=fp, ratchet_violations=(None if bad is None else len(bad)), wwidth_max_seen=max(weights.values()),

@@ -56,6 +56,8 @@ def describe(tag: str) -> str:
     base = tag.removeprefix("ratchet_ablation_")
     if base in DESC:
         return DESC[base]
+    if base == "analytical_25pct":
+        return "Analytical-flow folding (MILP/analytical/net_fold.py): block ratchet 25% floor 0.33, mvau_wwidth_max 72, FIFOs / DWCs sized by simulation, inter-block FIFOs depth 2."
     m = re.fullmatch(r"ratchet_(\d+)pct", base)
     if m:
         return f"MILP folding, frame-rate ratchet {m.group(1)}% (floor 0.33), FIFO model on, min-resources."

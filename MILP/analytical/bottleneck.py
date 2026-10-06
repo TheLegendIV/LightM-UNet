@@ -161,14 +161,19 @@ def _simd_candidates(cin: int, k: int) -> list[int]:
     return sorted(cands)
 
 
+WWIDTH_MAX: int | None = None      # FINN mvau_wwidth_max: cap on weight_bits * SIMD of every MVAU (net_fold.py --mvau-wwidth-max; the MILP's --mvau-wwidth-max)
+
+
 def _search_mvau(layer: LayerGeometry, bits: int, budget: int, weight_bits: int | None = None,
                  extra_ok=None) -> tuple[int, int, dict]:
     """(PE, SIMD, cost) with the largest cycles <= budget (fully balanced = cycles == budget);
-    ties broken by BRAM then LUT. weight_bits defaults to bits."""
+    ties broken by BRAM then LUT. weight_bits defaults to bits. SIMD * weight_bits <= WWIDTH_MAX when that cap is set."""
     wb = bits if weight_bits is None else weight_bits
     best = None
     for pe in fcm.divisors(layer.cout):
         for simd in _simd_candidates(layer.cin, layer.kh):
+            if WWIDTH_MAX is not None and simd * wb > WWIDTH_MAX:
+                continue
             cost = fcm.conv_cost_pe_simd(layer, wb, bits, pe, simd, ram_style=fcm.RAM_STYLE_AUTO, force_dsp=True)
             if cost["mvu_cycles"] > budget or cost["fmpad_cycles"] > budget:
                 continue
