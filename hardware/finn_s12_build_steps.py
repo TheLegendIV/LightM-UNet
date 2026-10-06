@@ -22,8 +22,11 @@ from qonnx.util.basic import calculate_matvec_accumulator_range, roundup_to_inte
 
 import finn_stage_partition  # noqa: E402
 from finn.builder.build_dataflow_steps import step_specialize_layers, step_target_fps_parallelization  # noqa: E402
+from finn.transformation.fpgadataflow.insert_dwc import InsertDWC  # noqa: E402
+from finn.transformation.fpgadataflow.insert_fifo import InsertFIFO  # noqa: E402
 from finn.transformation.fpgadataflow.minimize_weight_bit_width import MinimizeWeightBitWidth  # noqa: E402
 from finn.transformation.fpgadataflow.set_fifo_depths import reset_implementation  # noqa: E402
+from finn.transformation.fpgadataflow.specialize_layers import SpecializeLayers  # noqa: E402
 from finn.util.fpgadataflow import is_fpgadataflow_node  # noqa: E402
 
 WEIGHT_OP_TYPES = ("MVAU_hls", "MVAU_rtl", "VVAU_hls", "VVAU_rtl")
@@ -798,13 +801,32 @@ def _find_block_join_nodes(kernel_model, logical_names, prev_block=None):
     return by_name
 
 
+def step_set_fifo_depths_fixed2(model, cfg):
+    """Default FIFO-depth strategy for S12-dense builds -- skips FINN's own auto-sizing entirely (both
+    'characterize' and 'largefifo_rtlsim' run real HLS-rtlsim/Verilator cosimulation, which is what makes
+    builds slow and also what produced the huge, MILP-unaware autosized depths seen on un-bridged edges,
+    e.g. a near-full-frame depth on the edge into LabelSelect). Instead: insert a real StreamingFIFO node on
+    EVERY HW-to-HW edge (create_shallow_fifos=True) at FINN's structural default depth (2, from InsertFIFO's
+    max(outFIFODepths, inFIFODepths) node-attr defaults), and deliberately do NOT call RemoveShallowFIFOs --
+    every inserted FIFO must stay a real node so step_force_fifo_depths_from_milp (called right after this)
+    can see, override, and report EVERY one of them, matched or not."""
+    model = model.transform(InsertDWC())
+    model = model.transform(InsertFIFO(create_shallow_fifos=True, vivado_ram_style=cfg.large_fifo_mem_style))
+    model = model.transform(SpecializeLayers(cfg._resolve_fpga_part()))
+    model = model.transform(GiveUniqueNodeNames())
+    model = model.transform(GiveReadableTensorNames())
+    return model
+
+
 def step_force_fifo_depths_from_milp(model, fifo_plan: dict, min_depth: int = 2, skip_scale: float = 1.0):
     """After FINN's own (autosized) step_set_fifo_depths, overwrite StreamingFIFO* node depths with the
     MILP/analytical per-block-simulated ones (fifo_plan's 'wanted', keyed '<producer_role>=><consumer_role>'),
     matched by role identity via fifo_plan's 'role_of_node' (node name -> role string) + _real_producer/
     _real_consumer. Edges with no match keep FINN's autosized depth (safety net -- same pattern as
     hardware/builds/bottleneck_probe_v1/finn_bottleneck_probe_build.py's step_force_fifo_depths, generalized
-    from one isolated block to a whole partition's worth of block instances)."""
+    from one isolated block to a whole partition's worth of block instances). Every report entry (matched or
+    not) also carries the REAL producer/consumer node name + op_type, so unmatched edges are directly
+    actionable without a separate describe-the-graph pass."""
     role_of_node = fifo_plan["role_of_node"]
     wanted = {tuple(k.split("=>", 1)): v for k, v in fifo_plan["wanted"].items()}
     wanted_by_producer = fifo_plan.get("wanted_by_producer", {})
@@ -823,7 +845,12 @@ def step_force_fifo_depths_from_milp(model, fifo_plan: dict, min_depth: int = 2,
         elif cn_role == "dwc" and pr_role and pr_role != "dwc" and "." in pr_role:
             cn_role = f"{pr_role.rsplit('.', 1)[0]}.dwc"
         stock = inst.get_nodeattr("depth")
-        entry = dict(fifo=n.name, producer_role=pr_role, consumer_role=cn_role, stock_depth=stock, forced_depth=None)
+        entry = dict(
+            fifo=n.name,
+            producer_node=f"{prod.name}({prod.op_type})" if prod is not None else None,
+            consumer_node=f"{cons.name}({cons.op_type})" if cons is not None else None,
+            producer_role=pr_role, consumer_role=cn_role, stock_depth=stock, forced_depth=None,
+        )
         f = wanted.get((pr_role, cn_role)) if (pr_role and cn_role) else None
         producer_only = False
         if f is None and cons is None and pr_role:
@@ -883,7 +910,14 @@ def step_force_fifo_depths_from_milp(model, fifo_plan: dict, min_depth: int = 2,
     print(f"[force fifo depths from MILP] forced {n_forced}/{n_total} StreamingFIFO node(s) "
           f"({n_forced_virtual_dwc} via virtual-DWC collapse, {n_forced_dwc_bridge} via walk-past-DWC bridge, "
           f"{n_forced_producer_only} via producer-only inter-block "
-          f"convention); {n_total - n_forced} left on FINN's autosized depth")
+          f"convention); {n_total - n_forced} left unassigned (kept stock_depth)")
+    unassigned = [e for e in report if e["forced_depth"] is None]
+    if unassigned:
+        print(f"[force fifo depths from MILP] {len(unassigned)} unassigned FIFO(s) -- producer -> consumer "
+              f"(stock_depth):")
+        for e in unassigned:
+            print(f"    {e['fifo']:28s} {str(e['producer_node']):40s} -> {str(e['consumer_node']):40s} "
+                  f"stock_depth={e['stock_depth']}")
     return model, report
 
 

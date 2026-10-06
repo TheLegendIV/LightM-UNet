@@ -47,6 +47,12 @@ _parser.add_argument("--max-workers", type=int, default=4)
 _parser.add_argument("--build-dir", default=None, help="FINN_BUILD_DIR base (default for 'all': finn_build_tmp/<tag>)")
 _parser.add_argument("--output-dir", default=None, help="reuse an existing output dir instead of a new timestamped one")
 _parser.add_argument("--bridge-only", action="store_true", help="write the bridged folding configs and stop")
+_parser.add_argument("--fifo-autosize", choices=["fixed2", "rtlsim"], default="fixed2",
+                      help="'fixed2' (default): skip FINN's own rtlsim-based FIFO autosizing entirely -- every "
+                           "edge gets a real FIFO at depth 2, then step_force_fifo_depths_from_milp overwrites "
+                           "matched ones (unmatched edges stay at 2, reported explicitly, no silent huge "
+                           "autosized depths). 'rtlsim': old behaviour, FINN's own largefifo_rtlsim autosizer "
+                           "runs first (slow, real Verilator cosim) and MILP forcing only overwrites matches.")
 _args = _parser.parse_args()
 if _args.folding_json and not _args.conv_order:
     _parser.error("--folding-json requires --conv-order")
@@ -94,19 +100,20 @@ from finn_s12_build_steps import (  # noqa: E402
     step_force_dsp,
     step_force_fifo_depths_from_milp,
     step_minimize_bit_width_standalone_thresh_aware,
+    step_set_fifo_depths_fixed2,
 )
 
 install_relaxed_stage_boundaries()
 
 
 def _build_one_partition(fn, cfg, prefix, folding_file, idx, full, fold_suffix, tag, build_dir,
-                          allocate_uram=False, uram_budget_blocks=None, fifo_plan=None):
+                          allocate_uram=False, uram_budget_blocks=None, fifo_plan=None, fifo_autosize="fixed2"):
     """full=True: 8-way flow (IP named <prefix>, SynthOutOfContext -> report/ooc_synth_partition_<i>.json).
     full=False: standalone flow (default "finn_design" IP name, required by stock rtlsim's hardcoded wrapper name).
     fifo_plan (this partition's bridged MILP inter_block_fifos/intra_block_fifos, see
-    finn_s12_build_steps.build_partition_folding_config) is applied AFTER FINN's own autosized
-    step_set_fifo_depths -- matched edges get the MILP/analytical-sim depth, unmatched edges keep
-    FINN's autosized one (not a hardcoded depth=2 fallback)."""
+    finn_s12_build_steps.build_partition_folding_config) is applied AFTER the FIFO-depth-assignment step
+    (fixed2 default or rtlsim, see fifo_autosize) -- matched edges get the MILP/analytical-sim depth,
+    unmatched edges keep whatever the depth-assignment step gave them (2 for fixed2, autosized for rtlsim)."""
     if build_dir:
         part_build_dir = os.path.join(build_dir, prefix.rstrip("_"))
         os.makedirs(part_build_dir, exist_ok=True)
@@ -129,7 +136,7 @@ def _build_one_partition(fn, cfg, prefix, folding_file, idx, full, fold_suffix, 
     m = step_force_dsp(m, cfg)
     m = step_hw_codegen(m, cfg)
     m = step_hw_ipgen(m, cfg)
-    m = step_set_fifo_depths(m, cfg)
+    m = step_set_fifo_depths(m, cfg) if fifo_autosize == "rtlsim" else step_set_fifo_depths_fixed2(m, cfg)
     if fifo_plan is not None:
         m, fifo_report = step_force_fifo_depths_from_milp(m, fifo_plan)
         report_dir = os.path.dirname(fn) if full else cfg.output_dir
@@ -276,7 +283,8 @@ def main():
             os.makedirs(pcfg.output_dir, exist_ok=True)
         jobs.append((getCustomOp(sdp_nodes[i]).get_nodeattr("model"), pcfg, sdp_nodes[i].name + "_",
                      folding_files[i], i, full, fold_suffix, _args.tag, build_dir,
-                     _args.allocate_uram, _args.uram_budget_blocks, fifo_plans.get(i) if _args.folding_json else None))
+                     _args.allocate_uram, _args.uram_budget_blocks, fifo_plans.get(i) if _args.folding_json else None,
+                     _args.fifo_autosize))
 
     results = {}
     if len(jobs) == 1:

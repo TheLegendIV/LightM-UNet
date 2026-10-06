@@ -1,0 +1,218 @@
+[
+  {
+    "fifo": "StreamingFIFO_rtl_0",
+    "producer_node": null,
+    "consumer_node": "Thresholding_rtl_0(Thresholding_rtl)",
+    "producer_role": null,
+    "consumer_role": "up5.out_act",
+    "stock_depth": 2,
+    "forced_depth": null
+  },
+  {
+    "fifo": "StreamingFIFO_rtl_1",
+    "producer_node": "Thresholding_rtl_0(Thresholding_rtl)",
+    "consumer_node": "DuplicateStreams_hls_0(DuplicateStreams_hls)",
+    "producer_role": "up5.out_act",
+    "consumer_role": "regular5.0.dup",
+    "stock_depth": 2,
+    "forced_depth": 2
+  },
+  {
+    "fifo": "StreamingFIFO_rtl_2",
+    "producer_node": "DuplicateStreams_hls_0(DuplicateStreams_hls)",
+    "consumer_node": "Thresholding_rtl_1(Thresholding_rtl)",
+    "producer_role": "regular5.0.dup",
+    "consumer_role": "regular5.0.thr_s",
+    "stock_depth": 2,
+    "forced_depth": 2
+  },
+  {
+    "fifo": "StreamingFIFO_rtl_3",
+    "producer_node": "DuplicateStreams_hls_0(DuplicateStreams_hls)",
+    "consumer_node": "MVAU_rtl_0(MVAU_rtl)",
+    "producer_role": "regular5.0.dup",
+    "consumer_role": "regular5.0.mvau_r",
+    "stock_depth": 2,
+    "forced_depth": 2
+  },
+  {
+    "fifo": "StreamingFIFO_rtl_4",
+    "producer_node": "MVAU_rtl_0(MVAU_rtl)",
+    "consumer_node": "Thresholding_rtl_2(Thresholding_rtl)",
+    "producer_role": "regular5.0.mvau_r",
+    "consumer_role": "regular5.0.thr_r",
+    "stock_depth": 2,
+    "forced_depth": 2
+  },
+  {
+    "fifo": "StreamingFIFO_rtl_5",
+    "producer_node": "Thresholding_rtl_1(Thresholding_rtl)",
+    "consumer_node": "AddStreams_hls_0(AddStreams_hls)",
+    "producer_role": "regular5.0.thr_s",
+    "consumer_role": "regular5.0.add",
+    "stock_depth": 2,
+    "forced_depth": 564
+  },
+  {
+    "fifo": "StreamingFIFO_rtl_6",
+    "producer_node": "Thresholding_rtl_2(Thresholding_rtl)",
+    "consumer_node": "FMPadding_rtl_0(FMPadding_rtl)",
+    "producer_role": "regular5.0.thr_r",
+    "consumer_role": "regular5.0.fmpad",
+    "stock_depth": 2,
+    "forced_depth": 132
+  },
+  {
+    "fifo": "StreamingFIFO_rtl_7",
+    "producer_node": "FMPadding_rtl_0(FMPadding_rtl)",
+    "consumer_node": "ConvolutionInputGenerator_rtl_0(ConvolutionInputGenerator_rtl)",
+    "producer_role": "regular5.0.fmpad",
+    "consumer_role": "regular5.0.swg",
+    "stock_depth": 2,
+    "forced_depth": 2
+  },
+  {
+    "fifo": "StreamingFIFO_rtl_8",
+    "producer_node": "ConvolutionInputGenerator_rtl_0(ConvolutionInputGenerator_rtl)",
+    "consumer_node": "VVAU_hls_0(VVAU_hls)",
+    "producer_role": "regular5.0.swg",
+    "consumer_role": "regular5.0.mvau_m",
+    "stock_depth": 2,
+    "forced_depth": 2
+  },
+  {
+    "fifo": "StreamingFIFO_rtl_9",
+    "producer_node": "VVAU_hls_0(VVAU_hls)",
+    "consumer_node": "Thresholding_rtl_3(Thresholding_rtl)",
+    "producer_role": "regular5.0.mvau_m",
+    "consumer_role": "regular5.0.thr_m",
+    "stock_depth": 2,
+    "forced_depth": 2
+  },
+  {
+    "fifo": "StreamingFIFO_rtl_10",
+    "producer_node": "Thresholding_rtl_3(Thresholding_rtl)",
+    "consumer_node": "MVAU_rtl_1(MVAU_rtl)",
+    "producer_role": "regular5.0.thr_m",
+    "consumer_role": "regular5.0.mvau_e",
+    "stock_depth": 2,
+    "forced_depth": 2
+  },
+  {
+    "fifo": "StreamingFIFO_rtl_11",
+    "producer_node": "MVAU_rtl_1(MVAU_rtl)",
+    "consumer_node": "Thresholding_rtl_4(Thresholding_rtl)",
+    "producer_role": "regular5.0.mvau_e",
+    "consumer_role": "regular5.0.thr_e",
+    "stock_depth": 2,
+    "forced_depth": 2
+  },
+  {
+    "fifo": "StreamingFIFO_rtl_12",
+    "producer_node": "Thresholding_rtl_4(Thresholding_rtl)",
+    "consumer_node": "AddStreams_hls_0(AddStreams_hls)",
+    "producer_role": "regular5.0.thr_e",
+    "consumer_role": "regular5.0.add",
+    "stock_depth": 2,
+    "forced_depth": 2
+  },
+  {
+    "fifo": "StreamingFIFO_rtl_13",
+    "producer_node": "AddStreams_hls_0(AddStreams_hls)",
+    "consumer_node": "Thresholding_rtl_5(Thresholding_rtl)",
+    "producer_role": "regular5.0.add",
+    "consumer_role": "regular5.0.out_act",
+    "stock_depth": 2,
+    "forced_depth": 2
+  },
+  {
+    "fifo": "StreamingFIFO_rtl_14",
+    "producer_node": "Thresholding_rtl_5(Thresholding_rtl)",
+    "consumer_node": "FMPadding_Pixel_hls_0(FMPadding_Pixel_hls)",
+    "producer_role": "regular5.0.out_act",
+    "consumer_role": null,
+    "stock_depth": 2,
+    "forced_depth": null
+  },
+  {
+    "fifo": "StreamingFIFO_rtl_15",
+    "producer_node": "FMPadding_Pixel_hls_0(FMPadding_Pixel_hls)",
+    "consumer_node": "StreamingDataWidthConverter_rtl_0(StreamingDataWidthConverter_rtl)",
+    "producer_role": null,
+    "consumer_role": "dwc",
+    "stock_depth": 2,
+    "forced_depth": null
+  },
+  {
+    "fifo": "StreamingFIFO_rtl_16",
+    "producer_node": "StreamingDataWidthConverter_rtl_0(StreamingDataWidthConverter_rtl)",
+    "consumer_node": "FMPadding_rtl_1(FMPadding_rtl)",
+    "producer_role": "dwc",
+    "consumer_role": null,
+    "stock_depth": 2,
+    "forced_depth": null
+  },
+  {
+    "fifo": "StreamingFIFO_rtl_17",
+    "producer_node": "FMPadding_rtl_1(FMPadding_rtl)",
+    "consumer_node": "ConvolutionInputGenerator_rtl_1(ConvolutionInputGenerator_rtl)",
+    "producer_role": null,
+    "consumer_role": null,
+    "stock_depth": 2,
+    "forced_depth": null
+  },
+  {
+    "fifo": "StreamingFIFO_rtl_18",
+    "producer_node": "ConvolutionInputGenerator_rtl_1(ConvolutionInputGenerator_rtl)",
+    "consumer_node": "StreamingDataWidthConverter_rtl_1(StreamingDataWidthConverter_rtl)",
+    "producer_role": null,
+    "consumer_role": "dwc",
+    "stock_depth": 2,
+    "forced_depth": null
+  },
+  {
+    "fifo": "StreamingFIFO_rtl_19",
+    "producer_node": "StreamingDataWidthConverter_rtl_1(StreamingDataWidthConverter_rtl)",
+    "consumer_node": "MVAU_rtl_2(MVAU_rtl)",
+    "producer_role": "final.dwc",
+    "consumer_role": "final.mvau_f",
+    "stock_depth": 2,
+    "forced_depth": 2
+  },
+  {
+    "fifo": "StreamingFIFO_rtl_20",
+    "producer_node": "MVAU_rtl_2(MVAU_rtl)",
+    "consumer_node": "StreamingDataWidthConverter_rtl_2(StreamingDataWidthConverter_rtl)",
+    "producer_role": "final.mvau_f",
+    "consumer_role": "final.dwc",
+    "stock_depth": 2,
+    "forced_depth": null
+  },
+  {
+    "fifo": "StreamingFIFO_rtl_21",
+    "producer_node": "StreamingDataWidthConverter_rtl_2(StreamingDataWidthConverter_rtl)",
+    "consumer_node": "ChannelwiseOp_hls_0(ChannelwiseOp_hls)",
+    "producer_role": "dwc",
+    "consumer_role": null,
+    "stock_depth": 2,
+    "forced_depth": null
+  },
+  {
+    "fifo": "StreamingFIFO_rtl_22",
+    "producer_node": "ChannelwiseOp_hls_0(ChannelwiseOp_hls)",
+    "consumer_node": "LabelSelect_hls_0(LabelSelect_hls)",
+    "producer_role": null,
+    "consumer_role": null,
+    "stock_depth": 2,
+    "forced_depth": null
+  },
+  {
+    "fifo": "StreamingFIFO_rtl_23",
+    "producer_node": "LabelSelect_hls_0(LabelSelect_hls)",
+    "consumer_node": null,
+    "producer_role": null,
+    "consumer_role": null,
+    "stock_depth": 2,
+    "forced_depth": null
+  }
+]
