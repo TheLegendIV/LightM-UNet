@@ -1,0 +1,31 @@
+Overriding CANDIDATE_BITS to (6,) (from --candidate-bits).
+Predecessor map: 86/88 layers have a real, traced predecessor (the rest are the network's own first layer(s), with no real predecessor to fall back to anything but self-sensitivity).
+Extra dataflow nodes: 145 {'input_quant': 1, 'concat': 1, 'act': 1, 'upsample': 2, 'out_act': 27, 'residual_add': 27, 'skip_quant': 27, 'add': 27, 'pool_quant': 1, 'argmax': 1, 'dup': 28, 'pad_mvau': 2}.
+Note: ['down1.pool', 'down2.pool', 'initial.pool'] have no sensitivity entry (MaxPool2d, no weight, never HAWQ-measured) -- given a fixed raw sensitivity of 0.0 for every (w,a), see module docstring.
+Traced 88 layers (per-layer granularity, no block grouping). candidate_bits=(6,) -> 1 (w,a) pairs. y: 88 binaries, z: 4427 binaries (4515 total). Solving (time_limit=600s, gap_rel=0.001)...
+--target-fps 250.0 @ 100.0MHz -> every node <= 400000 cycles (hard constraint).
+Wrote MILP/artifacts/S12_dense_256_ratchet_ablation_v1/ratchet_1pct/layer_bits_folding_ratchet_1pct.json
+ILP status: Optimal
+LUT used (calibrated): 99161 (43.0% of 230400 budget) -- GUARANTEED (hard constraint).
+BRAM_18K used (calibrated): 101 (16.2% of 624 budget) -- GUARANTEED (hard constraint).
+DSP used: 178 (10.3% of 1728 budget) -- GUARANTEED (hard constraint).
+Bottleneck: initial.conv at 147971 cycles/frame -> 675.8 FPS @ 100.0MHz
+Total cycles (sum over nodes): 16670795
+Branch imbalance (diagnostic, 28 fork/join diamonds): median=11.00x max=88.00x
+Chain-rate imbalance (diagnostic, 232 nodes with a descendant): median=16.00x max=128.00x
+  input_quant   x  1: LUT       88  BRAM_18K    0.0  DSP    0  cycles      65536
+  concat        x  1: LUT        0  BRAM_18K    0.0  DSP    0  cycles      16384
+  act           x  1: LUT      116  BRAM_18K    0.0  DSP    0  cycles      65536
+  upsample      x  2: LUT        0  BRAM_18K    0.0  DSP    0  cycles      20480
+  out_act       x 27: LUT     8729  BRAM_18K    0.0  DSP    0  cycles    1212416
+  residual_add  x 27: LUT     7384  BRAM_18K    0.0  DSP    0  cycles    1212416
+  skip_quant    x 27: LUT     9502  BRAM_18K    0.0  DSP    0  cycles    1097728
+  add           x 27: LUT     3537  BRAM_18K    0.0  DSP    0  cycles    1212416
+  pool_quant    x  1: LUT       88  BRAM_18K    0.0  DSP    0  cycles      65536
+  argmax        x  1: LUT      320  BRAM_18K    0.0  DSP    0  cycles      65536
+  dup           x 28: LUT     3220  BRAM_18K    0.0  DSP    0  cycles    1277952
+  pad_mvau      x  2: LUT      407  BRAM_18K    0.0  DSP    3  cycles     262144
+Wrote MILP/artifacts/S12_dense_256_ratchet_ablation_v1/ratchet_1pct/pruning_layer_bits_folding_ratchet_1pct.json
+Wrote MILP/artifacts/S12_dense_256_ratchet_ablation_v1/ratchet_1pct/final_output.onnx
+Wrote MILP/artifacts/S12_dense_256_ratchet_ablation_v1/ratchet_1pct/summary.csv.
+Wrote MILP/artifacts/S12_dense_256_ratchet_ablation_v1/ratchet_1pct/run_args.json.

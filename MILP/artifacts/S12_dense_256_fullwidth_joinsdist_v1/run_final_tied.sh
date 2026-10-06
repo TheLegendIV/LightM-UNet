@@ -7,5 +7,5 @@ OUT=MILP/artifacts/S12_dense_256_fullwidth_joinsdist_v1/final_tied_dsr1.04
 python3 MILP/finn_milp.py --config config_12_dense_relu_nearest_conv_upsample_256 \
   --sensitivity-file MILP/artifacts/layer_sensitivity_12_dense_relu_nearest_conv_upsample_256.json \
   --candidate-bits 4,6,8 --max-lut-fraction 0.7 --max-bram-fraction 0.4 --max-dsp-fraction 0.9 \
-  --force-dsp --lexicographic --target-fps 100 --dsr-ratio 1.04 \
+  --force-dsp --lexicographic --target-fps 100 --dsr-pct 4 \
   --time-limit 900 --gap-rel 0.005 --out-file $OUT/layer_bits_folding_final.json > $OUT/solve.log 2>&1

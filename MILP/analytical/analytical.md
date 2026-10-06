@@ -284,7 +284,14 @@ Pool route for the 2D maxpool (initial and downsampling blocks, `pool_impl="swg_
 Final deconvolution (fnl_block.py, fnl_block_sim.py, test_fnl_block.py; not a bottleneck: single path), reference `LayerQuantEnetFINN.final` =
 `QuantConvTranspose2d(c5 -> out_channels, k = 2, s = 2)`, U4: 4 -> 5 channels, 128x128 -> 256x256.
 
-    Thr_in -> FMPadPix (zero insertion) -> SWG_u (2x2) -> MVAU_f (4*Cin -> Cout) -> [Bias (ChannelwiseOp add)]
+    FMPadPix (zero insertion) -> FMPad_u (pad 1) -> SWG_u (2x2) -> [DWC] -> MVAU_f (4*Cin -> Cout) -> [Bias (ChannelwiseOp add)] -> LabelSelect (argmax over the 5 channels)
+
+  Update 2026-10-06, after the real FINN build of this network (hardware/builds/S12_dense_256_u4_analytical_v1/probes/partition7_fifo_check_20261005_222226): FINN lowers the transposed conv to
+  FMPadding_Pixel (zero insertion only, (2H-1)^2 grid) followed by a separate FMPadding_rtl (pad 1, (2H+1)^2) -> the model has both (`FMPadPix`, `FMPad_u`; the up blocks too);
+  the bias IS lowered (ChannelwiseOp, INT16 -> INT17); the network ends in a `LabelSelect` argmax (`argmax=True`, role `label_select`): foldable PE | 5, ceil(5/PE) cycles per pixel
+  (327,680 per frame at PE 1, 65,536 at PE 5), UINT8 label out, one word per pixel at the sink. In parallel_window mode (MVAU SIMD > Cin: `initial.conv`, `final`) the SWG emits a whole KxK window per word
+  and FINN inserts a DWC that narrows it to the MVAU's SIMD (96 -> 48 bits in the final block): modelled as the edge `SWG_u->MVAU_f` / `SWG->MVAU_c` / `SWG_u->MVAU_u` when it applies.
+  The counts of FMPadding / ConvolutionInputGenerator / FMPadding_Pixel / UpsampleNearestNeighbour / StreamingMaxPool nodes equal the real partitions 0-7 (29 / 31 / 3 / 2 / 3).
 
 * No Dup, no skip FIFO, no join, no output threshold (raw logit): only ordinary FIFOs; `BottleneckResult.skip_fifo` is None.
 * Pixel domains: FMPadPix emits (2H+1)(2W+1) pixels (66,049 cycles at SIMD = Cin); SWG_u and MVAU_f work at OUTPUT resolution (65,536 pixels), with 4 * Cin * Cout MACs per output pixel

@@ -11,6 +11,6 @@ mkdir -p $OUT
 python3 MILP/finn_milp.py --config config_12_dense_relu_nearest_upsample_wm \
   --sensitivity-file MILP/artifacts/layer_sensitivity_12_dense_relu_nearest_upsample_wm.json \
   --candidate-bits 4,6,8 --max-lut-fraction 1.0 --max-bram-fraction 1.0 --max-dsp-fraction 1.0 \
-  --max-uram-fraction 1.0 --force-dsp --target-fps $FPS --dsr-ratio 2 --mvau-wwidth-max 80 \
+  --max-uram-fraction 1.0 --force-dsp --target-fps $FPS --dsr-pct 100 --mvau-wwidth-max 80 \
   --lexicographic --time-limit 900 --gap-rel 0.005 \
   --out-file $OUT/layer_bits_folding_$SUB.json > $OUT/solve.log 2>&1

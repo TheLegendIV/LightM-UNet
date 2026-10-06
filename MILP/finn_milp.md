@@ -32,7 +32,7 @@ extra dataflow node (see "Dataflow graph"):
   here, evaluated by `finn_cost_model.layer_cost_pe_simd` at that exact point.
 - `z[node, pe, simd, ram_style, variant, w, bits]` — the same, for an extra
   node, over that node's own legal options (`extra_node_options`).
-- `max_downstream_rate[node]` — continuous, only with `--dsr-ratio`.
+- `max_downstream_rate[node]` — continuous, only with `--dsr-pct`.
 
 **Objective**
 ```
@@ -56,7 +56,7 @@ ever needed again, reintroduce the dial rather than repurposing this one.
   at the chosen bits.
 - Extra nodes: exactly one option each; threshold bits with sources tied to
   `max(sources)` (below).
-- Optional rate coherence (`--pbi-ratio` / `--dsr-ratio`, below).
+- Optional rate coherence (`--pbi-ratio` / `--dsr-pct`, below).
 - Hard budgets, always enforced (not soft penalties):
   `Σ z·LUT ≤ f_lut·230,400`, `Σ z·BRAM18 ≤ f_bram·624`,
   `Σ z·DSP ≤ f_dsp·1,728`, `Σ z·URAM ≤ f_uram·96` (xczu7ev-ffvc1156-2-e).
@@ -130,6 +130,7 @@ model code — not exported ONNX graphs.
 | `out_act` | Thresholding_rtl | PE \| C | H·W·⌈C/PE⌉ | threshold fit | `max(sources)` = deployed rule |
 | `dup` | DuplicateStreams_hls | PE \| C | H·W·⌈C/PE⌉ | 115 LUT/PE (provisional) | — |
 | `upsample` | UpsampleNearestNeighbour_hls | none (all channels/cycle) | H_out·W_out | 0 (unknown) | — |
+| `argmax` (`final.argmax`) | LabelSelect_hls | PE \| labels (C = 5: PE 1 or 5) | H·W·⌈C/PE⌉ (327,680 at PE 1, 65,536 at PE 5 for 256×256) | 64 LUT/PE (**placeholder**, no FINN data yet) | — |
 
 Plus, inside every padded conv's own cost: **FMPadding** (and FMPadding_Pixel +
 border padding for ConvTranspose), cycles = padded H·W·⌈C/SIMD⌉ with SIMD tied
@@ -179,14 +180,44 @@ Notes and evidence:
   weights are a constant identity/zero matrix whose FINN datatype wasn't
   checked. Calibrate from per-node Vivado hierarchy reports
   (`hier_partition_N.rpt`, no longer present locally).
-- **Not modeled:** FIFOs, data-width converters, the extra INT8 threshold seen
+- **Not modeled:** FIFOs, data-width converters (the analytical blocks in `MILP/analytical/` size both), the final layer's bias ChannelwiseOp, FMPadding stages, the extra INT8 threshold seen
   on the InitialBlock pool path in the built graph (no Brevitas quantizer
   explains it).
 - Real 8-way build: the residual-join thresholds alone were 68 nodes =
   4,592 LUT and ~247 BRAM18-eq unpriced before 2026-09-26 — older solves
   under-report BRAM badly (the deployed `bram20` plan reported 124 BRAM18).
 
-## Rate coherence: `--pbi-ratio RATIO` (join balance) and `--dsr-ratio RATIO` (chain coherence)
+## FIFOs and DWCs: `--model-fifos` (opt-in, 2026-10-06)
+
+Off by default (the output is then byte-compatible with earlier runs). With the flag, `fifo_model.py` prices what the analytical blocks (`MILP/analytical/`) showed to matter, inside the solve:
+
+* the **skip FIFO** of every residual diamond (`find_fork_join_diamonds`, join kind `add`, long branch holding a padded windowed conv): `(n_fill + max(4, 8.5% n_fill))` pixels of `Cout/PE` words,
+  `n_fill = pad*W + pad + 1` (x1.10 for downsampling blocks). Its size in bits is ~fold-independent; the PE of the node before the join only sets the stream width (BRAM aspect, pow2 rounding via
+  `bottleneck.fifo_memory`). Verified against the 25 residual blocks of the analytical artifact (est. within -1%..+8%, test_fifo_model.py);
+* the **prefetch FIFO** in front of every padded 3x3 conv's FMPadding: `n_fill*(Cin/SIMD_swu) + 2` words of `SIMD_swu*bits` (matches the verified depths within 4 words);
+* every **DWC**: the internal ones of a node (MVAU -> its threshold when PE != PE_t, parallel_window SWG -> MVAU) and the one on each dataflow edge whose stream widths differ
+  (`fcm.dwc_cost`; widths = PE/SIMD x bits, accumulator bits inside conv nodes). Inter-node DWCs use width-class indicators and pair variables m >= u_P[w] + u_C[w'] - 1.
+All terms are linear in z and added to the LUT / BRAM / URAM budget rows and to the `--min-resources` objective; `total_*` in `_diagnostics` then include them.
+Inter-block FIFOs are fixed at depth 2 (priced like the analytical artifact). NOT priced (no closed form, sized by the analytical simulations): the downsampling `Dup -> SWG_r` feed, the up-block and
+initial-block `FIFO main`. Needs one `--candidate-bits` value. Extra output: top-level `intra_block_fifos` (priced FIFOs), `inter_block_fifos`, `dwcs`, `_diagnostics.fifo_model`.
+On S12-256 INT6 (force-dsp, min-resources, 250 fps) it finds 25 skip + 26 prefetch FIFOs = 146 BRAM18 (the analytical design: 143) and 175 DWCs (4.7k LUT; the analytical folding has 99).
+
+## Rate coherence: `--pbi-ratio RATIO` (join balance) and `--dsr-pct PCT` (chain coherence)
+
+**Frame-rate ratchet: `--ratchet-pct 4 --ratchet-floor 0.6` (2026-10-06, ON by default, needs `--target-fps`).** "Downstream no slower than upstream" in cycles PER FRAME (comparable across resolutions,
+unlike per element): for every dataflow edge P -> C between COMPUTE nodes (conv / MVAU layers, the downsampling pad-MVAU, the argmax) `cycles[C] <= max(floor * F, (1 + pct/100) * cycles[P])`, F = clock / target-fps (400,000 at 250 fps, so the floor is 240,000 cycles).
+Everything else (thresholds, dup, add, pools, upsample, concat, the 1-channel input quantizer) is relayed through (C is compared with its nearest compute ancestors); forks and joins need no special case. Thresholds / dup / add
+are NOT ratchet nodes: their slowest fold is tiny (a 4-channel threshold at PE 1 = 65,536 cycles) while the conv behind them cannot be faster than ~131,072 cycles under a 72-bit width cap, so an edge rule on them is
+infeasible at any small pct (found on the S12-256 ratchet ablation, where floor 0 is infeasible below +100% and the smallest feasible round floor is 0.33). Because each node picks
+from a few distinct cycle values, the disjunction is written as pair exclusions on cycle-class indicators: `u_P[c1] + sum(u_C[c2] for c2 > max(floor F, (1+pct) c1)) <= 1` (no big-M, no slack variable).
+It is the analytical build's block ratchet (`MILP/analytical/net_fold.py --ratchet-pct --ratchet-floor`) applied edge by edge instead of block by block. The floor is what usually binds: with it a node may always
+use up to 0.6 F, so the ratchet only bites when an upstream node is slower than 0.6 F / 1.04. `--ratchet-pct none` turns it off (old sweeps that passed `--target-fps` without the flag now get it: add `--ratchet-pct none`
+to reproduce them).
+
+**`--dsr-pct` (2026-10-06, OFF by default):** the ELEMENT-rate DSR below, in PERCENT (replaces `--dsr-ratio R`; R = 1 + pct/100; `--dsr-ratio-pass2` became `--dsr-pct-pass2`; `--min-dsr` searches the smallest
+feasible allowance). It is no longer the default because the 1-channel network input has a fixed element rate of 1.0 cycle per element, so at 4% every later stage must produce an element per cycle too: low-resolution stages
+then run 16-18x faster per frame than the fps target needs (S12-256 INT6: 1,280 DSP / 120k LUT against 121-145 DSP / 93k LUT with the ratchet). Result JSONs keep the ratio form (`dsr_ratio`).
+The final `argmax` node is exempt like the fixed-cycle nodes (its output has one element per pixel against C at its input, so its element-rate would be C x the final conv's by construction).
 
 Two independent constraint families on the dataflow graph (so threshold
 nodes and ordinary residual joins are included), each gated by its own flag.
@@ -221,7 +252,7 @@ names) each default to `None` (off); either, both, or neither may be set.
    from a diagnostic to the actual enforced constraint, and both now share
    `find_fork_join_diamonds` so they can never diverge on what counts as a
    diamond again.)
-2. **`--dsr-ratio` — chain coherence (downstream rate).** `rate[D] ≤ ratio ·
+2. **`--dsr-pct` — chain coherence (downstream rate).** `rate[D] ≤ ratio ·
    rate[L]` for every descendant D of an ancestor L, with
    `rate = cycles / (C·H·W of the node's own output)` so nodes are
    comparable across resolution changes. Only the "producer outruns
@@ -281,7 +312,7 @@ Neither family prices the FIFO itself; they only exclude badly skewed plans.
 History: `--max-join-imbalance-ratio` (join-only, separate flag) and an
 unnamed chain-coherence flag were folded into one shared
 `--optimize-downstream-rate` on 2026-09-26, then **split back into
-`--pbi-ratio` and `--dsr-ratio` on 2026-09-29** so the two mechanisms can be
+`--pbi-ratio` and `--dsr-pct` on 2026-09-29** so the two mechanisms can be
 swept independently again (see top of this section). Before the dataflow
 graph existed, the conv-only predecessor map's one-branch-point cap hid
 every ordinary chained RegularBottleneck join — only UpsamplingBottleneck
@@ -354,8 +385,8 @@ Every run so far passed `--force-dsp`, which masked this.
 | `--force-dsp` | forced-DSP calibration factors (`finn_cost_model.md`; currently identity) instead of the auto-resType avg_bits table. |
 | `--target-fps` | throughput target: every node ≤ `clock_mhz·1e6/target_fps` cycles (the physically meaningful rate constraint for a dataflow pipeline). |
 | `--max-latency-ms` / `--clock-mhz` | hard cap on the sum of cycles — a sequential-execution proxy, not the pipeline's real latency (see "Formulation"). The builds run at 100 MHz. |
-| `--dsr-ratio` / `--pbi-ratio` | see Rate coherence; independent flags, either/both/neither may be set. |
-| `--min-dsr` | find the smallest feasible `--dsr-ratio` (to 0.01, search range 1.01..20; parallel zero-objective feasibility probes) and solve with it, both passes under `--lexicographic`. Exclusive with `--dsr-ratio`. DSR multiplies a linear rate expression, so a DSR *variable* would be bilinear — it is searched, not optimized. |
+| `--dsr-pct` / `--pbi-ratio` | see Rate coherence; independent flags, either/both/neither may be set. |
+| `--min-dsr` | find the smallest feasible `--dsr-pct` (to 0.01, search range 1.01..20; parallel zero-objective feasibility probes) and solve with it, both passes under `--lexicographic`. Exclusive with `--dsr-pct`. DSR multiplies a linear rate expression, so a DSR *variable* would be bilinear — it is searched, not optimized. |
 | `--max-lut-fraction` / `--max-bram-fraction` / `--max-dsp-fraction` / `--max-uram-fraction` | maximum fraction of the device (renamed from `--hard-*-fraction`, 2026-10-02). |
 | `--force-serial` | PE=SIMD=1 everywhere, thresholds included. |
 | `--time-limit` / `--gap-rel` | CBC limits (default 1800 s, 2%). |
@@ -392,7 +423,7 @@ Next to `--out-file`:
   domain `finn_milp`, attributes `pe`, `simd`, bits, `cycles`,
   `ii_cycles_per_pixel` (cycles / output pixels, NOT channel-normalized),
   `rate_elems_per_cycle`, `chain_rate_cycles_per_elem` (cycles / (C·H·W) —
-  channel-normalized, exactly `--dsr-ratio`'s own `rate_expr`, directly
+  channel-normalized, exactly `--dsr-pct`'s own `rate_expr`, directly
   checkable node-by-node against `ratio · slowest-descendant-value`),
   `pct_of_slowest_node`, `is_slowest_node`, LUT, BRAM, DSP, URAM, and (convs)
   `mvu_cycles` / `swu_cycles` / `thr_pe`. The graph doc_string carries the run
@@ -420,21 +451,21 @@ Next to `--out-file`:
 - `_diagnostics.chain_rate_imbalance` (`milp_outputs.compute_chain_rate_imbalance_report`,
   added 2026-09-29) — the achieved-value counterpart to `branch_imbalance`,
   but for chain coherence: `max(rate[D] for every descendant D of L) /
-  rate[L]` per node L with a real descendant — exactly what `--dsr-ratio`
+  rate[L]` per node L with a real descendant — exactly what `--dsr-pct`
   bounds via `max_downstream_rate` at solve time, computed here post-solve so
-  it can be tracked even when `--dsr-ratio` itself is off. Exists
+  it can be tracked even when `--dsr-pct` itself is off. Exists
   specifically so a sweep can ask "does tightening `--pbi-ratio` alone move
-  chain coherence's own natural ratio" without needing `--dsr-ratio` enabled
+  chain coherence's own natural ratio" without needing `--dsr-pct` enabled
   at all (the mirror question to what `branch_imbalance` already answered for
   `--pbi-ratio`). Same exemption caveat as `branch_imbalance`: a fixed-cycle
   node (no folding freedom — e.g. `up4.upsample`) is exempt from the enforced
   constraint's OWN outer bound, so it can show a very large ratio (confirmed
-  real: `up4.upsample` at 24.0x under `--dsr-ratio 1.5`, while every
+  real: `up4.upsample` at 24.0x under `--dsr-pct 1.5`, while every
   constrained node tracked down to 1.5x) that stays large regardless of how
-  tight `--dsr-ratio` gets — report `median_ratio` as the primary signal for
+  tight `--dsr-pct` gets — report `median_ratio` as the primary signal for
   a sweep, not `max_ratio`, for exactly this reason.
 - `summary.csv` + `run_args.json` — one row, written (overwritten) fresh each
-  run (incl. `branch_imbalance_n_diamonds`/`_median_ratio`/`_max_ratio`, the set `dsr_ratio_setting`/`pbi_ratio_setting`, and the measured DSR stats `dsr_n_nodes`/`dsr_median`/`dsr_mean`/`dsr_max`/`dsr_worst_node` from `chain_rate_imbalance`, filled even when `--dsr-ratio` is off); no
+  run (incl. `branch_imbalance_n_diamonds`/`_median_ratio`/`_max_ratio`, the set `dsr_ratio_setting`/`pbi_ratio_setting`, and the measured DSR stats `dsr_n_nodes`/`dsr_median`/`dsr_mean`/`dsr_max`/`dsr_worst_node` from `chain_rate_imbalance`, filled even when `--dsr-pct` is off); no
   sweep dimension since `alpha` was removed (see "History") — a new run in
   the same `--out-file` directory simply replaces the prior one.
 
@@ -452,6 +483,8 @@ quantizes per site (reduce.2 / conv_bn_act.2 / residual_add / out_act …);
 cost model's calibration, not a certified hardware guarantee.
 
 ## History
+
+- 2026-10-06: `argmax` extra node (FINN LabelSelect over the 5 output channels, foldable PE | 5, DSR-exempt); `--dsr-ratio R` replaced by `--dsr-pct P` (still off by default); new default-on frame-rate ratchet `--ratchet-pct 4 --ratchet-floor 0.6`.
 
 - 2026-09-17: became self-contained (was `joint_bits_folding_ilp_perlayer.py`,
   a per-layer reindexing of the per-block `joint_bits_folding_ilp.py`);
@@ -514,7 +547,7 @@ cost model's calibration, not a certified hardware guarantee.
   `run_args.json` write a single row per run instead of upserting one row
   per alpha (`_update_sweep_summary` renamed `_write_run_summary`). Hard
   resource/throughput/rate-coherence/latency constraints are unchanged.
-- 2026-09-29: `--optimize-downstream-rate` split back into `--dsr-ratio`
+- 2026-09-29: `--optimize-downstream-rate` split back into `--dsr-pct`
   (chain coherence, `dsr_ratio` parameter) and `--pbi-ratio` (join balance,
   `pbi_ratio` parameter) so the two mechanisms can be held fixed
   independently while sweeping the other — a real experiment design need
@@ -546,13 +579,13 @@ cost model's calibration, not a certified hardware guarantee.
 - 2026-09-29 (later still): added `_diagnostics.chain_rate_imbalance`
   (`milp_outputs.compute_chain_rate_imbalance_report`) — the achieved-value
   counterpart to `branch_imbalance`, but for chain coherence, so a
-  cross-sensitivity sweep can track "how does `--dsr-ratio`'s own natural
+  cross-sensitivity sweep can track "how does `--dsr-pct`'s own natural
   ratio move when only `--pbi-ratio` is tightened" the same way
   `branch_imbalance` already let a sweep track the mirror question for
   `--pbi-ratio`. Wired into `write_outputs` (regeneration path) and
   `finn_milp.py`'s own post-solve diagnostics block alongside
   `branch_imbalance`.
-- 2026-09-30: `--min-resources` added (objective = equal-weight mean of LUT/BRAM_18K/DSP board fractions; for FIXED bits, e.g. one `--candidate-bits` value, so runs differing only in a constraint like `--dsr-ratio` compare on the cheapest fold, not an arbitrary tie). `--pbi-ratio` DEPRECATED (kept for reproducing old runs; PBI is only reported). `summary.csv` gained `dsr_ratio_setting`, `pbi_ratio_setting`, `dsr_*` (all nodes) and `dsr_foldable_*` (fixed-cycle nodes exempt = exactly what `--dsr-ratio` bounds; `dsr_foldable_max <= --dsr-ratio`). Min feasible DSR is found by bracketing/bisecting `--dsr-ratio` (feasibility is monotone; a native min-DSR objective would be bilinear). See artifacts/S12_dense_dsr_ablation_v1.
+- 2026-09-30: `--min-resources` added (objective = equal-weight mean of LUT/BRAM_18K/DSP board fractions; for FIXED bits, e.g. one `--candidate-bits` value, so runs differing only in a constraint like `--dsr-pct` compare on the cheapest fold, not an arbitrary tie). `--pbi-ratio` DEPRECATED (kept for reproducing old runs; PBI is only reported). `summary.csv` gained `dsr_ratio_setting`, `pbi_ratio_setting`, `dsr_*` (all nodes) and `dsr_foldable_*` (fixed-cycle nodes exempt = exactly what `--dsr-pct` bounds; `dsr_foldable_max <= --dsr-pct`). Min feasible DSR is found by bracketing/bisecting `--dsr-pct` (feasibility is monotone; a native min-DSR objective would be bilinear). See artifacts/S12_dense_dsr_ablation_v1.
 - 2026-10-02: residual-join handling is now always on (flags removed): `skip_quant`/`residual_add` bits are tied to the
   block's `expand.0` act bits (one shared add quantizer, FINN `AddStreams` single `inputDataType`) and join thresholds
   (`skip_quant`/`residual_add`/`out_act`) are LUTRAM-only. Removed `--tie-residual-bits`, `--joins-distributed`,
