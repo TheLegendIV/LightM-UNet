@@ -13,6 +13,7 @@ FIFO / DWC modelling on (`--model-fifos`), no latency cap (the MILP's sum of nod
 | `ratchet_100pct` | `--ratchet-pct 100 --ratchet-floor 0.33` | |
 | `ratchet_200pct` | `--ratchet-pct 200 --ratchet-floor 0.33` | |
 | `ratchet_off` | `--ratchet-pct none` | no rate rule (element-rate DSR is off by default) |
+| `analytical_25pct` | `MILP/analytical/net_fold.py --ratchet-pct 25 --ratchet-floor 0.33 --mvau-wwidth-max 72` (`run_analytical_arm.sh`) | **analytical flow**, not the MILP: same net / bits / fps / width cap / floor |
 | `ratchet_ablation_finn_autofold` | none: FINN's own `step_target_fps_parallelization` (250 fps, `mvau_wwidth_max` 72) | **built on hardware**, not a MILP arm |
 
 (The first sweep used 1/2/4/8/16 %: 1, 2, 4 and 8 % gave the identical folding and 16 % was a second one, so the sweep was widened to 1/25/(50)/100/200 %; the 50 % arm gave the same folding as 25 % and was dropped.)
@@ -38,18 +39,24 @@ only `ratchet_off` moves (101 DSP at 72, 105 DSP and 94.5k LUT with a looser cap
 | ratchet_100pct | 95,913 | 93,909 | 101 | 115 | 294,912 | 339.1 | 2 | C |
 | ratchet_200pct | 95,558 | 93,629 | 101 | 113 | 327,680 (`final.argmax`) | 305.2 | 1 | D |
 | ratchet_off | 95,274 | 93,387 | 101 | 101 | 327,680 (`final.argmax`) | 305.2 | 0 | E |
+| analytical_25pct | 87,995 | 76,918 | 205 | 241 | 147,715 (`regular5.0.conv`) | 677.0 | 82 | F |
 
-* **Five distinct foldings** (A-E), one per arm except that the dropped 50 % arm (run earlier) gave the same folding as 25 %. One hardware build per distinct folding (`arms_to_build.txt`, `arm_build_map.csv`).
+* **Six distinct foldings** (A-F; F = analytical), one per arm except that the dropped 50 % arm (run earlier) gave the same folding as 25 %. One hardware build per distinct folding (`arms_to_build.txt`, `arm_build_map.csv`).
 * The knee is between 25 % and 100 %: up to +25-50 % the design keeps the whole network at ~147k cycles (676 fps); at +100 % the convs may sit at 294,912 cycles (339 fps, 2 layers differ from `off`); at +200 % only the argmax (PE 1,
   327,680 cycles) differs from `off`. Tight ratchets cost up to ~4% LUT and 77 DSP against `off` and buy 2.2x throughput.
 * Every ratchet arm passes the edge check in `summarize_arms.py` (0 violations), every layer is INT6, `mvau_wwidth_max` 72 holds.
-* The analytical design (`S12_dense_256_u4_analytical_v1`) lands at 677 fps / 241 DSP / 76.9k node LUT; the MILP arms use fewer DSP and more LUT (different tie breaking, the `residual_add` threshold priced separately, see the
-  analytical README).
+* **Analytical arm** (F): 677 fps, 241 DSP, 76.9k node LUT and 205 BRAM18 (143 of them simulated skip / prefetch FIFOs, FINN will delete the depth-2 ones). It is the same design the analytical artifact
+  `S12_dense_256_u4_analytical_v1` already had (the width cap and the floor 0.33 / 25 % do not change it: block budgets 184,320 and 163,840 cycles, nodes at 147k, max SIMD x bits = 48). Against the MILP arms it uses
+  more DSP (241 vs 113-178 for the fast arms) and fewer LUT nodes (76.9k vs 93.6-96.3k): different tie breaking at equal cycles (it takes the cheapest BRAM / LUT fold, the MILP's objective weighs DSP heavily) and the MILP prices
+  `residual_add` separately (7.4k LUT) where the analytical flow merges it into `out_act`. Its BRAM18 is the simulated FIFO memory (the MILP's 101 BRAM18 is its FIFO model: skip + prefetch only).
+  The analytical ratchet is block to block (a block's budget = 1.25 x the slowest node of the previous block), the MILP's is node to node, so the analytical design breaks the MILP rule once
+  (`regular5.0.reduce.0` 65,536 -> `regular5.0.conv` 147,715 cycles; `ratchet_violations` = 1 in the table). At 4 % + floor 0.33 the analytical flow does not work: the block budgets ratchet down to ~136k cycles and
+  the up5 block fails its simulation check (9.32 cyc/px steady against an 8.3 target), hence 25 %.
 * FIFO model (BRAM18 101 in every arm) counts only skip FIFOs, prefetch FIFOs and DWCs; the down-block `Dup -> SWG_r` feed and the up / initial `FIFO main` are not priced (no closed form).
 
 ## Files
 
-* `run_ablation.sh` (run in `lightmunet_dev`, all arms in parallel, ~40 s), `summarize_arms.py`.
+* `run_ablation.sh` (run in `lightmunet_dev`, all MILP arms in parallel, ~40 s), `run_analytical_arm.sh` (~5 min: the blocks are simulated in parallel workers), `summarize_arms.py`.
 * Per arm folder: `layer_bits_folding_<arm>.json` (per_layer, extra_nodes, `intra_block_fifos` = the priced skip / prefetch FIFOs in the analytical role vocabulary the FINN bridge reads, `inter_block_fifos` (depth 2), `dwcs`,
   `_diagnostics.ratchet`, `_diagnostics.fifo_model`), `layer_bits_SITES_<arm>.json` (uniform INT6 per-site bits), `run_args.json`, `solve.log`, `summary.csv`, `final_output.onnx`.
 * `arms_summary.csv`, `arm_groups.json`, `arm_build_map.csv`, `arms_to_build.txt`.
