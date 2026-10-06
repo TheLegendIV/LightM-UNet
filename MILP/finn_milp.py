@@ -365,6 +365,7 @@ def solve_joint_perlayer(
     min_resources: bool = False,
     mvau_wwidth_max: int | None = None,
     feasibility_only: bool = False,
+    model_fifos: bool = False,
 ) -> dict:
     """Build and solve the MILP. Formulation: finn_milp.md "Formulation".
     feasibility_only: zero objective (any feasible point is Optimal) -- used by the --min-dsr probes."""
@@ -528,7 +529,7 @@ def solve_joint_perlayer(
             prob += node_at_least <= pulp.lpSum(sources_at_least), f"thr_bits_le_{name}_{level}"
             n_extra_constraints += len(sources_at_least) + 1
 
-    # Rate coherence: --pbi-ratio (join balance) and --dsr-ratio (chain coherence) are
+    # Rate coherence: --pbi-ratio (join balance) and --dsr-pct (chain coherence) are
     # independent constraint families on the dataflow graph -- each gated on its own flag
     # (split 2026-09-29 from the single --optimize-downstream-rate that drove both; see
     # finn_milp.md "Rate coherence" for why they were merged, then split again).
@@ -626,11 +627,24 @@ def solve_joint_perlayer(
             ), f"downstream_rate_{name}"
             n_chain_rate_constraints += 1
 
+    # ---- --model-fifos: skip / prefetch FIFOs and DWCs as extra LUT / BRAM / URAM terms (fifo_model.py); zero when the flag is off ----
+    fifo_model = None
+    fifo_lut = fifo_bram = fifo_uram = 0
+    if model_fifos:
+        if len(CANDIDATE_BITS) != 1:
+            raise ValueError("--model-fifos prices streams at one bit width: pass a single --candidate-bits value (mixed precision changes the stream widths per edge).")
+        if dataflow_map is None:
+            raise ValueError("--model-fifos needs the dataflow graph (dataflow_map).")
+        from fifo_model import FifoModel
+        fifo_model = FifoModel(geometries, extra_nodes, dataflow_map, z, layer_costs, CANDIDATE_BITS[0])
+        fifo_lut, fifo_bram, fifo_uram = fifo_model.add_terms(pulp, prob)
+        n_extra_constraints += fifo_model.n_pair_vars
+
     # Hard resource budgets and latency cap (sum of cycles).
-    prob += pulp.lpSum(z[k] * raw_lut[k] for k in z) <= max_lut_fraction * XCZU7EV["LUT"], "max_lut_budget"
-    prob += pulp.lpSum(z[k] * raw_bram[k] for k in z) <= max_bram_fraction * XCZU7EV["BRAM_18K"], "max_bram_budget"
+    prob += pulp.lpSum(z[k] * raw_lut[k] for k in z) + fifo_lut <= max_lut_fraction * XCZU7EV["LUT"], "max_lut_budget"
+    prob += pulp.lpSum(z[k] * raw_bram[k] for k in z) + fifo_bram <= max_bram_fraction * XCZU7EV["BRAM_18K"], "max_bram_budget"
     prob += pulp.lpSum(z[k] * raw_dsp[k] for k in z) <= max_dsp_fraction * XCZU7EV["DSP"], "max_dsp_budget"
-    prob += pulp.lpSum(z[k] * raw_uram[k] for k in z) <= max_uram_fraction * XCZU7EV["URAM"], "max_uram_budget"
+    prob += pulp.lpSum(z[k] * raw_uram[k] for k in z) + fifo_uram <= max_uram_fraction * XCZU7EV["URAM"], "max_uram_budget"
     if max_cycles is not None:
         prob += pulp.lpSum(z[k] * raw_cycles[k] for k in z) <= max_cycles, "max_cycles_budget"
 
@@ -655,10 +669,10 @@ def solve_joint_perlayer(
         # --min-resources: replace the accuracy objective by the equal-weight mean of the
         # LUT / BRAM_18K / DSP fractions of the board (same raw_* the hard caps use). Meant for FIXED
         # bits (single --candidate-bits value or --pin-bits-file): it picks the cheapest fold among
-        # the ties, so runs that differ only in a constraint (e.g. --dsr-ratio) stay comparable.
+        # the ties, so runs that differ only in a constraint (e.g. --dsr-pct) stay comparable.
         prob += (1.0 / 3.0) * (
-            pulp.lpSum(z[k] * raw_lut[k] for k in z) / XCZU7EV["LUT"]
-            + pulp.lpSum(z[k] * raw_bram[k] for k in z) / XCZU7EV["BRAM_18K"]
+            (pulp.lpSum(z[k] * raw_lut[k] for k in z) + fifo_lut) / XCZU7EV["LUT"]
+            + (pulp.lpSum(z[k] * raw_bram[k] for k in z) + fifo_bram) / XCZU7EV["BRAM_18K"]
             + pulp.lpSum(z[k] * raw_dsp[k] for k in z) / XCZU7EV["DSP"]
         )
     else:
@@ -751,10 +765,12 @@ def solve_joint_perlayer(
     total_cycles = sum(v["cycles"] for v in per_layer.values())
 
     extra_out: dict[str, dict] = {}
+    extra_chosen: dict[str, tuple] = {}
     for node in extra_nodes:
         name = node.geom.name
         chosen = next(k for k in extra_keys[name] if pulp.value(z[k]) > 0.5)
         _, pe, simd, ram_style, _, w, bits = chosen
+        extra_chosen[name] = chosen
         bits_rule = "fixed" if node.fixed_bits is not None else ("max_of_sources" if node.bit_sources else "n/a")
         extra_out[name] = {
             "kind": node.kind, "stage": node.geom.stage, "pe": pe, "simd": simd, "ram_style": ram_style,
@@ -777,6 +793,16 @@ def solve_joint_perlayer(
     total_uram += sum(v["uram18"] for v in extra_out.values())
     total_dsp += sum(v["dsp"] for v in extra_out.values())
     total_cycles += extra_cycles
+    fifo_out = None
+    if fifo_model is not None:      # skip / prefetch FIFOs and DWCs of the chosen folds join the totals (the budget rows above already counted them)
+        chosen_all = {n: (n, v["pe"], v["simd"], v["thr_ram_style"], v["variant"], v["weight_bits"], v["act_bits"]) for n, v in per_layer.items()}
+        chosen_all.update(extra_chosen)
+        fifo_out = fifo_model.describe(pulp, chosen_all)
+        fifo_out["inter_block_fifos"] = fifo_model.inter_block_fifos(chosen_all)
+        ft = fifo_out["totals"]
+        total_lut += ft["lut"] + ft["dwc_lut"] + sum(f["lut"] for f in fifo_out["inter_block_fifos"])
+        total_bram += ft["bram18"] + sum(f["bram18"] for f in fifo_out["inter_block_fifos"])
+        total_uram += ft["uram18"]
     node_cycles = {**{n: v["cycles"] for n, v in per_layer.items()}, **{n: v["cycles"] for n, v in extra_out.items()}}
     bottleneck_node = max(node_cycles, key=node_cycles.get)
 
@@ -786,12 +812,16 @@ def solve_joint_perlayer(
         "layer_act_bits": layer_act_bits,
         "per_layer": per_layer,
         "extra_nodes": extra_out,
+        **({"intra_block_fifos": fifo_out["fifos"], "inter_block_fifos": fifo_out["inter_block_fifos"], "dwcs": fifo_out["dwcs"]} if fifo_out else {}),
         "_diagnostics": {
+            **({"fifo_model": {"totals": fifo_out["totals"], "n_dwcs": len(fifo_out["dwcs"]), "skip_nodes": fifo_model.skip_nodes,
+                               "note": "skip / prefetch FIFOs + DWCs priced in the solve (fifo_model.py); total_* below include them. Simulation-only FIFOs (down feed, up / init FIFO main) "
+                                       "are not priced; inter-block FIFOs are fixed at depth 2."}} if fifo_out else {}),
             "candidate_bits": list(CANDIDATE_BITS), "n_layers": n_layers,
             "n_binary_vars": n_binary_vars, "n_constraints": n_constraints,
             "min_resources": min_resources, "mvau_wwidth_max": mvau_wwidth_max,
             "n_wwidth_blocked_folds": n_wwidth_blocked,
-            # exempt from --dsr-ratio (one cycle value whatever the fold); used for the foldable-only DSR stats
+            # exempt from --dsr-pct (one cycle value whatever the fold); used for the foldable-only DSR stats
             "fixed_cycle_nodes": sorted(fixed_cycle_names),
             "n_extra_nodes": len(extra_nodes), "extra_lut_calibrated": extra_lut,
             "extra_bram18k_calibrated": extra_bram, "extra_cycles": extra_cycles, "extra_by_kind": extra_by_kind,
@@ -872,13 +902,13 @@ def _write_run_summary(
         "branch_imbalance_n_diamonds": diag.get("branch_imbalance", {}).get("n_diamonds"),
         "branch_imbalance_median_ratio": diag.get("branch_imbalance", {}).get("median_ratio"),
         "branch_imbalance_max_ratio": diag.get("branch_imbalance", {}).get("max_ratio"),
-        # DSR = downstream-rate ratio (chain_rate_imbalance diagnostic): measured whether or not --dsr-ratio is set.
+        # DSR = downstream-rate ratio (chain_rate_imbalance diagnostic): measured whether or not --dsr-pct is set.
         "dsr_ratio_setting": args.dsr_ratio, "pbi_ratio_setting": args.pbi_ratio,
         "dsr_n_nodes": dsr.get("n_nodes"), "dsr_median": dsr.get("median_ratio"),
         "dsr_mean": dsr.get("mean_ratio"), "dsr_max": dsr.get("max_ratio"),
         "dsr_worst_node": (dsr.get("worst_nodes") or [{}])[0].get("node"),
-        # Same quantity --dsr-ratio bounds: fixed-cycle nodes (pools, upsample, concat) exempt as
-        # constrained nodes and as descendants' own rate. dsr_foldable_max <= --dsr-ratio when set.
+        # Same quantity --dsr-pct bounds: fixed-cycle nodes (pools, upsample, concat) exempt as
+        # constrained nodes and as descendants' own rate. dsr_foldable_max <= 1 + pct/100 when set.
         "dsr_foldable_n_nodes": dsr.get("foldable_n_nodes"), "dsr_foldable_median": dsr.get("foldable_median_ratio"),
         "dsr_foldable_max": dsr.get("foldable_max_ratio"),
         "dsr_foldable_worst_node": dsr.get("foldable_worst_node"),
@@ -904,7 +934,8 @@ def _write_run_summary(
         "max-lut-fraction": args.max_lut_fraction, "max-bram-fraction": args.max_bram_fraction,
         "max-dsp-fraction": args.max_dsp_fraction, "max-uram-fraction": args.max_uram_fraction, "force-dsp": args.force_dsp,
         "max-latency-ms": args.max_latency_ms, "clock-mhz": args.clock_mhz, "target-fps": args.target_fps,
-        "dsr-ratio": args.dsr_ratio, "dsr-ratio-pass2": args.dsr_ratio_pass2, "target-fps-pass2": args.target_fps_pass2,
+        "dsr-pct": None if args.dsr_ratio is None else round((args.dsr_ratio - 1) * 100, 6), "dsr-ratio": args.dsr_ratio,
+        "dsr-pct-pass2": args.dsr_pct_pass2, "target-fps-pass2": args.target_fps_pass2,
         "pbi-ratio": args.pbi_ratio,
         "mvau-wwidth-max": args.mvau_wwidth_max, "min-resources": args.min_resources,
         "lexicographic": args.lexicographic,
@@ -926,6 +957,32 @@ def _write_run_summary(
     }
     run_args_path.write_text(json.dumps(run_args, indent=2))
     print(f"Wrote {run_args_path}.")
+
+
+DEFAULT_DSR_PCT = 4.0         # --dsr-pct default (DSR was off before); the analytical net_fold.py ratchet uses the same number
+DSR_OFF = -1.0                # sentinel for "--dsr-pct none"
+
+
+def _dsr_arg(text: str) -> float:
+    """argparse type for --dsr-pct: a percentage >= 0, or none/off to disable the constraint."""
+    if text.lower() in ("none", "off"):
+        return DSR_OFF
+    value = float(text)
+    if value < 0.0:
+        raise argparse.ArgumentTypeError("--dsr-pct must be >= 0 (or 'none')")
+    return value
+
+
+def pct_to_ratio(pct: float) -> float:
+    """4 (%) -> 1.04: the slowest downstream rate may be at most (1 + pct/100) x a node's own rate."""
+    return 1.0 + pct / 100.0
+
+
+def resolve_dsr_ratio(pct: float | None, min_dsr: bool) -> float | None:
+    """--dsr-pct as given (None = flag absent, DSR_OFF = 'none') -> the ratio the solve uses: 1.04 when absent (unless --min-dsr searches it), None when switched off."""
+    if pct is None:
+        return None if min_dsr else pct_to_ratio(DEFAULT_DSR_PCT)
+    return None if pct == DSR_OFF else pct_to_ratio(pct)
 
 
 def build_model_and_graph() -> tuple[
@@ -1001,7 +1058,7 @@ def find_min_dsr(solve_kwargs: dict) -> float:
     with multiprocessing.get_context("fork").Pool(workers) as pool:
         for h, st in pool.imap_unordered(_probe_dsr, _MIN_DSR_GRID):
             results[h] = st
-            print(f"  --min-dsr probe {h / 100:.2f}: {st}", flush=True)
+            print(f"  --min-dsr probe {h - 100} pct (ratio {h / 100:.2f}): {st}", flush=True)
         feasible = sorted(h for h, st in results.items() if st == "Optimal")
         if not feasible:
             raise SystemExit("--min-dsr: infeasible even at DSR 20.00 under the other constraints.")
@@ -1012,10 +1069,10 @@ def find_min_dsr(solve_kwargs: dict) -> float:
             points = sorted({lo + round((hi - lo) * (i + 1) / (k + 1)) for i in range(k)} - {lo, hi})
             for h, st in pool.imap_unordered(_probe_dsr, points):
                 results[h] = st
-                print(f"  --min-dsr probe {h / 100:.2f}: {st}", flush=True)
+                print(f"  --min-dsr probe {h - 100} pct (ratio {h / 100:.2f}): {st}", flush=True)
             hi = min([h for h in points if results[h] == "Optimal"] + [hi])
             lo = max([h for h in points if results[h] != "Optimal" and h < hi] + [lo])
-    print(f"--min-dsr: smallest feasible DSR = {hi / 100:.2f}", flush=True)
+    print(f"--min-dsr: smallest feasible DSR = {hi - 100} pct (ratio {hi / 100:.2f})", flush=True)
     return hi / 100
 
 
@@ -1040,14 +1097,16 @@ def main() -> None:
     parser.add_argument("--max-latency-ms", type=float, default=None,
                          help="Hard cap on the sum of cycles, as ms at --clock-mhz.")
     parser.add_argument("--clock-mhz", type=float, default=100.0, help="Clock for --max-latency-ms (default 100).")
-    parser.add_argument("--dsr-ratio", type=float, default=None,
-                         help="Downstream-rate ratio: chain-coherence constraint bounding a node's rate against "
-                              "the slowest rate anywhere in its downstream subtree (off by default).")
+    parser.add_argument("--dsr-pct", type=_dsr_arg, default=None,
+                         help=f"Downstream-rate allowance in PERCENT: chain-coherence constraint bounding a node's rate against "
+                              f"the slowest rate anywhere in its downstream subtree (slowest descendant <= (1 + pct/100) x own rate). "
+                              f"ON by default at {DEFAULT_DSR_PCT:g} (the analytical build's block ratchet uses the same number); "
+                              f"'none' turns it off. With --min-dsr the default is not applied.")
     parser.add_argument("--min-dsr", action="store_true",
-                         help="Find the SMALLEST --dsr-ratio (to 0.01) for which the problem is feasible under all other "
+                         help="Find the SMALLEST --dsr-pct (to 0.01 of ratio = 1 pct) for which the problem is feasible under all other "
                               "constraints, then solve with it (both passes with --lexicographic). Feasibility probes run "
                               "in parallel; the search covers 1.01..20 and aborts if even 20 is infeasible. Exclusive with "
-                              "--dsr-ratio.")
+                              "--dsr-pct.")
     parser.add_argument("--pbi-ratio", type=float, default=None,
                          help="DEPRECATED (kept so old runs reproduce): parallel-branch-imbalance join-balance "
                               "constraint. Never engaged by default; PBI is only reported in summary.csv.")
@@ -1058,10 +1117,10 @@ def main() -> None:
     parser.add_argument("--target-fps-pass2", type=float, default=None,
                          help="--lexicographic only: throughput target for pass 2 (default: same as --target-fps, which may "
                               "itself be unset = no throughput constraint in pass 1).")
-    parser.add_argument("--dsr-ratio-pass2", type=float, default=None,
-                         help="--lexicographic only: dsr ratio for pass 2 (default: same as --dsr-ratio). Pass 2 pins the "
+    parser.add_argument("--dsr-pct-pass2", type=float, default=None,
+                         help="--lexicographic only: dsr percent for pass 2 (default: same as --dsr-pct). Pass 2 pins the "
                               "bits, so this only reshapes the folding. Pass 2's LUT/BRAM/DSP roof becomes the hard caps "
-                              "instead of pass 1's own use (pass 1 was not solved under this ratio).")
+                              "instead of pass 1's own use (pass 1 was not solved under this allowance).")
     parser.add_argument("--lexicographic", action="store_true",
                          help="Two passes with the SAME constraints. Pass 1: accuracy objective (sets the bits and a "
                               "resource roof = its own LUT/BRAM/DSP use). Pass 2: bits pinned to pass 1 (epsilon 0), "
@@ -1070,16 +1129,22 @@ def main() -> None:
     parser.add_argument("--min-resources", action="store_true",
                          help="Objective = equal-weight mean of LUT/BRAM_18K/DSP fractions of the board instead of "
                               "accuracy. For FIXED bits (one --candidate-bits value or --pin-bits-file): picks the "
-                              "cheapest fold so runs differing only in a constraint (e.g. --dsr-ratio) are comparable.")
+                              "cheapest fold so runs differing only in a constraint (e.g. --dsr-pct) are comparable.")
     parser.add_argument("--force-serial", action="store_true", help="Restrict every node to PE=SIMD=1.")
+    parser.add_argument("--model-fifos", action="store_true",
+                         help="Price the skip FIFO of every residual diamond, the prefetch FIFO in front of every padded conv and every data-width converter (inter-node and "
+                              "internal) in the LUT / BRAM / URAM budgets and the --min-resources objective (fifo_model.py, estimates from MILP/analytical). Inter-block FIFOs "
+                              "are fixed at depth 2. Needs ONE --candidate-bits value. Off by default: output unchanged.")
     parser.add_argument("--time-limit", type=int, default=1800, help="CBC time limit in seconds.")
     parser.add_argument("--gap-rel", type=float, default=0.02, help="CBC relative optimality gap.")
     parser.add_argument("--pin-bits-file", type=Path, default=None,
                          help="TEST-ONLY: pin y to a layer_bits_*.json (skips the bit-choice search; folding is still solved).")
     parser.add_argument("--out-file", type=Path, required=True)
     args = parser.parse_args()
-    if args.min_dsr and args.dsr_ratio is not None:
-        parser.error("--min-dsr and --dsr-ratio are mutually exclusive.")
+    if args.min_dsr and args.dsr_pct is not None:
+        parser.error("--min-dsr and --dsr-pct are mutually exclusive.")
+    args.dsr_ratio = resolve_dsr_ratio(args.dsr_pct, args.min_dsr)          # internal form: 1 + pct/100, None = off
+    args.dsr_ratio_pass2 = None if args.dsr_pct_pass2 is None else pct_to_ratio(args.dsr_pct_pass2)
 
     load_config(args.config)
 
@@ -1171,14 +1236,14 @@ def main() -> None:
               f"(hard constraint).")
 
     if args.min_dsr:
-        print("--min-dsr: searching for the smallest feasible DSR ratio...", flush=True)
+        print("--min-dsr: searching for the smallest feasible DSR allowance...", flush=True)
         args.dsr_ratio = find_min_dsr(dict(
             sensitivity=sensitivity, geometries=geometries, max_lut_fraction=args.max_lut_fraction,
             max_bram_fraction=args.max_bram_fraction, time_limit=args.time_limit, gap_rel=args.gap_rel,
             max_cycles=max_cycles, pinned_bits=pinned_bits, predecessor_map=predecessor_map, force_dsp=args.force_dsp,
             max_dsp_fraction=args.max_dsp_fraction, max_uram_fraction=args.max_uram_fraction, pbi_ratio=args.pbi_ratio,
             max_node_cycles=max_node_cycles, mvau_wwidth_max=args.mvau_wwidth_max, extra_nodes=extra_nodes,
-            dataflow_map=dataflow_map,
+            dataflow_map=dataflow_map, model_fifos=args.model_fifos,
         ))
 
     result = solve_joint_perlayer(
@@ -1188,7 +1253,7 @@ def main() -> None:
         max_dsp_fraction=args.max_dsp_fraction, max_uram_fraction=args.max_uram_fraction,
         dsr_ratio=args.dsr_ratio, pbi_ratio=args.pbi_ratio, max_node_cycles=max_node_cycles,
         min_resources=args.min_resources, mvau_wwidth_max=args.mvau_wwidth_max,
-        extra_nodes=extra_nodes, dataflow_map=dataflow_map,
+        extra_nodes=extra_nodes, dataflow_map=dataflow_map, model_fifos=args.model_fifos,
     )
     if args.lexicographic:
         if args.min_resources or args.pin_bits_file is not None:
@@ -1207,11 +1272,11 @@ def main() -> None:
             if args.target_fps_pass2 is not None:
                 max_node_cycles2 = args.clock_mhz * 1e6 / args.target_fps_pass2
                 print(f"--target-fps-pass2 {args.target_fps_pass2} -> pass 2 every node <= {max_node_cycles2:.0f} cycles.")
-            # --dsr-ratio-pass2 adds a constraint pass 1's fold was never solved under, so pass 1's own use is no
+            # --dsr-pct-pass2 adds a constraint pass 1's fold was never solved under, so pass 1's own use is no
             # longer a feasible roof: bound pass 2 by the hard caps instead (bits stay pinned).
             if args.dsr_ratio_pass2 is not None:
                 roofs = (args.max_lut_fraction, args.max_bram_fraction, args.max_dsp_fraction)
-                print(f"--dsr-ratio-pass2 {args.dsr_ratio_pass2}: pass 2 roof = hard caps {roofs} (not pass 1's use).")
+                print(f"--dsr-pct-pass2 {args.dsr_pct_pass2:g}: pass 2 roof = hard caps {roofs} (not pass 1's use).")
             else:
                 roofs = tuple(d1[k] / 100 * roof for k in ("lut_pct_of_budget", "bram_pct_of_budget", "dsp_pct_of_budget"))
             result = solve_joint_perlayer(
@@ -1222,7 +1287,7 @@ def main() -> None:
                 dsr_ratio=args.dsr_ratio if args.dsr_ratio_pass2 is None else args.dsr_ratio_pass2,
                 pbi_ratio=args.pbi_ratio, max_node_cycles=max_node_cycles2,
                 min_resources=True, mvau_wwidth_max=args.mvau_wwidth_max,
-                extra_nodes=extra_nodes, dataflow_map=dataflow_map,
+                extra_nodes=extra_nodes, dataflow_map=dataflow_map, model_fifos=args.model_fifos,
             )
             if result["status"] == "Optimal":
                 result["_diagnostics"]["lexicographic"] = {

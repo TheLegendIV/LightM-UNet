@@ -23,7 +23,7 @@ Rate policy:
   * every node's cycles per frame <= F = clock / fps (250 fps at 100 MHz = 400,000 cycles); the analytical search takes the largest cycle count that
     fits, so each stage is matched to the target;
   * optional latency cap --max-latency-ms (latency = cycles to the FIRST OUTPUT PIXEL, summed over the blocks' first-in -> first-out latencies / clock): the per-node budget is bisected down until it holds;
-  * "downstream faster than upstream": block k gets budget min(F, max(floor * F, R * slowest_{k-1})), R = --dsr-ratio (the MILP's own DSR ratio, default
+  * "downstream faster than upstream": block k gets budget min(F, max(floor * F, R * slowest_{k-1})), R = 1 + --dsr-pct/100 (the MILP's own DSR allowance, default
     1.04), floor = --budget-floor. A node that cannot be slowed (the lattice of legal (PE, SIMD) pairs) keeps the chain from relaxing past the floor,
     and the achieved MILP DSR ratio (cycles per output element, downstream vs. upstream) is reported in _diagnostics.chain_rate_imbalance.
 """
@@ -50,6 +50,7 @@ from finn_milp import (  # noqa: E402
 )
 from milp_outputs import compute_branch_imbalance_report, compute_chain_rate_imbalance_report  # noqa: E402
 
+from node_names import block_output_name, milp_role  # noqa: E402
 from bottleneck import _retarget_threshold, model_bottleneck  # noqa: E402
 from bottleneck import to_folding_config as _fold_reg, verify_with_sim as _verify_reg  # noqa: E402
 from dn_bottleneck import model_dn_bottleneck  # noqa: E402
@@ -105,7 +106,7 @@ def block_kind(stage: str) -> str:
     return "reg"
 
 
-def run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool = False):
+def run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool = False, prev_output: str | None = None):
     """Analytical model of one block at budget F_k cycles per frame -> (BlockResult, layer folds, extra folds,
     slowest, intra-block FIFOs, FIFO-verification warning). compute_fifos runs verify_with_sim + to_folding_config
     on top of the same chosen BottleneckResult (same PE/SIMD/bits as lf/xf) to also get this block's OWN FIFO depths
@@ -169,11 +170,11 @@ def run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool =
         lf["final"] = (n["MVAU_f"].pe, n["MVAU_f"].simd, None, n["MVAU_f"].frame_cycles)
         xf["final.argmax"] = (n["LabelSelect"].pe, 1, None)
     slowest = max(x.frame_cycles for x in r.nodes if x.name.startswith(FOLDABLE))
-    fifos, fifo_warning = (_intra_block_fifos(kind, r, stage) if compute_fifos else ([], None))
+    fifos, fifo_warning = (_intra_block_fifos(kind, r, stage, prev_output) if compute_fifos else ([], None))
     return r, lf, xf, slowest, fifos, fifo_warning
 
 
-def _intra_block_fifos(kind: str, r, stage: str) -> tuple[list[dict], str | None]:
+def _intra_block_fifos(kind: str, r, stage: str, prev_output: str | None = None) -> tuple[list[dict], str | None]:
     """verify_with_sim(r) + to_folding_config(r)['fifos'], stage-qualified (role names -> '<stage>.<role>') so every
     block's FIFOs land in one flat, uniquely-named list. Soft-fails (returns [] + a warning string) if the simulation
     does not converge -- same pattern as the mvau_cycle_mismatches diagnostic, surfaced not silently dropped."""
@@ -188,6 +189,7 @@ def _intra_block_fifos(kind: str, r, stage: str) -> tuple[list[dict], str | None
             "stage": stage, "name": f"{stage}.{f['name'].replace(' ', '_')}",
             "producer": f"{stage}.{f['producer']}", "consumer": f"{stage}.{f['consumer']}",
             "producer_node": f["producer_node"], "consumer_node": f["consumer_node"],
+            "producer_milp": milp_role(stage, kind, f["producer_node"], prev_output), "consumer_milp": milp_role(stage, kind, f["consumer_node"], prev_output),
             "depth": f["depth"], "width_bits": f["width_bits"], "max_occupancy": f["max_occupancy"],
             "is_skip": f["is_skip"], "mem": f.get("mem"), "finn_impl": f.get("finn_impl"),
             "mem_bram18": f.get("mem_bram18", 0), "mem_lut": f.get("mem_lut", 0),
@@ -322,15 +324,17 @@ def assemble(a, ctx, F_top: int, compute_intra_fifos: bool = False, keep_blocks:
     intra_fifos: list[dict] = []
     intra_fifo_warnings: list[str] = []
     blocks = []
+    prev_output = None
     for stage in block_order(geoms):
         kind = block_kind(stage)
-        F_k = F_top if (a.no_ratchet or slowest_prev is None) else int(min(F_top, max(a.budget_floor * F_top, a.dsr_ratio * slowest_prev)))
-        r, lf, xf, slowest, fifos, fifo_warning = run_block(stage, geom, a.bits, F_k, compute_fifos=compute_intra_fifos)
+        F_k = F_top if (a.no_ratchet or slowest_prev is None) else int(min(F_top, max(a.budget_floor * F_top, (1 + a.dsr_pct / 100) * slowest_prev)))
+        r, lf, xf, slowest, fifos, fifo_warning = run_block(stage, geom, a.bits, F_k, compute_fifos=compute_intra_fifos, prev_output=prev_output)
         intra_fifos.extend(fifos)
         if fifo_warning:
             intra_fifo_warnings.append(fifo_warning)
         rough_latency += r.latency_first_out_cycles
         blocks.append((stage, kind, r))
+        prev_output = block_output_name(stage, kind)
         for lname, (pe, simd, thr_pe, an_cycles) in lf.items():
             e = layer_entry(geom[lname], a.bits, pe, simd, thr_pe, stage, no_thr=(lname == "final"))
             if e["mvu_cycles"] != an_cycles:
@@ -408,7 +412,7 @@ def assemble(a, ctx, F_top: int, compute_intra_fifos: bool = False, keep_blocks:
             "bottleneck_node": bott, "bottleneck_cycles": node_cycles[bott],
             "max_node_cycles": int(a.clock_mhz * 1e6 / a.fps), "per_node_budget_used": F_top, "target_fps": a.fps, "clock_mhz": a.clock_mhz,
             "max_latency_ms": a.max_latency_ms, "fps": a.clock_mhz * 1e6 / node_cycles[bott],
-            "analytical": {"source": "MILP/analytical/net_fold.py", "dsr_ratio": a.dsr_ratio, "budget_floor": a.budget_floor, "ratchet": not a.no_ratchet,
+            "analytical": {"source": "MILP/analytical/net_fold.py", "dsr_pct": a.dsr_pct, "dsr_ratio": 1 + a.dsr_pct / 100, "budget_floor": a.budget_floor, "ratchet": not a.no_ratchet,
                            "sum_of_block_first_out_latencies_cycles": rough_latency, "block_profile": profile,
                            "mvau_cycle_mismatches_vs_milp_cost_model": mismatches},
             "note": "Folding assembled from the analytical per-block models (U4 widths), costed with the MILP's own layer_cost_pe_simd / extra_node_options. Not an ILP solve. "
@@ -550,7 +554,7 @@ def main() -> int:
     ap.add_argument("--clock-mhz", type=float, default=100.0)
     ap.add_argument("--max-latency-ms", type=float, default=None,
                     help="latency cap = time to the first output pixel (sum of the blocks' first-in -> first-out latencies / clock): the per-node budget is lowered (bisection) until it holds")
-    ap.add_argument("--dsr-ratio", type=float, default=1.04, help="tolerance of the downstream-faster ratchet (MILP --dsr-ratio default of the S12 runs)")
+    ap.add_argument("--dsr-pct", type=float, default=4.0, help="allowance of the downstream-faster ratchet in PERCENT (the MILP's --dsr-pct default); a block may be at most this much slower than the one before")
     ap.add_argument("--budget-floor", type=float, default=0.6, help="the ratchet never tightens a block below this fraction of the per-node budget")
     ap.add_argument("--no-ratchet", action="store_true", help="every block gets the full per-node budget (stages matched to it, no downstream-faster rule)")
     ap.add_argument("--tag", default="final", help="file tag: layer_bits_folding_<tag>.json / layer_bits_SITES_<tag>.json (S12 artifacts use 'final')")

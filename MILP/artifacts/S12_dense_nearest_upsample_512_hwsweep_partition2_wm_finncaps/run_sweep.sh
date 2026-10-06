@@ -16,10 +16,10 @@ run() { # tag extra-flags...
   python3 MILP/finn_milp.py $COMMON "$@" --out-file $OUT/$tag/layer_bits_folding_$tag.json > $OUT/$tag/solve.log 2>&1 &
 }
 run baseline_both_off
-run dsrSweep_pbiOff_dsr1.5 --dsr-ratio 1.5
-run dsrSweep_pbiOff_dsr3.0 --dsr-ratio 3.0
-run dsrSweep_pbiOff_dsr7.5 --dsr-ratio 7.5
-run dsrSweep_pbiOff_dsr15.0 --dsr-ratio 15.0
-run dsrSweep_pbiOff_dsr150.0 --dsr-ratio 150.0
+run dsrSweep_pbiOff_dsr1.5 --dsr-pct 50
+run dsrSweep_pbiOff_dsr3.0 --dsr-pct 200
+run dsrSweep_pbiOff_dsr7.5 --dsr-pct 650
+run dsrSweep_pbiOff_dsr15.0 --dsr-pct 1400
+run dsrSweep_pbiOff_dsr150.0 --dsr-pct 14900
 run pbiSweep_dsrOff_pbi1.5 --pbi-ratio 1.5
 wait

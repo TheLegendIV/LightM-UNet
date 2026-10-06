@@ -11,7 +11,7 @@ COMMON="--config config_12_dense_relu_nearest_upsample_wm \
   --force-dsp --target-fps 305.17 --mvau-wwidth-max 80 --min-resources --time-limit 900 --gap-rel 0.005"
 for b in 4 6 8; do
   for d in dsr2 nodsr; do
-    tag=int${b}_$d; extra=""; [ $d = dsr2 ] && extra="--dsr-ratio 2"
+    tag=int${b}_$d; extra=""; [ $d = dsr2 ] && extra="--dsr-pct 100"
     mkdir -p $OUT/$tag
     python3 MILP/finn_milp.py $COMMON --candidate-bits $b $extra --out-file $OUT/$tag/layer_bits_folding_$tag.json > $OUT/$tag/solve.log 2>&1 &
   done

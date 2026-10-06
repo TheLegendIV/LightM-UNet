@@ -14,11 +14,11 @@ run() { # tag extra-flags...
   mkdir -p $OUT/$tag
   python3 MILP/finn_milp.py $COMMON "$@" --out-file $OUT/$tag/layer_bits_folding_$tag.json > $OUT/$tag/solve.log 2>&1 &
 }
-run dsrmin_1x   --dsr-ratio 1.02
-run dsrmin_2x   --dsr-ratio 2.04
-run dsrmin_4x   --dsr-ratio 4.08
-run dsrmin_8x   --dsr-ratio 8.16
-run dsrmin_10x  --dsr-ratio 10.2
+run dsrmin_1x   --dsr-pct 2
+run dsrmin_2x   --dsr-pct 104
+run dsrmin_4x   --dsr-pct 308
+run dsrmin_8x   --dsr-pct 716
+run dsrmin_10x  --dsr-pct 920
 run dsr_off
 run dsr_off_fps305 --target-fps 305.1  # extra control: same FPS as the DSR runs (fixed initial.pool floor = 305.17)
 wait

@@ -4,10 +4,10 @@
 # FPS 250, hard caps 0.7 (LUT/BRAM/DSP), --mvau-wwidth-max UNSET, lexicographic: pass 1 accuracy (bits 4,6,8, no DSR),
 # pass 2 min resources at DSR = 1 + epsilon. fixed = legacy Int8 joins; tied = skip_quant/residual_add bits = expand.0 act bits.
 # Arms (ARMS env, default "fixed tied"): fixed|tied, optional suffix "dist" = --joins-distributed (LUTRAM-only join thresholds).
-# Run in lightmunet_dev from /workspace/LightM-UNet.  Usage: run_regression.sh [dsr2 ...]   (default: 1.02)
+# Run in lightmunet_dev from /workspace/LightM-UNet.  Usage: run_regression.sh [dsr2 ...]   (PERCENT, default: 2)
 cd /workspace/LightM-UNet
 OUT=MILP/artifacts/S12_dense_joinbits_regression_v1
-DSRS=${@:-1.02}
+DSRS=${@:-2}              # DSR allowances in PERCENT (2 = ratio 1.02)
 COMMON="--config config_12_dense_relu_nearest_upsample_wm \
   --sensitivity-file MILP/artifacts/layer_sensitivity_12_dense_relu_nearest_upsample_wm.json \
   --candidate-bits 4,6,8 --max-lut-fraction 0.7 --max-bram-fraction 0.7 --max-dsp-fraction 0.7 \
@@ -19,7 +19,7 @@ for D in $DSRS; do
     case $ARM in tied*) EXTRA="--tie-residual-bits";; esac
     case $ARM in *dist) EXTRA="$EXTRA --joins-distributed";; esac
     mkdir -p $OUT/$TAG
-    python3 MILP/finn_milp.py $COMMON $EXTRA --dsr-ratio-pass2 $D \
+    python3 MILP/finn_milp.py $COMMON $EXTRA --dsr-pct-pass2 $D \
       --out-file $OUT/$TAG/layer_bits_folding_$TAG.json > $OUT/$TAG/solve.log 2>&1 &
   done
 done
