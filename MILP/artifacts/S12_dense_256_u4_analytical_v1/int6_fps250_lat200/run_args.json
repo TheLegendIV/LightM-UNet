@@ -4,8 +4,6 @@
   "fps": "250.0",
   "clock_mhz": "100.0",
   "max_latency_ms": "200.0",
-  "dsr_ratio": "1.04",
-  "budget_floor": "0.6",
   "no_ratchet": "False",
   "tag": "final",
   "out_dir": "MILP/artifacts/S12_dense_256_u4_analytical_v1/int6_fps250_lat200",
@@ -18,5 +16,7 @@
   "workers": "6",
   "whole_net_check": "False",
   "no_verify": "False",
-  "no_onnx": "False"
+  "no_onnx": "False",
+  "ratchet_pct": "4.0",
+  "ratchet_floor": "0.6"
 }

@@ -141,11 +141,12 @@ class FifoModel:
         if item is not None:
             self.items.setdefault(key, []).append(item)
 
-    def _fifo_item(self, key, label, width, depth, stage, is_skip=False, producer=None, consumer=None):
+    def _fifo_item(self, key, label, width, depth, stage, is_skip=False, producer=None, consumer=None, role_kind="", conv=None):
         m = fifo_memory(width, depth)
         self._add_const(key, m["lut"], m["bram18"], m["uram"], dict(
-            kind="fifo", name=label, stage=stage, producer=producer, consumer=consumer, width_bits=int(width), depth=int(depth), mem=m["mem"],
-            depth_alloc=int(m["depth_alloc"]), lut=int(m["lut"]), mem_bram18=int(m["bram18"]), mem_uram18=int(m["uram"]), is_skip=is_skip))
+            kind="fifo", name=label, stage=stage, producer_milp=producer, consumer_milp=consumer, width_bits=int(width), depth=int(depth), mem=m["mem"],
+            depth_alloc=int(m["depth_alloc"]), lut=int(m["lut"]), mem_bram18=int(m["bram18"]), mem_uram18=int(m["uram"]), is_skip=is_skip,
+            role_kind=role_kind, conv=conv))
 
     def _build_constants(self) -> None:
         A = self.A
@@ -163,7 +164,8 @@ class FifoModel:
                 continue
             for key, _ in self.options[name]:
                 c = self.cost[key]
-                self._fifo_item(key, f"{name}.prefetch", c["simd_swu"] * A, prefetch_depth_words(g, c["simd_swu"]), g.stage, producer=f"{name}", consumer=f"{name}.fmpad")
+                self._fifo_item(key, f"{name}.prefetch", c["simd_swu"] * A, prefetch_depth_words(g, c["simd_swu"]), g.stage, producer=f"{name}", consumer=f"{name}.fmpad",
+                                 role_kind="prefetch", conv=name)
         # skip FIFO of every residual diamond (join kind add)
         for d in find_fork_join_diamonds(self.dmap):
             if self.kinds.get(d["join"]) != "add":
@@ -183,7 +185,7 @@ class FifoModel:
             for key, _ in self.options[node]:
                 pe = key[1]
                 self._fifo_item(key, f"{d['join']}.skip", pe * A, skip_depth_words(conv, cout, pe, dn), self.extras[d["join"]].geom.stage, is_skip=True,
-                                producer=node, consumer=d["join"])
+                                producer=node, consumer=d["join"], role_kind="skip")
 
     # ------------------------------------------------------------------ solver terms
     def add_terms(self, pulp, prob, tag: str = "fifo"):
@@ -231,7 +233,7 @@ class FifoModel:
         for name, key in chosen.items():
             for it in self.items.get(key, []):
                 if it["kind"] == "fifo":
-                    fifos.append({k: v for k, v in it.items() if k != "kind"})
+                    fifos.append(self._bridge_entry(it, chosen))
                     tot["lut"] += it["lut"]
                     tot["bram18"] += it["mem_bram18"]
                     tot["uram18"] += it["mem_uram18"]
@@ -245,6 +247,27 @@ class FifoModel:
             dwcs.append(dict(name=f"{pred}->{consumer}", stage=_stage(consumer, self.geom, self.extras), in_width=int(w1), out_width=int(w2), lut=float(lut)))
             tot["dwc_lut"] += lut
         return dict(fifos=fifos, dwcs=dwcs, totals=tot)
+
+    def _bridge_entry(self, it: dict, chosen: dict) -> dict:
+        """One entry of the flat `intra_block_fifos` list in the schema (and role vocabulary) net_fold.py writes and hardware/finn_s12_build_steps.py reads:
+        producer / consumer = '<stage>.<analytical role>' (skip: thr_s => add; prefetch: dwc or thr_r => fmpad, initial block: dup => fmpad); the MILP names ride along as *_milp."""
+        stage = it["stage"]
+        if it["role_kind"] == "skip":
+            producer, consumer = f"{stage}.thr_s", f"{stage}.add"
+        else:
+            consumer = f"{stage}.fmpad"
+            if stage == "initial":
+                producer = "initial.dup"
+            else:
+                preds = [p for p in self.dmap.get(it["conv"], []) if p in chosen]
+                in_w = self.ports(chosen[it["conv"]])["in_w"]
+                producer = f"{stage}.dwc" if preds and self.ports(chosen[preds[0]])["out_w"] != in_w else f"{stage}.thr_r"
+        mem = it["mem"]
+        return dict(
+            stage=stage, name=(f"{stage}.skip_FIFO" if it["is_skip"] else f"{stage}.prefetch"), producer=producer, consumer=consumer,
+            producer_milp=it["producer_milp"], consumer_milp=it["consumer_milp"], depth=it["depth"], width_bits=it["width_bits"], max_occupancy=it["depth"],
+            is_skip=it["is_skip"], mem=mem, finn_impl=("rtl" if mem == "srl" else f"vivado/{'ultra' if mem == 'uram' else 'block'}"),
+            mem_bram18=it["mem_bram18"], mem_lut=it["lut"], depth_alloc=it["depth_alloc"], mem_uram18=it["mem_uram18"])
 
     def _chosen_width(self, chosen, name, side, pred=None):
         key = chosen[name]

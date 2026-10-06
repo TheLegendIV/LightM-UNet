@@ -31,6 +31,7 @@ EXPS = {
     "random_shared": ("random indices (fixed, shared by all channels)", "#eb6834", "s"),
     "random_per_channel": ("random indices (fixed, per channel)", "#eb6834", "s"),
     "nearest_quarter": ("v/4 in all 4 sub-pixels", "#1baf7a", "^"),
+    "nearest_half": ("v/2 in all 4 sub-pixels (L2-matched)", "#eda100", "D"),
 }
 STAGE_TITLE = {"up4": "decoder stage 4 (1st unpool)", "up5": "decoder stage 5 (2nd unpool)"}
 
@@ -130,13 +131,22 @@ def main() -> None:
     suffix = f"{n_cases} validation cases (nnU-Net fold 0), trained nets, no retraining; {seed_note}"
 
     # -- Dice ---------------------------------------------------------------
-    fig, axes = new_fig(1, 7.2, 4.6)
+    # Report-style figure: terse, bold title/axes/ticks/legend, big plot area, legend inside the axes
+    # (identity lives in the legend, so no end labels or subtitle; case/seed counts are in the caption).
+    fig, axes = new_fig(1, 8.5, 6.2)
     ax = axes[0][0]
-    ends = draw_lines(ax, aggregate(dice, "dice", ["exp", "divisor"]), divisors)
-    ax.set_xlabel("channel divisor (1 = full-width ENet, 16 = U16)", color=INK2, fontsize=9.5)
-    ax.set_ylabel("Dice, mean over 4 classes", color=INK2, fontsize=9.5)
-    end_labels(ax, ends)
-    finish(fig, HERE / "exp_dice.png", "Validation Dice vs. channel width, by skip ablation", suffix, ax)
+    draw_lines(ax, aggregate(dice, "dice", ["exp", "divisor"]), divisors)
+    ax.set_title("Validation Dice vs Channel Widths for MaxUnpool Ablation", fontsize=15, fontweight="bold", color=INK)
+    ax.set_xlabel("Channel Width Divisor (1/x)", fontsize=13, fontweight="bold", color=INK)
+    ax.set_ylabel("mDice", fontsize=13, fontweight="bold", color=INK)
+    ax.tick_params(labelsize=12, colors=INK2)
+    for lbl in ax.get_xticklabels() + ax.get_yticklabels():
+        lbl.set_fontweight("bold")
+    ax.legend(loc="best", frameon=True, framealpha=0.9, facecolor=SURFACE, edgecolor=AXIS, prop={"weight": "bold", "size": 10.5})
+    fig.tight_layout()
+    fig.savefig(HERE / "exp_dice.png", dpi=200, facecolor=SURFACE)
+    plt.close(fig)
+    print("wrote exp_dice.png")
 
     # -- per-stage panels -----------------------------------------------------
     def stage_fig(value: str, ylabel: str, fname: str, title: str, subtitle: str, theory: bool = False) -> None:

@@ -133,6 +133,9 @@ def trace_layer_geometry(model: torch.nn.Module, input_hw: tuple[int, int], in_c
     return geometries, list(blocks.keys())
 
 
+DEFAULT_RATCHET_PCT = 4.0     # --ratchet-pct default: the analytical net_fold.py uses the same numbers (--ratchet-pct 4 --ratchet-floor 0.6)
+DEFAULT_RATCHET_FLOOR = 0.6
+
 # ---- Extra hardware nodes with no conv/pool module (see finn_milp.md "Dataflow graph") ----
 
 THRESHOLD_KINDS = ("skip_quant", "residual_add", "out_act", "input_quant", "act", "pool_quant")
@@ -366,6 +369,8 @@ def solve_joint_perlayer(
     mvau_wwidth_max: int | None = None,
     feasibility_only: bool = False,
     model_fifos: bool = False,
+    ratchet_pct: float | None = None,
+    ratchet_floor: float = DEFAULT_RATCHET_FLOOR,
 ) -> dict:
     """Build and solve the MILP. Formulation: finn_milp.md "Formulation".
     feasibility_only: zero objective (any feasible point is Optimal) -- used by the --min-dsr probes."""
@@ -627,6 +632,56 @@ def solve_joint_perlayer(
             ), f"downstream_rate_{name}"
             n_chain_rate_constraints += 1
 
+    # ---- Frame-rate ratchet (--ratchet-pct / --ratchet-floor): "downstream no slower than upstream" in cycles PER FRAME (comparable across resolutions), edge by edge on the
+    # dataflow graph: cycles[C] <= max(floor * F, (1 + pct/100) * cycles[P]) for every COMPUTE node C (conv / MVAU layers and the argmax) and each of its nearest compute ancestors P;
+    # everything else (thresholds, dup, add, pools, concat, upsample, the input quantizer) is relayed through. Thresholds / dup / add must NOT be ratchet nodes: their slowest fold
+    # is tiny (a 4-channel threshold at PE 1 = 65,536 cycles) while the conv behind them cannot be faster than ~131,072 under the width cap, so an edge rule on them is infeasible
+    # at any small pct. Nodes pick from a few distinct cycle values, so the disjunction becomes pair exclusions on cycle-class indicators (no big-M, no slack variable).
+    n_ratchet_constraints = 0
+    if ratchet_pct is not None and max_node_cycles is not None:
+        if dataflow_map is None:
+            raise ValueError("ratchet needs the dataflow graph (dataflow_map).")
+        node_opts: dict[str, list] = {}
+        for key, var in z.items():
+            node_opts.setdefault(key[0], []).append((raw_cycles[key], var))
+        ratchet_nodes = {g.name for g in geometries if g.op_type != "MaxPool2d" and len({c for _, c in layer_cycle_terms[g.name]}) > 1}
+        ratchet_nodes |= {n.geom.name for n in extra_nodes if n.kind in ("argmax", "pad_mvau") and len({c for _, c in layer_cycle_terms[n.geom.name]}) > 1}
+        floor_cycles = ratchet_floor * max_node_cycles
+        classes_of: dict[str, dict] = {}
+
+        def classes(n):
+            if n not in classes_of:
+                d: dict[float, list] = {}
+                for c, v in node_opts[n]:
+                    d.setdefault(c, []).append(v)
+                classes_of[n] = d
+            return classes_of[n]
+
+        anc_memo: dict[str, set] = {}
+
+        def foldable_ancestors(n):
+            if n not in anc_memo:
+                out: set = set()
+                for p in dataflow_map.get(n, []):
+                    if p in ratchet_nodes:
+                        out.add(p)
+                    else:
+                        out |= foldable_ancestors(p)
+                anc_memo[n] = out
+            return anc_memo[n]
+
+        for c_name in sorted(ratchet_nodes):
+            for p_name in sorted(foldable_ancestors(c_name)):
+                cc = classes(c_name)
+                for c1, zs1 in classes(p_name).items():
+                    limit = max(floor_cycles, (1 + ratchet_pct / 100) * c1) * (1 + 1e-9)
+                    bad = [v for c2, zs2 in cc.items() if c2 > limit for v in zs2]
+                    if bad:
+                        prob += pulp.lpSum(zs1) + pulp.lpSum(bad) <= 1, f"ratchet_{n_ratchet_constraints}"
+                        n_ratchet_constraints += 1
+    elif ratchet_pct is not None:
+        print("NOTE: --ratchet-pct needs --target-fps (the floor is a fraction of the per-node budget); ratchet not applied.")
+
     # ---- --model-fifos: skip / prefetch FIFOs and DWCs as extra LUT / BRAM / URAM terms (fifo_model.py); zero when the flag is off ----
     fifo_model = None
     fifo_lut = fifo_bram = fifo_uram = 0
@@ -687,7 +742,7 @@ def solve_joint_perlayer(
     n_binary_vars = len(y) + len(z)
     n_constraints = (
         n_layers + sum(len(candidate_pairs) for _ in geometries) + 4
-        + (1 if max_cycles is not None else 0) + n_join_constraints + n_chain_rate_constraints
+        + (1 if max_cycles is not None else 0) + n_join_constraints + n_chain_rate_constraints + n_ratchet_constraints
         + n_extra_constraints
     )
 
@@ -819,6 +874,7 @@ def solve_joint_perlayer(
                                        "are not priced; inter-block FIFOs are fixed at depth 2."}} if fifo_out else {}),
             "candidate_bits": list(CANDIDATE_BITS), "n_layers": n_layers,
             "n_binary_vars": n_binary_vars, "n_constraints": n_constraints,
+            "ratchet": {"pct": ratchet_pct if max_node_cycles is not None else None, "floor": ratchet_floor, "n_constraints": n_ratchet_constraints},
             "min_resources": min_resources, "mvau_wwidth_max": mvau_wwidth_max,
             "n_wwidth_blocked_folds": n_wwidth_blocked,
             # exempt from --dsr-pct (one cycle value whatever the fold); used for the foldable-only DSR stats
@@ -935,7 +991,7 @@ def _write_run_summary(
         "max-dsp-fraction": args.max_dsp_fraction, "max-uram-fraction": args.max_uram_fraction, "force-dsp": args.force_dsp,
         "max-latency-ms": args.max_latency_ms, "clock-mhz": args.clock_mhz, "target-fps": args.target_fps,
         "dsr-pct": None if args.dsr_ratio is None else round((args.dsr_ratio - 1) * 100, 6), "dsr-ratio": args.dsr_ratio,
-        "dsr-pct-pass2": args.dsr_pct_pass2, "target-fps-pass2": args.target_fps_pass2,
+        "dsr-pct-pass2": args.dsr_pct_pass2, "ratchet-pct": args.ratchet_pct, "ratchet-floor": args.ratchet_floor, "model-fifos": args.model_fifos, "target-fps-pass2": args.target_fps_pass2,
         "pbi-ratio": args.pbi_ratio,
         "mvau-wwidth-max": args.mvau_wwidth_max, "min-resources": args.min_resources,
         "lexicographic": args.lexicographic,
@@ -959,12 +1015,11 @@ def _write_run_summary(
     print(f"Wrote {run_args_path}.")
 
 
-DEFAULT_DSR_PCT = 4.0         # --dsr-pct default (DSR was off before); the analytical net_fold.py ratchet uses the same number
-DSR_OFF = -1.0                # sentinel for "--dsr-pct none"
+DSR_OFF = -1.0                # sentinel for "none"
 
 
 def _dsr_arg(text: str) -> float:
-    """argparse type for --dsr-pct: a percentage >= 0, or none/off to disable the constraint."""
+    """argparse type for --dsr-pct / --ratchet-pct: a percentage >= 0, or none/off to disable the constraint."""
     if text.lower() in ("none", "off"):
         return DSR_OFF
     value = float(text)
@@ -979,10 +1034,10 @@ def pct_to_ratio(pct: float) -> float:
 
 
 def resolve_dsr_ratio(pct: float | None, min_dsr: bool) -> float | None:
-    """--dsr-pct as given (None = flag absent, DSR_OFF = 'none') -> the ratio the solve uses: 1.04 when absent (unless --min-dsr searches it), None when switched off."""
-    if pct is None:
-        return None if min_dsr else pct_to_ratio(DEFAULT_DSR_PCT)
-    return None if pct == DSR_OFF else pct_to_ratio(pct)
+    """--dsr-pct as given (None = flag absent = DSR off, DSR_OFF = 'none') -> the ratio the solve uses, None = no DSR constraint."""
+    if pct is None or pct == DSR_OFF:
+        return None
+    return pct_to_ratio(pct)
 
 
 def build_model_and_graph() -> tuple[
@@ -1098,10 +1153,15 @@ def main() -> None:
                          help="Hard cap on the sum of cycles, as ms at --clock-mhz.")
     parser.add_argument("--clock-mhz", type=float, default=100.0, help="Clock for --max-latency-ms (default 100).")
     parser.add_argument("--dsr-pct", type=_dsr_arg, default=None,
-                         help=f"Downstream-rate allowance in PERCENT: chain-coherence constraint bounding a node's rate against "
-                              f"the slowest rate anywhere in its downstream subtree (slowest descendant <= (1 + pct/100) x own rate). "
-                              f"ON by default at {DEFAULT_DSR_PCT:g} (the analytical build's block ratchet uses the same number); "
-                              f"'none' turns it off. With --min-dsr the default is not applied.")
+                         help="Downstream-rate allowance in PERCENT: chain-coherence constraint on the ELEMENT rate (cycles per output element) bounding a node's "
+                              "rate against the slowest rate anywhere in its downstream subtree (slowest descendant <= (1 + pct/100) x own rate). OFF by default: "
+                              "the 1-channel network input pins the element rate at 1.0 and forces every later stage to run far faster than the fps target "
+                              "(S12-256: 1280 DSP). The default rate rule is --ratchet-pct.")
+    parser.add_argument("--ratchet-pct", type=_dsr_arg, default=DEFAULT_RATCHET_PCT,
+                         help=f"Frame-rate ratchet in PERCENT (default {DEFAULT_RATCHET_PCT:g}; 'none' = off): a node's cycles per FRAME may exceed those of its nearest foldable "
+                              f"upstream node by at most this much, but never below --ratchet-floor x the per-node budget (needs --target-fps).")
+    parser.add_argument("--ratchet-floor", type=float, default=DEFAULT_RATCHET_FLOOR,
+                         help=f"Fraction of the per-node cycle budget (clock/target-fps) a node may always use whatever the upstream node does (default {DEFAULT_RATCHET_FLOOR}).")
     parser.add_argument("--min-dsr", action="store_true",
                          help="Find the SMALLEST --dsr-pct (to 0.01 of ratio = 1 pct) for which the problem is feasible under all other "
                               "constraints, then solve with it (both passes with --lexicographic). Feasibility probes run "
@@ -1144,6 +1204,7 @@ def main() -> None:
     if args.min_dsr and args.dsr_pct is not None:
         parser.error("--min-dsr and --dsr-pct are mutually exclusive.")
     args.dsr_ratio = resolve_dsr_ratio(args.dsr_pct, args.min_dsr)          # internal form: 1 + pct/100, None = off
+    args.ratchet_pct = None if args.ratchet_pct == DSR_OFF else args.ratchet_pct
     args.dsr_ratio_pass2 = None if args.dsr_pct_pass2 is None else pct_to_ratio(args.dsr_pct_pass2)
 
     load_config(args.config)
@@ -1243,7 +1304,7 @@ def main() -> None:
             max_cycles=max_cycles, pinned_bits=pinned_bits, predecessor_map=predecessor_map, force_dsp=args.force_dsp,
             max_dsp_fraction=args.max_dsp_fraction, max_uram_fraction=args.max_uram_fraction, pbi_ratio=args.pbi_ratio,
             max_node_cycles=max_node_cycles, mvau_wwidth_max=args.mvau_wwidth_max, extra_nodes=extra_nodes,
-            dataflow_map=dataflow_map, model_fifos=args.model_fifos,
+            dataflow_map=dataflow_map, model_fifos=args.model_fifos, ratchet_pct=args.ratchet_pct, ratchet_floor=args.ratchet_floor,
         ))
 
     result = solve_joint_perlayer(
@@ -1254,6 +1315,7 @@ def main() -> None:
         dsr_ratio=args.dsr_ratio, pbi_ratio=args.pbi_ratio, max_node_cycles=max_node_cycles,
         min_resources=args.min_resources, mvau_wwidth_max=args.mvau_wwidth_max,
         extra_nodes=extra_nodes, dataflow_map=dataflow_map, model_fifos=args.model_fifos,
+        ratchet_pct=args.ratchet_pct, ratchet_floor=args.ratchet_floor,
     )
     if args.lexicographic:
         if args.min_resources or args.pin_bits_file is not None:
@@ -1288,6 +1350,7 @@ def main() -> None:
                 pbi_ratio=args.pbi_ratio, max_node_cycles=max_node_cycles2,
                 min_resources=True, mvau_wwidth_max=args.mvau_wwidth_max,
                 extra_nodes=extra_nodes, dataflow_map=dataflow_map, model_fifos=args.model_fifos,
+                ratchet_pct=args.ratchet_pct, ratchet_floor=args.ratchet_floor,
             )
             if result["status"] == "Optimal":
                 result["_diagnostics"]["lexicographic"] = {

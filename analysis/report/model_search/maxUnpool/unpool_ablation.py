@@ -14,6 +14,10 @@ Experiments (the `exp` column):
   nearest_quarter  no indices at all: v/4 written into all 4 sub-pixels
                    (= E[unpool over random indices], same mass per window,
                    position info removed, full coverage)               [exp 2]
+  nearest_half     no indices at all: v/2 written into all 4 sub-pixels.
+                   Same L2 norm per window as the real skip (4*(v/2)^2 = v^2),
+                   so it removes the norm confound of nearest_quarter (whose
+                   norm is halved); the window SUM is doubled instead.
 
 Per (width, exp) it records:
   * Dice on the validation split (nnU-Net fold-0 `val` list), same metric as
@@ -186,6 +190,8 @@ class SkipPatch:
                 main = block.unpool(main, patch._random_indices(stage_id, main, output_size), output_size=output_size)
             elif patch.mode == "nearest_quarter":
                 main = F.interpolate(main, size=output_size[2:], mode="nearest") * 0.25
+            elif patch.mode == "nearest_half":
+                main = F.interpolate(main, size=output_size[2:], mode="nearest") * 0.5
             else:
                 raise ValueError(patch.mode)
             out = block.reduce(x)
@@ -274,8 +280,8 @@ def build_predictor(div: int, run_name: str, channels: str) -> nnUNetPredictor:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--divisors", type=int, nargs="+", default=[w[0] for w in WIDTHS])
-    ap.add_argument("--exps", nargs="+", default=["control", "random", "nearest_quarter"],
-                    choices=["control", "random", "nearest_quarter"])
+    ap.add_argument("--exps", nargs="+", default=["control", "random", "nearest_quarter", "nearest_half"],
+                    choices=["control", "random", "nearest_quarter", "nearest_half"])
     ap.add_argument("--seeds", type=int, nargs="+", default=[0], help="seeds for the random-index exp")
     ap.add_argument("--random-mode", choices=["shared", "per_channel"], default="shared")
     ap.add_argument("--split", choices=["val", "test"], default="val")

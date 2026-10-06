@@ -204,8 +204,19 @@ On S12-256 INT6 (force-dsp, min-resources, 250 fps) it finds 25 skip + 26 prefet
 
 ## Rate coherence: `--pbi-ratio RATIO` (join balance) and `--dsr-pct PCT` (chain coherence)
 
-**`--dsr-pct` (2026-10-06):** the DSR allowance is given in PERCENT and is ON by default at 4 (ratio 1.04); `--dsr-pct none` switches it off, `--min-dsr` still searches the smallest feasible allowance
-(the default is not applied then). It replaces `--dsr-ratio R` (R = 1 + pct/100; `--dsr-ratio-pass2` became `--dsr-pct-pass2`). Result JSONs keep the ratio form (`dsr_ratio`) next to the percent in `run_args`.
+**Frame-rate ratchet: `--ratchet-pct 4 --ratchet-floor 0.6` (2026-10-06, ON by default, needs `--target-fps`).** "Downstream no slower than upstream" in cycles PER FRAME (comparable across resolutions,
+unlike per element): for every dataflow edge P -> C between COMPUTE nodes (conv / MVAU layers, the downsampling pad-MVAU, the argmax) `cycles[C] <= max(floor * F, (1 + pct/100) * cycles[P])`, F = clock / target-fps (400,000 at 250 fps, so the floor is 240,000 cycles).
+Everything else (thresholds, dup, add, pools, upsample, concat, the 1-channel input quantizer) is relayed through (C is compared with its nearest compute ancestors); forks and joins need no special case. Thresholds / dup / add
+are NOT ratchet nodes: their slowest fold is tiny (a 4-channel threshold at PE 1 = 65,536 cycles) while the conv behind them cannot be faster than ~131,072 cycles under a 72-bit width cap, so an edge rule on them is
+infeasible at any small pct (found on the S12-256 ratchet ablation, where floor 0 is infeasible below +100% and the smallest feasible round floor is 0.33). Because each node picks
+from a few distinct cycle values, the disjunction is written as pair exclusions on cycle-class indicators: `u_P[c1] + sum(u_C[c2] for c2 > max(floor F, (1+pct) c1)) <= 1` (no big-M, no slack variable).
+It is the analytical build's block ratchet (`MILP/analytical/net_fold.py --ratchet-pct --ratchet-floor`) applied edge by edge instead of block by block. The floor is what usually binds: with it a node may always
+use up to 0.6 F, so the ratchet only bites when an upstream node is slower than 0.6 F / 1.04. `--ratchet-pct none` turns it off (old sweeps that passed `--target-fps` without the flag now get it: add `--ratchet-pct none`
+to reproduce them).
+
+**`--dsr-pct` (2026-10-06, OFF by default):** the ELEMENT-rate DSR below, in PERCENT (replaces `--dsr-ratio R`; R = 1 + pct/100; `--dsr-ratio-pass2` became `--dsr-pct-pass2`; `--min-dsr` searches the smallest
+feasible allowance). It is no longer the default because the 1-channel network input has a fixed element rate of 1.0 cycle per element, so at 4% every later stage must produce an element per cycle too: low-resolution stages
+then run 16-18x faster per frame than the fps target needs (S12-256 INT6: 1,280 DSP / 120k LUT against 121-145 DSP / 93k LUT with the ratchet). Result JSONs keep the ratio form (`dsr_ratio`).
 The final `argmax` node is exempt like the fixed-cycle nodes (its output has one element per pixel against C at its input, so its element-rate would be C x the final conv's by construction).
 
 Two independent constraint families on the dataflow graph (so threshold
@@ -473,7 +484,7 @@ cost model's calibration, not a certified hardware guarantee.
 
 ## History
 
-- 2026-10-06: `argmax` extra node (FINN LabelSelect over the 5 output channels, foldable PE | 5, DSR-exempt); `--dsr-ratio R` replaced by `--dsr-pct P` and switched on by default at 4 (`--dsr-pct none` = old default).
+- 2026-10-06: `argmax` extra node (FINN LabelSelect over the 5 output channels, foldable PE | 5, DSR-exempt); `--dsr-ratio R` replaced by `--dsr-pct P` (still off by default); new default-on frame-rate ratchet `--ratchet-pct 4 --ratchet-floor 0.6`.
 
 - 2026-09-17: became self-contained (was `joint_bits_folding_ilp_perlayer.py`,
   a per-layer reindexing of the per-block `joint_bits_folding_ilp.py`);

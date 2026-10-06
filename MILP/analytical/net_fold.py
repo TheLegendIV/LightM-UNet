@@ -23,8 +23,8 @@ Rate policy:
   * every node's cycles per frame <= F = clock / fps (250 fps at 100 MHz = 400,000 cycles); the analytical search takes the largest cycle count that
     fits, so each stage is matched to the target;
   * optional latency cap --max-latency-ms (latency = cycles to the FIRST OUTPUT PIXEL, summed over the blocks' first-in -> first-out latencies / clock): the per-node budget is bisected down until it holds;
-  * "downstream faster than upstream": block k gets budget min(F, max(floor * F, R * slowest_{k-1})), R = 1 + --dsr-pct/100 (the MILP's own DSR allowance, default
-    1.04), floor = --budget-floor. A node that cannot be slowed (the lattice of legal (PE, SIMD) pairs) keeps the chain from relaxing past the floor,
+  * "downstream faster than upstream": block k gets budget min(F, max(floor * F, R * slowest_{k-1})), R = 1 + --ratchet-pct/100 (the MILP's --ratchet-pct, the same rule edge by edge on the dataflow graph; the element-rate DSR is a different, opt-in constraint; the MILP's own DSR allowance, default
+    1.04), floor = --ratchet-floor. A node that cannot be slowed (the lattice of legal (PE, SIMD) pairs) keeps the chain from relaxing past the floor,
     and the achieved MILP DSR ratio (cycles per output element, downstream vs. upstream) is reported in _diagnostics.chain_rate_imbalance.
 """
 from __future__ import annotations
@@ -327,7 +327,7 @@ def assemble(a, ctx, F_top: int, compute_intra_fifos: bool = False, keep_blocks:
     prev_output = None
     for stage in block_order(geoms):
         kind = block_kind(stage)
-        F_k = F_top if (a.no_ratchet or slowest_prev is None) else int(min(F_top, max(a.budget_floor * F_top, (1 + a.dsr_pct / 100) * slowest_prev)))
+        F_k = F_top if (a.no_ratchet or slowest_prev is None) else int(min(F_top, max(a.ratchet_floor * F_top, (1 + a.ratchet_pct / 100) * slowest_prev)))
         r, lf, xf, slowest, fifos, fifo_warning = run_block(stage, geom, a.bits, F_k, compute_fifos=compute_intra_fifos, prev_output=prev_output)
         intra_fifos.extend(fifos)
         if fifo_warning:
@@ -412,7 +412,7 @@ def assemble(a, ctx, F_top: int, compute_intra_fifos: bool = False, keep_blocks:
             "bottleneck_node": bott, "bottleneck_cycles": node_cycles[bott],
             "max_node_cycles": int(a.clock_mhz * 1e6 / a.fps), "per_node_budget_used": F_top, "target_fps": a.fps, "clock_mhz": a.clock_mhz,
             "max_latency_ms": a.max_latency_ms, "fps": a.clock_mhz * 1e6 / node_cycles[bott],
-            "analytical": {"source": "MILP/analytical/net_fold.py", "dsr_pct": a.dsr_pct, "dsr_ratio": 1 + a.dsr_pct / 100, "budget_floor": a.budget_floor, "ratchet": not a.no_ratchet,
+            "analytical": {"source": "MILP/analytical/net_fold.py", "ratchet_pct": a.ratchet_pct, "ratchet_floor": a.ratchet_floor, "ratchet": not a.no_ratchet,
                            "sum_of_block_first_out_latencies_cycles": rough_latency, "block_profile": profile,
                            "mvau_cycle_mismatches_vs_milp_cost_model": mismatches},
             "note": "Folding assembled from the analytical per-block models (U4 widths), costed with the MILP's own layer_cost_pe_simd / extra_node_options. Not an ILP solve. "
@@ -554,8 +554,8 @@ def main() -> int:
     ap.add_argument("--clock-mhz", type=float, default=100.0)
     ap.add_argument("--max-latency-ms", type=float, default=None,
                     help="latency cap = time to the first output pixel (sum of the blocks' first-in -> first-out latencies / clock): the per-node budget is lowered (bisection) until it holds")
-    ap.add_argument("--dsr-pct", type=float, default=4.0, help="allowance of the downstream-faster ratchet in PERCENT (the MILP's --dsr-pct default); a block may be at most this much slower than the one before")
-    ap.add_argument("--budget-floor", type=float, default=0.6, help="the ratchet never tightens a block below this fraction of the per-node budget")
+    ap.add_argument("--ratchet-pct", type=float, default=4.0, help="allowance of the downstream-faster ratchet in PERCENT (the MILP's --ratchet-pct default); a block may be at most this much slower than the one before")
+    ap.add_argument("--ratchet-floor", type=float, default=0.6, help="the ratchet never tightens a block below this fraction of the per-node budget")
     ap.add_argument("--no-ratchet", action="store_true", help="every block gets the full per-node budget (stages matched to it, no downstream-faster rule)")
     ap.add_argument("--tag", default="final", help="file tag: layer_bits_folding_<tag>.json / layer_bits_SITES_<tag>.json (S12 artifacts use 'final')")
     ap.add_argument("--out-dir", type=Path, required=True)
