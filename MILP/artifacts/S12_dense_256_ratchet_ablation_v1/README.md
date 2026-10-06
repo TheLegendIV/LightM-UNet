@@ -14,6 +14,7 @@ FIFO / DWC modelling on (`--model-fifos`), no latency cap (the MILP's sum of nod
 | `ratchet_200pct` | `--ratchet-pct 200 --ratchet-floor 0.33` | |
 | `ratchet_off` | `--ratchet-pct none` | no rate rule (element-rate DSR is off by default) |
 | `analytical_25pct` | `MILP/analytical/net_fold.py --ratchet-pct 25 --ratchet-floor 0.33 --mvau-wwidth-max 72` (`run_analytical_arm.sh`) | **analytical flow**, not the MILP: same net / bits / fps / width cap / floor |
+| `analytical_25pct_finnfifo` | the SAME folding as `analytical_25pct`, folding json written WITHOUT the FIFO lists (by `summarize_arms.py`) | **hardware-only variant**: the bridge forces nothing, FINN's own rtlsim autosizer (`largefifo_rtlsim`) sets every FIFO depth |
 | `ratchet_ablation_finn_autofold` | none: FINN's own `step_target_fps_parallelization` (250 fps, `mvau_wwidth_max` 72) | **built on hardware**, not a MILP arm |
 
 (The first sweep used 1/2/4/8/16 %: 1, 2, 4 and 8 % gave the identical folding and 16 % was a second one, so the sweep was widened to 1/25/(50)/100/200 %; the 50 % arm gave the same folding as 25 % and was dropped.)
@@ -41,7 +42,8 @@ only `ratchet_off` moves (101 DSP at 72, 105 DSP and 94.5k LUT with a looser cap
 | ratchet_off | 95,274 | 93,387 | 101 | 101 | 327,680 (`final.argmax`) | 305.2 | 0 | E |
 | analytical_25pct | 87,995 | 76,918 | 205 | 241 | 147,715 (`regular5.0.conv`) | 677.0 | 82 | F |
 
-* **Six distinct foldings** (A-F; F = analytical), one per arm except that the dropped 50 % arm (run earlier) gave the same folding as 25 %. One hardware build per distinct folding (`arms_to_build.txt`, `arm_build_map.csv`).
+* **Six distinct foldings** (A-F; F = analytical) and seven builds: `analytical_25pct_finnfifo` shares folding F with `analytical_25pct` but is its own build, so `analytical_25pct` (FIFO depths forced from the analytical simulation)
+  against `analytical_25pct_finnfifo` (FINN's autosized FIFOs) isolates the effect of the FIFO strategy at identical folding (compare BRAM, LUT and rtlsim cycles); the MILP / analytical FIFO columns of the table are blank for it, one per arm except that the dropped 50 % arm (run earlier) gave the same folding as 25 %. One hardware build per distinct folding (`arms_to_build.txt`, `arm_build_map.csv`).
 * The knee is between 25 % and 100 %: up to +25-50 % the design keeps the whole network at ~147k cycles (676 fps); at +100 % the convs may sit at 294,912 cycles (339 fps, 2 layers differ from `off`); at +200 % only the argmax (PE 1,
   327,680 cycles) differs from `off`. Tight ratchets cost up to ~4% LUT and 77 DSP against `off` and buy 2.2x throughput.
 * Every ratchet arm passes the edge check in `summarize_arms.py` (0 violations), every layer is INT6, `mvau_wwidth_max` 72 holds.

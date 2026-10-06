@@ -11,11 +11,23 @@ import json
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-ARMS = ["ratchet_1pct", "ratchet_25pct", "ratchet_100pct", "ratchet_200pct", "ratchet_off", "analytical_25pct"]
+ARMS = ["ratchet_1pct", "ratchet_25pct", "ratchet_100pct", "ratchet_200pct", "ratchet_off", "analytical_25pct", "analytical_25pct_finnfifo"]
+# hardware-only variants: same folding as their base arm, but the folding json is written WITHOUT the FIFO lists, so the FINN bridge forces nothing and FINN's own rtlsim autosizer sets every FIFO depth
+VARIANTS = {"analytical_25pct_finnfifo": "analytical_25pct"}
 WWIDTH_MAX, BITS = 72, 6
 
 
 def load(arm):
+    if arm in VARIANTS:                                   # generate the variant's folding json from its base arm (same folding, FIFO lists stripped)
+        base = load(VARIANTS[arm])
+        if base is None:
+            return None
+        d = {k: v for k, v in base.items() if k not in ("intra_block_fifos", "inter_block_fifos")}
+        d["_variant"] = dict(of=VARIANTS[arm], note="FIFO lists removed: FINN's rtlsim autosizer (largefifo_rtlsim) sets every FIFO depth; the folding is identical to the base arm")
+        out = HERE / arm / f"layer_bits_folding_{arm}.json"
+        out.parent.mkdir(exist_ok=True)
+        out.write_text(json.dumps(d, indent=1))
+        return d
     p = HERE / arm / f"layer_bits_folding_{arm}.json"
     return json.loads(p.read_text()) if p.exists() else None
 
@@ -88,9 +100,9 @@ def main():
             fifo_lut = it["fifo_lut"] + it["dwc_lut"] + g["inter_block_fifo_lut"]
             lut_total, bram_total, fifo_bram = g["total_lut_calibrated"] + fifo_lut, g["total_bram18k_with_all_fifos"], it["fifo_bram18"]
             n_dwcs = sum(len(b["dwcs"]) for b in d["block_verification"].values())
-            n_fifos = sum(1 for f in d["intra_block_fifos"] if f["depth"] > 2)
+            n_fifos = sum(1 for f in d.get("intra_block_fifos", []) if f["depth"] > 2)
         fp = fingerprint(d)
-        groups.setdefault(fp, []).append(arm)
+        groups.setdefault(fp if arm not in VARIANTS else f"{fp}:{arm}", []).append(arm)         # a variant always gets its own build
         bad = ratchet_violations(d)
         weights = {n: v["simd"] * v["weight_bits"] for n, v in d["per_layer"].items() if not n.endswith(".pool")}   # the analytical pad-MVAU (INT8 weights) is capped in its search too
         rc = _ratchet_cfg(d)
@@ -106,6 +118,9 @@ def main():
             all_int6=all(v == BITS for v in d["layer_weight_bits"].values()) and all(v == BITS for v in d["layer_act_bits"].values()),
         )
         assert row["wwidth_max_seen"] <= WWIDTH_MAX, (arm, row["wwidth_max_seen"])
+        if arm in VARIANTS:
+            for k in ("lut_total", "lut_fifo_dwc", "bram18", "bram18_fifos", "n_dwcs", "n_fifos_gt2"):
+                row[k] = None                                                                  # FINN autosizes the FIFOs: no model number
         rows.append(row)
     cols = ["arm", "status", "ratchet_pct", "ratchet_floor", "ratchet_constraints", "lut_total", "lut_nodes", "lut_fifo_dwc", "bram18", "bram18_fifos", "dsp", "slowest_node",
             "slowest_cycles", "fps", "sum_node_cycles_ms", "n_dwcs", "n_fifos_gt2", "layers_diff_vs_off", "fingerprint", "ratchet_violations", "wwidth_max_seen", "all_int6"]
@@ -126,6 +141,9 @@ def main():
     for r in rows:
         if r["status"] != "Optimal":
             print(f"{r['arm']:14s}{r['status']}")
+            continue
+        if r["arm"] in VARIANTS:
+            print(f"{r['arm']:14s}{r['status']:11s}{'-':>8s}{r['lut_nodes']:9d}{'-':>8s}{r['dsp']:6.0f}{r['slowest_cycles']:9d}{r['fps']:7.1f}{str(r['layers_diff_vs_off']):>8s}  {r['fingerprint']}  (same folding as {VARIANTS[r['arm']]}, FINN FIFO autosize)")
             continue
         print(f"{r['arm']:14s}{r['status']:11s}{r['lut_total']:8d}{r['lut_nodes']:9d}{r['bram18']:8.0f}{r['dsp']:6.0f}{r['slowest_cycles']:9d}{r['fps']:7.1f}"
               f"{str(r['layers_diff_vs_off']):>8s}  {r['fingerprint']}  {r['ratchet_violations']}")
