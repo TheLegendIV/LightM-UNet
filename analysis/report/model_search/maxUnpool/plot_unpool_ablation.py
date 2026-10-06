@@ -27,11 +27,11 @@ GRID, AXIS = "#e1e0d9", "#c3c2b7"
 
 # exp name -> (label, colour slot, marker); control=blue, random=orange, v/4=aqua.
 EXPS = {
-    "control": ("control (real indices)", "#2a78d6", "o"),
-    "random_shared": ("random indices (fixed, shared by all channels)", "#eb6834", "s"),
-    "random_per_channel": ("random indices (fixed, per channel)", "#eb6834", "s"),
-    "nearest_quarter": ("v/4 in all 4 sub-pixels", "#1baf7a", "^"),
-    "nearest_half": ("v/2 in all 4 sub-pixels (L2-matched)", "#eda100", "D"),
+    "control": ("control", "#2a78d6", "o"),
+    "random_shared": ("random indices", "#eb6834", "s"),
+    "random_per_channel": ("random indices (per channel)", "#eb6834", "s"),
+    "nearest_quarter": ("v/4 in all 4 window idx", "#1baf7a", "^"),
+    "nearest_half": ("v/2 (L2 matched) in all 4 window idx", "#eda100", "D"),
 }
 STAGE_TITLE = {"up4": "decoder stage 4 (1st unpool)", "up5": "decoder stage 5 (2nd unpool)"}
 
