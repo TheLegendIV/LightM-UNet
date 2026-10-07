@@ -53,6 +53,10 @@ _parser.add_argument("--fifo-autosize", choices=["fixed2", "rtlsim"], default="f
                            "matched ones (unmatched edges stay at 2, reported explicitly, no silent huge "
                            "autosized depths). 'rtlsim': old behaviour, FINN's own largefifo_rtlsim autosizer "
                            "runs first (slow, real Verilator cosim) and MILP forcing only overwrites matches.")
+_parser.add_argument("--probe", action="store_true",
+                      help="use the 8-way (full=True) per-partition naming/CreateStitchedIP/OOC-synth pipeline "
+                           "on just the --partitions subset given (not 'all'), skipping the final combine+aggregate "
+                           "step which needs all 8 -- for cheaply validating a fix on 1-2 partitions.")
 _args = _parser.parse_args()
 if _args.folding_json and not _args.conv_order:
     _parser.error("--folding-json requires --conv-order")
@@ -134,6 +138,15 @@ def _build_one_partition(fn, cfg, prefix, folding_file, idx, full, fold_suffix, 
     m = step_minimize_bit_width_standalone_thresh_aware(m, cfg)
     m = step_fix_weight_dtype_bipolar_bug(m, cfg)
     m = step_force_dsp(m, cfg)
+    # Rename with the per-partition prefix HERE, right before the real ipgen/HLS-synth
+    # trigger (step_hw_codegen -> PrepareIP bakes self.onnx_node.name into the generated
+    # RTL/HLS module name permanently, caching via code_gen_dir_ipgen). Folding config
+    # matching above needs the bare/unprefixed names FINN's own step_apply_folding_config
+    # re-derives internally, so this must come AFTER folding, not alongside the earlier
+    # GiveUniqueNodeNames call. The later rename+PrepareIP right before CreateStitchedIP is
+    # a no-op for these nodes (PrepareIP skips anything with code_gen_dir_ipgen already set)
+    # -- it only still matters for fresh nodes SplitLargeFIFOs inserts afterward.
+    m = m.transform(GiveUniqueNodeNames(prefix))
     m = step_hw_codegen(m, cfg)
     m = step_hw_ipgen(m, cfg)
     m = step_set_fifo_depths(m, cfg) if fifo_autosize == "rtlsim" else step_set_fifo_depths_fixed2(m, cfg)
@@ -148,7 +161,10 @@ def _build_one_partition(fn, cfg, prefix, folding_file, idx, full, fold_suffix, 
         m = step_allocate_uram_fifos(m, idx, budget=budget)
 
     ckpt_dir = os.path.dirname(fn) if full else cfg.output_dir
-    ckpt_name = f"partition_{idx}_prefifo_autosize.onnx" if full else f"partition{idx}_{tag}_{fold_suffix}_prefifo_autosize.onnx"
+    # Named "postfifo" (not "prefifo"): FIFOs are already inserted/sized/forced by this point
+    # (step_set_fifo_depths[_fixed2] + step_force_fifo_depths_from_milp already ran above) --
+    # this checkpoint is only "pre" the SplitLargeFIFOs/PrepareIP/HLSSynthIP stage that follows.
+    ckpt_name = f"partition_{idx}_postfifo_autosize.onnx" if full else f"partition{idx}_{tag}_{fold_suffix}_postfifo_autosize.onnx"
     m.save(os.path.join(ckpt_dir, ckpt_name))
     print(f"{log} saved FIFO-autosize checkpoint: {os.path.join(ckpt_dir, ckpt_name)}", flush=True)
 
@@ -209,10 +225,13 @@ def _aggregate_full(ooc_results, report_dir):
 
 
 def main():
-    full = _args.partitions == ["all"]
-    part_ids = list(range(8)) if full else [int(p) for p in _args.partitions]
+    do_combine = _args.partitions == ["all"]
+    # --probe: production (prefix/CreateStitchedIP/OOC-synth) pipeline on a chosen subset,
+    # skipping the final combine+aggregate step which requires all 8 partitions to be present.
+    full = do_combine or _args.probe
+    part_ids = list(range(8)) if do_combine else [int(p) for p in _args.partitions]
     fold_suffix = "milpfold" if _args.folding_json else "autofold"
-    part_tag = "8way" if full else "partition" + "_".join(map(str, part_ids))
+    part_tag = "8way" if do_combine else ("probe" if _args.probe else "partition") + "_".join(map(str, part_ids))
 
     output_dir = _args.output_dir or os.path.join(
         base.ENET_DIR, "finn_deployment_outputs",
@@ -296,7 +315,7 @@ def main():
                 results[futs[fut]] = fut.result()
                 print(f"partition {futs[fut]} done", flush=True)
 
-    if not full:
+    if not do_combine:
         print(f"Done. Reports in {output_dir}")
         return
 

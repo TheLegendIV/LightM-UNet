@@ -51,6 +51,11 @@ launch() {  # tag [extra finn_s12_build.py args...]
   echo "$(date): LAUNCHED $tag PID=$!"
   sleep 5
 }
-launch ratchet_ablation_finn_autofold                                  # control: FINN's own step_target_fps_parallelization, no MILP folding
-for arm in "${ARMS[@]}"; do launch "$arm" --folding-json "layer_bits_folding_${arm}.json"; done
+launch ratchet_ablation_finn_autofold --fifo-autosize rtlsim           # control: FINN's own step_target_fps_parallelization + real largefifo_rtlsim FIFO autosizing (no MILP folding/FIFO forcing)
+for arm in "${ARMS[@]}"; do
+  extra=(--folding-json "layer_bits_folding_${arm}.json")
+  # this arm's json has no inter_block_fifos/intra_block_fifos: needs FINN's real rtlsim autosizer, not the fixed2-everywhere default
+  [ "$arm" = "analytical_25pct_finnfifo" ] && extra+=(--fifo-autosize rtlsim)
+  launch "$arm" "${extra[@]}"
+done
 echo "Tail logs: tail -f /tmp/ooc_*.log ; results: finn_deployment_outputs/<tag>_{milpfold,autofold}_partition${PART}_<ts>/report/"

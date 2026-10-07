@@ -50,8 +50,14 @@ upserts one row per arm (identical foldings share the build and say so in `notes
 
 ## Caveats
 
-* FINN's rtlsim FIFO autosizer still runs before the MILP depths are forced, so unmatched FIFOs (the down-block `Dup -> SWG_r` feed, anything the MILP does not list) keep a large autosized depth and inflate BRAM
-  relative to the MILP's FIFO model; compare LUT / DSP / rate first, BRAM only together with `fifo_force_report_partition_2.json`.
+* `finn_s12_build.py --fifo-autosize` defaults to `fixed2` (every FIFO starts at depth 2, no rtlsim) -- unmatched
+  FIFOs on the 6 MILP-folded arms therefore stay at depth 2, NOT a large autosized depth. Only
+  `ratchet_ablation_finn_autofold` and `analytical_25pct_finnfifo` pass `--fifo-autosize rtlsim` explicitly in
+  `run_arms.sh` (both have no `inter_block_fifos`/`intra_block_fifos` to force, so they need FINN's real
+  `largefifo_rtlsim` autosizer or every FIFO silently stays at depth 2 -- this exact gap caused
+  `analytical_25pct_finnfifo`'s prior deadlock and was NOT a FINN autosizer bug). Keep this in mind before
+  comparing BRAM across arms: the 6 fixed2 arms' unmatched-FIFO BRAM is near-zero by construction, the 2
+  rtlsim arms' is real/measured.
 * The bridge does not apply the argmax PE (`final.argmax`) and the FMPadding_Pixel SIMD: irrelevant for partition 2, relevant for partitions 5-7.
 * `hardware/README.md` and `hardware/builds/README.md` describe an older flow; this folder describes the unified `finn_s12_*` flow.
 * Nothing here has been run: `bash -n` and `py_compile` only.

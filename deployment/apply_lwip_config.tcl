@@ -4,8 +4,8 @@
 # wiped on every "Re-generate BSP Sources").
 
 set ws_dir      [file join [file normalize [file dirname [info script]]] "FINN_interface"]
-set xsa_file    [file join $ws_dir "zcu106_test" "hw" "top_wrapper.xsa"]
-set platform_mss [file join $ws_dir "zcu106_test" "psu_cortexa53_0" "standalone_domain" "bsp" "system.mss"]
+set xsa_file    [file join $ws_dir "zcu106_s12" "hw" "top_wrapper.xsa"]
+set platform_mss [file join $ws_dir "zcu106_s12" "psu_cortexa53_0" "standalone_domain" "bsp" "system.mss"]
 
 hsi::open_hw_design $xsa_file
 hsi::open_sw_design $platform_mss
@@ -53,11 +53,11 @@ foreach {name value} $cfg {
     common::set_property CONFIG.$name $value $lwip_lib
 }
 
-hsi::generate_bsp -dir [file join $ws_dir "zcu106_test" "psu_cortexa53_0" "standalone_domain" "bsp"] -proc psu_cortexa53_0
+hsi::generate_bsp -dir [file join $ws_dir "zcu106_s12" "psu_cortexa53_0" "standalone_domain" "bsp"] -proc psu_cortexa53_0
 
 # TCP_SND_QUEUELEN has no CONFIG.* property -- lwip211.tcl always hardcodes it to
 # "16 * TCP_SND_BUF/TCP_MSS", so patch it back in every time after regeneration.
-set contrib_lwipopts [file join $ws_dir "zcu106_test" "psu_cortexa53_0" "standalone_domain" "bsp" \
+set contrib_lwipopts [file join $ws_dir "zcu106_s12" "psu_cortexa53_0" "standalone_domain" "bsp" \
     "psu_cortexa53_0" "libsrc" "lwip211_v1_8" "src" "contrib" "ports" "xilinx" "include" "lwipopts.h"]
 
 set fd [open $contrib_lwipopts r]

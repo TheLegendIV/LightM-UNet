@@ -257,6 +257,17 @@ def _rename_partition_verilog_sources(node_name, orig_list_path, top_module_name
     # name as ip_name) -- leave it alone so the hand-written top-level
     # netlist's instantiation of it still matches.
     module_names.discard(top_module_name)
+    # CreateStitchedIP's actual stitched-IP top module (distinct from the
+    # "_wrapper" module above) is literally named node_name itself (its
+    # ip_name is prefix.rstrip("_") == node_name) -- also already globally
+    # unique. Leaving it in module_names would match this bare node_name
+    # as a substring of every $readmem(...) path under this partition's own
+    # node_name-named directory (since finn_s12_build.py's own earlier
+    # GiveUniqueNodeNames(prefix) already makes every other module name
+    # node_name-prefixed too), double-prefixing the directory segment into
+    # a nonexistent path like "GenericPartition_4_r_GenericPartition_4/..."
+    # and crashing Verilator's $readmem with a file-not-found/stack-smash.
+    module_names.discard(node_name)
     rename_map = {m: "%s_r_%s" % (node_name, m) for m in module_names}
 
     # Build ONE combined regex (alternation over all names, longest first so a

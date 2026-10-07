@@ -1,0 +1,59 @@
+import json
+import os
+import sys
+
+sys.path.insert(0, "/home/thelegendiv/finn/notebooks/enet")
+os.environ.setdefault("FINN_ROOT", "/home/thelegendiv/finn")
+os.environ["FINN_BUILD_DIR"] = "/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/debug_p1_role_scratch2"
+
+from qonnx.core.modelwrapper import ModelWrapper
+from qonnx.custom_op.registry import getCustomOp
+
+import finn_enet_ip_build_partitioned_8way as base
+from finn_partition_build_steps import step_create_dataflow_partition_multi
+from finn_s12_build_steps import (
+    load_partition_logical_names, WEIGHT_OP_TYPES, _resolve_folding_entry, _stage_leaf,
+    _claimed_mvau_names, _find_join_thresholds, _previous_block_name,
+)
+
+ENET_DIR = "/home/thelegendiv/finn/notebooks/enet"
+PREAMBLE_DIR = os.path.join(ENET_DIR, "finn_deployment_outputs", "S12_dense_256_u4_analytical_v1_ft15ep_preamble_20261005_220558")
+CONV_ORDER = os.path.join(ENET_DIR, "quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated_conv_order.json")
+FOLDING_JSON = os.path.join(ENET_DIR, "layer_bits_folding_S12_dense_256_u4_analytical_v1_int6_fps250_lat200_20261006.json")
+PART_IDX = 1
+
+with open(FOLDING_JSON) as f:
+    folding_block = json.load(f)
+per_layer = folding_block["per_layer"]
+
+cfg = base.cfg_stitched_ip_partitioned_8way
+flat_ckpt = os.path.join(PREAMBLE_DIR, "intermediate_models", "assign_stage_partition_ids_8way.onnx")
+parent = step_create_dataflow_partition_multi(ModelWrapper(flat_ckpt), cfg)
+sdp_nodes = parent.get_nodes_by_op_type("StreamingDataflowPartition")
+sdp = [n for n in sdp_nodes if n.name == f"GenericPartition_{PART_IDX}"][0]
+kernel_model = ModelWrapper(getCustomOp(sdp).get_nodeattr("model"))
+
+logical = load_partition_logical_names(PREAMBLE_DIR, CONV_ORDER)
+logical_names = logical[PART_IDX][0]
+first_logical_name = logical_names[0]
+prev_block = _previous_block_name(CONV_ORDER, first_logical_name)
+print("prev_block:", prev_block)
+
+claimed = _claimed_mvau_names(kernel_model, logical_names, per_layer)
+print("claimed count:", len(claimed))
+
+weight_nodes = [n for n in kernel_model.graph.node if n.op_type in WEIGHT_OP_TYPES]
+print("num weight nodes:", len(weight_nodes), "num logical names:", len(logical_names))
+for node, logical_name in list(zip(weight_nodes, logical_names))[:6]:
+    entry, json_key = _resolve_folding_entry(logical_name, per_layer)
+    print(f"  {node.name:12s} logical={logical_name:25s} resolved_key={json_key} claimed={node.name in claimed}")
+
+joins = _find_join_thresholds(kernel_model, logical_names, prev_block, claimed)
+print("joins found:", len(joins))
+for name, (block, kind) in joins.items():
+    if block in ("down1", "down2"):
+        print(" ", name, "->", block, kind)
+
+# also check per_layer for a 'down1.shortcut_proj' style key
+cands = [k for k in per_layer if "down1" in k or "shortcut" in k]
+print("per_layer keys mentioning down1/shortcut:", cands)

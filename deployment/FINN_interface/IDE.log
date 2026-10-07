@@ -86,3 +86,918 @@ con
 
 16:24:49 INFO  : Launch script is exported to file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\test_system\_ide\scripts\debugger_test-default.tcl'
 16:25:42 INFO  : Disconnected from the channel tcfchan#3.
+17:53:00 DEBUG : Logs will be stored at 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/IDE.log'.
+17:53:01 INFO  : Launching XSCT server: xsct.bat -n  -interactive C:\DEV\repos\LightM-UNet\deployment\FINN_interface\temp_xsdb_launch_script.tcl
+17:53:07 INFO  : Registering command handlers for Vitis TCF services
+17:53:08 INFO  : Platform repository initialization has completed.
+17:53:08 INFO  : XSCT server has started successfully.
+17:53:08 INFO  : plnx-install-location is set to ''
+17:53:08 INFO  : Successfully done setting XSCT server connection channel  
+17:53:14 INFO  : Successfully done setting workspace for the tool. 
+17:53:14 INFO  : Successfully done query RDI_DATADIR 
+17:53:56 INFO  : Hardware specification for platform project 'zcu106' is updated.
+17:56:48 ERROR : (XSDB Server)invalid command name "C:DEVeposLightM-UNetdeploymentpply_lwip_config.tcl"
+
+18:02:13 INFO  : Result from executing command 'getProjects': zcu106_s12
+18:02:13 INFO  : Result from executing command 'getPlatforms': xilinx_zcu102_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_202220_1/xilinx_zcu102_base_202220_1.xpfm;xilinx_zcu102_base_dfx_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_dfx_202220_1/xilinx_zcu102_base_dfx_202220_1.xpfm;xilinx_zcu104_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu104_base_202220_1/xilinx_zcu104_base_202220_1.xpfm
+18:07:51 INFO  : Result from executing command 'getProjects': zcu106_s12
+18:07:51 INFO  : Result from executing command 'getPlatforms': xilinx_zcu102_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_202220_1/xilinx_zcu102_base_202220_1.xpfm;xilinx_zcu102_base_dfx_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_dfx_202220_1/xilinx_zcu102_base_dfx_202220_1.xpfm;xilinx_zcu104_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu104_base_202220_1/xilinx_zcu104_base_202220_1.xpfm;zcu106_s12|C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/zcu106_s12.xpfm
+18:20:24 INFO  : Checking for BSP changes to sync application flags for project 'lwip_test'...
+18:23:07 INFO  : Result from executing command 'removePlatformRepo': 
+18:25:50 INFO  : Result from executing command 'getProjects': zcu106_s12
+18:25:50 INFO  : Result from executing command 'getPlatforms': xilinx_zcu102_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_202220_1/xilinx_zcu102_base_202220_1.xpfm;xilinx_zcu102_base_dfx_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_dfx_202220_1/xilinx_zcu102_base_dfx_202220_1.xpfm;xilinx_zcu104_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu104_base_202220_1/xilinx_zcu104_base_202220_1.xpfm
+18:26:27 INFO  : No changes in MSS file content so sources will not be generated.
+18:29:09 INFO  : No changes in MSS file content so sources will not be generated.
+18:29:41 INFO  : No changes in MSS file content so sources will not be generated.
+18:31:53 INFO  : No changes in MSS file content so sources will not be generated.
+18:33:12 INFO  : No changes in MSS file content so sources will not be generated.
+18:37:20 INFO  : Result from executing command 'getProjects': zcu106_s12
+18:37:20 INFO  : Result from executing command 'getPlatforms': xilinx_zcu102_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_202220_1/xilinx_zcu102_base_202220_1.xpfm;xilinx_zcu102_base_dfx_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_dfx_202220_1/xilinx_zcu102_base_dfx_202220_1.xpfm;xilinx_zcu104_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu104_base_202220_1/xilinx_zcu104_base_202220_1.xpfm;zcu106_s12|C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/zcu106_s12.xpfm
+18:38:12 INFO  : Checking for BSP changes to sync application flags for project 'lwip_test'...
+18:38:12 INFO  : Updating application flags with new BSP settings...
+18:38:12 INFO  : Successfully updated application flags for project lwip_test.
+18:38:57 INFO  : Checking for BSP changes to sync application flags for project 'lwip_test'...
+18:47:39 INFO  : Checking for BSP changes to sync application flags for project 'lwip_test'...
+18:47:57 INFO  : Result from executing command 'removePlatformRepo': 
+18:48:21 ERROR : Error from executing command 'removePlatformRepo': ERROR: No valid directory exists at given path.
+18:50:45 INFO  : Result from executing command 'getProjects': zcu106_s12
+18:50:45 INFO  : Result from executing command 'getPlatforms': xilinx_zcu102_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_202220_1/xilinx_zcu102_base_202220_1.xpfm;xilinx_zcu102_base_dfx_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_dfx_202220_1/xilinx_zcu102_base_dfx_202220_1.xpfm;xilinx_zcu104_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu104_base_202220_1/xilinx_zcu104_base_202220_1.xpfm
+18:50:47 INFO  : Checking for BSP changes to sync application flags for project 'lwip_test'...
+18:53:35 INFO  : Checking for BSP changes to sync application flags for project 'lwip_test'...
+18:54:10 INFO  : Connected to target on host '127.0.0.1' and port '3121'.
+18:54:11 INFO  : Jtag cable 'Xilinx HW-FTDI-TEST FT232H 84713' is selected.
+18:54:11 INFO  : 'jtag frequency' command is executed.
+18:54:12 INFO  : Sourcing of 'F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl' is done.
+18:54:12 INFO  : Context for 'APU' is selected.
+18:54:12 INFO  : System reset is completed.
+18:54:15 INFO  : 'after 3000' command is executed.
+18:54:15 INFO  : 'targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}' command is executed.
+18:54:26 INFO  : Device configured successfully with "C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/_ide/bitstream/top_wrapper.bit"
+18:54:26 INFO  : Context for 'APU' is selected.
+18:54:27 INFO  : Hardware design and registers information is loaded from 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/hw/top_wrapper.xsa'.
+18:54:27 INFO  : 'configparams force-mem-access 1' command is executed.
+18:54:27 INFO  : Context for 'APU' is selected.
+18:54:27 INFO  : Boot mode is read from the target.
+18:54:27 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+18:54:27 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+18:54:28 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf' is downloaded to processor 'psu_cortexa53_0'.
+18:54:28 INFO  : 'set bp_54_28_fsbl_bp [bpadd -addr &XFsbl_Exit]' command is executed.
+18:54:29 INFO  : 'con -block -timeout 60' command is executed.
+18:54:29 INFO  : 'bpremove $bp_54_28_fsbl_bp' command is executed.
+18:54:29 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+18:54:29 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+18:54:30 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf' is downloaded to processor 'psu_cortexa53_0'.
+18:54:30 INFO  : 'configparams force-mem-access 0' command is executed.
+18:54:30 INFO  : ----------------XSDB Script----------------
+connect -url tcp:127.0.0.1:3121
+source F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl
+targets -set -nocase -filter {name =~"APU*"}
+rst -system
+after 3000
+targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}
+fpga -file C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/_ide/bitstream/top_wrapper.bit
+targets -set -nocase -filter {name =~"APU*"}
+loadhw -hw C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/hw/top_wrapper.xsa -mem-ranges [list {0x80000000 0xbfffffff} {0x400000000 0x5ffffffff} {0x1000000000 0x7fffffffff}] -regs
+configparams force-mem-access 1
+targets -set -nocase -filter {name =~"APU*"}
+set mode [expr [mrd -value 0xFF5E0200] & 0xf]
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf
+set bp_54_28_fsbl_bp [bpadd -addr &XFsbl_Exit]
+con -block -timeout 60
+bpremove $bp_54_28_fsbl_bp
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf
+configparams force-mem-access 0
+----------------End of Script----------------
+
+18:54:30 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+18:54:30 INFO  : 'con' command is executed.
+18:54:30 INFO  : ----------------XSDB Script (After Launch)----------------
+targets -set -nocase -filter {name =~ "*A53*#0"}
+con
+----------------End of Script----------------
+
+18:54:30 INFO  : Launch script is exported to file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test_system\_ide\scripts\debugger_lwip_test-default.tcl'
+19:15:38 INFO  : Disconnected from the channel tcfchan#9.
+03:13:09 DEBUG : Logs will be stored at 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/IDE.log'.
+03:13:10 INFO  : Launching XSCT server: xsct.bat -n  -interactive C:\DEV\repos\LightM-UNet\deployment\FINN_interface\temp_xsdb_launch_script.tcl
+03:13:16 INFO  : Registering command handlers for Vitis TCF services
+03:13:17 INFO  : XSCT server has started successfully.
+03:13:17 INFO  : Platform repository initialization has completed.
+03:13:23 INFO  : Successfully done setting XSCT server connection channel  
+03:13:23 INFO  : plnx-install-location is set to ''
+03:13:23 INFO  : Successfully done query RDI_DATADIR 
+03:13:23 INFO  : Successfully done setting workspace for the tool. 
+03:13:58 INFO  : Hardware specification for platform project 'zcu106_s12' is updated.
+03:19:04 INFO  : Result from executing command 'getProjects': zcu106_s12
+03:19:04 INFO  : Result from executing command 'getPlatforms': xilinx_zcu102_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_202220_1/xilinx_zcu102_base_202220_1.xpfm;xilinx_zcu102_base_dfx_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_dfx_202220_1/xilinx_zcu102_base_dfx_202220_1.xpfm;xilinx_zcu104_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu104_base_202220_1/xilinx_zcu104_base_202220_1.xpfm;zcu106_s12|C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/zcu106_s12.xpfm
+03:20:01 INFO  : Checking for BSP changes to sync application flags for project 'lwip_test'...
+03:20:25 INFO  : The hardware specification used by project 'lwip_test' is out of sync with the platform. Resource files extracted from the hardware specification will be updated.
+03:20:25 INFO  : The file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test\_ide\bitstream\top_wrapper.bit' stored in project is removed.
+03:20:25 INFO  : The updated bitstream files are copied from platform to folder 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test\_ide\bitstream' in project 'lwip_test'.
+03:20:25 INFO  : The file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test\_ide\psinit\psu_init.tcl' stored in project is removed.
+03:20:25 INFO  : The updated ps init files are copied from platform to folder 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test\_ide\psinit' in project 'lwip_test'.
+03:20:29 INFO  : Connected to target on host '127.0.0.1' and port '3121'.
+03:20:30 INFO  : Jtag cable 'Xilinx HW-FTDI-TEST FT232H 84713' is selected.
+03:20:30 INFO  : 'jtag frequency' command is executed.
+03:20:30 INFO  : Sourcing of 'F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl' is done.
+03:20:30 INFO  : Context for 'APU' is selected.
+03:20:30 INFO  : System reset is completed.
+03:20:33 INFO  : 'after 3000' command is executed.
+03:20:33 INFO  : 'targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}' command is executed.
+03:20:45 INFO  : Device configured successfully with "C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/_ide/bitstream/top_wrapper.bit"
+03:20:45 INFO  : Context for 'APU' is selected.
+03:20:45 INFO  : Hardware design and registers information is loaded from 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/hw/top_wrapper.xsa'.
+03:20:45 INFO  : 'configparams force-mem-access 1' command is executed.
+03:20:45 INFO  : Context for 'APU' is selected.
+03:20:45 INFO  : Boot mode is read from the target.
+03:20:45 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+03:20:45 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+03:20:46 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf' is downloaded to processor 'psu_cortexa53_0'.
+03:20:46 INFO  : 'set bp_20_46_fsbl_bp [bpadd -addr &XFsbl_Exit]' command is executed.
+03:20:47 INFO  : 'con -block -timeout 60' command is executed.
+03:20:47 INFO  : 'bpremove $bp_20_46_fsbl_bp' command is executed.
+03:20:47 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+03:20:47 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+03:20:48 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf' is downloaded to processor 'psu_cortexa53_0'.
+03:20:48 INFO  : 'configparams force-mem-access 0' command is executed.
+03:20:48 INFO  : ----------------XSDB Script----------------
+connect -url tcp:127.0.0.1:3121
+source F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl
+targets -set -nocase -filter {name =~"APU*"}
+rst -system
+after 3000
+targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}
+fpga -file C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/_ide/bitstream/top_wrapper.bit
+targets -set -nocase -filter {name =~"APU*"}
+loadhw -hw C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/hw/top_wrapper.xsa -mem-ranges [list {0x80000000 0xbfffffff} {0x400000000 0x5ffffffff} {0x1000000000 0x7fffffffff}] -regs
+configparams force-mem-access 1
+targets -set -nocase -filter {name =~"APU*"}
+set mode [expr [mrd -value 0xFF5E0200] & 0xf]
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf
+set bp_20_46_fsbl_bp [bpadd -addr &XFsbl_Exit]
+con -block -timeout 60
+bpremove $bp_20_46_fsbl_bp
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf
+configparams force-mem-access 0
+----------------End of Script----------------
+
+03:20:48 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+03:20:48 INFO  : 'con' command is executed.
+03:20:48 INFO  : ----------------XSDB Script (After Launch)----------------
+targets -set -nocase -filter {name =~ "*A53*#0"}
+con
+----------------End of Script----------------
+
+03:20:48 INFO  : Launch script is exported to file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test_system\_ide\scripts\debugger_lwip_test-default.tcl'
+03:43:48 INFO  : Hardware specification for platform project 'zcu106_s12' is updated.
+03:47:30 INFO  : Result from executing command 'getProjects': zcu106_s12
+03:47:30 INFO  : Result from executing command 'getPlatforms': xilinx_zcu102_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_202220_1/xilinx_zcu102_base_202220_1.xpfm;xilinx_zcu102_base_dfx_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_dfx_202220_1/xilinx_zcu102_base_dfx_202220_1.xpfm;xilinx_zcu104_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu104_base_202220_1/xilinx_zcu104_base_202220_1.xpfm;zcu106_s12|C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/zcu106_s12.xpfm
+03:47:42 INFO  : Checking for BSP changes to sync application flags for project 'lwip_test'...
+03:48:01 INFO  : Disconnected from the channel tcfchan#3.
+03:48:02 INFO  : The hardware specification used by project 'lwip_test' is out of sync with the platform. Resource files extracted from the hardware specification will be updated.
+03:48:02 INFO  : The file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test\_ide\bitstream\top_wrapper.bit' stored in project is removed.
+03:48:03 INFO  : The updated bitstream files are copied from platform to folder 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test\_ide\bitstream' in project 'lwip_test'.
+03:48:03 INFO  : The file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test\_ide\psinit\psu_init.tcl' stored in project is removed.
+03:48:03 INFO  : The updated ps init files are copied from platform to folder 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test\_ide\psinit' in project 'lwip_test'.
+03:48:04 INFO  : Connected to target on host '127.0.0.1' and port '3121'.
+03:48:05 INFO  : Jtag cable 'Xilinx HW-FTDI-TEST FT232H 84713' is selected.
+03:48:05 INFO  : 'jtag frequency' command is executed.
+03:48:05 INFO  : Sourcing of 'F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl' is done.
+03:48:05 INFO  : Context for 'APU' is selected.
+03:48:05 INFO  : System reset is completed.
+03:48:08 INFO  : 'after 3000' command is executed.
+03:48:08 INFO  : 'targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}' command is executed.
+03:48:08 ERROR : couldn't open "C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/_ide/bitstream/top_wrapper.bit": no such file or directory
+03:48:08 ERROR : Exception occured while running Program Device.
+java.lang.RuntimeException: couldn't open "C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/_ide/bitstream/top_wrapper.bit": no such file or directory
+03:48:08 INFO  : ----------------XSDB Script----------------
+connect -url tcp:127.0.0.1:3121
+source F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl
+targets -set -nocase -filter {name =~"APU*"}
+rst -system
+after 3000
+----------------End of Script----------------
+
+03:48:08 ERROR : couldn't open "C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/_ide/bitstream/top_wrapper.bit": no such file or directory
+03:48:16 INFO  : Connected to target on host '127.0.0.1' and port '3121'.
+03:48:16 INFO  : Jtag cable 'Xilinx HW-FTDI-TEST FT232H 84713' is selected.
+03:48:16 INFO  : 'jtag frequency' command is executed.
+03:48:16 INFO  : Sourcing of 'F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl' is done.
+03:48:16 INFO  : Context for 'APU' is selected.
+03:48:17 INFO  : System reset is completed.
+03:48:20 INFO  : 'after 3000' command is executed.
+03:48:20 INFO  : 'targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}' command is executed.
+03:48:20 ERROR : couldn't open "C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/_ide/bitstream/top_wrapper.bit": no such file or directory
+03:48:20 ERROR : Exception occured while running Program Device.
+java.lang.RuntimeException: couldn't open "C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/_ide/bitstream/top_wrapper.bit": no such file or directory
+03:48:20 INFO  : ----------------XSDB Script----------------
+connect -url tcp:127.0.0.1:3121
+source F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl
+targets -set -nocase -filter {name =~"APU*"}
+rst -system
+after 3000
+----------------End of Script----------------
+
+03:48:20 ERROR : couldn't open "C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/_ide/bitstream/top_wrapper.bit": no such file or directory
+03:48:31 INFO  : Connected to target on host '127.0.0.1' and port '3121'.
+03:48:32 INFO  : Jtag cable 'Xilinx HW-FTDI-TEST FT232H 84713' is selected.
+03:48:32 INFO  : 'jtag frequency' command is executed.
+03:48:32 INFO  : Sourcing of 'F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl' is done.
+03:48:32 INFO  : Context for 'APU' is selected.
+03:48:32 INFO  : System reset is completed.
+03:48:35 INFO  : 'after 3000' command is executed.
+03:48:35 INFO  : 'targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}' command is executed.
+03:48:35 ERROR : couldn't open "C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/_ide/bitstream/top_wrapper.bit": no such file or directory
+03:48:35 ERROR : Exception occured while running Program Device.
+java.lang.RuntimeException: couldn't open "C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/_ide/bitstream/top_wrapper.bit": no such file or directory
+03:48:35 INFO  : ----------------XSDB Script----------------
+connect -url tcp:127.0.0.1:3121
+source F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl
+targets -set -nocase -filter {name =~"APU*"}
+rst -system
+after 3000
+----------------End of Script----------------
+
+03:48:35 ERROR : couldn't open "C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/_ide/bitstream/top_wrapper.bit": no such file or directory
+03:48:50 INFO  : Result from executing command 'removePlatformRepo': 
+03:51:14 INFO  : Result from executing command 'getProjects': zcu106_s12
+03:51:14 INFO  : Result from executing command 'getPlatforms': xilinx_zcu102_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_202220_1/xilinx_zcu102_base_202220_1.xpfm;xilinx_zcu102_base_dfx_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_dfx_202220_1/xilinx_zcu102_base_dfx_202220_1.xpfm;xilinx_zcu104_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu104_base_202220_1/xilinx_zcu104_base_202220_1.xpfm
+03:51:15 INFO  : Checking for BSP changes to sync application flags for project 'lwip_test'...
+03:51:24 INFO  : Checking for BSP changes to sync application flags for project 'lwip_test'...
+03:52:13 INFO  : Connected to target on host '127.0.0.1' and port '3121'.
+03:52:13 INFO  : Jtag cable 'Xilinx HW-FTDI-TEST FT232H 84713' is selected.
+03:52:13 INFO  : 'jtag frequency' command is executed.
+03:52:13 INFO  : Sourcing of 'F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl' is done.
+03:52:13 INFO  : Context for 'APU' is selected.
+03:52:14 INFO  : System reset is completed.
+03:52:17 INFO  : 'after 3000' command is executed.
+03:52:17 INFO  : 'targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}' command is executed.
+03:52:28 INFO  : Device configured successfully with "C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_echo.bit"
+03:52:28 INFO  : Context for 'APU' is selected.
+03:52:29 INFO  : Hardware design and registers information is loaded from 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_echo.xsa'.
+03:52:29 INFO  : 'configparams force-mem-access 1' command is executed.
+03:52:29 INFO  : Context for 'APU' is selected.
+03:52:29 INFO  : Boot mode is read from the target.
+03:52:29 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+03:52:29 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+03:52:29 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf' is downloaded to processor 'psu_cortexa53_0'.
+03:52:29 INFO  : 'set bp_52_29_fsbl_bp [bpadd -addr &XFsbl_Exit]' command is executed.
+03:52:31 INFO  : 'con -block -timeout 60' command is executed.
+03:52:31 INFO  : 'bpremove $bp_52_29_fsbl_bp' command is executed.
+03:52:31 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+03:52:31 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+03:52:31 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf' is downloaded to processor 'psu_cortexa53_0'.
+03:52:31 INFO  : 'configparams force-mem-access 0' command is executed.
+03:52:31 INFO  : ----------------XSDB Script----------------
+connect -url tcp:127.0.0.1:3121
+source F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl
+targets -set -nocase -filter {name =~"APU*"}
+rst -system
+after 3000
+targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}
+fpga -file C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_echo.bit
+targets -set -nocase -filter {name =~"APU*"}
+loadhw -hw C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_echo.xsa -mem-ranges [list {0x80000000 0xbfffffff} {0x400000000 0x5ffffffff} {0x1000000000 0x7fffffffff}] -regs
+configparams force-mem-access 1
+targets -set -nocase -filter {name =~"APU*"}
+set mode [expr [mrd -value 0xFF5E0200] & 0xf]
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf
+set bp_52_29_fsbl_bp [bpadd -addr &XFsbl_Exit]
+con -block -timeout 60
+bpremove $bp_52_29_fsbl_bp
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf
+configparams force-mem-access 0
+----------------End of Script----------------
+
+03:52:31 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+03:52:31 INFO  : 'con' command is executed.
+03:52:31 INFO  : ----------------XSDB Script (After Launch)----------------
+targets -set -nocase -filter {name =~ "*A53*#0"}
+con
+----------------End of Script----------------
+
+03:52:31 INFO  : Launch script is exported to file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test_system\_ide\scripts\debugger_lwip_test-default.tcl'
+03:55:14 INFO  : Hardware specification for platform project 'zcu106_s12' is updated.
+03:56:00 INFO  : Result from executing command 'removePlatformRepo': 
+04:00:42 INFO  : Result from executing command 'getProjects': zcu106_s12
+04:00:42 INFO  : Result from executing command 'getPlatforms': xilinx_zcu102_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_202220_1/xilinx_zcu102_base_202220_1.xpfm;xilinx_zcu102_base_dfx_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_dfx_202220_1/xilinx_zcu102_base_dfx_202220_1.xpfm;xilinx_zcu104_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu104_base_202220_1/xilinx_zcu104_base_202220_1.xpfm
+04:01:00 INFO  : Checking for BSP changes to sync application flags for project 'lwip_test'...
+04:01:49 INFO  : The hardware specification used by project 'lwip_test' is out of sync with the platform. Resource files extracted from the hardware specification will be updated.
+04:01:49 INFO  : The file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test\_ide\bitstream\top_wrapper_echo.bit' stored in project is removed.
+04:01:49 INFO  : The updated bitstream files are copied from platform to folder 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test\_ide\bitstream' in project 'lwip_test'.
+04:01:49 INFO  : The file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test\_ide\psinit\psu_init.tcl' stored in project is removed.
+04:01:50 INFO  : The updated ps init files are copied from platform to folder 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test\_ide\psinit' in project 'lwip_test'.
+04:03:15 INFO  : Disconnected from the channel tcfchan#7.
+04:03:16 INFO  : Connected to target on host '127.0.0.1' and port '3121'.
+04:03:17 INFO  : Jtag cable 'Xilinx HW-FTDI-TEST FT232H 84713' is selected.
+04:03:17 INFO  : 'jtag frequency' command is executed.
+04:03:17 INFO  : Sourcing of 'F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl' is done.
+04:03:17 INFO  : Context for 'APU' is selected.
+04:03:17 INFO  : System reset is completed.
+04:03:20 INFO  : 'after 3000' command is executed.
+04:03:21 INFO  : 'targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}' command is executed.
+04:03:32 INFO  : Device configured successfully with "C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper.bit"
+04:03:32 INFO  : Context for 'APU' is selected.
+04:03:32 INFO  : Hardware design and registers information is loaded from 'C:/DEV/repos/LightM-UNet/deployment/top_wrapper.xsa'.
+04:03:32 INFO  : 'configparams force-mem-access 1' command is executed.
+04:03:32 INFO  : Context for 'APU' is selected.
+04:03:32 INFO  : Boot mode is read from the target.
+04:03:32 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+04:03:32 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+04:03:33 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf' is downloaded to processor 'psu_cortexa53_0'.
+04:03:33 INFO  : 'set bp_3_33_fsbl_bp [bpadd -addr &XFsbl_Exit]' command is executed.
+04:03:34 INFO  : 'con -block -timeout 60' command is executed.
+04:03:34 INFO  : 'bpremove $bp_3_33_fsbl_bp' command is executed.
+04:03:34 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+04:03:34 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+04:03:35 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf' is downloaded to processor 'psu_cortexa53_0'.
+04:03:35 INFO  : 'configparams force-mem-access 0' command is executed.
+04:03:35 INFO  : ----------------XSDB Script----------------
+connect -url tcp:127.0.0.1:3121
+source F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl
+targets -set -nocase -filter {name =~"APU*"}
+rst -system
+after 3000
+targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}
+fpga -file C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper.bit
+targets -set -nocase -filter {name =~"APU*"}
+loadhw -hw C:/DEV/repos/LightM-UNet/deployment/top_wrapper.xsa -mem-ranges [list {0x80000000 0xbfffffff} {0x400000000 0x5ffffffff} {0x1000000000 0x7fffffffff}] -regs
+configparams force-mem-access 1
+targets -set -nocase -filter {name =~"APU*"}
+set mode [expr [mrd -value 0xFF5E0200] & 0xf]
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf
+set bp_3_33_fsbl_bp [bpadd -addr &XFsbl_Exit]
+con -block -timeout 60
+bpremove $bp_3_33_fsbl_bp
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf
+configparams force-mem-access 0
+----------------End of Script----------------
+
+04:03:35 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+04:03:35 INFO  : 'con' command is executed.
+04:03:35 INFO  : ----------------XSDB Script (After Launch)----------------
+targets -set -nocase -filter {name =~ "*A53*#0"}
+con
+----------------End of Script----------------
+
+04:03:35 INFO  : Launch script is exported to file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test_system\_ide\scripts\debugger_lwip_test-default.tcl'
+04:06:36 INFO  : Disconnected from the channel tcfchan#13.
+15:27:05 DEBUG : Logs will be stored at 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/IDE.log'.
+15:27:06 INFO  : Launching XSCT server: xsct.bat -n  -interactive C:\DEV\repos\LightM-UNet\deployment\FINN_interface\temp_xsdb_launch_script.tcl
+15:27:20 INFO  : XSCT server has started successfully.
+15:27:21 INFO  : Registering command handlers for Vitis TCF services
+15:27:22 INFO  : Platform repository initialization has completed.
+15:27:27 INFO  : plnx-install-location is set to ''
+15:27:27 INFO  : Successfully done setting XSCT server connection channel  
+15:27:27 INFO  : Successfully done query RDI_DATADIR 
+15:27:27 INFO  : Successfully done setting workspace for the tool. 
+15:28:51 INFO  : Hardware specification for platform project 'zcu106_s12' is updated.
+15:30:10 INFO  : Result from executing command 'getProjects': zcu106_s12
+15:30:10 INFO  : Result from executing command 'getPlatforms': xilinx_zcu102_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_202220_1/xilinx_zcu102_base_202220_1.xpfm;xilinx_zcu102_base_dfx_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_dfx_202220_1/xilinx_zcu102_base_dfx_202220_1.xpfm;xilinx_zcu104_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu104_base_202220_1/xilinx_zcu104_base_202220_1.xpfm;zcu106_s12|C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/zcu106_s12.xpfm
+15:30:25 INFO  : Checking for BSP changes to sync application flags for project 'lwip_test'...
+15:32:17 INFO  : The hardware specification used by project 'lwip_test' is out of sync with the platform. Resource files extracted from the hardware specification will be updated.
+15:32:17 INFO  : The file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test\_ide\bitstream\top_wrapper.bit' stored in project is removed.
+15:32:17 INFO  : The updated bitstream files are copied from platform to folder 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test\_ide\bitstream' in project 'lwip_test'.
+15:32:17 INFO  : The file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test\_ide\psinit\psu_init.tcl' stored in project is removed.
+15:32:18 INFO  : The updated ps init files are copied from platform to folder 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test\_ide\psinit' in project 'lwip_test'.
+15:32:19 INFO  : Connected to target on host '127.0.0.1' and port '3121'.
+15:32:19 INFO  : Jtag cable 'Xilinx HW-FTDI-TEST FT232H 84713' is selected.
+15:32:19 INFO  : 'jtag frequency' command is executed.
+15:32:19 INFO  : Sourcing of 'F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl' is done.
+15:32:19 INFO  : Context for 'APU' is selected.
+15:32:20 INFO  : System reset is completed.
+15:32:23 INFO  : 'after 3000' command is executed.
+15:32:23 INFO  : 'targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}' command is executed.
+15:32:34 INFO  : Device configured successfully with "C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.bit"
+15:32:34 INFO  : Context for 'APU' is selected.
+15:32:34 INFO  : Hardware design and registers information is loaded from 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.xsa'.
+15:32:34 INFO  : 'configparams force-mem-access 1' command is executed.
+15:32:34 INFO  : Context for 'APU' is selected.
+15:32:34 INFO  : Boot mode is read from the target.
+15:32:34 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+15:32:34 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+15:32:35 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf' is downloaded to processor 'psu_cortexa53_0'.
+15:32:35 INFO  : 'set bp_32_35_fsbl_bp [bpadd -addr &XFsbl_Exit]' command is executed.
+15:32:36 INFO  : 'con -block -timeout 60' command is executed.
+15:32:36 INFO  : 'bpremove $bp_32_35_fsbl_bp' command is executed.
+15:32:36 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+15:32:37 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+15:32:37 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf' is downloaded to processor 'psu_cortexa53_0'.
+15:32:37 INFO  : 'configparams force-mem-access 0' command is executed.
+15:32:37 INFO  : ----------------XSDB Script----------------
+connect -url tcp:127.0.0.1:3121
+source F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl
+targets -set -nocase -filter {name =~"APU*"}
+rst -system
+after 3000
+targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}
+fpga -file C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.bit
+targets -set -nocase -filter {name =~"APU*"}
+loadhw -hw C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.xsa -mem-ranges [list {0x80000000 0xbfffffff} {0x400000000 0x5ffffffff} {0x1000000000 0x7fffffffff}] -regs
+configparams force-mem-access 1
+targets -set -nocase -filter {name =~"APU*"}
+set mode [expr [mrd -value 0xFF5E0200] & 0xf]
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf
+set bp_32_35_fsbl_bp [bpadd -addr &XFsbl_Exit]
+con -block -timeout 60
+bpremove $bp_32_35_fsbl_bp
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf
+configparams force-mem-access 0
+----------------End of Script----------------
+
+15:32:37 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+15:32:37 INFO  : 'con' command is executed.
+15:32:37 INFO  : ----------------XSDB Script (After Launch)----------------
+targets -set -nocase -filter {name =~ "*A53*#0"}
+con
+----------------End of Script----------------
+
+15:32:37 INFO  : Launch script is exported to file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test_system\_ide\scripts\debugger_lwip_test-default.tcl'
+16:14:23 INFO  : Disconnected from the channel tcfchan#2.
+16:14:24 INFO  : Connected to target on host '127.0.0.1' and port '3121'.
+16:14:24 INFO  : Jtag cable 'Xilinx HW-FTDI-TEST FT232H 84713' is selected.
+16:14:24 INFO  : 'jtag frequency' command is executed.
+16:14:24 INFO  : Sourcing of 'F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl' is done.
+16:14:24 INFO  : Context for 'APU' is selected.
+16:14:24 INFO  : System reset is completed.
+16:14:27 INFO  : 'after 3000' command is executed.
+16:14:27 INFO  : 'targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}' command is executed.
+16:14:38 INFO  : Device configured successfully with "C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.bit"
+16:14:38 INFO  : Context for 'APU' is selected.
+16:14:38 INFO  : Hardware design and registers information is loaded from 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.xsa'.
+16:14:38 INFO  : 'configparams force-mem-access 1' command is executed.
+16:14:38 INFO  : Context for 'APU' is selected.
+16:14:38 INFO  : Boot mode is read from the target.
+16:14:38 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:14:39 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+16:14:39 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf' is downloaded to processor 'psu_cortexa53_0'.
+16:14:39 INFO  : 'set bp_14_39_fsbl_bp [bpadd -addr &XFsbl_Exit]' command is executed.
+16:14:40 INFO  : 'con -block -timeout 60' command is executed.
+16:14:40 INFO  : 'bpremove $bp_14_39_fsbl_bp' command is executed.
+16:14:40 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:14:40 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+16:14:41 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf' is downloaded to processor 'psu_cortexa53_0'.
+16:14:41 INFO  : 'configparams force-mem-access 0' command is executed.
+16:14:41 INFO  : ----------------XSDB Script----------------
+connect -url tcp:127.0.0.1:3121
+source F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl
+targets -set -nocase -filter {name =~"APU*"}
+rst -system
+after 3000
+targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}
+fpga -file C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.bit
+targets -set -nocase -filter {name =~"APU*"}
+loadhw -hw C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.xsa -mem-ranges [list {0x80000000 0xbfffffff} {0x400000000 0x5ffffffff} {0x1000000000 0x7fffffffff}] -regs
+configparams force-mem-access 1
+targets -set -nocase -filter {name =~"APU*"}
+set mode [expr [mrd -value 0xFF5E0200] & 0xf]
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf
+set bp_14_39_fsbl_bp [bpadd -addr &XFsbl_Exit]
+con -block -timeout 60
+bpremove $bp_14_39_fsbl_bp
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf
+configparams force-mem-access 0
+----------------End of Script----------------
+
+16:14:41 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:14:41 INFO  : 'con' command is executed.
+16:14:41 INFO  : ----------------XSDB Script (After Launch)----------------
+targets -set -nocase -filter {name =~ "*A53*#0"}
+con
+----------------End of Script----------------
+
+16:14:41 INFO  : Launch script is exported to file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test_system\_ide\scripts\debugger_lwip_test-default.tcl'
+16:16:04 INFO  : Disconnected from the channel tcfchan#3.
+16:16:05 INFO  : Connected to target on host '127.0.0.1' and port '3121'.
+16:16:05 INFO  : Jtag cable 'Xilinx HW-FTDI-TEST FT232H 84713' is selected.
+16:16:05 INFO  : 'jtag frequency' command is executed.
+16:16:05 INFO  : Sourcing of 'F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl' is done.
+16:16:05 INFO  : Context for 'APU' is selected.
+16:16:05 INFO  : System reset is completed.
+16:16:08 INFO  : 'after 3000' command is executed.
+16:16:09 INFO  : 'targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}' command is executed.
+16:16:20 INFO  : Device configured successfully with "C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.bit"
+16:16:20 INFO  : Context for 'APU' is selected.
+16:16:20 INFO  : Hardware design and registers information is loaded from 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.xsa'.
+16:16:20 INFO  : 'configparams force-mem-access 1' command is executed.
+16:16:20 INFO  : Context for 'APU' is selected.
+16:16:20 INFO  : Boot mode is read from the target.
+16:16:20 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:16:20 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+16:16:21 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf' is downloaded to processor 'psu_cortexa53_0'.
+16:16:21 INFO  : 'set bp_16_21_fsbl_bp [bpadd -addr &XFsbl_Exit]' command is executed.
+16:16:22 INFO  : 'con -block -timeout 60' command is executed.
+16:16:22 INFO  : 'bpremove $bp_16_21_fsbl_bp' command is executed.
+16:16:22 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:16:22 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+16:16:22 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf' is downloaded to processor 'psu_cortexa53_0'.
+16:16:23 INFO  : 'configparams force-mem-access 0' command is executed.
+16:16:23 INFO  : ----------------XSDB Script----------------
+connect -url tcp:127.0.0.1:3121
+source F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl
+targets -set -nocase -filter {name =~"APU*"}
+rst -system
+after 3000
+targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}
+fpga -file C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.bit
+targets -set -nocase -filter {name =~"APU*"}
+loadhw -hw C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.xsa -mem-ranges [list {0x80000000 0xbfffffff} {0x400000000 0x5ffffffff} {0x1000000000 0x7fffffffff}] -regs
+configparams force-mem-access 1
+targets -set -nocase -filter {name =~"APU*"}
+set mode [expr [mrd -value 0xFF5E0200] & 0xf]
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf
+set bp_16_21_fsbl_bp [bpadd -addr &XFsbl_Exit]
+con -block -timeout 60
+bpremove $bp_16_21_fsbl_bp
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf
+configparams force-mem-access 0
+----------------End of Script----------------
+
+16:16:23 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:16:23 INFO  : 'con' command is executed.
+16:16:23 INFO  : ----------------XSDB Script (After Launch)----------------
+targets -set -nocase -filter {name =~ "*A53*#0"}
+con
+----------------End of Script----------------
+
+16:16:23 INFO  : Launch script is exported to file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test_system\_ide\scripts\debugger_lwip_test-default.tcl'
+16:20:06 ERROR : (XSDB Server)invalid command name "disconnet"
+
+16:20:43 INFO  : Checking for BSP changes to sync application flags for project 'lwip_test'...
+16:22:15 WARN  : channel "tcfchan#4" closed
+16:22:16 INFO  : Connected to target on host '127.0.0.1' and port '3121'.
+16:22:16 INFO  : Jtag cable 'Xilinx HW-FTDI-TEST FT232H 84713' is selected.
+16:22:16 INFO  : 'jtag frequency' command is executed.
+16:22:16 INFO  : Sourcing of 'F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl' is done.
+16:22:16 INFO  : Context for 'APU' is selected.
+16:22:16 INFO  : System reset is completed.
+16:22:19 INFO  : 'after 3000' command is executed.
+16:22:19 INFO  : 'targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}' command is executed.
+16:22:30 INFO  : Device configured successfully with "C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.bit"
+16:22:30 INFO  : Context for 'APU' is selected.
+16:22:30 INFO  : Hardware design and registers information is loaded from 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.xsa'.
+16:22:30 INFO  : 'configparams force-mem-access 1' command is executed.
+16:22:30 INFO  : Context for 'APU' is selected.
+16:22:30 INFO  : Boot mode is read from the target.
+16:22:30 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:22:31 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+16:22:31 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf' is downloaded to processor 'psu_cortexa53_0'.
+16:22:31 INFO  : 'set bp_22_31_fsbl_bp [bpadd -addr &XFsbl_Exit]' command is executed.
+16:22:32 INFO  : 'con -block -timeout 60' command is executed.
+16:22:32 INFO  : 'bpremove $bp_22_31_fsbl_bp' command is executed.
+16:22:32 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:22:32 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+16:22:33 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf' is downloaded to processor 'psu_cortexa53_0'.
+16:22:33 INFO  : 'configparams force-mem-access 0' command is executed.
+16:22:33 INFO  : ----------------XSDB Script----------------
+connect -url tcp:127.0.0.1:3121
+source F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl
+targets -set -nocase -filter {name =~"APU*"}
+rst -system
+after 3000
+targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}
+fpga -file C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.bit
+targets -set -nocase -filter {name =~"APU*"}
+loadhw -hw C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.xsa -mem-ranges [list {0x80000000 0xbfffffff} {0x400000000 0x5ffffffff} {0x1000000000 0x7fffffffff}] -regs
+configparams force-mem-access 1
+targets -set -nocase -filter {name =~"APU*"}
+set mode [expr [mrd -value 0xFF5E0200] & 0xf]
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf
+set bp_22_31_fsbl_bp [bpadd -addr &XFsbl_Exit]
+con -block -timeout 60
+bpremove $bp_22_31_fsbl_bp
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf
+configparams force-mem-access 0
+----------------End of Script----------------
+
+16:22:33 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:22:33 INFO  : 'con' command is executed.
+16:22:33 INFO  : ----------------XSDB Script (After Launch)----------------
+targets -set -nocase -filter {name =~ "*A53*#0"}
+con
+----------------End of Script----------------
+
+16:22:33 INFO  : Launch script is exported to file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test_system\_ide\scripts\debugger_lwip_test-default.tcl'
+16:34:21 INFO  : Disconnected from the channel tcfchan#5.
+16:34:31 INFO  : Connected to target on host '127.0.0.1' and port '3121'.
+16:34:31 INFO  : Jtag cable 'Xilinx HW-FTDI-TEST FT232H 84713' is selected.
+16:34:31 INFO  : 'jtag frequency' command is executed.
+16:34:31 INFO  : Sourcing of 'F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl' is done.
+16:34:31 INFO  : Context for 'APU' is selected.
+16:34:31 INFO  : System reset is completed.
+16:34:34 INFO  : 'after 3000' command is executed.
+16:34:34 INFO  : 'targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}' command is executed.
+16:34:45 INFO  : Device configured successfully with "C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.bit"
+16:34:45 INFO  : Context for 'APU' is selected.
+16:34:45 INFO  : Hardware design and registers information is loaded from 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.xsa'.
+16:34:45 INFO  : 'configparams force-mem-access 1' command is executed.
+16:34:45 INFO  : Context for 'APU' is selected.
+16:34:45 INFO  : Boot mode is read from the target.
+16:34:45 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:34:46 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+16:34:46 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf' is downloaded to processor 'psu_cortexa53_0'.
+16:34:46 INFO  : 'set bp_34_46_fsbl_bp [bpadd -addr &XFsbl_Exit]' command is executed.
+16:34:47 INFO  : 'con -block -timeout 60' command is executed.
+16:34:47 INFO  : 'bpremove $bp_34_46_fsbl_bp' command is executed.
+16:34:47 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:34:48 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+16:34:48 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf' is downloaded to processor 'psu_cortexa53_0'.
+16:34:48 INFO  : 'configparams force-mem-access 0' command is executed.
+16:34:48 INFO  : ----------------XSDB Script----------------
+connect -url tcp:127.0.0.1:3121
+source F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl
+targets -set -nocase -filter {name =~"APU*"}
+rst -system
+after 3000
+targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}
+fpga -file C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.bit
+targets -set -nocase -filter {name =~"APU*"}
+loadhw -hw C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.xsa -mem-ranges [list {0x80000000 0xbfffffff} {0x400000000 0x5ffffffff} {0x1000000000 0x7fffffffff}] -regs
+configparams force-mem-access 1
+targets -set -nocase -filter {name =~"APU*"}
+set mode [expr [mrd -value 0xFF5E0200] & 0xf]
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf
+set bp_34_46_fsbl_bp [bpadd -addr &XFsbl_Exit]
+con -block -timeout 60
+bpremove $bp_34_46_fsbl_bp
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf
+configparams force-mem-access 0
+----------------End of Script----------------
+
+16:34:48 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:34:48 INFO  : 'con' command is executed.
+16:34:48 INFO  : ----------------XSDB Script (After Launch)----------------
+targets -set -nocase -filter {name =~ "*A53*#0"}
+con
+----------------End of Script----------------
+
+16:34:48 INFO  : Launch script is exported to file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test_system\_ide\scripts\debugger_lwip_test-default.tcl'
+16:35:59 WARN  : channel "tcfchan#6" closed
+16:36:00 INFO  : Connected to target on host '127.0.0.1' and port '3121'.
+16:36:00 INFO  : Jtag cable 'Xilinx HW-FTDI-TEST FT232H 84713' is selected.
+16:36:00 INFO  : 'jtag frequency' command is executed.
+16:36:00 INFO  : Sourcing of 'F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl' is done.
+16:36:00 INFO  : Context for 'APU' is selected.
+16:36:01 INFO  : System reset is completed.
+16:36:04 INFO  : 'after 3000' command is executed.
+16:36:04 INFO  : 'targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}' command is executed.
+16:36:15 INFO  : Device configured successfully with "C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.bit"
+16:36:15 INFO  : Context for 'APU' is selected.
+16:36:15 INFO  : Hardware design and registers information is loaded from 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.xsa'.
+16:36:15 INFO  : 'configparams force-mem-access 1' command is executed.
+16:36:15 INFO  : Context for 'APU' is selected.
+16:36:15 INFO  : Boot mode is read from the target.
+16:36:15 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:36:15 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+16:36:16 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf' is downloaded to processor 'psu_cortexa53_0'.
+16:36:16 INFO  : 'set bp_36_16_fsbl_bp [bpadd -addr &XFsbl_Exit]' command is executed.
+16:36:17 INFO  : 'con -block -timeout 60' command is executed.
+16:36:17 INFO  : 'bpremove $bp_36_16_fsbl_bp' command is executed.
+16:36:17 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:36:17 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+16:36:18 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf' is downloaded to processor 'psu_cortexa53_0'.
+16:36:18 INFO  : 'configparams force-mem-access 0' command is executed.
+16:36:18 INFO  : ----------------XSDB Script----------------
+connect -url tcp:127.0.0.1:3121
+source F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl
+targets -set -nocase -filter {name =~"APU*"}
+rst -system
+after 3000
+targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}
+fpga -file C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.bit
+targets -set -nocase -filter {name =~"APU*"}
+loadhw -hw C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.xsa -mem-ranges [list {0x80000000 0xbfffffff} {0x400000000 0x5ffffffff} {0x1000000000 0x7fffffffff}] -regs
+configparams force-mem-access 1
+targets -set -nocase -filter {name =~"APU*"}
+set mode [expr [mrd -value 0xFF5E0200] & 0xf]
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf
+set bp_36_16_fsbl_bp [bpadd -addr &XFsbl_Exit]
+con -block -timeout 60
+bpremove $bp_36_16_fsbl_bp
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf
+configparams force-mem-access 0
+----------------End of Script----------------
+
+16:36:18 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:36:18 INFO  : 'con' command is executed.
+16:36:18 INFO  : ----------------XSDB Script (After Launch)----------------
+targets -set -nocase -filter {name =~ "*A53*#0"}
+con
+----------------End of Script----------------
+
+16:36:18 INFO  : Launch script is exported to file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test_system\_ide\scripts\debugger_lwip_test-default.tcl'
+16:40:30 INFO  : Disconnected from the channel tcfchan#7.
+16:40:50 INFO  : Connected to target on host '127.0.0.1' and port '3121'.
+16:40:50 INFO  : Jtag cable 'Xilinx HW-FTDI-TEST FT232H 84713' is selected.
+16:40:50 INFO  : 'jtag frequency' command is executed.
+16:40:50 INFO  : Sourcing of 'F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl' is done.
+16:40:50 INFO  : Context for 'APU' is selected.
+16:40:51 INFO  : System reset is completed.
+16:40:54 INFO  : 'after 3000' command is executed.
+16:40:54 INFO  : 'targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}' command is executed.
+16:41:05 INFO  : Device configured successfully with "C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.bit"
+16:41:05 INFO  : Context for 'APU' is selected.
+16:41:05 INFO  : Hardware design and registers information is loaded from 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.xsa'.
+16:41:05 INFO  : 'configparams force-mem-access 1' command is executed.
+16:41:05 INFO  : Context for 'APU' is selected.
+16:41:05 INFO  : Boot mode is read from the target.
+16:41:05 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:41:05 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+16:41:06 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf' is downloaded to processor 'psu_cortexa53_0'.
+16:41:06 INFO  : 'set bp_41_6_fsbl_bp [bpadd -addr &XFsbl_Exit]' command is executed.
+16:41:07 INFO  : 'con -block -timeout 60' command is executed.
+16:41:07 INFO  : 'bpremove $bp_41_6_fsbl_bp' command is executed.
+16:41:07 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:41:07 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+16:41:08 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf' is downloaded to processor 'psu_cortexa53_0'.
+16:41:08 INFO  : 'configparams force-mem-access 0' command is executed.
+16:41:08 INFO  : ----------------XSDB Script----------------
+connect -url tcp:127.0.0.1:3121
+source F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl
+targets -set -nocase -filter {name =~"APU*"}
+rst -system
+after 3000
+targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}
+fpga -file C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.bit
+targets -set -nocase -filter {name =~"APU*"}
+loadhw -hw C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.xsa -mem-ranges [list {0x80000000 0xbfffffff} {0x400000000 0x5ffffffff} {0x1000000000 0x7fffffffff}] -regs
+configparams force-mem-access 1
+targets -set -nocase -filter {name =~"APU*"}
+set mode [expr [mrd -value 0xFF5E0200] & 0xf]
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf
+set bp_41_6_fsbl_bp [bpadd -addr &XFsbl_Exit]
+con -block -timeout 60
+bpremove $bp_41_6_fsbl_bp
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf
+configparams force-mem-access 0
+----------------End of Script----------------
+
+16:41:08 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:41:08 INFO  : 'con' command is executed.
+16:41:08 INFO  : ----------------XSDB Script (After Launch)----------------
+targets -set -nocase -filter {name =~ "*A53*#0"}
+con
+----------------End of Script----------------
+
+16:41:08 INFO  : Launch script is exported to file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test_system\_ide\scripts\debugger_lwip_test-default.tcl'
+16:48:59 INFO  : Disconnected from the channel tcfchan#8.
+16:49:00 INFO  : Connected to target on host '127.0.0.1' and port '3121'.
+16:49:01 INFO  : Jtag cable 'Xilinx HW-FTDI-TEST FT232H 84713' is selected.
+16:49:01 INFO  : 'jtag frequency' command is executed.
+16:49:01 INFO  : Sourcing of 'F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl' is done.
+16:49:01 INFO  : Context for 'APU' is selected.
+16:49:01 INFO  : System reset is completed.
+16:49:04 INFO  : 'after 3000' command is executed.
+16:49:04 INFO  : 'targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}' command is executed.
+16:49:15 INFO  : Device configured successfully with "C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.bit"
+16:49:15 INFO  : Context for 'APU' is selected.
+16:49:15 INFO  : Hardware design and registers information is loaded from 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.xsa'.
+16:49:15 INFO  : 'configparams force-mem-access 1' command is executed.
+16:49:15 INFO  : Context for 'APU' is selected.
+16:49:15 INFO  : Boot mode is read from the target.
+16:49:15 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:49:15 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+16:49:16 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf' is downloaded to processor 'psu_cortexa53_0'.
+16:49:16 INFO  : 'set bp_49_16_fsbl_bp [bpadd -addr &XFsbl_Exit]' command is executed.
+16:49:17 INFO  : 'con -block -timeout 60' command is executed.
+16:49:17 INFO  : 'bpremove $bp_49_16_fsbl_bp' command is executed.
+16:49:17 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:49:17 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+16:49:18 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf' is downloaded to processor 'psu_cortexa53_0'.
+16:49:18 INFO  : 'configparams force-mem-access 0' command is executed.
+16:49:18 INFO  : ----------------XSDB Script----------------
+connect -url tcp:127.0.0.1:3121
+source F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl
+targets -set -nocase -filter {name =~"APU*"}
+rst -system
+after 3000
+targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}
+fpga -file C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.bit
+targets -set -nocase -filter {name =~"APU*"}
+loadhw -hw C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.xsa -mem-ranges [list {0x80000000 0xbfffffff} {0x400000000 0x5ffffffff} {0x1000000000 0x7fffffffff}] -regs
+configparams force-mem-access 1
+targets -set -nocase -filter {name =~"APU*"}
+set mode [expr [mrd -value 0xFF5E0200] & 0xf]
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf
+set bp_49_16_fsbl_bp [bpadd -addr &XFsbl_Exit]
+con -block -timeout 60
+bpremove $bp_49_16_fsbl_bp
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf
+configparams force-mem-access 0
+----------------End of Script----------------
+
+16:49:18 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:49:18 INFO  : 'con' command is executed.
+16:49:18 INFO  : ----------------XSDB Script (After Launch)----------------
+targets -set -nocase -filter {name =~ "*A53*#0"}
+con
+----------------End of Script----------------
+
+16:49:18 INFO  : Launch script is exported to file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test_system\_ide\scripts\debugger_lwip_test-default.tcl'
+16:53:40 INFO  : Disconnected from the channel tcfchan#9.
+16:53:41 INFO  : Connected to target on host '127.0.0.1' and port '3121'.
+16:53:41 INFO  : Jtag cable 'Xilinx HW-FTDI-TEST FT232H 84713' is selected.
+16:53:41 INFO  : 'jtag frequency' command is executed.
+16:53:41 INFO  : Sourcing of 'F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl' is done.
+16:53:41 INFO  : Context for 'APU' is selected.
+16:53:41 INFO  : System reset is completed.
+16:53:44 INFO  : 'after 3000' command is executed.
+16:53:44 INFO  : 'targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}' command is executed.
+16:53:55 INFO  : Device configured successfully with "C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.bit"
+16:53:55 INFO  : Context for 'APU' is selected.
+16:53:55 INFO  : Hardware design and registers information is loaded from 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.xsa'.
+16:53:55 INFO  : 'configparams force-mem-access 1' command is executed.
+16:53:56 INFO  : Context for 'APU' is selected.
+16:53:56 INFO  : Boot mode is read from the target.
+16:53:56 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:53:56 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+16:53:56 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf' is downloaded to processor 'psu_cortexa53_0'.
+16:53:56 INFO  : 'set bp_53_56_fsbl_bp [bpadd -addr &XFsbl_Exit]' command is executed.
+16:53:58 INFO  : 'con -block -timeout 60' command is executed.
+16:53:58 INFO  : 'bpremove $bp_53_56_fsbl_bp' command is executed.
+16:53:58 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:53:58 INFO  : Processor reset is completed for 'psu_cortexa53_0'.
+16:53:58 INFO  : The application 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf' is downloaded to processor 'psu_cortexa53_0'.
+16:53:58 INFO  : 'configparams force-mem-access 0' command is executed.
+16:53:58 INFO  : ----------------XSDB Script----------------
+connect -url tcp:127.0.0.1:3121
+source F:/PLD/Xilinx/Vitis/2022.2/scripts/vitis/util/zynqmp_utils.tcl
+targets -set -nocase -filter {name =~"APU*"}
+rst -system
+after 3000
+targets -set -filter {jtag_cable_name =~ "Xilinx HW-FTDI-TEST FT232H 84713" && level==0 && jtag_device_ctx=="jsn-HW-FTDI-TEST FT232H-84713-14730093-0"}
+fpga -file C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.bit
+targets -set -nocase -filter {name =~"APU*"}
+loadhw -hw C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/hw/top_wrapper_ila.xsa -mem-ranges [list {0x80000000 0xbfffffff} {0x400000000 0x5ffffffff} {0x1000000000 0x7fffffffff}] -regs
+configparams force-mem-access 1
+targets -set -nocase -filter {name =~"APU*"}
+set mode [expr [mrd -value 0xFF5E0200] & 0xf]
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/boot/fsbl.elf
+set bp_53_56_fsbl_bp [bpadd -addr &XFsbl_Exit]
+con -block -timeout 60
+bpremove $bp_53_56_fsbl_bp
+targets -set -nocase -filter {name =~ "*A53*#0"}
+rst -processor
+dow C:/DEV/repos/LightM-UNet/deployment/FINN_interface/lwip_test/Debug/lwip_test.elf
+configparams force-mem-access 0
+----------------End of Script----------------
+
+16:53:58 INFO  : Context for processor 'psu_cortexa53_0' is selected.
+16:53:59 INFO  : 'con' command is executed.
+16:53:59 INFO  : ----------------XSDB Script (After Launch)----------------
+targets -set -nocase -filter {name =~ "*A53*#0"}
+con
+----------------End of Script----------------
+
+16:53:59 INFO  : Launch script is exported to file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test_system\_ide\scripts\debugger_lwip_test-default.tcl'
+19:12:33 INFO  : Disconnected from the channel tcfchan#10.

@@ -1,3 +1,11 @@
+# SUPERSEDED (2026-10-06): this list is INCOMPLETE -- it's missing every
+# HLS-backend child node's own ip dir (all but the 2 IODMA entries, and even
+# those 2 point one level too high) plus finn-rtllib/memstream, so
+# generate_target on a combined BD fails with
+# "Cannot upgrade to invalid target ''". Use
+# hardware/finn_fix_combined_bd_ip_repos.tcl instead (auto-discovers the full
+# correct set via glob). Kept only for history.
+#
 # Registers all per-partition stitched IPs + both IODMA cores as IP
 # repositories in the currently open Vivado project (run after `open_project`
 # / `create_project`, before adding them to a block design).

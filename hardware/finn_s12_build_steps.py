@@ -32,7 +32,7 @@ from finn.util.fpgadataflow import is_fpgadataflow_node  # noqa: E402
 WEIGHT_OP_TYPES = ("MVAU_hls", "MVAU_rtl", "VVAU_hls", "VVAU_rtl")
 THRESH_OP_TYPES = ("Thresholding_hls", "Thresholding_rtl")
 SWU_OP_TYPES = ("ConvolutionInputGenerator_hls", "ConvolutionInputGenerator_rtl")
-FMPAD_OP_TYPES = ("FMPadding_hls", "FMPadding_rtl", "FMPadding_Pixel")
+FMPAD_OP_TYPES = ("FMPadding_hls", "FMPadding_rtl", "FMPadding_Pixel", "FMPadding_Pixel_hls", "FMPadding_Pixel_rtl")
 # Pinned Thresholding_rtl memory placement (thresholding.sv: stage depth >= trigger -> BRAM, else LUTRAM;
 # 0 = Vivado "auto"). MUST match MILP/finn_cost_model.py THR_DEPTH_TRIGGER_BRAM / THR_DEPTH_TRIGGER_DISTRIBUTED,
 # which is what the MILP priced: ram_style "block" -> 1024, "distributed" -> 999999 (everything LUTRAM).
@@ -435,6 +435,29 @@ def _find_preceding_swu_fmpad_vvau(kernel_model, vvau_node):
     return fmpad, swu
 
 
+def _find_up_block_fmpad_chain(kernel_model, mvau_node):
+    """up_bottleneck.py's 2x2-lowered transposed conv has TWO FMPadding nodes in series before its SWG --
+    the zero-insertion 'FMPadPix' (op_type FMPadding_Pixel_hls, role 'fmpadpix') followed by the border
+    'FMPad_u' (op_type FMPadding_rtl, role 'fmpad_u') -- unlike every other conv's single FMPadding, so
+    _find_dense_swu_fmpad's one-hop walk only ever finds the nearer FMPad_u and mislabels it 'fmpadpix'.
+    Returns (fmpadpix_node|None, fmpad_u_node|None, swu_node|None)."""
+    def producer(node):
+        p = kernel_model.find_producer(node.input[0])
+        while p is not None and p.op_type.startswith("StreamingDataWidthConverter"):
+            p = kernel_model.find_producer(p.input[0])
+        return p
+    swu = producer(mvau_node)
+    if swu is None or swu.op_type not in SWU_OP_TYPES:
+        return None, None, None
+    fmpad_u = producer(swu)
+    if fmpad_u is not None and fmpad_u.op_type not in FMPAD_OP_TYPES:
+        fmpad_u = None
+    fmpadpix = producer(fmpad_u) if fmpad_u is not None else None
+    if fmpadpix is not None and fmpadpix.op_type not in FMPAD_OP_TYPES:
+        fmpadpix = None
+    return fmpadpix, fmpad_u, swu
+
+
 def _find_following_thresholding(kernel_model, weight_node):
     consumer = kernel_model.find_consumer(weight_node.output[0])
     if consumer is not None and consumer.op_type in THRESH_OP_TYPES:
@@ -494,13 +517,33 @@ def step_allocate_uram_fifos(model, partition_idx, budget=None):
     return model
 
 
-def _find_join_thresholds(kernel_model, logical_names, prev_block=None):
+def _claimed_mvau_names(kernel_model, logical_names, per_layer):
+    """Weight-op node names build_partition_role_nodes resolves to a main-path leaf role (reduce.0/
+    conv/conv.0/expand.0/main_proj.0/up.0/final) -- lets _find_join_thresholds tell a block's own
+    main-path MVAU (whose Thresholding is already role-tagged via _find_following_thresholding) apart
+    from an MVAU-fed Thresholding that ISN'T one of these recognized leaves (e.g. dn_bottleneck.py's
+    skip_pad='mvau' identity-pad conv), which must still get a 'skip_quant' role or its FIFO is never
+    matched by step_force_fifo_depths_from_milp and silently stays at FINN's shallow default depth."""
+    claimed = set()
+    weight_nodes = [n for n in kernel_model.graph.node if n.op_type in WEIGHT_OP_TYPES]
+    for node, logical_name in zip(weight_nodes, logical_names):
+        entry, json_key = _resolve_folding_entry(logical_name, per_layer)
+        if entry is None or json_key is None:
+            continue
+        stage, _leaf = _stage_leaf(json_key)
+        if stage is not None:
+            claimed.add(node.name)
+    return claimed
+
+
+def _find_join_thresholds(kernel_model, logical_names, prev_block=None, claimed_mvau_names=None):
     """{Thresholding node name: (block, kind)} for the residual-join thresholds the MILP prices as
     extra nodes `<block>.skip_quant|residual_add|out_act` (finn_cost_model.md "Residual-join
     thresholds"). Matched structurally around each AddStreams: residual_add = Thresholding
     consuming the add's output; out_act = the Thresholding consuming that; skip_quant = Thresholding
-    feeding an add input whose producer is NOT an MVAU/VVAU (an MVAU-fed one is that conv's own thr,
-    handled via _find_following_thresholding). Ported from
+    feeding an add input whose producer is NOT an MVAU/VVAU, OR is an MVAU/VVAU not already claimed
+    as a main-path leaf by claimed_mvau_names (dn_bottleneck.py's skip_pad='mvau' identity-pad conv --
+    a claimed one is that conv's own thr, handled via _find_following_thresholding instead). Ported from
     hardware/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/
     finn_hawq_folding_bridge_nearest_upsample.py's find_join_thresholds."""
     adds = [n for n in kernel_model.graph.node if n.op_type.startswith("AddStreams")]
@@ -535,8 +578,10 @@ def _find_join_thresholds(kernel_model, logical_names, prev_block=None):
             if not is_thr(prod):
                 continue
             prod_in = kernel_model.find_producer(prod.input[0])
-            if prod_in is None or prod_in.op_type not in WEIGHT_OP_TYPES:
-                found[prod.name] = (block, "skip_quant")
+            weight_fed = prod_in is not None and prod_in.op_type in WEIGHT_OP_TYPES
+            if weight_fed and (claimed_mvau_names is None or prod_in.name in claimed_mvau_names):
+                continue
+            found[prod.name] = (block, "skip_quant")
     return found
 
 
@@ -671,18 +716,32 @@ def _find_init_block_extra_nodes(kernel_model, stage, dup_node, conv_path_head):
     return by_name
 
 
-def _find_dn_block_maxpool(kernel_model, dup_node, entry_head):
-    """'dn'-kind block's StreamingMaxPool, found on the Dup's OTHER output branch (not the one feeding
-    entry_head, the reduce.0 leaf's own FMPad/SWG/MVAU) per dn_bottleneck.py's skip-path topology:
-        Dup -+-> entry_head (reduce.0's own FMPad/SWG/MVAU) ...
-             +-> MaxPool -> Thr_s (already resolved via _find_block_join_nodes as '<stage>.skip_quant'/'thr_s')"""
-    for out_tensor in dup_node.output:
+def _find_dn_block_via_skip(kernel_model, skip_mvau_node):
+    """'dn'-kind block's per_layer leaf 'reduce.0' is actually the MILP's SKIP-branch conv (role 'mvau_s'),
+    fed DIRECTLY by its own StreamingMaxPool (no SWU -- a true 1x1), itself fed directly by Dup. The MAIN
+    chain's entry conv ('shortcut_proj', role 'mvau_r') sits on Dup's OTHER branch behind its own SWU
+    (swg_r) and has NO per_layer/logical_name entry at all (never claimed by the main per-leaf loop above).
+    Confirmed via direct topology trace (recheck_p1_topology.py), contradicting the naive assumption
+    'reduce.0 == MILP's mvau_r' that 'reg' kind's (truly-1x1, no-SWU, main-chain-entry) reduce.0 would
+    suggest:
+        Dup -+-> MaxPool -> MVAU_s(='reduce.0' per_layer leaf) -> Thr_s --(skip FIFO)--> Add
+             +-> SWG_r -> MVAU_r(='shortcut_proj', UNCLAIMED) -> Thr_r -> FMPad -> SWG_m -> MVAU_m(='conv.0') -> ...
+    Returns (maxpool_node|None, dup_node|None, swg_r_node|None, shortcut_mvau_node|None)."""
+    maxpool = _real_producer_skip_dwc(kernel_model, skip_mvau_node)
+    if maxpool is None or not maxpool.op_type.startswith("StreamingMaxPool"):
+        return None, None, None, None
+    dup = _real_producer_skip_dwc(kernel_model, maxpool)
+    if dup is None or not dup.op_type.startswith("DuplicateStreams"):
+        return maxpool, None, None, None
+    swg_r = shortcut_mvau = None
+    for out_tensor in dup.output:
         c = kernel_model.find_consumer(out_tensor)
-        while c is not None and c.op_type.startswith("StreamingFIFO"):
+        while c is not None and c.op_type.startswith(_SKIP_FIFO_DWC_OPS):
             c = kernel_model.find_consumer(c.output[0])
-        if c is not None and (entry_head is None or c.name != entry_head.name) and c.op_type.startswith("StreamingMaxPool"):
-            return c
-    return None
+        if c is not None and c.name != maxpool.name and c.op_type in SWU_OP_TYPES:
+            swg_r = c
+            shortcut_mvau = _real_consumer_skip_dwc(kernel_model, swg_r)
+    return maxpool, dup, swg_r, shortcut_mvau
 
 
 def _find_up_block_upnn(kernel_model, thr_p_node):
@@ -699,11 +758,13 @@ def build_partition_role_nodes(kernel_model, logical_names, per_layer):
     name, for every weight-bearing layer in this partition. Covers each block's entry/mid/exit MVAU and their
     OWN Thresholding (mvau_r/thr_r, mvau_m/thr_m, mvau_e/thr_e, mvau_p/thr_p, mvau_u/thr_u, mvau_c/thr_c,
     mvau_f), the dense-conv's FMPadding/SWU (fmpad/swg_m, via _find_dense_swu_fmpad, resolved for 'init' kind
-    too; 'up' kind's own 2x2-lowered conv gets fmpadpix/swg_u the same way), each block's Dup (feeding its
-    entry MVAU), 'dn' kind's own skip-path MaxPool (_find_dn_block_maxpool), 'up' kind's own
-    UpsampleNearestNeighbour (_find_up_block_upnn), and -- for 'init' kind only -- its own
-    thr_in/thr_m/maxpool/concat/thr_act (_find_init_block_extra_nodes). Does NOT cover
-    add/skip_quant/residual_add/out_act -- see _find_block_join_nodes."""
+    too; 'up' kind's own 2x2-lowered conv gets fmpadpix/fmpad_u/swg_u via _find_up_block_fmpad_chain, which
+    unlike the dense case has TWO chained FMPadding nodes to resolve), each block's Dup (feeding its
+    entry MVAU), 'dn' kind's own skip-branch MaxPool/SWG_r/shortcut-conv (mvau_r/thr_r, UNCLAIMED by the
+    main per-leaf loop -- see _find_dn_block_via_skip for why 'reduce.0' is actually the MILP's 'mvau_s'
+    skip-conv, not 'mvau_r'), 'up' kind's own UpsampleNearestNeighbour (_find_up_block_upnn), and -- for
+    'init' kind only -- its own thr_in/thr_m/maxpool/concat/thr_act (_find_init_block_extra_nodes). Does NOT
+    cover add/skip_quant/residual_add/out_act -- see _find_block_join_nodes."""
     weight_nodes = [n for n in kernel_model.graph.node if n.op_type in WEIGHT_OP_TYPES]
     by_name: dict[str, str] = {}
     for node, logical_name in zip(weight_nodes, logical_names):
@@ -716,9 +777,14 @@ def build_partition_role_nodes(kernel_model, logical_names, per_layer):
         if leaf == "final":
             by_name[f"{stage}.mvau_f"] = node.name
             continue
+        kind = _block_kind_of_stage(stage)
         mvau_role, thr_role = _LEAF_ROLES[leaf]
         if leaf == "conv" and stage == "initial":
             mvau_role, thr_role = "mvau_c", "thr_c"
+        elif leaf == "reduce.0" and kind == "dn":
+            # see _find_dn_block_via_skip: dn_bottleneck.py's 'reduce.0' is the MILP's SKIP-branch conv,
+            # not the main-chain entry _LEAF_ROLES assumes (that's 'reg' kind's shape, not 'dn' kind's).
+            mvau_role, thr_role = "mvau_s", "thr_s"
         by_name[f"{stage}.{mvau_role}"] = node.name
         thr = _find_following_thresholding(kernel_model, node)
         if thr is not None:
@@ -735,26 +801,43 @@ def build_partition_role_nodes(kernel_model, logical_names, per_layer):
             if fmpad_node is not None:
                 by_name[f"{stage}.fmpad"] = fmpad_node.name
         elif leaf == "up.0":
-            # up_bottleneck.py's 2x2-lowered transposed conv: FMPadPix -> SWG_u -> MVAU_u (role names
-            # 'fmpadpix'/'swg_u' per its own _ROLE_OF/to_folding_config -- distinct names from the dense-conv case above).
-            fmpad_node, swu_node = _find_dense_swu_fmpad(kernel_model, node)
+            # up_bottleneck.py's 2x2-lowered transposed conv: FMPadPix -> FMPad_u -> SWG_u -> MVAU_u -- TWO
+            # chained FMPadding nodes (roles 'fmpadpix'/'fmpad_u'), unlike every other conv's single
+            # FMPadding -- see _find_up_block_fmpad_chain's docstring for why _find_dense_swu_fmpad alone
+            # under-finds/mislabels this case.
+            fmpadpix_node, fmpad_u_node, swu_node = _find_up_block_fmpad_chain(kernel_model, node)
+            fmpad_node = fmpad_u_node
             if swu_node is not None:
                 by_name[f"{stage}.swg_u"] = swu_node.name
-            if fmpad_node is not None:
-                by_name[f"{stage}.fmpadpix"] = fmpad_node.name
-        kind = _block_kind_of_stage(stage)
+            if fmpad_u_node is not None:
+                by_name[f"{stage}.fmpad_u"] = fmpad_u_node.name
+            if fmpadpix_node is not None:
+                by_name[f"{stage}.fmpadpix"] = fmpadpix_node.name
         if leaf == _ENTRY_LEAF_BY_KIND.get(kind):
-            # 'init' kind's entry leaf ('conv') has FMPad/SWG/DWC between Dup and the MVAU itself; every
-            # other kind's entry MVAU is fed directly by Dup.
-            dup = _real_producer(kernel_model, fmpad_node or swu_node or node)
-            if dup is not None and dup.op_type.startswith("DuplicateStreams"):
-                by_name[f"{stage}.dup"] = dup.name
-                if kind == "init":
-                    by_name.update(_find_init_block_extra_nodes(kernel_model, stage, dup, fmpad_node or swu_node))
-                elif kind == "dn":
-                    maxpool = _find_dn_block_maxpool(kernel_model, dup, fmpad_node or swu_node or node)
-                    if maxpool is not None:
-                        by_name[f"{stage}.maxpool"] = maxpool.name
+            if kind == "dn":
+                # 'reduce.0' (this node, role 'mvau_s') is fed directly by MaxPool, itself fed directly by
+                # Dup -- walk back through those (no FMPad/SWU on THIS branch) to find Dup, then across to
+                # the other, unclaimed main-chain-entry branch (swg_r -> mvau_r/thr_r).
+                maxpool, dup, swg_r, shortcut_mvau = _find_dn_block_via_skip(kernel_model, node)
+                if maxpool is not None:
+                    by_name[f"{stage}.maxpool"] = maxpool.name
+                if dup is not None:
+                    by_name[f"{stage}.dup"] = dup.name
+                if swg_r is not None:
+                    by_name[f"{stage}.swg_r"] = swg_r.name
+                if shortcut_mvau is not None and shortcut_mvau.op_type in WEIGHT_OP_TYPES:
+                    by_name[f"{stage}.mvau_r"] = shortcut_mvau.name
+                    thr_r = _find_following_thresholding(kernel_model, shortcut_mvau)
+                    if thr_r is not None:
+                        by_name[f"{stage}.thr_r"] = thr_r.name
+            else:
+                # 'init' kind's entry leaf ('conv') has FMPad/SWG/DWC between Dup and the MVAU itself; every
+                # other (non-'dn') kind's entry MVAU is fed directly by Dup.
+                dup = _real_producer(kernel_model, fmpad_node or swu_node or node)
+                if dup is not None and dup.op_type.startswith("DuplicateStreams"):
+                    by_name[f"{stage}.dup"] = dup.name
+                    if kind == "init":
+                        by_name.update(_find_init_block_extra_nodes(kernel_model, stage, dup, fmpad_node or swu_node))
         if leaf == "main_proj.0" and thr is not None:
             upnn = _find_up_block_upnn(kernel_model, thr)
             if upnn is not None:
@@ -762,7 +845,7 @@ def build_partition_role_nodes(kernel_model, logical_names, per_layer):
     return by_name
 
 
-def _find_block_join_nodes(kernel_model, logical_names, prev_block=None):
+def _find_block_join_nodes(kernel_model, logical_names, prev_block=None, claimed_mvau_names=None):
     """role -> node bridge for the residual-join nodes the MILP's inter/intra_block_fifos reference as
     '<block>.add' / '<block>.skip_quant' (='<block>.thr_s') / '<block>.residual_add' / '<block>.out_act'
     (aliased to '<block>.thr_out' -- the block's externally-visible output, what the NEXT block's Dup is fed
@@ -770,7 +853,7 @@ def _find_block_join_nodes(kernel_model, logical_names, prev_block=None):
     (proven) for residual_add/out_act/skip_quant; adds the AddStreams node itself via the same
     adds/expand.0-blocks zip that function uses internally."""
     by_name: dict[str, str] = {}
-    joins = _find_join_thresholds(kernel_model, logical_names, prev_block)
+    joins = _find_join_thresholds(kernel_model, logical_names, prev_block, claimed_mvau_names)
     for node_name, (block, kind) in joins.items():
         by_name[f"{block}.{kind}"] = node_name
         if kind == "skip_quant":
@@ -972,7 +1055,15 @@ def build_partition_folding_config(partition_model_fn, sdp_node_name, logical_na
                 folding_config[fmpad_node.name] = {"SIMD": safe_pe}
         elif compute_entry.get("simd_swu") is not None and node.op_type.startswith("MVAU"):
             # FINN leaves dense-conv SWU SIMD=1 otherwise, making the SWU the bottleneck.
-            fmpad_node, swu_node = _find_dense_swu_fmpad(kernel_model, node)
+            _, up0_leaf = _stage_leaf(json_key)
+            if up0_leaf == "up.0":
+                # up_bottleneck.py's 2x2-lowered conv has TWO chained FMPadding nodes (FMPadPix, FMPad_u)
+                # before its SWG -- _find_dense_swu_fmpad only finds the nearer FMPad_u, so FMPadPix's own
+                # SIMD would otherwise silently stay at FINN's default/auto instead of matching the chain.
+                fmpadpix_node, fmpad_node, swu_node = _find_up_block_fmpad_chain(kernel_model, node)
+            else:
+                fmpad_node, swu_node = _find_dense_swu_fmpad(kernel_model, node)
+                fmpadpix_node = None
             if swu_node is not None:
                 simd_swu = compute_entry["simd_swu"]
                 if swu_node.op_type == "ConvolutionInputGenerator_rtl":
@@ -993,6 +1084,8 @@ def build_partition_folding_config(partition_model_fn, sdp_node_name, logical_na
                 print(f"{log} {swu_node.name:30s} {swu_node.op_type:12s} (SWU) {swu_cfg}")
                 if fmpad_node is not None:
                     folding_config[fmpad_node.name] = {"SIMD": simd_swu}
+                if fmpadpix_node is not None:
+                    folding_config[fmpadpix_node.name] = {"SIMD": simd_swu}
 
         thr_pe = compute_entry.get("thr_pe")
         if thr_pe is not None:
@@ -1008,12 +1101,14 @@ def build_partition_folding_config(partition_model_fn, sdp_node_name, logical_na
     if unmatched:
         print(f"{log} WARNING: {len(unmatched)} logical names had no folding entry: {unmatched}")
 
+    claimed_mvau_names = _claimed_mvau_names(kernel_model, logical_names, per_layer)
+
     # residual-join thresholds: memory placement only (their MILP PE is not applied here -- they
     # stay at FINN's own PE, same as the original partition2_wm bridge this was ported from).
     n_join = 0
     if extra_nodes is not None and conv_order_file is not None:
         prev_block = _previous_block_name(conv_order_file, logical_names[0]) if logical_names else None
-        joins = _find_join_thresholds(kernel_model, logical_names, prev_block)
+        joins = _find_join_thresholds(kernel_model, logical_names, prev_block, claimed_mvau_names)
         for thr_name, (block, kind) in joins.items():
             style = (extra_nodes.get(f"{block}.{kind}") or {}).get("ram_style")
             if style not in THRESH_TRIGGER_BY_STYLE:
@@ -1033,7 +1128,7 @@ def build_partition_folding_config(partition_model_fn, sdp_node_name, logical_na
     if inter_block_fifos is not None or intra_block_fifos is not None:
         role_by_name = build_partition_role_nodes(kernel_model, logical_names, per_layer)
         prev_block = _previous_block_name(conv_order_file, logical_names[0]) if (conv_order_file and logical_names) else None
-        role_by_name.update(_find_block_join_nodes(kernel_model, logical_names, prev_block))
+        role_by_name.update(_find_block_join_nodes(kernel_model, logical_names, prev_block, claimed_mvau_names))
         # Several real nodes are registered under more than one role string (int_bottleneck.py's _ROLE_OF name
         # AND net_fold.py's own MILP xf name for the SAME node, e.g. 'initial.thr_act' / 'initial.act' both ->
         # the init block's output Thresholding) -- intra_block_fifos and inter_block_fifos don't consistently
