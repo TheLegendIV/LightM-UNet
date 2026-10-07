@@ -254,7 +254,7 @@ def model_dn_bottleneck(
 
 
 # escalation schedule: (elastic scale, FIFO after FMPad holds the next frame's padding, uniform depth multiplier)
-_SIZING_SCHEDULE = ((1, False, 1), (1, True, 1), (2, True, 1), (2, True, 2), (4, True, 2), (4, True, 4))
+_SIZING_SCHEDULE = reg._SIZING_SCHEDULE
 
 
 def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02, max_tries: int = 8, shrink: bool = True,
@@ -314,7 +314,7 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
     r.verification = dict(
         ok=ok, steady_cyc_px=sat.steady_cyc_px, latency_first_out=paced.latency_first_out, frame_cycles=sat.cycles,
         skip_needed_words=need, elastic_depth=elastic, uniform_depth=depth, tries=tries, deadlock=sat.deadlock,
-        frame_periods=sat.frame_periods,
+        frame_periods=sat.frame_periods, full_fifos=sat.full_fifos,
     )
     finalize_fifo_costs(r, fifo_mem)
     if not ok:

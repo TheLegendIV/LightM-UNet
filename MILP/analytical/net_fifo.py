@@ -100,8 +100,22 @@ def compose(blocks: list, depths: list) -> dict:
     return dict(order=order, sink=last["sink"], N=last["N"], px_per_frame=last["N"] // last["frames"], iface=iface)
 
 
+def chain_fifos(net: dict) -> list:
+    """Every distinct Fifo object of a composed chain (object identity: the intra-block FIFO names repeat across blocks)."""
+    seen, out = set(), []
+    for node in net["order"]:
+        for attr in ("inp", "out", "ins", "outs"):
+            v = getattr(node, attr, None)
+            for f in (v if isinstance(v, (list, tuple)) else [v]):
+                if isinstance(f, bs.Fifo) and id(f) not in seen:
+                    seen.add(id(f))
+                    out.append(f)
+    return out
+
+
 def run_chain(net: dict, max_cycles: int, stall: int = 5000) -> dict:
-    """Step the chain until the sink has N pixels. Returns deadlock flag, per-frame periods (cycles) and interface FIFO occupancies."""
+    """Step the chain until the sink has N pixels. Returns deadlock flag, per-frame periods (cycles), interface FIFO occupancies, and the Fifo objects that were
+    full when the run ended (`full`: the blocked chain of a deadlock) or reached their depth at any time (`saturated`)."""
     order, sink, N, ppf = net["order"], net["sink"], net["N"], net["px_per_frame"]
     rev = list(reversed(order))
     t = last = 0
@@ -123,8 +137,10 @@ def run_chain(net: dict, max_cycles: int, stall: int = 5000) -> dict:
     done = sink.done
     ends = [done[(k + 1) * ppf - 1] for k in range(len(done) // ppf)]
     periods = [ends[k] - ends[k - 1] for k in range(1, len(ends))]
+    fifos = chain_fifos(net)
     return dict(deadlock=deadlock, cycles=t, periods=periods, period=(periods[-1] if periods else float("inf")),
-                first_out=(done[0] if done else -1), iface_max=[f.max_occ for f in net["iface"]])
+                first_out=(done[0] if done else -1), iface_max=[f.max_occ for f in net["iface"]],
+                full=[f for f in fifos if len(f.q) >= f.depth], saturated=[f for f in fifos if f.max_occ >= f.depth])
 
 
 def run_pair(a: tuple, b: tuple, depth: int, F: int, frames: int = DEFAULT_FRAMES) -> dict:

@@ -95,7 +95,7 @@ def model_up_bottleneck(
 
     pe_p, simd_p, c_p = _search_mvau(g_p, bits, F)
     if join_pe is None:
-        join_pe = 1 if skip_conv else _join_pe_for_upnn(cout, T_in, c_p["mvu_cycles"] / px_in, res)
+        join_pe = 1 if (skip_conv or reg._EXPLICIT) else _join_pe_for_upnn(cout, T_in, c_p["mvu_cycles"] / px_in, res)   # explicit folds: the given PEs are the join PEs
     res.params["join_pe"] = join_pe
     pe_r, simd_r, c_r = _search_mvau(g_r, bits, F)
     # FMPadding_Pixel over the (2H+1) x (2W+1) zero-inserted image emits cf words per pixel: it must also fit F
@@ -282,7 +282,7 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
         ok=ok, steady_cyc_px=sat.steady_cyc_px, latency_first_out=paced.latency_first_out, frame_cycles=sat.cycles,
         skip_needed_words=need_skip, main_needed_words=need_main, uniform_depth=depth, tries=tries, deadlock=sat.deadlock,
         elastic_depth=emap.get("FMPad_k", emap.get("FMPadPix")),
-        frame_periods=sat.frame_periods,
+        frame_periods=sat.frame_periods, full_fifos=sat.full_fifos,
     )
     finalize_fifo_costs(r, fifo_mem)
     if not ok:
