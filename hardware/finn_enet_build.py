@@ -67,6 +67,7 @@ from qonnx.transformation.general import (
 
 from finn.transformation.streamline.absorb import (
     AbsorbAddIntoMultiThreshold,
+    AbsorbSignBiasIntoMultiThreshold,
     AbsorbMulIntoMultiThreshold,
     FactorOutMulSignMagnitude,
     Absorb1BitMulIntoMatMul,
@@ -146,6 +147,7 @@ def _streamline_linear(model: ModelWrapper, cfg: DataflowBuildConfig):
         CollapseRepeatedMul(),
         BatchNormToAffine(),
         ConvertSignToThres(),
+        AbsorbSignBiasIntoMultiThreshold(),  # fixes INT-annotated MT with out_bias=0 before Add is moved away
         MoveAddPastMul(),
         MoveScalarAddPastMatMul(),
         MoveAddPastConv(),

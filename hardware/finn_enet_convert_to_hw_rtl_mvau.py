@@ -34,6 +34,8 @@ Everything else is a byte-for-byte copy of finn_enet_build.step_enet_convert_to_
 """
 import sys
 
+import numpy as np
+
 sys.path.insert(0, "/home/thelegendiv/finn/notebooks/enet")
 
 from finn_enet_build import (  # noqa: E402
@@ -57,6 +59,23 @@ from finn_enet_build import (  # noqa: E402
     ModelWrapper,
     DataflowBuildConfig,
 )
+from qonnx.transformation.base import Transformation  # noqa: E402
+
+
+class AnnotateIntegerThresholds(Transformation):
+    """RoundAndClipThresholds only retypes thresholds it changes; already-integer ones keep FLOAT32."""
+
+    def apply(self, model):
+        modified = False
+        for n in model.graph.node:
+            if n.op_type != "MultiThreshold":
+                continue
+            idt = model.get_tensor_datatype(n.input[0])
+            T = model.get_initializer(n.input[1])
+            if idt.is_integer() and not model.get_tensor_datatype(n.input[1]).is_integer() and np.all(T == np.round(T)):
+                model.set_tensor_datatype(n.input[1], idt)
+                modified = True
+        return (model, modified)
 
 
 def _force_signed_weight_datatypes(model):
@@ -120,6 +139,7 @@ def step_enet_convert_to_hw_rtl_mvau(model: ModelWrapper, cfg: DataflowBuildConf
         to_hw.InferChannelwiseLinearLayer,
         to_hw.InferStreamingMaxPool,
         RoundAndClipThresholds,
+        AnnotateIntegerThresholds,
         to_hw.InferThresholdingLayer,  # forced standalone HERE, before MVAU/VVAU fusion below
         to_hw.InferBinaryMatrixVectorActivation,
         to_hw.InferQuantizedMatrixVectorActivation,
