@@ -914,6 +914,7 @@ def step_force_fifo_depths_from_milp(model, fifo_plan: dict, min_depth: int = 2,
     wanted = {tuple(k.split("=>", 1)): v for k, v in fifo_plan["wanted"].items()}
     wanted_by_producer = fifo_plan.get("wanted_by_producer", {})
     n_total = n_forced = n_forced_virtual_dwc = n_forced_producer_only = n_forced_dwc_bridge = 0
+    n_forced_thr_swap = 0
     report = []
     for n in model.graph.node:
         if not n.op_type.startswith("StreamingFIFO"):
@@ -971,6 +972,18 @@ def step_force_fifo_depths_from_milp(model, fifo_plan: dict, min_depth: int = 2,
             if leg1 is not None and leg2 is not None:
                 f = leg1 if leg1["depth"] >= leg2["depth"] else leg2
                 virtual_dwc = True
+        thr_swap = False
+        if f is None and pr_role and cn_role and cn_role.endswith(".add") and "." in pr_role:
+            # "dn"-kind blocks (down1/down2): build_partition_role_nodes's thr_s/thr_r labels are
+            # bound to the physically wrong node -- the Thresholding that really feeds Add is
+            # labeled thr_r (not thr_s), confirmed via role_of_node + real graph walk. Retry the
+            # lookup under the other label so the MILP's skip-FIFO depth still lands on whichever
+            # node really feeds Add, regardless of which label it ended up bound to.
+            stage, leaf = pr_role.rsplit(".", 1)
+            swapped_leaf = {"thr_r": "thr_s", "thr_s": "thr_r"}.get(leaf)
+            if swapped_leaf is not None:
+                f = wanted.get((f"{stage}.{swapped_leaf}", cn_role))
+                thr_swap = f is not None
         if f is not None:
             depth = max(min_depth, int(round(f["depth"] * (skip_scale if f.get("is_skip") else 1.0))))
             inst.set_nodeattr("depth", depth)
@@ -988,12 +1001,16 @@ def step_force_fifo_depths_from_milp(model, fifo_plan: dict, min_depth: int = 2,
             if dwc_bridge:
                 entry["forced_via_dwc_bridge"] = True
                 n_forced_dwc_bridge += 1
+            if thr_swap:
+                entry["forced_via_thr_role_swap"] = True
+                n_forced_thr_swap += 1
             n_forced += 1
         report.append(entry)
     print(f"[force fifo depths from MILP] forced {n_forced}/{n_total} StreamingFIFO node(s) "
           f"({n_forced_virtual_dwc} via virtual-DWC collapse, {n_forced_dwc_bridge} via walk-past-DWC bridge, "
-          f"{n_forced_producer_only} via producer-only inter-block "
-          f"convention); {n_total - n_forced} left unassigned (kept stock_depth)")
+          f"{n_forced_producer_only} via producer-only inter-block convention, "
+          f"{n_forced_thr_swap} via thr_r/thr_s role swap); {n_total - n_forced} left unassigned "
+          f"(kept stock_depth)")
     unassigned = [e for e in report if e["forced_depth"] is None]
     if unassigned:
         print(f"[force fifo depths from MILP] {len(unassigned)} unassigned FIFO(s) -- producer -> consumer "
