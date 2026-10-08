@@ -78,3 +78,6 @@ The final block now matches the real FINN lowering (hardware/builds/S12_dense_25
 `FMPadding_Pixel -> FMPadding_rtl (pad 1) -> SWG 2x2 (parallel_window) -> DWC 96->48 -> MVAU_f -> ChannelwiseOp bias -> LabelSelect (argmax, PE 5, UINT8 label)`.
 `extra_nodes["final.argmax"]` (kind `argmax`, 65,536 cycles at PE 5, LUT is a placeholder until a FINN probe exists). `intra_block_fifos` is the flat per-FIFO list the FINN bridge reads;
 the per-block summary is `block_verification`. Every inter-block FIFO is fixed at depth 2.
+
+## Superseded by v2 (2026-10-08)
+The up-block join FIFOs in this run (up4 skip 17 / main 639, up5 skip 5 / main 302) were sized with an upsampler model that does not match the kernel in the build container and deadlock in simulation with the real kernel. See `../S12_dense_256_u4_analytical_v2/README.md`; folds are unchanged.

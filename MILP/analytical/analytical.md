@@ -253,9 +253,12 @@ T_out = F / (4*H*W), T_in = F / (H*W). Reported cyc_px is per OUTPUT pixel.
   (128 MACs/cycle at T_out = 18; 64 DSP at INT4 of the block's 100).
 * ConvTranspose (K = S = 2) is lowered by InferPixelPaddingDeconv to FMPadding_Pixel (zero insertion, (2H+1) x (2W+1) image) + a 2x2 stride-1 window + MVAU:
   4*Cmid*Cmid MACs per output pixel, 3 of 4 window elements are inserted zeros. FMPadding_Pixel emits one word group per pixel of the zero-inserted image.
-* UpsampleNearestNeighbour is not foldable: all channels per word, one OUTPUT pixel per cycle (Hout*Wout cycles per frame), a floor on F. Per input row it emits every
-  pixel twice (2W cycles) and re-emits the buffered row (2W cycles).
-* Two join FIFOs, both sized by the simulation: "skip FIFO" at the end of the ext branch (the shorter-latency branch for the conv variant) and "FIFO main".
+* UpsampleNearestNeighbour is not foldable: all channels per word, one OUTPUT pixel per cycle (Hout*Wout cycles per frame), a floor on F. Kernel = finn-hlslib 16e5847 (build container):
+  one loop iteration per cycle, blocking read / write, one-row buffer. On an even output row it reads input pixel x and writes RowBuf[x/2] for x < W (the first W outputs leave one per
+  input pixel, paced by the input), writes the last W outputs with no read, and the odd row replays the buffer (2W cycles). Until 2026-10-08 this file (and up_bottleneck_sim.py) described
+  an emitter of two outputs per input pixel; with that model the main branch led the ext branch and the skip FIFO was sized for a lead that does not exist. With the real kernel the ext
+  branch leads by up to ~W pixels per row (up4 skip FIFO need 496 words paced, up5 252; v1 had 17 / 5, S12_dense_256_u4_analytical_v2 has 512 / 256).
+* Two join FIFOs, both sized by the simulation: "skip FIFO" at the end of the ext branch and "FIFO main" (which branch needs the big one depends on the upsampler timing above: with the real kernel the skip FIFO).
 * The sliding windows are small here (3x3 at d=1, 2x2), so the next-frame fill gap that hurt the dilated blocks is ~0.6% (18.10 vs 18 cyc/px).
 * Untested in FINN: FMPadding_Pixel / UpsampleNearestNeighbour attributes (SIMD), their LUTs are priced 0 or provisional.
 
@@ -301,6 +304,8 @@ Final deconvolution (fnl_block.py, fnl_block_sim.py, test_fnl_block.py; not a bo
   untested: both variants are probed (6 cases `fnl_cin4_cout5_in128_int{b}_{bias,nobias}`).
 
 PE of the nodes behind the nearest-neighbour upsampler (up_bottleneck.py, `join_pe`; found from the diagnostic probes `up_..._int4_noconv_{pe2,pe4,fjoin,fupnn,fall,pe4fall}`)
+(Note 2026-10-08: the two-phase derivation below assumes the old UpNN model, 2 outputs per input in phase 1. The real kernel emits one output per input in the first half of the even row,
+then a burst, so its per-row time is about W*max(c_p, d) + 3*W*d, not W*c_p + 2*W*d. The rule is kept as is; block verification confirms the rate at every up block of the S12-256 design.)
 
 Mean-rate balance is not enough behind UpsampleNearestNeighbour. For each input row it runs two phases: phase 1 reads the row and emits every pixel twice (input-limited, one input
 pixel per `c_p` cycles), phase 2 re-emits the stored row and needs no new input (output-limited, one output pixel per `d` cycles). The 1x1 projection in front of it (MVAU_p) can only
