@@ -23,7 +23,15 @@ _parser.add_argument(
     help="skip the per-pixel top-1 in-PL argmax (step_insert_argmax_output/LabelSelect) and keep "
          "the raw 5-channel logit output instead. Default on.",
 )
+_parser.add_argument(
+    "--blocks", action="store_true",
+    help="tag one partition per analytical BLOCK (initial, down1, regular1.0, ..., final: 29) instead of the 8-way stage split, and write "
+         "intermediate_models/block_partitions.json (finn_s12_blocks.py). Needs --conv-order. Build the blocks with finn_s12_build.py --blocks.",
+)
+_parser.add_argument("--conv-order", help="<model>_conv_order.json (required with --blocks)")
 _args = _parser.parse_args()
+if _args.blocks and not _args.conv_order:
+    _parser.error("--blocks requires --conv-order")
 
 # finn_enet_ip_build_partitioned_8way reads sys.argv[1]/[2] at import time.
 _real_argv, sys.argv = sys.argv, sys.argv[:1]
@@ -38,6 +46,8 @@ from finn_s12_build_steps import (  # noqa: E402
     check_dangling_nodes, install_relaxed_stage_boundaries, step_insert_argmax_output,
 )
 from finn_compose_thresholds import step_compose_consecutive_thresholds  # noqa: E402
+
+import finn_s12_blocks  # noqa: E402
 
 install_relaxed_stage_boundaries()
 
@@ -61,6 +71,10 @@ def main():
         # (after `final`'s ChannelwiseOp) puts it in partition 7 via assign_stage_partition_ids_8way's
         # own index-based fallback, same as any other trailing node.
         steps.insert(idx_convert + 2, step_insert_argmax_output)
+    if _args.blocks:
+        finn_s12_blocks.CONV_ORDER = _args.conv_order
+        steps[idx_partition] = finn_s12_blocks.assign_block_partition_ids        # same position as assign_stage_partition_ids_8way
+        print("per-block partitioning: assign_block_partition_ids (conv order %s)" % _args.conv_order)
     print("argmax:", _args.argmax)
     print("Steps to run:", [s if isinstance(s, str) else s.__name__ for s in steps])
     cfg = dataclasses.replace(
@@ -85,7 +99,8 @@ def main():
             n_thresh += 1
     print(f"standalone Thresholding nodes: {n_thresh}")
 
-    report = check_dangling_nodes(ModelWrapper(os.path.join(ckpt_dir, "assign_stage_partition_ids_8way.onnx")))
+    flat_name = "assign_block_partition_ids.onnx" if _args.blocks else "assign_stage_partition_ids_8way.onnx"
+    report = check_dangling_nodes(ModelWrapper(os.path.join(ckpt_dir, flat_name)))
     with open(os.path.join(ckpt_dir, "dangling_node_report.json"), "w") as f:
         json.dump(report, f, indent=2)
     print(f"dangling-node check: {report['n_dangling']} / {report['total_nodes']} nodes dangling")

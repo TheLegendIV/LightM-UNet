@@ -147,10 +147,11 @@ class SwgGenNode:
 def simulate_up(
     r, inject_interval: float = 0, skip_depth: int | None = None, main_depth: int | None = None, fifo_depth: int = 2,
     fifo_depths: dict | None = None, frames: int = 1, elastic_map: dict | None = None, max_cycles: int | None = None,
-    swg_slack_px: int = 1,
+    swg_slack_px: int = 1, pix_simd: int | None = None,
 ) -> SimResult:
     """skip_depth: the 'skip FIFO' on the EXT branch end, main_depth: 'FIFO main' on the main branch end (words; None = r's value,
-    UNBOUNDED = measure). inject_interval: cycles between INPUT pixels."""
+    UNBOUNDED = measure). inject_interval: cycles between INPUT pixels.
+    pix_simd: SIMD of the FMPadding_Pixel node (None = the SWG's SIMD, what the bridge sets; 1 = FINN's default when nothing sets it: cmid folds per pixel, a DWC widens it to the SWG's SIMD)."""
     p = r.params
     H, W, Ho, Wo = p["height"], p["width"], 2 * p["height"], 2 * p["width"]
     cin, cmid, cout = p["cin"], p["cmid"], p["cout"]
@@ -224,9 +225,11 @@ def simulate_up(
     order.append(StreamNode("Thr_r", [f], [f_o], thr_r_w, thr_r_w, n_in))
     cf_u = cmid // n["SWG_u"].simd
     sf_u, nf_u, thr_u_w = 4 * cmid // n["MVAU_u"].simd, cmid // n["MVAU_u"].pe, cmid // n["Thr_u"].pe
-    f = link("Thr_r", thr_r_w, "FMPadPix", cf_u, f_o, n_in)
+    cf_p = cf_u if pix_simd is None else cmid // pix_simd
+    f = link("Thr_r", thr_r_w, "FMPadPix", cf_p, f_o, n_in)
     f_o = fifo("FMPadPix->out")
-    order.append(FmPadPixelNode("FMPadPix", f, f_o, H, W, cf_u, frames, edge_pad=False))
+    order.append(FmPadPixelNode("FMPadPix", f, f_o, H, W, cf_p, frames, edge_pad=False))
+    f_o = link("FMPadPix", cf_p, "FMPad_u", cf_u, f_o, (2 * H - 1) * (2 * W - 1) * frames)
     f_pad = fifo("FMPad_u->out")
     order.append(FmPadNode("FMPad_u", f_o, f_pad, 2 * H - 1, 2 * W - 1, 1, cf_u, frames))
     f_o2 = fifo("SWG_u->out")
