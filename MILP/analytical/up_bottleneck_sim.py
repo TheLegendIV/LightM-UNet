@@ -6,8 +6,15 @@ Block (FINNUpsamplingBottleneck, decoder_type nearest_conv_upsample; input H x W
 (the [..] conv part is absent for decoder_type nearest_upsample, where UpNN feeds Thr_s -> FIFO main).
 
 New node types (the rest comes from bottleneck_sim / dn_bottleneck_sim):
-  UpNNNode        UpsampleNearestNeighbour_hls: all channels per word (1 word per pixel); per input row it emits each pixel twice
-                  (2W cycles, consuming W words) and then re-emits the buffered row (2W cycles): 4 cycles per input pixel = Hout*Wout.
+  UpNNNode        UpsampleNearestNeighbour_hls = finn-hlslib 16e5847 (FINN v0.10.1-10-g39f0c9a6b, the build container) upsample.hpp, line by line:
+                  one loop iteration per cycle over (y, x) in 2H x 2W, blocking in.read() / out.write(); a pixel is read only on even output rows y while
+                  x < W (RowBuf[x] = in.read()), and output pixel x is RowBuf[x // 2]. So on an even row the first W outputs come out ONE PER INPUT
+                  PIXEL, paced by the input (output x leaves when input x has arrived, not x / 2), the last W outputs follow with no read, and the odd
+                  row replays the buffer (2W cycles, no read). 4 cycles per input pixel = Hout*Wout when never starved or blocked. A whole iteration
+                  stalls when the read starves or the write is blocked. The node is NOT the 2-outputs-per-input emitter of earlier versions of this file:
+                  that one made the main branch lead the ext branch, so the skip FIFO was sized for a lead that does not exist (the ext branch leads
+                  by up to ~W pixels per row) and the block deadlocked as sized (see up_bottleneck.verify_with_sim, S12_dense_256_u4_analytical_v2).
+                  The newer hlslib upsample_nn (8d979e2b, FINN v1.0.0-alpha: frame-sized buffer, non-blocking read) is a different kernel.
   FmPadPixelNode  FMPadding_Pixel + border of a transposed conv (K = S = 2): the (2H+1) x (2W+1) image has a real pixel at every
                   (odd, odd) position; all other positions are zero pixels emitted at 1 word per cycle.
   SwgGenNode      stride-1 window generator for a KxK window without padding over a (hin x win) image (the 2x2 window of the lowered
@@ -28,42 +35,27 @@ from bottleneck_sim import (  # noqa: E402
 class UpNNNode:
     def __init__(self, name, inp: Fifo, out: Fifo, h: int, w: int, frames: int = 1):
         self.name, self.inp, self.out, self.h, self.w, self.frames = name, inp, out, h, w, frames
-        self.f = self.r = self.i = self.sub = 0
-        self.phase = 0
+        self.f = self.y = self.x = 0                           # frame, output row (0 .. 2H-1), output column (0 .. 2W-1)
 
     def step(self, t: int) -> int:
         if self.f >= self.frames:
             return IDLE
-        wo = 2 * self.w
-        out_base = (self.f * 2 * self.h + 2 * self.r) * wo
-        if self.phase == 0:                                    # read the row, emit every pixel twice
-            if self.sub == 0:
-                if not self.inp.q:
-                    return STARVED
-                if not self.out.space():
-                    return BLOCKED
-                pid, _ = self.inp.q.popleft()
-                expect = (self.f * self.h + self.r) * self.w + self.i
-                assert pid == expect, f"{self.name}: input pixel {pid}, expected {expect}"
-                self.out.push((out_base + 2 * self.i, 0))
-                self.sub = 1
-                return BUSY
-            if not self.out.space():
-                return BLOCKED
-            self.out.push((out_base + 2 * self.i + 1, 0))
-            self.sub = 0
-            self.i += 1
-            if self.i == self.w:
-                self.i, self.phase = 0, 1
-            return BUSY
-        if not self.out.space():                               # re-emit the buffered row as output row 2r+1
+        reads = self.y % 2 == 0 and self.x < self.w            # hlslib: read_row (even y) && x < IFMDim
+        if reads and not self.inp.q:
+            return STARVED
+        if not self.out.space():
             return BLOCKED
-        self.out.push((out_base + wo + self.i, 0))
-        self.i += 1
-        if self.i == wo:
-            self.i, self.phase, self.r = 0, 0, self.r + 1
-            if self.r == self.h:
-                self.r, self.f = 0, self.f + 1
+        if reads:
+            pid, _ = self.inp.q.popleft()
+            expect = (self.f * self.h + self.y // 2) * self.w + self.x
+            assert pid == expect, f"{self.name}: input pixel {pid}, expected {expect}"
+        self.out.push(((self.f * 2 * self.h + self.y) * 2 * self.w + self.x, 0))
+        self.x += 1
+        if self.x == 2 * self.w:
+            self.x = 0
+            self.y += 1
+            if self.y == 2 * self.h:
+                self.y, self.f = 0, self.f + 1
         return BUSY
 
 
@@ -147,10 +139,11 @@ class SwgGenNode:
 def simulate_up(
     r, inject_interval: float = 0, skip_depth: int | None = None, main_depth: int | None = None, fifo_depth: int = 2,
     fifo_depths: dict | None = None, frames: int = 1, elastic_map: dict | None = None, max_cycles: int | None = None,
-    swg_slack_px: int = 1,
+    swg_slack_px: int = 1, pix_simd: int | None = None,
 ) -> SimResult:
     """skip_depth: the 'skip FIFO' on the EXT branch end, main_depth: 'FIFO main' on the main branch end (words; None = r's value,
-    UNBOUNDED = measure). inject_interval: cycles between INPUT pixels."""
+    UNBOUNDED = measure). inject_interval: cycles between INPUT pixels.
+    pix_simd: SIMD of the FMPadding_Pixel node (None = the SWG's SIMD, what the bridge sets; 1 = FINN's default when nothing sets it: cmid folds per pixel, a DWC widens it to the SWG's SIMD)."""
     p = r.params
     H, W, Ho, Wo = p["height"], p["width"], 2 * p["height"], 2 * p["width"]
     cin, cmid, cout = p["cin"], p["cmid"], p["cout"]
@@ -224,9 +217,11 @@ def simulate_up(
     order.append(StreamNode("Thr_r", [f], [f_o], thr_r_w, thr_r_w, n_in))
     cf_u = cmid // n["SWG_u"].simd
     sf_u, nf_u, thr_u_w = 4 * cmid // n["MVAU_u"].simd, cmid // n["MVAU_u"].pe, cmid // n["Thr_u"].pe
-    f = link("Thr_r", thr_r_w, "FMPadPix", cf_u, f_o, n_in)
+    cf_p = cf_u if pix_simd is None else cmid // pix_simd
+    f = link("Thr_r", thr_r_w, "FMPadPix", cf_p, f_o, n_in)
     f_o = fifo("FMPadPix->out")
-    order.append(FmPadPixelNode("FMPadPix", f, f_o, H, W, cf_u, frames, edge_pad=False))
+    order.append(FmPadPixelNode("FMPadPix", f, f_o, H, W, cf_p, frames, edge_pad=False))
+    f_o = link("FMPadPix", cf_p, "FMPad_u", cf_u, f_o, (2 * H - 1) * (2 * W - 1) * frames)
     f_pad = fifo("FMPad_u->out")
     order.append(FmPadNode("FMPad_u", f_o, f_pad, 2 * H - 1, 2 * W - 1, 1, cf_u, frames))
     f_o2 = fifo("SWG_u->out")

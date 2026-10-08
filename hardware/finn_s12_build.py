@@ -57,7 +57,14 @@ _parser.add_argument("--probe", action="store_true",
                       help="use the 8-way (full=True) per-partition naming/CreateStitchedIP/OOC-synth pipeline "
                            "on just the --partitions subset given (not 'all'), skipping the final combine+aggregate "
                            "step which needs all 8 -- for cheaply validating a fix on 1-2 partitions.")
+_parser.add_argument("--blocks", action="store_true",
+                      help="per-BLOCK partitions (preamble made with finn_s12_preamble.py --blocks): --partitions takes block names (stage3.7, up4, ...), partition ids, or `shapes` "
+                           "(one representative block per distinct shape, see --block-shapes). Standalone builds only (no 'all'/combine); each block gets its own output dir + rtlsim.")
+_parser.add_argument("--no-ooc", action="store_true", help="standalone builds: stitch the IP and run rtlsim, but skip the Vivado out-of-context synthesis (much faster; no resource numbers)")
+_parser.add_argument("--block-shapes", help="block_shapes.json (shape groups of the folding: {'shapes': [{'representative': 'stage3.7', 'members': [...]}, ...]}) for --partitions shapes")
 _args = _parser.parse_args()
+if _args.blocks and _args.partitions == ["all"]:
+    _parser.error("--blocks needs explicit --partitions (block names, ids or `shapes`)")
 if _args.folding_json and not _args.conv_order:
     _parser.error("--folding-json requires --conv-order")
 
@@ -93,6 +100,7 @@ from finn_partition_build_steps import (  # noqa: E402
     step_measure_rtlsim_performance_multi,
 )
 from finn_stage_partition import validate_partition_single_output  # noqa: E402
+import finn_s12_blocks  # noqa: E402
 from finn_s12_build_steps import (  # noqa: E402
     URAM_BUDGET_BLOCKS,
     URAM_PARTITIONS,
@@ -190,7 +198,8 @@ def _build_one_partition(fn, cfg, prefix, folding_file, idx, full, fold_suffix, 
     m = m.transform(CreateStitchedIP(fpga_part, clk))
     final_fn = os.path.join(cfg.output_dir, f"partition{idx}_{tag}_{fold_suffix}_stitched.onnx")
     m.save(final_fn)
-    m = step_out_of_context_synthesis(m, cfg)
+    if not _args.no_ooc:
+        m = step_out_of_context_synthesis(m, cfg)
     m.save(final_fn)
     try:
         m = step_measure_rtlsim_performance(m, cfg)
@@ -229,15 +238,20 @@ def main():
     # --probe: production (prefix/CreateStitchedIP/OOC-synth) pipeline on a chosen subset,
     # skipping the final combine+aggregate step which requires all 8 partitions to be present.
     full = do_combine or _args.probe
-    part_ids = list(range(8)) if do_combine else [int(p) for p in _args.partitions]
+    blocks = finn_s12_blocks.load_block_partitions(_args.preamble_dir) if _args.blocks else None
+    if blocks is not None:
+        part_ids = finn_s12_blocks.resolve_partitions(blocks, _args.partitions, _args.block_shapes)
+        print("blocks to build:", [(i, blocks[i]["stage"]) for i in part_ids])
+    else:
+        part_ids = list(range(8)) if do_combine else [int(p) for p in _args.partitions]
     fold_suffix = "milpfold" if _args.folding_json else "autofold"
-    part_tag = "8way" if do_combine else ("probe" if _args.probe else "partition") + "_".join(map(str, part_ids))
+    part_tag = "8way" if do_combine else ("blocks%d" % len(part_ids) if blocks is not None else ("probe" if _args.probe else "partition") + "_".join(map(str, part_ids)))
 
     output_dir = _args.output_dir or os.path.join(
         base.ENET_DIR, "finn_deployment_outputs",
         f"{_args.tag}_{fold_suffix}_{part_tag}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
     )
-    build_dir = _args.build_dir or (os.path.join(base.ENET_DIR, "finn_build_tmp", _args.tag) if full else None)
+    build_dir = _args.build_dir or (os.path.join(base.ENET_DIR, "finn_build_tmp", _args.tag) if (full or blocks is not None) else None)
     if build_dir:
         os.makedirs(build_dir, exist_ok=True)
         os.environ["FINN_BUILD_DIR"] = build_dir
@@ -254,12 +268,19 @@ def main():
     print(f"Preamble: {_args.preamble_dir}\nFolding json: {_args.folding_json}\nConv order: {_args.conv_order}")
     print(f"target_fps={cfg.target_fps} mvau_wwidth_max={cfg.mvau_wwidth_max}\nOUTPUT_DIR={output_dir}", flush=True)
 
-    flat_ckpt = os.path.join(_args.preamble_dir, "intermediate_models", "assign_stage_partition_ids_8way.onnx")
+    flat_name = "assign_block_partition_ids.onnx" if blocks is not None else "assign_stage_partition_ids_8way.onnx"
+    flat_ckpt = os.path.join(_args.preamble_dir, "intermediate_models", flat_name)
     parent = step_create_dataflow_partition_multi(ModelWrapper(flat_ckpt), cfg)
     sdp_nodes = parent.get_nodes_by_op_type("StreamingDataflowPartition")
-    assert len(sdp_nodes) == 8, f"expected 8 partitions, got {len(sdp_nodes)}"
+    n_expected = len(blocks) if blocks is not None else 8
+    assert len(sdp_nodes) == n_expected, f"expected {n_expected} partitions, got {len(sdp_nodes)}"
     if full:
         validate_partition_single_output(parent)
+    elif blocks is not None:
+        try:
+            validate_partition_single_output(parent)
+        except AssertionError as e:      # warn only: the last block legitimately leaves the graph with more than one stream
+            print('WARNING (blocks mode, continuing):', e)
 
     folding_files = {i: None for i in part_ids}
     if _args.folding_json:
@@ -273,7 +294,10 @@ def main():
         intra_block_fifos = folding_block.get("intra_block_fifos")
         if not inter_block_fifos and not intra_block_fifos:
             print("WARNING: folding json has no inter_block_fifos/intra_block_fifos -- all FIFOs left on FINN's autosized depth")
-        logical = load_partition_logical_names(_args.preamble_dir, _args.conv_order)
+        if blocks is not None:
+            logical = {b["id"]: (b["logical_convs"], b["logical_pools"]) for b in blocks}
+        else:
+            logical = load_partition_logical_names(_args.preamble_dir, _args.conv_order)
         fifo_plans = {i: None for i in part_ids}
         for i in part_ids:
             fc, fifo_plan = build_partition_folding_config(
@@ -298,7 +322,7 @@ def main():
     for i in part_ids:
         pcfg = cfg
         if not full and len(part_ids) > 1:
-            pcfg = dataclasses.replace(cfg, output_dir=os.path.join(output_dir, f"partition_{i}"))
+            pcfg = dataclasses.replace(cfg, output_dir=os.path.join(output_dir, f"partition_{i}" + (f"_{blocks[i]['stage']}" if blocks is not None else "")))
             os.makedirs(pcfg.output_dir, exist_ok=True)
         jobs.append((getCustomOp(sdp_nodes[i]).get_nodeattr("model"), pcfg, sdp_nodes[i].name + "_",
                      folding_files[i], i, full, fold_suffix, _args.tag, build_dir,

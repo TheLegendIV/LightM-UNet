@@ -1,0 +1,41 @@
+throughput target 250 fps @ 100 MHz -> every node <= 400000 cycles/frame; latency cap 200 ms -> first output pixel within 20000000 cycles; INT6 uniform; 88 layers, 145 extra nodes
+realising 29 blocks (12 distinct shapes) and sizing their internal FIFOs, 6 workers
+28 inter-block FIFOs fixed at depth 2
+Wrote MILP/artifacts/S12_dense_256_u4_analytical_v2/int6_fps250_lat200/layer_bits_SITES_final.json (85 weight sites, 110 act sites).
+  initial      init  budget  400000  slowest foldable  147456
+  down1        dn    budget  240000  slowest foldable  147456
+  regular1.0   reg   budget  240000  slowest foldable  147456
+  regular1.1   reg   budget  240000  slowest foldable  147456
+  regular1.2   reg   budget  240000  slowest foldable  147456
+  regular1.3   reg   budget  240000  slowest foldable  147456
+  down2        dn    budget  240000  slowest foldable  147456
+  stage2.0     reg   budget  240000  slowest foldable  147456
+  stage2.1     reg   budget  240000  slowest foldable  147456
+  stage2.2     reg   budget  240000  slowest foldable  147456
+  stage2.3     reg   budget  240000  slowest foldable  147456
+  stage2.4     reg   budget  240000  slowest foldable  147456
+  stage2.5     reg   budget  240000  slowest foldable  147456
+  stage2.6     reg   budget  240000  slowest foldable  147456
+  stage2.7     reg   budget  240000  slowest foldable  147456
+  stage3.0     reg   budget  240000  slowest foldable  147456
+  stage3.1     reg   budget  240000  slowest foldable  147456
+  stage3.2     reg   budget  240000  slowest foldable  147456
+  stage3.3     reg   budget  240000  slowest foldable  147456
+  stage3.4     reg   budget  240000  slowest foldable  147456
+  stage3.5     reg   budget  240000  slowest foldable  147456
+  stage3.6     reg   budget  240000  slowest foldable  147456
+  stage3.7     reg   budget  240000  slowest foldable  147456
+  up4          up    budget  240000  slowest foldable  131072
+  regular4.0   reg   budget  240000  slowest foldable  147456
+  regular4.1   reg   budget  240000  slowest foldable  147456
+  up5          up    budget  240000  slowest foldable  131072
+  regular5.0   reg   budget  240000  slowest foldable  147456
+  final        final budget  240000  slowest foldable  131072
+
+per-node budget used 400000  LUT 76918 (33.4%)  BRAM18 62 + 0 inter-block FIFO  DSP 241 (13.9%)
+bottleneck regular5.0.conv 147715 cyc -> 677.0 fps @ 100 MHz; latency to first output pixel 9.94 ms (sum of node cycles 170.2 ms, not a latency); pipeline-fill estimate 9.94 ms
+DSR (cycles per output element): max 144.2529296875 median 9.01580810546875;  MVAU cycle mismatches vs MILP cost model: 0
+intra-block FIFOs: 454 edges, 145 BRAM18; total BRAM18 with ALL FIFOs (inter + intra block): 207
+inter-block FIFOs (fixed, target 400000 cyc/frame): depths min 2 median 2 max 2; 0 BRAM18 + 392 LUT + 0 URAM; whole-net check: None
+wrote MILP/artifacts/S12_dense_256_u4_analytical_v2/int6_fps250_lat200/enet_dataflow_final.onnx: 548 nodes (92 FIFOs, 102 DWCs)
+wrote MILP/artifacts/S12_dense_256_u4_analytical_v2/int6_fps250_lat200/layer_bits_folding_final.json

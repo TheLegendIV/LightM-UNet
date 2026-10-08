@@ -317,26 +317,10 @@ def _shape_count(shape):
     return n
 
 
-def load_partition_logical_names(preamble_dir, conv_order_file, n_partitions=8):
-    """{partition_idx: (conv_logical_names, pool_logical_names)} via positional
-    match of conv_order.json against the pre-partition graph, shape-validated against each
-    node's real weight element count. conv_order.json is built from plain PyTorch forward
-    hooks (Python statement order), but the real exported graph's node order follows
-    topological/readiness order instead -- these DIVERGE whenever a block forks into two
-    branches of different depth before the next weight-bearing op (confirmed for
-    FINNUpsamplingBottleneck's skip_resize_conv (3 hops: main_proj->main_act->main_up) vs.
-    reduce (1 hop, same fork point) -- real graph order ends up [..., reduce, skip_resize_conv,
-    ...], not conv_order.json's [..., skip_resize_conv, reduce, ...]). When the next unconsumed
-    conv_order.json entry's weight_shape element count doesn't match the real node's weight
-    initializer, search ahead (REALIGN_WINDOW) for the entry that does and swap it forward,
-    rather than silently mis-assigning folding params to the wrong real conv. A forked MatMul
-    duplicated by step_dedup_forked_matmul_before_threshold (same weight tensor) inherits the
-    first copy's logical name."""
-    full_model = ModelWrapper(f"{preamble_dir}/intermediate_models/step_enet_convert_to_hw_rtl_mvau.onnx")
-    boundaries = finn_stage_partition.compute_8way_boundaries(full_model)
-    print(f"[bridge] 8-way boundaries: {boundaries}")
-    edges = [0] + [boundaries[k] for k in PARTITION_RANGE_ORDER] + [None]
-
+def match_conv_order_to_nodes(full_model, conv_order_file):
+    """(weight_like_idx, {node_idx: conv_order entry}): the positional match of conv_order.json against the weight-bearing nodes (MVAU / VVAU / MaxPool) of a
+    pre-partition graph, with the weight-count realignment described in load_partition_logical_names. Shared by the 8-way bridge and the per-block partitioning
+    (finn_s12_blocks.py)."""
     with open(conv_order_file) as f:
         all_names = json.load(f)
 
@@ -391,6 +375,31 @@ def load_partition_logical_names(preamble_dir, conv_order_file, n_partitions=8):
         node_idx_to_entry[node_idx] = entry
     if pos != len(all_names):
         raise RuntimeError(f"consumed only {pos}/{len(all_names)} conv_order.json entries -- do not proceed.")
+
+    return weight_like_idx, node_idx_to_entry
+
+
+def load_partition_logical_names(preamble_dir, conv_order_file, n_partitions=8):
+    """{partition_idx: (conv_logical_names, pool_logical_names)} via positional
+    match of conv_order.json against the pre-partition graph, shape-validated against each
+    node's real weight element count. conv_order.json is built from plain PyTorch forward
+    hooks (Python statement order), but the real exported graph's node order follows
+    topological/readiness order instead -- these DIVERGE whenever a block forks into two
+    branches of different depth before the next weight-bearing op (confirmed for
+    FINNUpsamplingBottleneck's skip_resize_conv (3 hops: main_proj->main_act->main_up) vs.
+    reduce (1 hop, same fork point) -- real graph order ends up [..., reduce, skip_resize_conv,
+    ...], not conv_order.json's [..., skip_resize_conv, reduce, ...]). When the next unconsumed
+    conv_order.json entry's weight_shape element count doesn't match the real node's weight
+    initializer, search ahead (REALIGN_WINDOW) for the entry that does and swap it forward,
+    rather than silently mis-assigning folding params to the wrong real conv. A forked MatMul
+    duplicated by step_dedup_forked_matmul_before_threshold (same weight tensor) inherits the
+    first copy's logical name."""
+    full_model = ModelWrapper(f"{preamble_dir}/intermediate_models/step_enet_convert_to_hw_rtl_mvau.onnx")
+    boundaries = finn_stage_partition.compute_8way_boundaries(full_model)
+    print(f"[bridge] 8-way boundaries: {boundaries}")
+    edges = [0] + [boundaries[k] for k in PARTITION_RANGE_ORDER] + [None]
+
+    weight_like_idx, node_idx_to_entry = match_conv_order_to_nodes(full_model, conv_order_file)
 
     result = {i: ([], []) for i in range(n_partitions)}
     for node_idx in weight_like_idx:
