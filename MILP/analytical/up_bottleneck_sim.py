@@ -189,15 +189,29 @@ def simulate_up(
     f_main = fifo("FIFO main", main_depth)
     if conv:
         cf_k = cout // n["SWG_k"].simd
-        sf_k, nf_k, thr_k_w = 9 * cout // n["MVAU_k"].simd, cout // n["MVAU_k"].pe, cout // n["Thr_k"].pe
+        dw = bool(p.get("skip_dw"))
+        if dw:
+            # bilinear substitute: depthwise 3x3 (VVAU_hls). The SWG (SIMD = PE) emits 9 words per channel fold per window, or ONE parallel word (9 x PE elements) when the VVAU SIMD > 1 (a DWC
+            # narrows it); the VVAU consumes (C/PE) * (9/SIMD) words per output pixel and emits C/PE accumulator words (one per 9/SIMD inputs).
+            par_k = n["MVAU_k"].simd > 1
+            swg_out_k = cf_k if par_k else 9 * cf_k
+            sf_k = cf_k * (9 // n["MVAU_k"].simd)
+            nf_k = cout // n["MVAU_k"].pe
+        else:
+            sf_k, nf_k = 9 * cout // n["MVAU_k"].simd, cout // n["MVAU_k"].pe
+            swg_out_k = sf_k
+        thr_k_w = cout // n["Thr_k"].pe
         f = link("UpNN", 1, "FMPad_k", cf_k, f_up, n_out)
         f_o = fifo("FMPad_k->out")
         order.append(FmPadNode("FMPad_k", f, f_o, Ho, Wo, 1, cf_k, frames))
         f_o2 = fifo("SWG_k->out")
-        order.append(SwgNode("SWG_k", f_o, f_o2, Ho, Wo, 3, cf_k, sf_k, swg_slack_px, frames))
-        f = link("SWG_k", sf_k, "MVAU_k", sf_k, f_o2, n_out)
+        order.append(SwgNode("SWG_k", f_o, f_o2, Ho, Wo, 3, cf_k, swg_out_k, swg_slack_px, frames))
+        f = link("SWG_k", swg_out_k, "MVAU_k", sf_k, f_o2, n_out)
         f_o = fifo("MVAU_k->out")
-        order.append(MvauNode("MVAU_k", f, f_o, sf_k, nf_k, n_out))
+        if dw:
+            order.append(StreamNode("MVAU_k", [f], [f_o], sf_k, nf_k, n_out))
+        else:
+            order.append(MvauNode("MVAU_k", f, f_o, sf_k, nf_k, n_out))
         f = link("MVAU_k", nf_k, "Thr_k", thr_k_w, f_o, n_out)
         order.append(StreamNode("Thr_k", [f], [f_main], thr_k_w, thr_k_w, n_out))
         main_w = thr_k_w

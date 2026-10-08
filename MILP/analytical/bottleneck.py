@@ -222,6 +222,32 @@ def _search_mvau(layer: LayerGeometry, bits: int, budget: int, weight_bits: int 
     return pe, simd, cost
 
 
+def _search_vvau(layer: LayerGeometry, bits: int, budget: int, weight_bits: int | None = None) -> tuple[int, int, dict]:
+    """(PE, SIMD, cost) of a DEPTHWISE conv (FINN VVAU_hls on the zcu7ev): PE | channels, SIMD | kh*kw (the kernel elements per cycle; SIMD > 1 = SWG parallel_window, SWG SIMD = PE).
+    Cycles per frame = pixels * (C / PE) * (kh*kw / SIMD); same selection rule as _search_mvau (largest cycles <= budget, then BRAM, then LUT). An explicit fold (explicit_folds, key
+    layer.name) bypasses the search."""
+    assert layer.groups > 1 and layer.groups == layer.cin == layer.cout, f"{layer.name}: not a depthwise layer"
+    wb = bits if weight_bits is None else weight_bits
+    if layer.name in _EXPLICIT:
+        pe, simd = _EXPLICIT[layer.name]
+        if pe < 1 or layer.cout % pe or simd < 1 or (layer.kh * layer.kw) % simd:
+            raise ValueError(f"explicit fold {layer.name}: (PE={pe}, SIMD={simd}) is not legal for a depthwise {layer.cout}-channel {layer.kh}x{layer.kw} conv")
+        return pe, simd, fcm.layer_cost_pe_simd_auto_ram(layer, wb, bits, pe, simd, force_dsp=True)
+    best = None
+    for pe in fcm.divisors(layer.cout):
+        for simd in fcm.divisors(layer.kh * layer.kw):
+            cost = fcm.conv_cost_pe_simd(layer, wb, bits, pe, simd, ram_style=fcm.RAM_STYLE_AUTO, force_dsp=True)
+            if cost["mvu_cycles"] > budget or cost["swu_cycles"] > budget or cost["fmpad_cycles"] > budget:
+                continue
+            key = (-cost["mvu_cycles"], cost["wm_bram18"] + cost["swu_bram18"] + cost["thr_bram18"], cost["total_lut"])
+            if best is None or key < best[0]:
+                best = (key, pe, simd)
+    if best is None:
+        raise ValueError(f"{layer.name}: no (PE, SIMD) reaches {budget} cycles/frame for the depthwise conv; fastest is {layer.hout * layer.wout} cycles/frame (PE=C, SIMD=kh*kw). Raise T.")
+    _, pe, simd = best
+    return pe, simd, fcm.layer_cost_pe_simd_auto_ram(layer, wb, bits, pe, simd, force_dsp=True)
+
+
 
 def search_swg_pool(g_pool: LayerGeometry, bits: int, budget: int, parallel_window: bool = False) -> dict:
     """FINN `Pool` route for a MaxPool (InferPool: depthwise ConvolutionInputGenerator + Pool_hls with PE), instead of StreamingMaxPool.

@@ -21,6 +21,7 @@ Run: python3 up_bottleneck.py --cin 32 --cout 16 --v 4 --bits 4 --height 32 --wi
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import math
 import os
@@ -30,7 +31,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bottleneck as reg  # noqa: E402
 from bottleneck import (  # noqa: E402
     BottleneckResult, NodeResult, SkipFifo, _SIZING_SCHEDULE, _dwc, _fifo_attrs, _fifo_bram18, _geom, _min_pe, _retarget_threshold,
-    _search_mvau, finalize_fifo_costs,
+    _search_mvau, _search_vvau, finalize_fifo_costs,
 )
 
 fcm = reg.fcm
@@ -54,10 +55,13 @@ def _join_pe_for_upnn(cout: int, t_in: float, c_p_in: float, res) -> int:
 
 def model_up_bottleneck(
     cin: int, cout: int, v: int, bits: int, height: int, width: int, F: int | None = None, T_out: float | None = None,
-    skip_conv: bool = True, join_pe: int | None = None,
+    skip_conv: bool = True, join_pe: int | None = None, skip_dw: bool = False,
 ) -> BottleneckResult:
     """cin -> cout upsampling block, Cmid = cin/v, INPUT map height x width, output 2*height x 2*width, uniform INT `bits`.
     Budget: F frame cycles, or T_out cycles per OUTPUT pixel (F = T_out * 4*height*width).
+    skip_dw: the main branch's upsampler is the BILINEAR substitute of LayerQuantEnetFINN (`_nearest_depthwise_bilinear_kernel`): nearest upsample, then a frozen DEPTHWISE 3x3 conv with the
+    tent kernel outer([1,2,1]/4, [1,2,1]/4) (INT8 weights): UpNN -> FMPadding -> SWG (depthwise, SIMD = PE) -> VVAU_hls (PE | Cout, SIMD | 9; SIMD > 1 = SWG parallel_window) -> Thr_k (the
+    block's skip_quant threshold) -> FIFO main. Same slot as the 3x3 skip_resize_conv of skip_conv=True but 9*Cout MACs per pixel instead of 9*Cout^2; needs skip_conv=True.
     join_pe: lower bound on the PE of the output-resolution join chain (Thr_s of the noconv decoder, Add, Thr_out). None (default) derives it from the budget
     for the noconv decoder (rule below) and uses the narrowest PE that fits F for the conv decoder; an int overrides.
 
@@ -68,6 +72,8 @@ def model_up_bottleneck(
     d = Cout / PE the cycles per OUTPUT pixel of the node behind the upsampler (Thr_s). Mean-rate balance only asks d <= t_in / 4. U4 up4: t_in 72, c_p 64 ->
     d <= 4 -> PE >= 4 (measured: PE 1 20.53, PE 2 17.96, PE 4 16.25 cyc/px, target 18). Tightening the target shrinks t_in - c_p and raises the PE; when
     t_in - c_p < 2 even PE = Cout is not enough and only buffering (>= half an input row in front of the upsampler or one output row behind) can help."""
+    if skip_dw and not skip_conv:
+        raise ValueError("skip_dw (bilinear depthwise upsampler) needs skip_conv=True: it takes the windowed-conv slot of the main branch")
     if cin % v:
         raise ValueError(f"Cin={cin} not divisible by v={v}")
     if (F is None) == (T_out is None):
@@ -79,7 +85,7 @@ def model_up_bottleneck(
     cmid, A = cin // v, bits
     res = BottleneckResult(params=dict(
         cin=cin, cmid=cmid, cout=cout, v=v, z=v, T=T, F=F, T_in=T_in, bits=bits, k=3, dilation=1, stride=1, height=H, width=W,
-        hout=Ho, wout=Wo, pad=1, block="up", skip_conv=skip_conv, skip_pad="n/a", skip_order="n/a", pad_group=None,
+        hout=Ho, wout=Wo, pad=1, block="up", skip_conv=skip_conv, skip_dw=skip_dw, skip_pad="n/a", skip_order="n/a", pad_group=None,
     ))
     if px_out > F:
         raise ValueError(f"F={F} is below the UpsampleNearestNeighbour floor of {px_out} cycles/frame (one output pixel per cycle, not foldable)")
@@ -89,6 +95,8 @@ def model_up_bottleneck(
     g_u = _geom("up", cmid, cmid, Ho + 1, Wo + 1, Ho, Wo, k=2, s=1, d=1, p=0)       # lowered ConvTranspose (K=S=2): conv on the (2H+1)^2 image
     g_e = _geom("expand", cmid, cout, Ho, Wo, Ho, Wo)
     g_k = _geom("skipconv", cout, cout, Ho, Wo, Ho, Wo, k=3, s=1, d=1, p=1)
+    if skip_dw:
+        g_k = dataclasses.replace(_geom("skipdw", cout, cout, Ho, Wo, Ho, Wo, k=3, s=1, d=1, p=1), groups=cout)
     g_dup = _geom("dup", cin, cin, H, W, H, W, op="Dup")
     g_upnn = _geom("upnn", cout, cout, H, W, Ho, Wo, op="Upsample")
     g_join = _geom("join", cout, cout, Ho, Wo, Ho, Wo, op="Thresholding")
@@ -106,7 +114,7 @@ def model_up_bottleneck(
     c_p, c_r = _retarget_threshold(c_p, g_p, A, tpe_p), _retarget_threshold(c_r, g_r, A, tpe_r)
     c_u, c_e = _retarget_threshold(c_u, g_u, A, tpe_u), _retarget_threshold(c_e, g_e, A, tpe_e)
     if skip_conv:
-        pe_k, simd_k, c_k = _search_mvau(g_k, bits, F)
+        pe_k, simd_k, c_k = _search_vvau(g_k, bits, F, weight_bits=8) if skip_dw else _search_mvau(g_k, bits, F)      # tent-kernel weights are frozen INT8
         tpe_k = _min_pe(cout, px_out, F, "Thr_k")
         c_k = _retarget_threshold(c_k, g_k, A, tpe_k)
     else:
@@ -140,10 +148,15 @@ def model_up_bottleneck(
     if skip_conv:
         simd_swu_k = c_k["simd_swu"]
         nd.append(row("FMPad_k", "FMPadding 3x3", 0, simd_swu_k, c_k["fmpad_cycles"], in_w=simd_swu_k * A, out_w=simd_swu_k * A))
-        nd.append(row("SWG_k", "ConvolutionInputGenerator_rtl", 0, simd_swu_k, c_k["swu_cycles"], c_k["swu_lut"], c_k["swu_bram18"], c_k["swu_uram18"],
-                      in_w=simd_swu_k * A, out_w=simd_swu_k * A))
-        nd.append(row("MVAU_k", "MVAU rtl 3x3 skip conv", pe_k, simd_k, c_k["mvu_cycles"], c_k["mvu_lut"], c_k["wm_bram18"], c_k["wm_uram18"],
-                      c_k["mvu_dsp"], in_w=simd_k * A, out_w=pe_k * c_k["acc_bits"]))
+        par_k = skip_dw and simd_k > 1                      # depthwise parallel_window: one 3x3 window (9 elements per channel) per SWG word, a DWC narrows it to the VVAU's SIMD
+        nd.append(row("SWG_k", "ConvolutionInputGenerator_rtl" + (" depthwise" + (" parallel_window" if par_k else "") if skip_dw else ""), 0, simd_swu_k, c_k["swu_cycles"], c_k["swu_lut"],
+                      c_k["swu_bram18"], c_k["swu_uram18"], in_w=simd_swu_k * A, out_w=simd_swu_k * A * (9 if par_k else 1)))
+        if skip_dw:
+            nd.append(row("MVAU_k", "VVAU_hls 3x3 depthwise bilinear (tent)", pe_k, simd_k, c_k["mvu_cycles"], c_k["mvu_lut"], c_k["wm_bram18"], c_k["wm_uram18"],
+                          c_k["mvu_dsp"], in_w=pe_k * simd_k * A, out_w=pe_k * c_k["acc_bits"]))
+        else:
+            nd.append(row("MVAU_k", "MVAU rtl 3x3 skip conv", pe_k, simd_k, c_k["mvu_cycles"], c_k["mvu_lut"], c_k["wm_bram18"], c_k["wm_uram18"],
+                          c_k["mvu_dsp"], in_w=simd_k * A, out_w=pe_k * c_k["acc_bits"]))
         nd.append(row("Thr_k", "Thresholding_rtl", tpe_k, 0, px_out * (cout // tpe_k), c_k["thr_lut"], c_k["thr_bram18"],
                       in_w=tpe_k * c_k["acc_bits"], out_w=tpe_k * A))
         main_out_pe = tpe_k
@@ -172,6 +185,8 @@ def model_up_bottleneck(
     _dwc("Thr_p->UpNN", tpe_p * A, cout * A, cout, tpe_p, cout, px_in, px_out, dw)
     if skip_conv:
         _dwc("UpNN->FMPad_k", cout * A, simd_swu_k * A, cout, cout, simd_swu_k, px_out, px_out, dw)
+        if par_k:
+            _dwc("SWG_k->MVAU_k", 9 * pe_k * A, pe_k * simd_k * A, 9 * cout, 9 * pe_k, pe_k * simd_k, px_out, px_out, dw)
         _dwc("MVAU_k->Thr_k", pe_k * c_k["acc_bits"], tpe_k * c_k["acc_bits"], cout, pe_k, tpe_k, px_out, px_out, dw)
     else:
         _dwc("UpNN->Thr_s", cout * A, pe_ts * A, cout, cout, pe_ts, px_out, px_out, dw)
@@ -197,7 +212,8 @@ def model_up_bottleneck(
     l_main = dup_px + cyc["MVAU_p"] + thr_px(cout, tpe_p)
     if skip_conv:
         cf_k = math.ceil(cout / simd_swu_k)
-        l_main += (W - 1) * T_in + (Wo + 2) * cf_k + 9 * cout / simd_k + cyc["MVAU_k"] + thr_px(cout, tpe_k)   # 3x3 window needs ~one input row
+        swg_win = cf_k * (1 if par_k else 9) if skip_dw else 9 * cout / simd_k          # words the SWG emits for one window (depthwise: 9 kernel elements per channel fold, or one parallel word)
+        l_main += (W - 1) * T_in + (Wo + 2) * cf_k + swg_win + cyc["MVAU_k"] + thr_px(cout, tpe_k)   # 3x3 window needs ~one input row
     else:
         l_main += thr_px(cout, pe_ts)
     l_ext = dup_px + cyc["MVAU_r"] + thr_px(cmid, tpe_r) + (Wo + 2) * cf_u + 4 * cmid / simd_u + cyc["MVAU_u"] + thr_px(cmid, tpe_u) + cyc["MVAU_e"] + thr_px(cout, tpe_e)
@@ -375,7 +391,7 @@ def to_folding_config(r: BottleneckResult) -> dict:
     if p["skip_conv"]:
         fold.update({
             "fmpad_k": {"SIMD": n["SWG_k"].simd},
-            "swg_k": {"SIMD": n["SWG_k"].simd, "parallel_window": int(n["MVAU_k"].simd > cout)},
+            "swg_k": {"SIMD": n["SWG_k"].simd, "parallel_window": int(n["MVAU_k"].simd > (1 if p.get("skip_dw") else cout))},      # depthwise: parallel_window iff the VVAU SIMD > 1
             "mvau_k": {"PE": n["MVAU_k"].pe, "SIMD": n["MVAU_k"].simd}, "thr_k": {"PE": n["Thr_k"].pe, "depth_trigger_bram": block},
         })
     else:
@@ -409,6 +425,12 @@ _OP_LABEL = {
     "UpNN": "UpsampleNearestNeighbour_hls", "FMPad_k": "FMPadding_rtl", "FMPadPix": "FMPadding_Pixel_hls", "FMPad_u": "FMPadding_rtl",
     "SWG_k": "ConvolutionInputGenerator_rtl", "SWG_u": "ConvolutionInputGenerator_rtl", "Add": "AddStreams_hls",
 }
+
+
+def _op_label(r: BottleneckResult, name: str) -> str:
+    if name == "MVAU_k" and r.params.get("skip_dw"):
+        return "VVAU_hls"
+    return _OP_LABEL.get(name, name)
 
 
 def export_onnx(r: BottleneckResult, path: str) -> None:
@@ -450,7 +472,7 @@ def export_onnx(r: BottleneckResult, path: str) -> None:
                          ii_cycles_per_output_pixel=float(x.cyc_px), pct_of_budget=100 * x.frame_cycles / p["F"],
                          is_slowest_node=int(x.op.startswith("MVAU") and x.frame_cycles == slowest), lut=float(x.lut), bram18k=float(x.bram18),
                          uram18=float(x.uram), dsp=int(x.dsp), in_width_bits=x.in_width_bits, out_width_bits=x.out_width_bits, act_bits=p["bits"])
-            op = _OP_LABEL.get(name, "Thresholding_rtl")
+            op = _op_label(r, name) if name in _OP_LABEL else "Thresholding_rtl"
         else:
             in_bits, out_bits = g["fifos"][ins[0]]["bits"], g["fifos"][outs[0]]["bits"]
             shp = shape[in_t[0]]
