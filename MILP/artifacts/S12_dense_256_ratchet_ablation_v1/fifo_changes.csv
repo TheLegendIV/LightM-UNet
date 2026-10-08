@@ -427,11 +427,11 @@ ratchet_1pct,up4,other intra-block,up4.add,up4.thr_out,7,False,True,,2,,0,,15,sr
 ratchet_1pct,up4,dup output,up4.dup,up4.mvau_p,6,False,True,,8,,0,,14,srl
 ratchet_1pct,up4,dup output,up4.dup,up4.mvau_r,6,False,True,,8,,0,,14,srl
 ratchet_1pct,up4,DWC side,up4.dwc,up4.thr_e,16,False,True,,2,,0,,24,srl
-ratchet_1pct,up4,DWC side,up4.dwc,up4.thr_p,18,False,True,,2,,0,,26,srl
+ratchet_1pct,up4,DWC side,up4.dwc,up4.thr_p,18,False,True,,6,,0,,26,srl
 ratchet_1pct,up4,DWC side,up4.dwc,up4.thr_r,18,False,True,,8,,0,,26,srl
 ratchet_1pct,up4,DWC side,up4.dwc,up4.thr_s,6,False,True,,8,,0,,14,srl
 ratchet_1pct,up4,DWC side,up4.dwc,up4.thr_u,18,False,True,,2,,0,,26,srl
-ratchet_1pct,up4,DWC side,up4.dwc,up4.upnn,96,False,True,,7,,0,,104,srl
+ratchet_1pct,up4,DWC side,up4.dwc,up4.upnn,96,False,True,,8,,0,,104,srl
 ratchet_1pct,up4,other intra-block,up4.fmpad_u,up4.swg_u,6,False,True,,8,,0,,14,srl
 ratchet_1pct,up4,window prefetch (in front of FMPad),up4.fmpadpix,up4.fmpad_u,6,False,True,,72,,1,,0,bram
 ratchet_1pct,up4,DWC side,up4.mvau_e,up4.dwc,64,False,True,,2,,0,,72,srl
@@ -439,10 +439,10 @@ ratchet_1pct,up4,DWC side,up4.mvau_p,up4.dwc,72,False,True,,2,,0,,80,srl
 ratchet_1pct,up4,DWC side,up4.mvau_r,up4.dwc,36,False,True,,8,,0,,44,srl
 ratchet_1pct,up4,DWC side,up4.mvau_u,up4.dwc,144,False,True,,2,,0,,152,srl
 ratchet_1pct,up4,other intra-block,up4.swg_u,up4.mvau_u,6,False,True,,2,,0,,14,srl
-ratchet_1pct,up4,skip FIFO,up4.thr_e,up4.add,6,False,True,,17,,0,,14,srl
-ratchet_1pct,up4,DWC side,up4.thr_p,up4.dwc,6,False,True,,2,,0,,14,srl
+ratchet_1pct,up4,skip FIFO,up4.thr_e,up4.add,6,True,True,512,512,1,1,0,0,bram
+ratchet_1pct,up4,DWC side,up4.thr_p,up4.dwc,6,False,True,,8,,0,,14,srl
 ratchet_1pct,up4,window prefetch (in front of FMPad),up4.thr_r,up4.fmpadpix,6,False,True,,72,,1,,0,bram
-ratchet_1pct,up4,other intra-block,up4.thr_s,up4.add,6,False,True,,664,,1,,0,bram
+ratchet_1pct,up4,other intra-block,up4.thr_s,up4.add,6,True,True,1536,368,1,1,0,0,bram
 ratchet_1pct,up4,other intra-block,up4.thr_u,up4.mvau_e,6,False,True,,2,,0,,14,srl
 ratchet_1pct,up4,DWC side,up4.upnn,up4.dwc,96,False,True,,8,,0,,104,srl
 ratchet_1pct,up5,other intra-block,up5.add,up5.thr_out,7,False,True,,2,,0,,15,srl
@@ -458,14 +458,14 @@ ratchet_1pct,up5,DWC side,up5.dwc,up5.upnn,24,False,True,,16,,0,,32,srl
 ratchet_1pct,up5,other intra-block,up5.fmpad_u,up5.swg_u,12,False,True,,16,,0,,20,srl
 ratchet_1pct,up5,window prefetch (in front of FMPad),up5.fmpadpix,up5.fmpad_u,12,False,True,,48,,0,,32,srl
 ratchet_1pct,up5,DWC side,up5.mvau_e,up5.dwc,30,False,True,,2,,0,,38,srl
-ratchet_1pct,up5,DWC side,up5.mvau_p,up5.dwc,34,False,True,,9,,0,,42,srl
+ratchet_1pct,up5,DWC side,up5.mvau_p,up5.dwc,34,False,True,,16,,0,,42,srl
 ratchet_1pct,up5,DWC side,up5.mvau_r,up5.dwc,34,False,True,,16,,0,,42,srl
 ratchet_1pct,up5,DWC side,up5.mvau_u,up5.dwc,68,False,True,,2,,0,,76,srl
 ratchet_1pct,up5,other intra-block,up5.swg_u,up5.mvau_u,12,False,True,,2,,0,,20,srl
-ratchet_1pct,up5,skip FIFO,up5.thr_e,up5.add,6,False,True,,5,,0,,14,srl
+ratchet_1pct,up5,skip FIFO,up5.thr_e,up5.add,6,True,True,256,256,1,1,0,0,bram
 ratchet_1pct,up5,DWC side,up5.thr_p,up5.dwc,6,False,True,,16,,0,,14,srl
 ratchet_1pct,up5,DWC side,up5.thr_r,up5.dwc,6,False,True,,16,,0,,14,srl
-ratchet_1pct,up5,other intra-block,up5.thr_s,up5.add,6,False,True,,314,,1,,0,bram
+ratchet_1pct,up5,other intra-block,up5.thr_s,up5.add,6,True,True,768,166,1,1,0,0,bram
 ratchet_1pct,up5,other intra-block,up5.thr_u,up5.mvau_e,6,False,True,,2,,0,,14,srl
 ratchet_1pct,up5,DWC side,up5.upnn,up5.dwc,24,False,True,,16,,0,,32,srl
 ratchet_25pct,down1,other intra-block,down1.add,down1.thr_out,7,False,True,,2,,0,,15,srl
@@ -889,11 +889,11 @@ ratchet_25pct,up4,other intra-block,up4.add,up4.thr_out,7,False,True,,2,,0,,15,s
 ratchet_25pct,up4,dup output,up4.dup,up4.mvau_p,6,False,True,,8,,0,,14,srl
 ratchet_25pct,up4,dup output,up4.dup,up4.mvau_r,6,False,True,,8,,0,,14,srl
 ratchet_25pct,up4,DWC side,up4.dwc,up4.thr_e,16,False,True,,2,,0,,24,srl
-ratchet_25pct,up4,DWC side,up4.dwc,up4.thr_p,18,False,True,,2,,0,,26,srl
+ratchet_25pct,up4,DWC side,up4.dwc,up4.thr_p,18,False,True,,6,,0,,26,srl
 ratchet_25pct,up4,DWC side,up4.dwc,up4.thr_r,18,False,True,,8,,0,,26,srl
 ratchet_25pct,up4,DWC side,up4.dwc,up4.thr_s,6,False,True,,8,,0,,14,srl
 ratchet_25pct,up4,DWC side,up4.dwc,up4.thr_u,18,False,True,,2,,0,,26,srl
-ratchet_25pct,up4,DWC side,up4.dwc,up4.upnn,96,False,True,,7,,0,,104,srl
+ratchet_25pct,up4,DWC side,up4.dwc,up4.upnn,96,False,True,,8,,0,,104,srl
 ratchet_25pct,up4,other intra-block,up4.fmpad_u,up4.swg_u,6,False,True,,8,,0,,14,srl
 ratchet_25pct,up4,window prefetch (in front of FMPad),up4.fmpadpix,up4.fmpad_u,6,False,True,,72,,1,,0,bram
 ratchet_25pct,up4,DWC side,up4.mvau_e,up4.dwc,64,False,True,,2,,0,,72,srl
@@ -901,10 +901,10 @@ ratchet_25pct,up4,DWC side,up4.mvau_p,up4.dwc,72,False,True,,2,,0,,80,srl
 ratchet_25pct,up4,DWC side,up4.mvau_r,up4.dwc,36,False,True,,8,,0,,44,srl
 ratchet_25pct,up4,DWC side,up4.mvau_u,up4.dwc,144,False,True,,2,,0,,152,srl
 ratchet_25pct,up4,other intra-block,up4.swg_u,up4.mvau_u,6,False,True,,2,,0,,14,srl
-ratchet_25pct,up4,skip FIFO,up4.thr_e,up4.add,6,False,True,,17,,0,,14,srl
-ratchet_25pct,up4,DWC side,up4.thr_p,up4.dwc,6,False,True,,2,,0,,14,srl
+ratchet_25pct,up4,skip FIFO,up4.thr_e,up4.add,6,True,True,512,512,1,1,0,0,bram
+ratchet_25pct,up4,DWC side,up4.thr_p,up4.dwc,6,False,True,,8,,0,,14,srl
 ratchet_25pct,up4,window prefetch (in front of FMPad),up4.thr_r,up4.fmpadpix,6,False,True,,72,,1,,0,bram
-ratchet_25pct,up4,other intra-block,up4.thr_s,up4.add,6,False,True,,664,,1,,0,bram
+ratchet_25pct,up4,other intra-block,up4.thr_s,up4.add,6,True,True,1536,368,1,1,0,0,bram
 ratchet_25pct,up4,other intra-block,up4.thr_u,up4.mvau_e,6,False,True,,2,,0,,14,srl
 ratchet_25pct,up4,DWC side,up4.upnn,up4.dwc,96,False,True,,8,,0,,104,srl
 ratchet_25pct,up5,other intra-block,up5.add,up5.thr_out,7,False,True,,2,,0,,15,srl
@@ -920,14 +920,14 @@ ratchet_25pct,up5,DWC side,up5.dwc,up5.upnn,24,False,True,,16,,0,,32,srl
 ratchet_25pct,up5,other intra-block,up5.fmpad_u,up5.swg_u,12,False,True,,16,,0,,20,srl
 ratchet_25pct,up5,window prefetch (in front of FMPad),up5.fmpadpix,up5.fmpad_u,12,False,True,,48,,0,,32,srl
 ratchet_25pct,up5,DWC side,up5.mvau_e,up5.dwc,30,False,True,,2,,0,,38,srl
-ratchet_25pct,up5,DWC side,up5.mvau_p,up5.dwc,34,False,True,,9,,0,,42,srl
+ratchet_25pct,up5,DWC side,up5.mvau_p,up5.dwc,34,False,True,,16,,0,,42,srl
 ratchet_25pct,up5,DWC side,up5.mvau_r,up5.dwc,34,False,True,,16,,0,,42,srl
 ratchet_25pct,up5,DWC side,up5.mvau_u,up5.dwc,68,False,True,,2,,0,,76,srl
 ratchet_25pct,up5,other intra-block,up5.swg_u,up5.mvau_u,12,False,True,,2,,0,,20,srl
-ratchet_25pct,up5,skip FIFO,up5.thr_e,up5.add,6,False,True,,5,,0,,14,srl
+ratchet_25pct,up5,skip FIFO,up5.thr_e,up5.add,6,True,True,256,256,1,1,0,0,bram
 ratchet_25pct,up5,DWC side,up5.thr_p,up5.dwc,6,False,True,,16,,0,,14,srl
 ratchet_25pct,up5,DWC side,up5.thr_r,up5.dwc,6,False,True,,16,,0,,14,srl
-ratchet_25pct,up5,other intra-block,up5.thr_s,up5.add,6,False,True,,314,,1,,0,bram
+ratchet_25pct,up5,other intra-block,up5.thr_s,up5.add,6,True,True,768,166,1,1,0,0,bram
 ratchet_25pct,up5,other intra-block,up5.thr_u,up5.mvau_e,6,False,True,,2,,0,,14,srl
 ratchet_25pct,up5,DWC side,up5.upnn,up5.dwc,24,False,True,,16,,0,,32,srl
 ratchet_100pct,down1,other intra-block,down1.add,down1.thr_out,7,False,True,,2,,0,,15,srl
@@ -1306,7 +1306,7 @@ ratchet_100pct,up4,DWC side,up4.dwc,up4.thr_e,16,False,True,,2,,0,,24,srl
 ratchet_100pct,up4,DWC side,up4.dwc,up4.thr_p,18,False,True,,2,,0,,26,srl
 ratchet_100pct,up4,DWC side,up4.dwc,up4.thr_s,6,False,True,,16,,0,,14,srl
 ratchet_100pct,up4,DWC side,up4.dwc,up4.thr_u,18,False,True,,2,,0,,26,srl
-ratchet_100pct,up4,DWC side,up4.dwc,up4.upnn,96,False,True,,3,,0,,104,srl
+ratchet_100pct,up4,DWC side,up4.dwc,up4.upnn,96,False,True,,5,,0,,104,srl
 ratchet_100pct,up4,other intra-block,up4.fmpad_u,up4.swg_u,6,False,True,,16,,0,,14,srl
 ratchet_100pct,up4,window prefetch (in front of FMPad),up4.fmpadpix,up4.fmpad_u,6,False,True,,144,,1,,0,bram
 ratchet_100pct,up4,DWC side,up4.mvau_e,up4.dwc,32,False,True,,2,,0,,40,srl
@@ -1314,10 +1314,10 @@ ratchet_100pct,up4,DWC side,up4.mvau_p,up4.dwc,36,False,True,,2,,0,,44,srl
 ratchet_100pct,up4,other intra-block,up4.mvau_r,up4.thr_r,18,False,True,,2,,0,,26,srl
 ratchet_100pct,up4,DWC side,up4.mvau_u,up4.dwc,72,False,True,,2,,0,,80,srl
 ratchet_100pct,up4,other intra-block,up4.swg_u,up4.mvau_u,6,False,True,,16,,0,,14,srl
-ratchet_100pct,up4,skip FIFO,up4.thr_e,up4.add,6,False,True,,17,,0,,14,srl
+ratchet_100pct,up4,skip FIFO,up4.thr_e,up4.add,6,True,True,512,512,1,1,0,0,bram
 ratchet_100pct,up4,DWC side,up4.thr_p,up4.dwc,6,False,True,,2,,0,,14,srl
 ratchet_100pct,up4,window prefetch (in front of FMPad),up4.thr_r,up4.fmpadpix,6,False,True,,117,,1,,0,bram
-ratchet_100pct,up4,other intra-block,up4.thr_s,up4.add,6,False,True,,921,,1,,0,bram
+ratchet_100pct,up4,other intra-block,up4.thr_s,up4.add,6,True,True,1536,761,1,1,0,0,bram
 ratchet_100pct,up4,other intra-block,up4.thr_u,up4.mvau_e,6,False,True,,4,,0,,14,srl
 ratchet_100pct,up4,DWC side,up4.upnn,up4.dwc,96,False,True,,16,,0,,104,srl
 ratchet_100pct,up5,other intra-block,up5.add,up5.thr_out,7,False,True,,2,,0,,15,srl
@@ -1325,7 +1325,7 @@ ratchet_100pct,up5,dup output,up5.dup,up5.mvau_p,6,False,True,,32,,0,,14,srl
 ratchet_100pct,up5,dup output,up5.dup,up5.mvau_r,6,False,True,,32,,0,,14,srl
 ratchet_100pct,up5,DWC side,up5.dwc,up5.thr_s,6,False,True,,32,,0,,14,srl
 ratchet_100pct,up5,DWC side,up5.dwc,up5.thr_u,17,False,True,,2,,0,,25,srl
-ratchet_100pct,up5,DWC side,up5.dwc,up5.upnn,24,False,True,,6,,0,,32,srl
+ratchet_100pct,up5,DWC side,up5.dwc,up5.upnn,24,False,True,,10,,0,,32,srl
 ratchet_100pct,up5,other intra-block,up5.fmpad_u,up5.swg_u,6,False,True,,32,,0,,14,srl
 ratchet_100pct,up5,window prefetch (in front of FMPad),up5.fmpadpix,up5.fmpad_u,6,False,True,,80,,1,,0,bram
 ratchet_100pct,up5,other intra-block,up5.mvau_e,up5.thr_e,15,False,True,,2,,0,,23,srl
@@ -1333,10 +1333,10 @@ ratchet_100pct,up5,other intra-block,up5.mvau_p,up5.thr_p,17,False,True,,2,,0,,2
 ratchet_100pct,up5,other intra-block,up5.mvau_r,up5.thr_r,17,False,True,,32,,0,,25,srl
 ratchet_100pct,up5,DWC side,up5.mvau_u,up5.dwc,68,False,True,,2,,0,,76,srl
 ratchet_100pct,up5,other intra-block,up5.swg_u,up5.mvau_u,6,False,True,,2,,0,,14,srl
-ratchet_100pct,up5,skip FIFO,up5.thr_e,up5.add,6,False,True,,5,,0,,14,srl
+ratchet_100pct,up5,skip FIFO,up5.thr_e,up5.add,6,True,True,256,256,1,1,0,0,bram
 ratchet_100pct,up5,DWC side,up5.thr_p,up5.dwc,6,False,True,,2,,0,,14,srl
 ratchet_100pct,up5,window prefetch (in front of FMPad),up5.thr_r,up5.fmpadpix,6,False,True,,80,,1,,0,bram
-ratchet_100pct,up5,other intra-block,up5.thr_s,up5.add,6,False,True,,436,,1,,0,bram
+ratchet_100pct,up5,other intra-block,up5.thr_s,up5.add,6,True,True,768,355,1,1,0,0,bram
 ratchet_100pct,up5,other intra-block,up5.thr_u,up5.mvau_e,6,False,True,,2,,0,,14,srl
 ratchet_100pct,up5,DWC side,up5.upnn,up5.dwc,24,False,True,,32,,0,,32,srl
 ratchet_200pct,down1,other intra-block,down1.add,down1.thr_out,7,False,True,,2,,0,,15,srl
@@ -1714,7 +1714,7 @@ ratchet_200pct,up4,DWC side,up4.dwc,up4.thr_e,16,False,True,,2,,0,,24,srl
 ratchet_200pct,up4,DWC side,up4.dwc,up4.thr_p,18,False,True,,2,,0,,26,srl
 ratchet_200pct,up4,DWC side,up4.dwc,up4.thr_s,6,False,True,,16,,0,,14,srl
 ratchet_200pct,up4,DWC side,up4.dwc,up4.thr_u,18,False,True,,2,,0,,26,srl
-ratchet_200pct,up4,DWC side,up4.dwc,up4.upnn,96,False,True,,3,,0,,104,srl
+ratchet_200pct,up4,DWC side,up4.dwc,up4.upnn,96,False,True,,5,,0,,104,srl
 ratchet_200pct,up4,other intra-block,up4.fmpad_u,up4.swg_u,6,False,True,,16,,0,,14,srl
 ratchet_200pct,up4,window prefetch (in front of FMPad),up4.fmpadpix,up4.fmpad_u,6,False,True,,144,,1,,0,bram
 ratchet_200pct,up4,DWC side,up4.mvau_e,up4.dwc,32,False,True,,2,,0,,40,srl
@@ -1722,10 +1722,10 @@ ratchet_200pct,up4,DWC side,up4.mvau_p,up4.dwc,36,False,True,,2,,0,,44,srl
 ratchet_200pct,up4,other intra-block,up4.mvau_r,up4.thr_r,18,False,True,,2,,0,,26,srl
 ratchet_200pct,up4,DWC side,up4.mvau_u,up4.dwc,72,False,True,,2,,0,,80,srl
 ratchet_200pct,up4,other intra-block,up4.swg_u,up4.mvau_u,6,False,True,,16,,0,,14,srl
-ratchet_200pct,up4,skip FIFO,up4.thr_e,up4.add,6,False,True,,17,,0,,14,srl
+ratchet_200pct,up4,skip FIFO,up4.thr_e,up4.add,6,True,True,512,512,1,1,0,0,bram
 ratchet_200pct,up4,DWC side,up4.thr_p,up4.dwc,6,False,True,,2,,0,,14,srl
 ratchet_200pct,up4,window prefetch (in front of FMPad),up4.thr_r,up4.fmpadpix,6,False,True,,117,,1,,0,bram
-ratchet_200pct,up4,other intra-block,up4.thr_s,up4.add,6,False,True,,921,,1,,0,bram
+ratchet_200pct,up4,other intra-block,up4.thr_s,up4.add,6,True,True,1536,761,1,1,0,0,bram
 ratchet_200pct,up4,other intra-block,up4.thr_u,up4.mvau_e,6,False,True,,4,,0,,14,srl
 ratchet_200pct,up4,DWC side,up4.upnn,up4.dwc,96,False,True,,16,,0,,104,srl
 ratchet_200pct,up5,other intra-block,up5.add,up5.thr_out,7,False,True,,2,,0,,15,srl
@@ -1733,7 +1733,7 @@ ratchet_200pct,up5,dup output,up5.dup,up5.mvau_p,6,False,True,,32,,0,,14,srl
 ratchet_200pct,up5,dup output,up5.dup,up5.mvau_r,6,False,True,,32,,0,,14,srl
 ratchet_200pct,up5,DWC side,up5.dwc,up5.thr_s,6,False,True,,32,,0,,14,srl
 ratchet_200pct,up5,DWC side,up5.dwc,up5.thr_u,17,False,True,,2,,0,,25,srl
-ratchet_200pct,up5,DWC side,up5.dwc,up5.upnn,24,False,True,,6,,0,,32,srl
+ratchet_200pct,up5,DWC side,up5.dwc,up5.upnn,24,False,True,,10,,0,,32,srl
 ratchet_200pct,up5,other intra-block,up5.fmpad_u,up5.swg_u,6,False,True,,32,,0,,14,srl
 ratchet_200pct,up5,window prefetch (in front of FMPad),up5.fmpadpix,up5.fmpad_u,6,False,True,,80,,1,,0,bram
 ratchet_200pct,up5,other intra-block,up5.mvau_e,up5.thr_e,15,False,True,,2,,0,,23,srl
@@ -1741,10 +1741,10 @@ ratchet_200pct,up5,other intra-block,up5.mvau_p,up5.thr_p,17,False,True,,2,,0,,2
 ratchet_200pct,up5,other intra-block,up5.mvau_r,up5.thr_r,17,False,True,,32,,0,,25,srl
 ratchet_200pct,up5,DWC side,up5.mvau_u,up5.dwc,68,False,True,,2,,0,,76,srl
 ratchet_200pct,up5,other intra-block,up5.swg_u,up5.mvau_u,6,False,True,,2,,0,,14,srl
-ratchet_200pct,up5,skip FIFO,up5.thr_e,up5.add,6,False,True,,5,,0,,14,srl
+ratchet_200pct,up5,skip FIFO,up5.thr_e,up5.add,6,True,True,256,256,1,1,0,0,bram
 ratchet_200pct,up5,DWC side,up5.thr_p,up5.dwc,6,False,True,,2,,0,,14,srl
 ratchet_200pct,up5,window prefetch (in front of FMPad),up5.thr_r,up5.fmpadpix,6,False,True,,80,,1,,0,bram
-ratchet_200pct,up5,other intra-block,up5.thr_s,up5.add,6,False,True,,436,,1,,0,bram
+ratchet_200pct,up5,other intra-block,up5.thr_s,up5.add,6,True,True,768,355,1,1,0,0,bram
 ratchet_200pct,up5,other intra-block,up5.thr_u,up5.mvau_e,6,False,True,,2,,0,,14,srl
 ratchet_200pct,up5,DWC side,up5.upnn,up5.dwc,24,False,True,,32,,0,,32,srl
 ratchet_off,down1,other intra-block,down1.add,down1.thr_out,7,False,True,,2,,0,,15,srl
@@ -2121,7 +2121,7 @@ ratchet_off,up4,DWC side,up4.dwc,up4.thr_e,16,False,True,,2,,0,,24,srl
 ratchet_off,up4,DWC side,up4.dwc,up4.thr_p,18,False,True,,2,,0,,26,srl
 ratchet_off,up4,DWC side,up4.dwc,up4.thr_s,6,False,True,,16,,0,,14,srl
 ratchet_off,up4,DWC side,up4.dwc,up4.thr_u,18,False,True,,2,,0,,26,srl
-ratchet_off,up4,DWC side,up4.dwc,up4.upnn,96,False,True,,3,,0,,104,srl
+ratchet_off,up4,DWC side,up4.dwc,up4.upnn,96,False,True,,5,,0,,104,srl
 ratchet_off,up4,other intra-block,up4.fmpad_u,up4.swg_u,6,False,True,,16,,0,,14,srl
 ratchet_off,up4,window prefetch (in front of FMPad),up4.fmpadpix,up4.fmpad_u,6,False,True,,144,,1,,0,bram
 ratchet_off,up4,DWC side,up4.mvau_e,up4.dwc,32,False,True,,2,,0,,40,srl
@@ -2129,10 +2129,10 @@ ratchet_off,up4,DWC side,up4.mvau_p,up4.dwc,36,False,True,,2,,0,,44,srl
 ratchet_off,up4,other intra-block,up4.mvau_r,up4.thr_r,18,False,True,,2,,0,,26,srl
 ratchet_off,up4,DWC side,up4.mvau_u,up4.dwc,72,False,True,,2,,0,,80,srl
 ratchet_off,up4,other intra-block,up4.swg_u,up4.mvau_u,6,False,True,,16,,0,,14,srl
-ratchet_off,up4,skip FIFO,up4.thr_e,up4.add,6,False,True,,17,,0,,14,srl
+ratchet_off,up4,skip FIFO,up4.thr_e,up4.add,6,True,True,512,512,1,1,0,0,bram
 ratchet_off,up4,DWC side,up4.thr_p,up4.dwc,6,False,True,,2,,0,,14,srl
 ratchet_off,up4,window prefetch (in front of FMPad),up4.thr_r,up4.fmpadpix,6,False,True,,117,,1,,0,bram
-ratchet_off,up4,other intra-block,up4.thr_s,up4.add,6,False,True,,921,,1,,0,bram
+ratchet_off,up4,other intra-block,up4.thr_s,up4.add,6,True,True,1536,761,1,1,0,0,bram
 ratchet_off,up4,other intra-block,up4.thr_u,up4.mvau_e,6,False,True,,4,,0,,14,srl
 ratchet_off,up4,DWC side,up4.upnn,up4.dwc,96,False,True,,16,,0,,104,srl
 ratchet_off,up5,other intra-block,up5.add,up5.thr_out,7,False,True,,2,,0,,15,srl
@@ -2140,7 +2140,7 @@ ratchet_off,up5,dup output,up5.dup,up5.mvau_p,6,False,True,,32,,0,,14,srl
 ratchet_off,up5,dup output,up5.dup,up5.mvau_r,6,False,True,,32,,0,,14,srl
 ratchet_off,up5,DWC side,up5.dwc,up5.thr_s,6,False,True,,32,,0,,14,srl
 ratchet_off,up5,DWC side,up5.dwc,up5.thr_u,17,False,True,,2,,0,,25,srl
-ratchet_off,up5,DWC side,up5.dwc,up5.upnn,24,False,True,,6,,0,,32,srl
+ratchet_off,up5,DWC side,up5.dwc,up5.upnn,24,False,True,,10,,0,,32,srl
 ratchet_off,up5,other intra-block,up5.fmpad_u,up5.swg_u,6,False,True,,32,,0,,14,srl
 ratchet_off,up5,window prefetch (in front of FMPad),up5.fmpadpix,up5.fmpad_u,6,False,True,,80,,1,,0,bram
 ratchet_off,up5,other intra-block,up5.mvau_e,up5.thr_e,15,False,True,,2,,0,,23,srl
@@ -2148,9 +2148,9 @@ ratchet_off,up5,other intra-block,up5.mvau_p,up5.thr_p,17,False,True,,2,,0,,25,s
 ratchet_off,up5,other intra-block,up5.mvau_r,up5.thr_r,17,False,True,,32,,0,,25,srl
 ratchet_off,up5,DWC side,up5.mvau_u,up5.dwc,68,False,True,,2,,0,,76,srl
 ratchet_off,up5,other intra-block,up5.swg_u,up5.mvau_u,6,False,True,,2,,0,,14,srl
-ratchet_off,up5,skip FIFO,up5.thr_e,up5.add,6,False,True,,5,,0,,14,srl
+ratchet_off,up5,skip FIFO,up5.thr_e,up5.add,6,True,True,256,256,1,1,0,0,bram
 ratchet_off,up5,DWC side,up5.thr_p,up5.dwc,6,False,True,,2,,0,,14,srl
 ratchet_off,up5,window prefetch (in front of FMPad),up5.thr_r,up5.fmpadpix,6,False,True,,80,,1,,0,bram
-ratchet_off,up5,other intra-block,up5.thr_s,up5.add,6,False,True,,436,,1,,0,bram
+ratchet_off,up5,other intra-block,up5.thr_s,up5.add,6,True,True,768,355,1,1,0,0,bram
 ratchet_off,up5,other intra-block,up5.thr_u,up5.mvau_e,6,False,True,,2,,0,,14,srl
 ratchet_off,up5,DWC side,up5.upnn,up5.dwc,24,False,True,,32,,0,,32,srl

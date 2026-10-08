@@ -1,7 +1,7 @@
 """Tests for fifo_model.py (finn_milp.py --model-fifos). Run in lightmunet_dev:  cd MILP && python3 test_fifo_model.py
 
 1. The closed-form skip / prefetch estimators reproduce the verified FIFO depths of the analytical S12-256 artifact (MILP/artifacts/S12_dense_256_u4_analytical_v1).
-2. One real solve with --model-fifos on the S12-256 config: feasible, the FIFO terms are in the totals and in the output lists, and the BRAM they add is the analytical
+2. One real solve on the S12-256 config (FIFO modelling is the default; --no-model-fifos for the comparison): feasible, the FIFO terms are in the totals and in the output lists, and the BRAM they add is the analytical
    design's order of magnitude (143 BRAM18). The same solve without the flag has no FIFO keys.
 """
 import json
@@ -84,7 +84,7 @@ class TestModelFifosSolve(unittest.TestCase):
             assert res.returncode == 0, res.stderr[-2000:]
             return json.loads(out.read_text())
 
-        cls.on, cls.off = run(["--model-fifos"], "on.json"), run([], "off.json")
+        cls.on, cls.off = run([], "on.json"), run(["--no-model-fifos"], "off.json")
 
     @classmethod
     def tearDownClass(cls):
@@ -106,12 +106,29 @@ class TestModelFifosSolve(unittest.TestCase):
 
     def test_skip_and_prefetch_sites_are_found(self):
         fifos = self.on["intra_block_fifos"]
-        self.assertEqual(sum(1 for f in fifos if f["is_skip"]), 25)                  # every regular / downsampling residual block (up blocks are simulation-only)
+        self.assertEqual(sum(1 for f in fifos if f["is_skip"]), 27)                  # 25 regular / downsampling residual blocks + the ext-end skip FIFO of up4 and up5
+        self.assertEqual(sum(1 for f in fifos if f["name"].endswith(".FIFO_main")), 2)       # up4 / up5 `FIFO main`
         self.assertEqual(sum(1 for f in fifos if f["name"].endswith(".prefetch")), 26)       # every padded 3x3 conv incl. initial.conv
         self.assertTrue(all(f["depth"] > 2 for f in fifos))
 
+    def test_up_block_join_fifos_follow_the_closed_forms(self):
+        by = {f["name"]: f for f in self.on["intra_block_fifos"]}
+        for stage, w_in, cout in (("up4", 32, 16), ("up5", 64, 4)):
+            skip, main = by[f"{stage}.skip_FIFO"], by[f"{stage}.FIFO_main"]
+            self.assertEqual((skip["producer"], skip["consumer"]), (f"{stage}.thr_e", f"{stage}.add"))
+            self.assertEqual((main["producer"], main["consumer"]), (f"{stage}.thr_s", f"{stage}.add"))
+            pe_e, pe_s = skip["width_bits"] // 6, main["width_bits"] // 6
+            self.assertEqual(skip["depth"], w_in * (cout // pe_e))                          # ONE input row of the ext stream (simulation: need = W - 1 px, + 1 px)
+            self.assertEqual(main["depth"], 3 * w_in * (cout // pe_s))                      # 3 input rows of the main stream (bound)
+            self.assertFalse(main["is_skip"])
+        # the simulated depths of the analytical v2 design (row-buffer upsampler): up4 skip 512 / main 351, up5 skip 256 / main 160 words at PE 1 -> the closed forms cover them
+        self.assertGreaterEqual(32 * 16, 512)
+        self.assertGreaterEqual(3 * 32 * 16, 351)
+        self.assertGreaterEqual(64 * 4, 256)
+        self.assertGreaterEqual(3 * 64 * 4, 160)
+
     def test_bram_is_the_analytical_designs_order_of_magnitude(self):
-        # analytical design: 143 BRAM18. The MILP may pick stream widths whose BRAM aspect / pow2 rounding is cheaper (91 with the ratchet), never more than ~30% above.
+        # analytical design: 143 BRAM18. The MILP may pick stream widths whose BRAM aspect / pow2 rounding is cheaper (91 with the default --dsr-pct), never more than ~30% above.
         bram = self.on["_diagnostics"]["fifo_model"]["totals"]["bram18"]
         self.assertGreater(bram, 143 * 0.5)
         self.assertLess(bram, 143 * 1.3)

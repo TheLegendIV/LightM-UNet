@@ -1,7 +1,7 @@
 # S12_dense_256_ratchet_ablation_v1 (hardware side)
 
-Partition-2 OOC builds for the ratchet ablation of the 256x256 S12 dense nearest-upsample (noconv) ReLU net, uniform INT6. The MILP arms live in
-`MILP/artifacts/S12_dense_256_ratchet_ablation_v1/` (see its README for the arms, the ratchet and the results). Written but NOT launched: the FINN container is run by hand.
+Partition-2 OOC builds for the DSR (formerly "ratchet") ablation of the 256x256 S12 dense nearest-upsample (noconv) ReLU net, uniform INT6. The MILP arms live in
+`MILP/artifacts/S12_dense_256_ratchet_ablation_v1/` (see its README for the arms, the DSR rule and the results). Written but NOT launched: the FINN container is run by hand.
 
 ## What gets built (partition 2, one build per distinct MILP folding + the control)
 

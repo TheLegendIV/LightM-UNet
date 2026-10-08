@@ -7,7 +7,7 @@ Traced 88 layers (per-layer granularity, no block grouping). candidate_bits=(6,)
 Wrote MILP/artifacts/S12_dense_256_ratchet_ablation_v1/ratchet_100pct/layer_bits_folding_ratchet_100pct.json
 ILP status: Optimal
 LUT used (calibrated): 95913 (41.6% of 230400 budget) -- GUARANTEED (hard constraint).
-BRAM_18K used (calibrated): 101 (16.2% of 624 budget) -- GUARANTEED (hard constraint).
+BRAM_18K used (calibrated): 105 (16.8% of 624 budget) -- GUARANTEED (hard constraint).
 DSP used: 115 (6.7% of 1728 budget) -- GUARANTEED (hard constraint).
 Bottleneck: down1.conv.0 at 294912 cycles/frame -> 339.1 FPS @ 100.0MHz
 Total cycles (sum over nodes): 29161487

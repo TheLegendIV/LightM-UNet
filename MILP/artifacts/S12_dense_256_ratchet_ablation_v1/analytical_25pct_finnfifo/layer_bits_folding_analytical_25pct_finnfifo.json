@@ -6168,9 +6168,9 @@
   "xczu7ev_bram18k_budget": 624,
   "bram_pct_of_budget": 9.935897435897436,
   "inter_block_fifo_bram18": 0,
-  "intra_block_fifo_bram18": 143,
+  "intra_block_fifo_bram18": 145,
   "total_bram18k_with_inter_block_fifos": 62.0,
-  "total_bram18k_with_all_fifos": 205.0,
+  "total_bram18k_with_all_fifos": 207.0,
   "intra_block_fifo_warnings": [],
   "total_uram18": 0.0,
   "xczu7ev_uram_budget": 96,
@@ -6192,10 +6192,10 @@
   "fps": 676.9793182818265,
   "analytical": {
    "source": "MILP/analytical/net_fold.py",
-   "ratchet_pct": 25.0,
-   "ratchet_floor": 0.33,
+   "dsr_pct": 25.0,
+   "dsr_floor": 0.33,
    "mvau_wwidth_max": 72,
-   "ratchet": true,
+   "dsr": true,
    "sum_of_block_first_out_latencies_cycles": 769865,
    "block_profile": [
     {
@@ -6748,8 +6748,8 @@
    ]
   },
   "intra_block_fifo_totals": {
-   "fifo_lut": 9026.0,
-   "fifo_bram18": 143.0,
+   "fifo_lut": 8998.0,
+   "fifo_bram18": 145.0,
    "fifo_uram18": 0.0,
    "dwc_lut": 1658.5179000000012
   },
@@ -10814,7 +10814,7 @@
   "up4": {
    "kind": "up",
    "verified": true,
-   "steady_cyc_px": 41.4169921875,
+   "steady_cyc_px": 41.47705078125,
    "T": 45.0,
    "fifos": [
     {
@@ -10822,10 +10822,10 @@
      "producer": "Thr_s",
      "consumer": "Add",
      "width_bits": 6,
-     "depth": 651,
-     "max_occ": 635,
+     "depth": 351,
+     "max_occ": 335,
      "mem": "bram",
-     "depth_alloc": 1024,
+     "depth_alloc": 512,
      "lut": 0,
      "bram18": 1,
      "uram18": 0
@@ -10861,12 +10861,12 @@
      "producer": "Thr_e",
      "consumer": "Add",
      "width_bits": 6,
-     "depth": 17,
-     "max_occ": 1,
-     "mem": "srl",
-     "depth_alloc": 17,
-     "lut": 14,
-     "bram18": 0,
+     "depth": 512,
+     "max_occ": 496,
+     "mem": "bram",
+     "depth_alloc": 512,
+     "lut": 0,
+     "bram18": 1,
      "uram18": 0
     }
    ],
@@ -10914,8 +10914,7 @@
     "MVAU_r runs at 71% of F: no (PE, SIMD) divisor pair lands exactly on F",
     "MVAU_u runs at 71% of F: no (PE, SIMD) divisor pair lands exactly on F",
     "MVAU_e runs at 71% of F: no (PE, SIMD) divisor pair lands exactly on F",
-    "FMPadPix / FMPad_k / UpNN LUT are not calibrated in finn_cost_model (priced 0 or provisional); MVAU_u counts the MACs on inserted zeros (FINN lowers ConvTranspose to zero insertion + conv)",
-    "skip FIFO set from the analytic 32 to 17 words by simulation"
+    "FMPadPix / FMPad_k / UpNN LUT are not calibrated in finn_cost_model (priced 0 or provisional); MVAU_u counts the MACs on inserted zeros (FINN lowers ConvTranspose to zero insertion + conv)"
    ]
   },
   "regular4.0": {
@@ -11061,10 +11060,10 @@
      "producer": "Thr_s",
      "consumer": "Add",
      "width_bits": 6,
-     "depth": 302,
-     "max_occ": 298,
+     "depth": 160,
+     "max_occ": 156,
      "mem": "bram",
-     "depth_alloc": 512,
+     "depth_alloc": 256,
      "lut": 0,
      "bram18": 1,
      "uram18": 0
@@ -11100,12 +11099,12 @@
      "producer": "Thr_e",
      "consumer": "Add",
      "width_bits": 6,
-     "depth": 5,
-     "max_occ": 1,
-     "mem": "srl",
-     "depth_alloc": 5,
-     "lut": 14,
-     "bram18": 0,
+     "depth": 256,
+     "max_occ": 252,
+     "mem": "bram",
+     "depth_alloc": 256,
+     "lut": 0,
+     "bram18": 1,
      "uram18": 0
     }
    ],
@@ -11159,8 +11158,7 @@
     "MVAU_r runs at 71% of F: no (PE, SIMD) divisor pair lands exactly on F",
     "MVAU_u runs at 71% of F: no (PE, SIMD) divisor pair lands exactly on F",
     "MVAU_e runs at 71% of F: no (PE, SIMD) divisor pair lands exactly on F",
-    "FMPadPix / FMPad_k / UpNN LUT are not calibrated in finn_cost_model (priced 0 or provisional); MVAU_u counts the MACs on inserted zeros (FINN lowers ConvTranspose to zero insertion + conv)",
-    "skip FIFO set from the analytic 8 to 5 words by simulation"
+    "FMPadPix / FMPad_k / UpNN LUT are not calibrated in finn_cost_model (priced 0 or provisional); MVAU_u counts the MACs on inserted zeros (FINN lowers ConvTranspose to zero insertion + conv)"
    ]
   },
   "regular5.0": {

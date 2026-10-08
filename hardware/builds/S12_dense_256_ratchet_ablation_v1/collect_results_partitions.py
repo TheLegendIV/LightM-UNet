@@ -1,4 +1,4 @@
-"""Collect the partition-only OOC-synth results of the S12 256x256 ratchet ablation into hardware/results.csv.
+"""Collect the partition-only OOC-synth results of the S12 256x256 DSR ablation (folder and arm names keep the old word "ratchet") into hardware/results.csv.
 
 Parametrised sibling of hardware/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/collect_results_partition2.py (same schema and upsert key = (model_name, config)),
 for builds made by finn_s12_build.py --partitions N: <tag>_{milpfold,autofold}_partition<N>_<ts>/report/ooc_synth_and_timing.json.
@@ -43,7 +43,7 @@ CHANNELS, BOTTLENECKS, BIT_WIDTH = "4,16,32,16,4", "4,8,8,2,1", "6_uniform_int6"
 TARGET_FPS, MVAU_WWIDTH_MAX = 250.0, 72
 
 DESC = {
-    "ratchet_off": "MILP folding, no ratchet (--ratchet-pct none), FIFO model on, min-resources.",
+    "ratchet_off": "MILP folding, no DSR rule (--dsr-pct none), FIFO model on, min-resources.",
     "finn_autofold": "FINN auto-fold control (step_target_fps_parallelization, target 250 fps, mvau_wwidth_max 72), no MILP folding.",
 }
 
@@ -63,10 +63,10 @@ def describe(tag: str) -> str:
     if base == "analytical_25pct_finnfifo":
         return "Analytical-flow folding (as analytical_25pct) with FINN's OWN FIFO autosizing (largefifo_rtlsim): no FIFO depths forced by the bridge."
     if base == "analytical_25pct":
-        return "Analytical-flow folding (MILP/analytical/net_fold.py): block ratchet 25% floor 0.33, mvau_wwidth_max 72, FIFOs / DWCs sized by simulation, inter-block FIFOs depth 2."
+        return "Analytical-flow folding (MILP/analytical/net_fold.py): block DSR 25% floor 0.33, mvau_wwidth_max 72, FIFOs / DWCs sized by simulation, inter-block FIFOs depth 2."
     m = re.fullmatch(r"ratchet_(\d+)pct", base)
     if m:
-        return f"MILP folding, frame-rate ratchet {m.group(1)}% (floor 0.33), FIFO model on, min-resources."
+        return f"MILP folding, downstream-rate rule (DSR) {m.group(1)}% (floor 0.33), FIFO model on, min-resources."
     return f"Partition-only OOC synth, tag={tag}."
 
 

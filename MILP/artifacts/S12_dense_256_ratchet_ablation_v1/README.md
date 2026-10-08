@@ -1,6 +1,9 @@
 # S12_dense_256_ratchet_ablation_v1
 
-Ratchet ablation for the 256x256 S12 dense **nearest-upsample (no conv after the upsample), ReLU** net (`config_12_dense_relu_nearest_upsample_256`), the 256 counterpart of
+> **Naming (2026-10-08):** the frame-rate rule this ablation sweeps was called the "ratchet" (`--ratchet-pct` / `--ratchet-floor`); it is now the downstream-rate rule `--dsr-pct` / `--dsr-floor`
+> (the old element-rate DSR was removed). Folder, arm names (`ratchet_*`) and result keys written before the rename keep the old word; the scripts and prose use the new names.
+
+DSR ablation for the 256x256 S12 dense **nearest-upsample (no conv after the upsample), ReLU** net (`config_12_dense_relu_nearest_upsample_256`), the 256 counterpart of
 `S12_dense_dsr_ablation_v1`. Uniform INT6, 250 fps (every node <= 400,000 cycles per frame at 100 MHz), `--mvau-wwidth-max 72`, `--force-dsp`, objective `--min-resources`,
 FIFO / DWC modelling on (`--model-fifos`), no latency cap (the MILP's sum of node cycles is not a latency).
 
@@ -8,60 +11,60 @@ FIFO / DWC modelling on (`--model-fifos`), no latency cap (the MILP's sum of nod
 
 | arm | MILP flags (on top of the common ones in `run_ablation.sh`) | |
 |---|---|---|
-| `ratchet_1pct` | `--ratchet-pct 1 --ratchet-floor 0.33` | |
-| `ratchet_25pct` | `--ratchet-pct 25 --ratchet-floor 0.33` | |
-| `ratchet_100pct` | `--ratchet-pct 100 --ratchet-floor 0.33` | |
-| `ratchet_200pct` | `--ratchet-pct 200 --ratchet-floor 0.33` | |
-| `ratchet_off` | `--ratchet-pct none` | no rate rule (element-rate DSR is off by default) |
-| `analytical_25pct` | `MILP/analytical/net_fold.py --ratchet-pct 25 --ratchet-floor 0.33 --mvau-wwidth-max 72` (`run_analytical_arm.sh`) | **analytical flow**, not the MILP: same net / bits / fps / width cap / floor |
+| `ratchet_1pct` | `--dsr-pct 1 --dsr-floor 0.33` | |
+| `ratchet_25pct` | `--dsr-pct 25 --dsr-floor 0.33` | |
+| `ratchet_100pct` | `--dsr-pct 100 --dsr-floor 0.33` | |
+| `ratchet_200pct` | `--dsr-pct 200 --dsr-floor 0.33` | |
+| `ratchet_off` | `--dsr-pct none` | no rate rule (element-rate DSR is off by default) |
+| `analytical_25pct` | `MILP/analytical/net_fold.py --dsr-pct 25 --dsr-floor 0.33 --mvau-wwidth-max 72` (`run_analytical_arm.sh`) | **analytical flow**, not the MILP: same net / bits / fps / width cap / floor |
 | `analytical_25pct_finnfifo` | the SAME folding as `analytical_25pct`, folding json written WITHOUT the FIFO lists (by `summarize_arms.py`) | **hardware-only variant**: the bridge forces nothing, FINN's own rtlsim autosizer (`largefifo_rtlsim`) sets every FIFO depth |
 | `ratchet_<arm>_simfifo` (5 arms) | the MILP arm's folding, unchanged, with FIFO lists from `MILP/analytical/net_explicit.py` (`run_simfifo.sh`) | **hardware-only variant**: the MILP folding simulated in the analytical block models, every FIFO sized by simulation and grown until the chained whole net does not deadlock; see `fifo_sim_report.md` |
 | `ratchet_ablation_finn_autofold` | none: FINN's own `step_target_fps_parallelization` (250 fps, `mvau_wwidth_max` 72) | **built on hardware**, not a MILP arm |
 
 (The first sweep used 1/2/4/8/16 %: 1, 2, 4 and 8 % gave the identical folding and 16 % was a second one, so the sweep was widened to 1/25/(50)/100/200 %; the 50 % arm gave the same folding as 25 % and was dropped.)
 
-**Ratchet** = "downstream no slower than upstream" in cycles per frame, on every compute node (conv / MVAU layers, the downsampling pad-MVAU, the argmax) against its nearest compute ancestor
+**DSR** = "downstream no slower than upstream" in cycles per frame, on every compute node (conv / MVAU layers, the downsampling pad-MVAU, the argmax) against its nearest compute ancestor
 (thresholds, dup, add, pools, concat, upsample and the input quantizer are relayed through): `cycles[C] <= max(floor * F, (1 + pct/100) * cycles[P])`, F = 400,000.
 
-**Why floor 0.33 and not 0.** The floor is the number of cycles a node may always use whatever its upstream node does (0.33 * F = 132,000). With floor 0 the ratchet is infeasible below +50 % (tested at 1, 5, 12, 25, 33 %: infeasible;
+**Why floor 0.33 and not 0.** The floor is the number of cycles a node may always use whatever its upstream node does (0.33 * F = 132,000). With floor 0 the DSR is infeasible below +50 % (tested at 1, 5, 12, 25, 33 %: infeasible;
 50 % and up: feasible, with or without the width cap): the last blocks have tiny layers (`regular5`: 1 -> 4 channels, at most 65,536 cycles of work each) in front of the final transposed conv, which has 4x the work per pixel, so no
-strict "no slower" chain can hold without a floor. From about 0.4 up (160k cycles and more) the design (~147k cycles) never touches the ratchet and the small-pct arms collapse to one folding; 0.33 is the smallest round floor
-that is feasible for all arms and still binds. (The first version of the ratchet compared every node, thresholds and dups included, and was infeasible at any floor below 0.328; it now only ratchets compute nodes.)
+strict "no slower" chain can hold without a floor. From about 0.4 up (160k cycles and more) the design (~147k cycles) never touches the DSR and the small-pct arms collapse to one folding; 0.33 is the smallest round floor
+that is feasible for all arms and still binds. (The first version of the DSR compared every node, thresholds and dups included, and was infeasible at any floor below 0.328; it now only ratchets compute nodes.)
 
 **Why `--mvau-wwidth-max 72`.** It is FINN's own `mvau_wwidth_max` (SetFolding's cap on weight bits x SIMD per MVAU: 6-bit x SIMD 12). The MILP carries it as a hard cap only so that the MILP arms and the FINN auto-fold control
-live in the same search space (the auto-fold control must be given the identical value). It is not needed for correctness, and on this net it hardly matters: with floor 0.33 the ratchet arms are identical at cap 72 / 96 / 144 / none;
+live in the same search space (the auto-fold control must be given the identical value). It is not needed for correctness, and on this net it hardly matters: with floor 0.33 the DSR arms are identical at cap 72 / 96 / 144 / none;
 only `ratchet_off` moves (101 DSP at 72, 105 DSP and 94.5k LUT with a looser cap).
 
 ## Results (`arms_summary.csv`, written by `summarize_arms.py`)
 
 | arm | LUT incl. FIFO+DWC | LUT nodes | BRAM18 | DSP | slowest node (cycles) | fps | layers differing from `ratchet_off` (of 88) | folding |
 |---|---|---|---|---|---|---|---|---|
-| ratchet_1pct | 99,161 | 96,255 | 101 | 178 | 147,971 (`initial.conv`) | 675.8 | 82 | A |
-| ratchet_25pct | 98,466 | 95,625 | 101 | 147 | 147,980 (`down1.conv.0`) | 675.8 | 82 | B |
-| ratchet_100pct | 95,913 | 93,909 | 101 | 115 | 294,912 | 339.1 | 2 | C |
-| ratchet_200pct | 95,558 | 93,629 | 101 | 113 | 327,680 (`final.argmax`) | 305.2 | 1 | D |
-| ratchet_off | 95,274 | 93,387 | 101 | 101 | 327,680 (`final.argmax`) | 305.2 | 0 | E |
-| analytical_25pct | 87,995 | 76,918 | 205 | 241 | 147,715 (`regular5.0.conv`) | 677.0 | 82 | F |
+| ratchet_1pct | 99,161 | 96,255 | 105 | 178 | 147,971 (`initial.conv`) | 675.8 | 82 | A |
+| ratchet_25pct | 98,466 | 95,625 | 105 | 147 | 147,980 (`down1.conv.0`) | 675.8 | 82 | B |
+| ratchet_100pct | 95,913 | 93,909 | 105 | 115 | 294,912 | 339.1 | 2 | C |
+| ratchet_200pct | 95,558 | 93,629 | 105 | 113 | 327,680 (`final.argmax`) | 305.2 | 1 | D |
+| ratchet_off | 95,274 | 93,387 | 105 | 101 | 327,680 (`final.argmax`) | 305.2 | 0 | E |
+| analytical_25pct | 87,967 | 76,918 | 207 | 241 | 147,715 (`regular5.0.conv`) | 677.0 | 82 | F |
 
 * **Six distinct foldings** (A-F; F = analytical) and seven builds: `analytical_25pct_finnfifo` shares folding F with `analytical_25pct` but is its own build, so `analytical_25pct` (FIFO depths forced from the analytical simulation)
   against `analytical_25pct_finnfifo` (FINN's autosized FIFOs) isolates the effect of the FIFO strategy at identical folding (compare BRAM, LUT and rtlsim cycles); the MILP / analytical FIFO columns of the table are blank for it, one per arm except that the dropped 50 % arm (run earlier) gave the same folding as 25 %. One hardware build per distinct folding (`arms_to_build.txt`, `arm_build_map.csv`).
 * The knee is between 25 % and 100 %: up to +25-50 % the design keeps the whole network at ~147k cycles (676 fps); at +100 % the convs may sit at 294,912 cycles (339 fps, 2 layers differ from `off`); at +200 % only the argmax (PE 1,
   327,680 cycles) differs from `off`. Tight ratchets cost up to ~4% LUT and 77 DSP against `off` and buy 2.2x throughput.
-* Every ratchet arm passes the edge check in `summarize_arms.py` (0 violations), every layer is INT6, `mvau_wwidth_max` 72 holds.
-* **Analytical arm** (F): 677 fps, 241 DSP, 76.9k node LUT and 205 BRAM18 (143 of them simulated skip / prefetch FIFOs, FINN will delete the depth-2 ones). It is the same design the analytical artifact
+* Every DSR arm passes the edge check in `summarize_arms.py` (0 violations), every layer is INT6, `mvau_wwidth_max` 72 holds.
+* **Analytical arm** (F): 677 fps, 241 DSP, 76.9k node LUT and 207 BRAM18 (145 of them simulated skip / prefetch FIFOs, FINN will delete the depth-2 ones). It is the same design the analytical artifact
   `S12_dense_256_u4_analytical_v1` already had (the width cap and the floor 0.33 / 25 % do not change it: block budgets 184,320 and 163,840 cycles, nodes at 147k, max SIMD x bits = 48). Against the MILP arms it uses
   more DSP (241 vs 113-178 for the fast arms) and fewer LUT nodes (76.9k vs 93.6-96.3k): different tie breaking at equal cycles (it takes the cheapest BRAM / LUT fold, the MILP's objective weighs DSP heavily) and the MILP prices
-  `residual_add` separately (7.4k LUT) where the analytical flow merges it into `out_act`. Its BRAM18 is the simulated FIFO memory (the MILP's 101 BRAM18 is its FIFO model: skip + prefetch only).
-  The analytical ratchet is block to block (a block's budget = 1.25 x the slowest node of the previous block), the MILP's is node to node, so the analytical design breaks the MILP rule once
-  (`regular5.0.reduce.0` 65,536 -> `regular5.0.conv` 147,715 cycles; `ratchet_violations` = 1 in the table). At 4 % + floor 0.33 the analytical flow does not work: the block budgets ratchet down to ~136k cycles and
+  `residual_add` separately (7.4k LUT) where the analytical flow merges it into `out_act`. Its BRAM18 is the simulated FIFO memory (the MILP's 105 BRAM18 is its FIFO model: skip + prefetch + the up blocks' two join FIFOs).
+  The analytical DSR is block to block (a block's budget = 1.25 x the slowest node of the previous block), the MILP's is node to node, so the analytical design breaks the MILP rule once
+  (`regular5.0.reduce.0` 65,536 -> `regular5.0.conv` 147,715 cycles; `ratchet_violations` = 1 in the table). At 4 % + floor 0.33 the analytical flow does not work: the block budgets DSR down to ~136k cycles and
   the up5 block fails its simulation check (9.32 cyc/px steady against an 8.3 target), hence 25 %.
-* FIFO model (BRAM18 101 in every arm) counts only skip FIFOs, prefetch FIFOs and DWCs; the down-block `Dup -> SWG_r` feed and the up / initial `FIFO main` are not priced (no closed form).
+* FIFO model (BRAM18 105 in every arm) counts the skip FIFOs, prefetch FIFOs, the two join FIFOs of each up block (closed forms fitted to the real row-buffer upsampler, `fifo_model.UP_SKIP_ROWS` / `UP_MAIN_ROWS`) and DWCs; the down-block `Dup -> SWG_r` feed and the initial `FIFO main` are not priced (no closed form).
 
 ## Files
 
 * `run_ablation.sh` (run in `lightmunet_dev`, all MILP arms in parallel, ~40 s), `run_analytical_arm.sh` (~5 min: the blocks are simulated in parallel workers), `summarize_arms.py`.
 * Per arm folder: `layer_bits_folding_<arm>.json` (per_layer, extra_nodes, `intra_block_fifos` = the priced skip / prefetch FIFOs in the analytical role vocabulary the FINN bridge reads, `inter_block_fifos` (depth 2), `dwcs`,
-  `_diagnostics.ratchet`, `_diagnostics.fifo_model`), `layer_bits_SITES_<arm>.json` (uniform INT6 per-site bits), `run_args.json`, `solve.log`, `summary.csv`, `final_output.onnx`.
+  `_diagnostics.DSR`, `_diagnostics.fifo_model`), `layer_bits_SITES_<arm>.json` (uniform INT6 per-site bits), `run_args.json`, `solve.log`, `summary.csv`, `final_output.onnx`.
 * `arms_summary.csv`, `arm_groups.json`, `arm_build_map.csv`, `arms_to_build.txt`.
 
 ## Hardware
@@ -71,7 +74,7 @@ partition-2 OOC builds of the five distinct foldings plus the FINN auto-fold con
 
 ## Caveats
 
-* Reproduce with `bash MILP/artifacts/S12_dense_256_ratchet_ablation_v1/run_ablation.sh` after any change to `finn_milp.py`; the ratchet / FIFO model are new (2026-10-06).
+* Reproduce with `bash MILP/artifacts/S12_dense_256_ratchet_ablation_v1/run_ablation.sh` after any change to `finn_milp.py`; the DSR / FIFO model are new (2026-10-06).
 * FINN still runs its rtlsim FIFO autosizer before the MILP depths are forced (`step_force_fifo_depths_from_milp`): FIFOs that the MILP does not list keep FINN's autosized depth, which inflates the BRAM of the hardware
   numbers relative to the MILP's FIFO model. The bridge reports matched / unresolved FIFOs (`fifo_force_report_partition_<i>.json`).
 * The argmax PE and the FMPadding_Pixel SIMD are not applied by the bridge (only matters for partitions 5-7).
@@ -83,18 +86,20 @@ first output pixel at 672,900 cycles (6.7 ms). Only this design can be checked t
 sizing is not modelled. Hardware result reported for these probes: every probe deadlocked except `analytical_25pct` (including the FINN auto-fold control and `analytical_25pct_finnfifo`), i.e. the only build where every
 FIFO of the partition was forced from the simulation passed.
 
-## FIFO simulation of the MILP arms (`<arm>_simfifo`, 2026-10-06)
+## FIFO simulation of the MILP arms (`<arm>_simfifo`, regenerated 2026-10-08)
 
-The hardware probes of the five MILP arms deadlocked; their FIFO lists were closed-form estimates (skip + prefetch + DWC only) and the designs had never been simulated. `MILP/analytical/net_explicit.py`
+The hardware probes of the five MILP arms deadlocked; their FIFO lists were closed-form estimates and the designs had never been simulated. `MILP/analytical/net_explicit.py`
 (`run_simfifo.sh`, `summarize_simfifo.py`) feeds each arm's folding unchanged into the analytical block models and simulators (`bottleneck.explicit_folds`), sizes every FIFO of every block by simulation (3 frames, saturated input,
 budget = the block's slowest MILP node, the usual sizing schedule extended to uniform x16), then chains all 29 blocks (inter-block FIFOs depth 2) and grows the full FIFOs on a deadlock. Pass = no deadlock and period <= 400,000
 cycles/frame. Results: `fifo_sim_report.md` (per arm and FIFO class), `fifo_changes.csv` (per FIFO: MILP depth / BRAM18 / LUT next to the simulated ones), `<arm>_simfifo/layer_bits_folding_<arm>_simfifo.json` (folding identical,
-`intra_block_fifos` = every simulated FIFO with `milp_depth`, `fifo_sim`, `fifo_model_estimate`).
+`intra_block_fifos` = every simulated FIFO with `milp_depth`, `fifo_sim`, `fifo_model_estimate`). The first version of this section (2026-10-06) was simulated with the OLD upsampler model (two outputs per input) and is superseded:
+the simulator now uses the real finn-hlslib row-buffer `UpsampleNearestNeighbour` (`up_bottleneck_sim.UpNNNode`), under which the up blocks' ext-end skip FIFO needs one input row (512 / 256 words, not 17 / 5). Old results: `archive_pre_20261008_upnn_fix/`.
 
-* No arm deadlocked with all inter-block FIFOs at depth 2; every chain passed in round 1 (periods 327,899 for 1 % / 25 %, 362,022 / 366,938 / 369,446 for 100 % / 200 % / off). Nothing was grown by the chain: the MILP lists simply left
-  most FIFOs unsized. Hardware deadlocks therefore point at FIFOs the MILP did not list and FINN autosized (the sim now lists and sizes all of them), not at a design that deadlocks with correct depths.
-* Intra-block FIFO BRAM18: MILP estimate 91 -> simulated 146 (1 %), 147 (25 %), 187 (100 %, 200 %, off). Skip FIFOs stay near the MILP estimate (median 2336 -> 2339..2480 words); prefetch FIFOs shrink or stay (538 -> 344..538)
-  except the dilated stage2/3 blocks; the new memory is the FIFOs the MILP does not price: FMPad -> SWG and Thr_r -> FMPad of the dilated convs (12-24k words, 12 BRAM18 each) and other intra-block FIFOs (50-64 BRAM18).
+* All five arms and the target are unified in `arms_config.sh` (INT6, 250 fps, DSR floor 0.33, width cap 72); `summarize_arms.py` fails if any result carries other values.
+* No arm deadlocks with all inter-block FIFOs at depth 2; every chain passed in round 1 (periods 327,899 for 1 % / 25 %, 362,022 for 100 % / 200 % / off; first output pixel at 0.56-1.43 M cycles). Nothing was grown by the chain.
+* Intra-block FIFO BRAM18, MILP estimate -> simulated: 95 -> 148 (1 %), 149 (25 %), 189 (100 %, 200 %, off). The MILP estimate now prices the up blocks' two join FIFOs: the skip FIFO is exact (up4 512 / up5 256 words, simulated 512 / 256);
+  `FIFO main` is a 3-input-row bound (1,536 / 768 words) against 368 / 166 words simulated at the MILP folding, one BRAM18 either way.
+* The new memory is still the FIFOs the MILP does not price: FMPad -> SWG and Thr_r -> FMPad of the dilated convs (12-24k words, 12 BRAM18 each) and other intra-block FIFOs (60 BRAM18).
 * Window-fill gap: the dilated convs (stage2.x/3.x with dilation 8 / 16) cannot reach their own cycle budget at any depth (+3 ... +15 %: one frame's window fill per frame); they are accepted since their period is still under 400,000.
-* The bias of the final block is simulated at PE 1 (no MILP node; the real build uses 1): 327,680 cycles/frame (305 fps), which bounds every arm's chain period from below; the argmax PE of the MILP arms is not the limit.
+* The bias of the final block is simulated at PE 1 (no MILP node; the real build uses 1): 327,680 cycles/frame (305 fps), which bounds every arm's chain period from below.
 * The simulation cannot see FINN's own FIFO autosizer or DWC buffering inside FINN RTL: a passing sim does not guarantee that the hardware build passes.

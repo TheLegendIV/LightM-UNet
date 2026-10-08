@@ -1,4 +1,4 @@
-"""Tests for the final argmax node (kind "argmax", FINN LabelSelect), the --dsr-pct option and the default frame-rate ratchet (--ratchet-pct / --ratchet-floor) of finn_milp.py.
+"""Tests for the final argmax node (kind "argmax", FINN LabelSelect), and the downstream-rate rule --dsr-pct / --dsr-floor (cycles per FRAME vs the nearest compute ancestor; formerly --ratchet-*) of finn_milp.py.
 
 Run in lightmunet_dev (needs torch, pulp, the vendored enet package):  cd MILP && python3 test_argmax_dsr.py
 The last class runs the real CLI once on the S12-256 config (uniform INT6, force-dsp, min-resources, 250 fps), about 40 s.
@@ -21,19 +21,21 @@ CONFIG = "config_12_dense_relu_nearest_upsample_256"
 
 
 class TestDsrOption(unittest.TestCase):
-    def test_flag_absent_means_off(self):
-        self.assertIsNone(finn_milp.resolve_dsr_ratio(None, False))
-
     def test_none_switches_it_off(self):
-        self.assertIsNone(finn_milp.resolve_dsr_ratio(finn_milp._dsr_arg("none"), False))
-        self.assertIsNone(finn_milp.resolve_dsr_ratio(finn_milp._dsr_arg("off"), False))
+        self.assertEqual(finn_milp._dsr_arg("none"), finn_milp.DSR_OFF)
+        self.assertEqual(finn_milp._dsr_arg("off"), finn_milp.DSR_OFF)
 
     def test_percent_maps_to_ratio(self):
-        self.assertAlmostEqual(finn_milp.resolve_dsr_ratio(finn_milp._dsr_arg("50"), False), 1.5)
-        self.assertEqual(finn_milp.resolve_dsr_ratio(finn_milp._dsr_arg("0"), False), 1.0)
+        self.assertAlmostEqual(finn_milp.pct_to_ratio(finn_milp._dsr_arg("50")), 1.5)
+        self.assertEqual(finn_milp.pct_to_ratio(finn_milp._dsr_arg("0")), 1.0)
 
-    def test_ratchet_defaults(self):
-        self.assertEqual((finn_milp.DEFAULT_RATCHET_PCT, finn_milp.DEFAULT_RATCHET_FLOOR), (4.0, 0.6))
+    def test_dsr_defaults(self):
+        self.assertEqual((finn_milp.DEFAULT_DSR_PCT, finn_milp.DEFAULT_DSR_FLOOR), (4.0, 0.6))
+
+    def test_retired_flags_are_gone(self):
+        src = (HERE / "finn_milp.py").read_text()
+        for gone in ("--ratchet-pct", "--ratchet-floor", "--min-dsr", "--dsr-pct-pass2", "dsr_ratio", "max_downstream_rate"):
+            self.assertNotIn(gone, src.replace("formerly --ratchet-pct", ""), gone)
 
     def test_rejects_negative_percent(self):
         with self.assertRaises(argparse.ArgumentTypeError):
@@ -68,7 +70,7 @@ class TestArgmaxNode(unittest.TestCase):
 
 
 class TestCliSolve(unittest.TestCase):
-    """One real solve with the DEFAULTS (ratchet 4% / floor 0.6, no DSR): feasible, every foldable edge obeys the frame-rate ratchet, the argmax is a priced node."""
+    """One real solve with the DEFAULTS (--dsr-pct 4 / --dsr-floor 0.6): feasible, every compute edge obeys the frame-rate DSR rule, the argmax is a priced node."""
 
     @classmethod
     def setUpClass(cls):
@@ -85,14 +87,13 @@ class TestCliSolve(unittest.TestCase):
     def tearDownClass(cls):
         cls.tmp.cleanup()
 
-    def test_feasible_with_the_default_ratchet_and_no_dsr(self):
+    def test_feasible_with_the_default_dsr(self):
         d = self.result["_diagnostics"]
         self.assertEqual(self.result["status"], "Optimal")
-        self.assertIsNone(d["dsr_ratio"])
-        self.assertEqual((d["ratchet"]["pct"], d["ratchet"]["floor"]), (4.0, 0.6))
-        self.assertGreater(d["ratchet"]["n_constraints"], 100)
+        self.assertEqual((d["dsr"]["pct"], d["dsr"]["floor"]), (4.0, 0.6))
+        self.assertGreater(d["dsr"]["n_constraints"], 100)
 
-    def test_every_compute_edge_obeys_the_ratchet(self):
+    def test_every_compute_edge_obeys_the_dsr_rule(self):
         nodes = {**self.result["per_layer"], **self.result["extra_nodes"]}
         ops = {n for n in self.result["per_layer"] if not n.endswith(".pool")} | {n for n, v in self.result["extra_nodes"].items() if v["kind"] in ("argmax", "pad_mvau")}
         edges = self.result["dataflow_graph"]["edges"]
@@ -112,11 +113,11 @@ class TestCliSolve(unittest.TestCase):
                 checked += 1
         self.assertGreater(checked, 60)
 
-    def test_ratchet_keeps_the_design_near_the_budget_not_at_the_input_rate(self):
-        self.assertLess(self.result["_diagnostics"]["total_dsp"], 400)       # the element-rate DSR at 4% needs 1280
+    def test_dsr_keeps_the_design_near_the_budget_not_at_the_input_rate(self):
+        self.assertLess(self.result["_diagnostics"]["total_dsp"], 400)       # the removed element-rate rule at 4% needed 1280
         self.assertGreater(1e8 / self.result["_diagnostics"]["bottleneck_cycles"], 250)
 
-    def test_argmax_is_a_priced_extra_node_exempt_from_dsr(self):
+    def test_argmax_is_a_priced_extra_node_with_a_fixed_cycle_value_in_the_diagnostics(self):
         a = self.result["extra_nodes"]["final.argmax"]
         self.assertIn(a["pe"], (1, 5))
         self.assertEqual(a["cycles"], 5 * 256 * 256 // a["pe"])

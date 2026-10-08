@@ -18,7 +18,7 @@ Files per run (`final` tag, as in `S12_dense_256_fullwidth_joinsdist_v1/*/`):
 BRAM per node, every DWC, every FIFO with depth / width / memory; intra-block FIFOs of depth <= 2 are not drawn because FINN removes them, inter-block FIFOs always are).
 
 Regenerate: `python3 MILP/analytical/net_fold.py --bits 6 --fps 250 --clock-mhz 100 --max-latency-ms 200 --out-dir MILP/artifacts/S12_dense_256_u4_analytical_v1/int6_fps250_lat200`
-(in `lightmunet_dev`; `--no-ratchet` drops the downstream-faster rule; with the 200 ms cap both settle on the same design because the legal (PE, SIMD) steps are coarse).
+(in `lightmunet_dev`; `--no-dsr` drops the downstream-faster rule; with the 200 ms cap both settle on the same design because the legal (PE, SIMD) steps are coarse).
 
 ## Notes
 * Latency is the time to the FIRST OUTPUT PIXEL: the sum over blocks of each block model's first-in -> first-out latency (`_diagnostics.latency_ms`, 9.9 ms; the chained

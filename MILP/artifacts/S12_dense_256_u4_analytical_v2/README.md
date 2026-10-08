@@ -1,7 +1,7 @@
 # S12_dense_256_u4_analytical_v2
 
 Same design, targets and settings as `S12_dense_256_u4_analytical_v1` (S12 dense network, U4 widths (4, 16, 32, 16, 4), 256x256 input, uniform INT6, 250 fps at 100 MHz,
-latency cap 200 ms, ratchet 4 % / floor 0.6, inter-block FIFOs fixed at depth 2, 6 workers). The only change is the model of the nearest-neighbour upsampler in the
+latency cap 200 ms, --dsr-pct 4 % / --dsr-floor 0.6 (then called ratchet), inter-block FIFOs fixed at depth 2, 6 workers). The only change is the model of the nearest-neighbour upsampler in the
 block simulation (`MILP/analytical/up_bottleneck_sim.py`, `UpNNNode`). Everything else is read from `net_fold.py` unchanged.
 
 ## Why v2

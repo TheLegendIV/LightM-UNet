@@ -10,8 +10,9 @@ Both are expressed here as terms LINEAR in the solver's one-hot fold variables z
   * skip / prefetch / internal DWCs (MVAU -> threshold, parallel-window SWG -> MVAU) depend on ONE node's option -> a per-option constant added to that option's LUT / BRAM / URAM;
   * an inter-node DWC depends on two neighbours: width-class indicators u_P[w] (sum of z over P's options with output width w) and u_C[w'], pair variables
     m[w, w'] >= u_P[w] + u_C[w'] - 1 (continuous, minimised by the budget), priced with fcm.dwc_cost.
-Simulation-only FIFOs (down feed into SWG_r, up-block `FIFO main`, init `FIFO main`) have no closed form and are NOT priced in the solve: MILP/analytical's verify_with_sim
-sizes them after the fact (net_fold.py). Single candidate bit width only (every stream is `bits` wide), like the uniform S12 runs.
+The up blocks' two join FIFOs (`skip FIFO` at the ext end = one input row, `FIFO main` = 3 input rows of the main stream; closed forms fitted to the simulation with the real upsampler kernel, see
+UP_SKIP_ROWS / UP_MAIN_ROWS) are priced like the regular skip FIFO. Simulation-only FIFOs without a closed form (down feed into SWG_r, init `FIFO main`, dup outputs) are NOT priced in the solve:
+MILP/analytical's verify_with_sim sizes them after the fact (net_fold.py). Single candidate bit width only (every stream is `bits` wide), like the uniform S12 runs.
 """
 from __future__ import annotations
 
@@ -28,6 +29,10 @@ from layer_topology import find_fork_join_diamonds  # noqa: E402
 SKIP_DELTA_MIN_PX = 4         # delta = verified skip depth - n_fill, in pixels: 2..11 px in the 25 verified residual blocks (2-3% of n_fill, 8.5% at 128 px wide, 6% at 64 px / d=1);
 SKIP_DELTA_FRAC = 0.085       # the bound max(4, 8.5% of n_fill) covers all of them (it is the fold-dependent term ceil(R / T) of bottleneck.py, bilinear in the fold)
 DN_SKIP_MARGIN = 1.10         # the downsampling block's analytic skip depth is 8-10% below the simulated need
+UP_SKIP_ROWS = 1.0            # up block, ext-end skip FIFO: ONE input row of the block (W px of the ext stream). Simulation with the real row-buffer UpsampleNearestNeighbour (MILP/analytical,
+                              # up_bottleneck_sim.UpNNNode, 2026-10-08): paced need = W-1 px for every fold swept (up4 27-31 px of W=32, up5 58.5-63 px of W=64), final depth need + 1 px = W px exactly.
+UP_MAIN_ROWS = 3.0            # up block, `FIFO main` (proj -> UpNN -> Thr_s end): bound 3 x W px of the main stream. The paced need depends on the Thr_s fold and the rate (1 px .. 89 px at W=32, 5 .. 145 px
+                              # at W=64 over budgets 16..96 / 4..24 cycles per output px; max 2.75 W); the MILP's own up4 / up5 folds need 22 / 40.5 px. It is a deadlock bound, cheap in memory (one BRAM18).
 
 
 def n_fill_px(conv) -> int:
@@ -46,6 +51,16 @@ def skip_depth_words(conv, cout: int, pe: int, downsampling: bool = False) -> in
     if downsampling:
         px = math.ceil(px * DN_SKIP_MARGIN)
     return px * (cout // pe)
+
+
+def up_skip_depth_words(w_in: int, cout: int, pe: int) -> int:
+    """Up block, FIFO at the end of the ext branch (reduce -> transposed conv -> expand), `skip FIFO` of the analytical block: UP_SKIP_ROWS x W px of cout/pe words (W = input width of the block)."""
+    return math.ceil(UP_SKIP_ROWS * w_in) * (cout // pe)
+
+
+def up_main_depth_words(w_in: int, cout: int, pe: int) -> int:
+    """Up block, `FIFO main` at the end of the main branch (main_proj -> UpsampleNearestNeighbour -> skip_quant): UP_MAIN_ROWS x W px of cout/pe words."""
+    return math.ceil(UP_MAIN_ROWS * w_in) * (cout // pe)
 
 
 def prefetch_depth_words(conv, simd_swu: int) -> int:
@@ -170,6 +185,9 @@ class FifoModel:
         for d in find_fork_join_diamonds(self.dmap):
             if self.kinds.get(d["join"]) != "add":
                 continue
+            if self.extras[d["join"]].geom.stage.startswith("up"):
+                self._up_block_fifos(d)                                            # the long branch is a lowered transposed conv: closed forms from the simulation (up_skip_depth_words)
+                continue
             conv_branch = None
             for label, other in (("branch_a", "branch_b"), ("branch_b", "branch_a")):
                 convs = [n for n in d[label] if n in self.geom and self.geom[n].kh * self.geom[n].kw > 1 and (self.geom[n].ph or self.geom[n].pw)]
@@ -186,6 +204,23 @@ class FifoModel:
                 pe = key[1]
                 self._fifo_item(key, f"{d['join']}.skip", pe * A, skip_depth_words(conv, cout, pe, dn), self.extras[d["join"]].geom.stage, is_skip=True,
                                 producer=node, consumer=d["join"], role_kind="skip")
+
+    def _up_block_fifos(self, d: dict) -> None:
+        """Both join FIFOs of an up block: ext end (`skip FIFO`) and main end (`FIFO main`). The main branch is the one holding the upsample node. Per-option constants like the regular skip FIFO."""
+        stage, A = self.extras[d["join"]].geom.stage, self.A
+        a, b = d["branch_a"], d["branch_b"]
+        main = a if any(self.kinds.get(n) == "upsample" for n in a) else b
+        ext = b if main is a else a
+        if not main or not ext or f"{stage}.main_proj.0" not in self.geom:
+            return
+        w_in, cout = self.geom[f"{stage}.main_proj.0"].win, self.extras[d["join"]].geom.cout
+        for node, role, fn, is_skip in ((ext[0], "up_skip", up_skip_depth_words, True), (main[0], "up_main", up_main_depth_words, False)):
+            if node not in self.options:
+                continue
+            for key, _ in self.options[node]:
+                pe = (self.cost[key].get("thr_pe") or key[1]) if node in self.geom else key[1]          # a conv's own threshold PE sets its output stream
+                self._fifo_item(key, f"{d['join']}.{'skip' if is_skip else 'main'}", pe * A, fn(w_in, cout, pe), stage, is_skip=is_skip, producer=node, consumer=d["join"], role_kind=role)
+            self.skip_nodes[node] = dict(join=d["join"], n_fill_px=w_in, conv=None, kind=role)
 
     # ------------------------------------------------------------------ solver terms
     def add_terms(self, pulp, prob, tag: str = "fifo"):
@@ -254,6 +289,10 @@ class FifoModel:
         stage = it["stage"]
         if it["role_kind"] == "skip":
             producer, consumer = f"{stage}.thr_s", f"{stage}.add"
+        elif it["role_kind"] == "up_skip":
+            producer, consumer = f"{stage}.thr_e", f"{stage}.add"
+        elif it["role_kind"] == "up_main":
+            producer, consumer = f"{stage}.thr_s", f"{stage}.add"
         else:
             consumer = f"{stage}.fmpad"
             if stage == "initial":
@@ -264,7 +303,7 @@ class FifoModel:
                 producer = f"{stage}.dwc" if preds and self.ports(chosen[preds[0]])["out_w"] != in_w else f"{stage}.thr_r"
         mem = it["mem"]
         return dict(
-            stage=stage, name=(f"{stage}.skip_FIFO" if it["is_skip"] else f"{stage}.prefetch"), producer=producer, consumer=consumer,
+            stage=stage, name=(f"{stage}.skip_FIFO" if it["is_skip"] else (f"{stage}.FIFO_main" if it["role_kind"] == "up_main" else f"{stage}.prefetch")), producer=producer, consumer=consumer,
             producer_milp=it["producer_milp"], consumer_milp=it["consumer_milp"], depth=it["depth"], width_bits=it["width_bits"], max_occupancy=it["depth"],
             is_skip=it["is_skip"], mem=mem, finn_impl=("rtl" if mem == "srl" else f"vivado/{'ultra' if mem == 'uram' else 'block'}"),
             mem_bram18=it["mem_bram18"], mem_lut=it["lut"], depth_alloc=it["depth_alloc"], mem_uram18=it["mem_uram18"])

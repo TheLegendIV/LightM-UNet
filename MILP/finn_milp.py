@@ -133,8 +133,8 @@ def trace_layer_geometry(model: torch.nn.Module, input_hw: tuple[int, int], in_c
     return geometries, list(blocks.keys())
 
 
-DEFAULT_RATCHET_PCT = 4.0     # --ratchet-pct default: the analytical net_fold.py uses the same numbers (--ratchet-pct 4 --ratchet-floor 0.6)
-DEFAULT_RATCHET_FLOOR = 0.6
+DEFAULT_DSR_PCT = 4.0         # --dsr-pct default: the analytical net_fold.py uses the same numbers (--dsr-pct 4 --dsr-floor 0.6)
+DEFAULT_DSR_FLOOR = 0.6
 
 # ---- Extra hardware nodes with no conv/pool module (see finn_milp.md "Dataflow graph") ----
 
@@ -360,7 +360,6 @@ def solve_joint_perlayer(
     force_dsp: bool = False,
     max_dsp_fraction: float = 1.0,
     max_uram_fraction: float = 1.0,
-    dsr_ratio: float | None = None,
     pbi_ratio: float | None = None,
     max_node_cycles: float | None = None,
     extra_nodes: list[ExtraNode] = (),
@@ -369,11 +368,11 @@ def solve_joint_perlayer(
     mvau_wwidth_max: int | None = None,
     feasibility_only: bool = False,
     model_fifos: bool = False,
-    ratchet_pct: float | None = None,
-    ratchet_floor: float = DEFAULT_RATCHET_FLOOR,
+    dsr_pct: float | None = None,
+    dsr_floor: float = DEFAULT_DSR_FLOOR,
 ) -> dict:
     """Build and solve the MILP. Formulation: finn_milp.md "Formulation".
-    feasibility_only: zero objective (any feasible point is Optimal) -- used by the --min-dsr probes."""
+    feasibility_only: zero objective (any feasible point is Optimal)."""
     candidate_pairs = tuple((w, a) for w in CANDIDATE_BITS for a in CANDIDATE_BITS)
     layer_names = tuple(g.name for g in geometries)
     n_layers = len(geometries)
@@ -534,19 +533,17 @@ def solve_joint_perlayer(
             prob += node_at_least <= pulp.lpSum(sources_at_least), f"thr_bits_le_{name}_{level}"
             n_extra_constraints += len(sources_at_least) + 1
 
-    # Rate coherence: --pbi-ratio (join balance) and --dsr-pct (chain coherence) are
-    # independent constraint families on the dataflow graph -- each gated on its own flag
-    # (split 2026-09-29 from the single --optimize-downstream-rate that drove both; see
-    # finn_milp.md "Rate coherence" for why they were merged, then split again).
+    # Rate coherence: --pbi-ratio (join balance, deprecated) is a constraint family on the dataflow graph gated on its own flag.
+    # The frame-rate rule --dsr-pct / --dsr-floor is below. (The older ELEMENT-rate chain constraint that used to be called --dsr-pct was removed 2026-10-08;
+    # the chain_rate_imbalance diagnostic still reports it as `elemrate_*`.)
     topology = dataflow_map if dataflow_map is not None else predecessor_map
     fixed_cycle_names = {name for name, terms in layer_cycle_terms.items() if len({c for _, c in terms}) == 1}
     # The final argmax (LabelSelect) emits ONE label per pixel from a C-channel input: its output element count is C times smaller than its input's, so the
-    # element-rate DSR (cycles per OUTPUT element) of a full-rate argmax is C x that of the final conv by construction. Exempt like the fixed-cycle nodes.
+    # element rate (cycles per OUTPUT element) of a full-rate argmax is C x that of the final conv by construction. Exempt like the fixed-cycle nodes (diagnostics, pbi).
     fixed_cycle_names |= {node.geom.name for node in extra_nodes if node.kind == "argmax"}
     n_join_constraints = 0
-    n_chain_rate_constraints = 0
-    if (pbi_ratio is not None or dsr_ratio is not None) and topology is None:
-        raise ValueError("pbi_ratio/dsr_ratio needs a predecessor_map or dataflow_map.")
+    if pbi_ratio is not None and topology is None:
+        raise ValueError("pbi_ratio needs a predecessor_map or dataflow_map.")
 
     if pbi_ratio is not None:
         # Parallel branch imbalance: cumulative fork-to-join cycle-SUM ratio for every
@@ -579,74 +576,21 @@ def solve_joint_perlayer(
             prob += sum_b <= pbi_ratio * sum_a, f"pbi_ratio_{d['join']}_b_le_a"
             n_join_constraints += 2
 
-    if dsr_ratio is not None:
-        # Chain: rate[L] <= ratio * rate[D] for every descendant D, in O(edges) via
-        # max_downstream_rate (the SLOWEST/bottleneck descendant rate) bounded BELOW (so it
-        # can't be deflated). rate = cycles / outputs. Constraining L against the slowest thing
-        # downstream is what actually catches a fast upstream node outrunning a distant slow
-        # bottleneck (the compounding-mismatch case) -- an earlier version tracked the FASTEST
-        # descendant (min, bounded above), which only restricted the opposite, harmless
-        # direction (a slow producer merely starves a FIFO, no depth risk) and left the
-        # documented target case ("producer outruns consumer") completely unconstrained;
-        # confirmed by a toy 3-node chain (see finn_milp.md "Rate coherence"). Same
-        # anti-inflation principle as before, mirrored: a MAX-type auxiliary appearing on the
-        # restricted (left) side of a <= must be bounded from below only, so it can't be pushed
-        # down below the true maximum to cheat the constraint.
-        node_shapes = [*geometries, *(node.geom for node in extra_nodes)]
-        rate_expr = {
-            g.name: layer_cycles_expr[g.name] * (1.0 / (g.hout * g.wout * g.cout))
-            for g in node_shapes if g.name in layer_cycles_expr
-        }
-        successors: dict[str, list[str]] = {name: [] for name in rate_expr}
-        for consumer, preds in topology.items():
-            if consumer not in rate_expr:
-                continue
-            for pred in preds:
-                if pred in successors:
-                    successors[pred].append(consumer)
-        max_downstream_rate = {
-            name: pulp.LpVariable(f"max_downstream_rate_{name}", lowBound=0)
-            for name, children in successors.items() if children
-        }
-        # Fixed-cycle nodes (MaxPool, concat, upsample -- one cycle value whatever the
-        # option, same set the join-balance check exempts) have no folding freedom, so
-        # pairing them against a foldable node forces all the give onto the foldable
-        # side. Excluded from contributing their OWN rate to an ancestor's
-        # max_downstream_rate, and exempted from their own outer constraint -- but still
-        # relayed transparently (their max_downstream_rate[child] link stays), so a real
-        # foldable bottleneck sitting beyond a fixed pass-through node is still caught.
-        for name, children in successors.items():
-            if not children:
-                continue
-            for child in children:
-                if child not in fixed_cycle_names:
-                    prob += max_downstream_rate[name] >= rate_expr[child], f"max_rate_{name}_ge_{child}"
-                    n_chain_rate_constraints += 1
-                if child in max_downstream_rate:
-                    prob += max_downstream_rate[name] >= max_downstream_rate[child], f"max_rate_{name}_ge_max_{child}"
-                    n_chain_rate_constraints += 1
-            if name in fixed_cycle_names:
-                continue
-            prob += (
-                max_downstream_rate[name] <= dsr_ratio * rate_expr[name]
-            ), f"downstream_rate_{name}"
-            n_chain_rate_constraints += 1
-
-    # ---- Frame-rate ratchet (--ratchet-pct / --ratchet-floor): "downstream no slower than upstream" in cycles PER FRAME (comparable across resolutions), edge by edge on the
+    # ---- DSR = downstream-rate rule (--dsr-pct / --dsr-floor): "downstream no slower than upstream" in cycles PER FRAME (comparable across resolutions), edge by edge on the
     # dataflow graph: cycles[C] <= max(floor * F, (1 + pct/100) * cycles[P]) for every COMPUTE node C (conv / MVAU layers and the argmax) and each of its nearest compute ancestors P;
-    # everything else (thresholds, dup, add, pools, concat, upsample, the input quantizer) is relayed through. Thresholds / dup / add must NOT be ratchet nodes: their slowest fold
+    # everything else (thresholds, dup, add, pools, concat, upsample, the input quantizer) is relayed through. Thresholds / dup / add must NOT be DSR nodes: their slowest fold
     # is tiny (a 4-channel threshold at PE 1 = 65,536 cycles) while the conv behind them cannot be faster than ~131,072 under the width cap, so an edge rule on them is infeasible
     # at any small pct. Nodes pick from a few distinct cycle values, so the disjunction becomes pair exclusions on cycle-class indicators (no big-M, no slack variable).
-    n_ratchet_constraints = 0
-    if ratchet_pct is not None and max_node_cycles is not None:
+    n_dsr_constraints = 0
+    if dsr_pct is not None and max_node_cycles is not None:
         if dataflow_map is None:
-            raise ValueError("ratchet needs the dataflow graph (dataflow_map).")
+            raise ValueError("--dsr-pct needs the dataflow graph (dataflow_map).")
         node_opts: dict[str, list] = {}
         for key, var in z.items():
             node_opts.setdefault(key[0], []).append((raw_cycles[key], var))
-        ratchet_nodes = {g.name for g in geometries if g.op_type != "MaxPool2d" and len({c for _, c in layer_cycle_terms[g.name]}) > 1}
-        ratchet_nodes |= {n.geom.name for n in extra_nodes if n.kind in ("argmax", "pad_mvau") and len({c for _, c in layer_cycle_terms[n.geom.name]}) > 1}
-        floor_cycles = ratchet_floor * max_node_cycles
+        dsr_nodes = {g.name for g in geometries if g.op_type != "MaxPool2d" and len({c for _, c in layer_cycle_terms[g.name]}) > 1}
+        dsr_nodes |= {n.geom.name for n in extra_nodes if n.kind in ("argmax", "pad_mvau") and len({c for _, c in layer_cycle_terms[n.geom.name]}) > 1}
+        floor_cycles = dsr_floor * max_node_cycles
         classes_of: dict[str, dict] = {}
 
         def classes(n):
@@ -663,24 +607,24 @@ def solve_joint_perlayer(
             if n not in anc_memo:
                 out: set = set()
                 for p in dataflow_map.get(n, []):
-                    if p in ratchet_nodes:
+                    if p in dsr_nodes:
                         out.add(p)
                     else:
                         out |= foldable_ancestors(p)
                 anc_memo[n] = out
             return anc_memo[n]
 
-        for c_name in sorted(ratchet_nodes):
+        for c_name in sorted(dsr_nodes):
             for p_name in sorted(foldable_ancestors(c_name)):
                 cc = classes(c_name)
                 for c1, zs1 in classes(p_name).items():
-                    limit = max(floor_cycles, (1 + ratchet_pct / 100) * c1) * (1 + 1e-9)
+                    limit = max(floor_cycles, (1 + dsr_pct / 100) * c1) * (1 + 1e-9)
                     bad = [v for c2, zs2 in cc.items() if c2 > limit for v in zs2]
                     if bad:
-                        prob += pulp.lpSum(zs1) + pulp.lpSum(bad) <= 1, f"ratchet_{n_ratchet_constraints}"
-                        n_ratchet_constraints += 1
-    elif ratchet_pct is not None:
-        print("NOTE: --ratchet-pct needs --target-fps (the floor is a fraction of the per-node budget); ratchet not applied.")
+                        prob += pulp.lpSum(zs1) + pulp.lpSum(bad) <= 1, f"dsr_{n_dsr_constraints}"
+                        n_dsr_constraints += 1
+    elif dsr_pct is not None:
+        print("NOTE: --dsr-pct needs --target-fps (the floor is a fraction of the per-node budget); DSR not applied.")
 
     # ---- --model-fifos: skip / prefetch FIFOs and DWCs as extra LUT / BRAM / URAM terms (fifo_model.py); zero when the flag is off ----
     fifo_model = None
@@ -742,7 +686,7 @@ def solve_joint_perlayer(
     n_binary_vars = len(y) + len(z)
     n_constraints = (
         n_layers + sum(len(candidate_pairs) for _ in geometries) + 4
-        + (1 if max_cycles is not None else 0) + n_join_constraints + n_chain_rate_constraints + n_ratchet_constraints
+        + (1 if max_cycles is not None else 0) + n_join_constraints + n_dsr_constraints
         + n_extra_constraints
     )
 
@@ -759,8 +703,7 @@ def solve_joint_perlayer(
                 "max_dsp_fraction": max_dsp_fraction, "max_uram_fraction": max_uram_fraction,
                 "max_cycles": max_cycles, "max_node_cycles": max_node_cycles,
                 "throughput_floor_violations": throughput_floor_violations,
-                "dsr_ratio": dsr_ratio, "pbi_ratio": pbi_ratio, "n_join_constraints": n_join_constraints,
-                "n_chain_rate_constraints": n_chain_rate_constraints,
+                "pbi_ratio": pbi_ratio, "n_join_constraints": n_join_constraints,
                 "solver_time_limit_s": time_limit, "solver_gap_rel": gap_rel, "force_serial": FORCE_SERIAL,
                 "force_dsp": force_dsp,
                 "note": f"Solver status {status_name!r} -- no joint per-layer (bits, folding) assignment "
@@ -770,7 +713,7 @@ def solve_joint_perlayer(
                         + (f" and max_cycles={max_cycles:.0f}" if max_cycles is not None else "")
                         + (f" and max_node_cycles={max_node_cycles:.0f} (nodes that cannot reach it even fully "
                            f"folded: {throughput_floor_violations or 'none'})" if max_node_cycles is not None else "")
-                        + (f" and dsr_ratio={dsr_ratio}" if dsr_ratio is not None else "")
+                        + (f" and dsr_pct={dsr_pct} (floor {dsr_floor})" if dsr_pct is not None else "")
                         + (f" and pbi_ratio={pbi_ratio}" if pbi_ratio is not None else "")
                         + " at all.",
             },
@@ -874,10 +817,10 @@ def solve_joint_perlayer(
                                        "are not priced; inter-block FIFOs are fixed at depth 2."}} if fifo_out else {}),
             "candidate_bits": list(CANDIDATE_BITS), "n_layers": n_layers,
             "n_binary_vars": n_binary_vars, "n_constraints": n_constraints,
-            "ratchet": {"pct": ratchet_pct if max_node_cycles is not None else None, "floor": ratchet_floor, "n_constraints": n_ratchet_constraints},
+            "dsr": {"pct": dsr_pct if max_node_cycles is not None else None, "floor": dsr_floor, "n_constraints": n_dsr_constraints},
             "min_resources": min_resources, "mvau_wwidth_max": mvau_wwidth_max,
             "n_wwidth_blocked_folds": n_wwidth_blocked,
-            # exempt from --dsr-pct (one cycle value whatever the fold); used for the foldable-only DSR stats
+            # one cycle value whatever the fold; used for the foldable-only element-rate stats
             "fixed_cycle_nodes": sorted(fixed_cycle_names),
             "n_extra_nodes": len(extra_nodes), "extra_lut_calibrated": extra_lut,
             "extra_bram18k_calibrated": extra_bram, "extra_cycles": extra_cycles, "extra_by_kind": extra_by_kind,
@@ -897,8 +840,7 @@ def solve_joint_perlayer(
             # norm_mean = mean of the normalized values the ILP actually minimizes.
             "sensitivity_raw_sum": sum(raw_sensitivity[(n, layer_weight_bits[n], layer_act_bits[n])] for n in layer_names),
             "sensitivity_norm_mean": sum(sens_norm[(n, layer_weight_bits[n], layer_act_bits[n])] for n in layer_names) / n_layers,
-            "dsr_ratio": dsr_ratio, "pbi_ratio": pbi_ratio, "n_join_constraints": n_join_constraints,
-            "n_chain_rate_constraints": n_chain_rate_constraints,
+            "pbi_ratio": pbi_ratio, "n_join_constraints": n_join_constraints,
             "solver_time_limit_s": time_limit, "solver_gap_rel": gap_rel, "force_serial": FORCE_SERIAL,
             "force_dsp": force_dsp,
             "note": "Joint per-LAYER MILP: y[layer,w,a] (sensitivity) linked to z[layer,pe,simd,ram_style,w,a] "
@@ -924,9 +866,9 @@ _SUMMARY_FIELDS = [
     "total_dsp", "total_cycles", "clock_mhz", "latency_ms", "target_fps", "fps", "bottleneck_node",
     "n_binary_vars", "n_layers", "n_zero_sensitivity_layers", "zero_sensitivity_layers",
     "branch_imbalance_n_diamonds", "branch_imbalance_median_ratio", "branch_imbalance_max_ratio",
-    "dsr_ratio_setting", "pbi_ratio_setting",
-    "dsr_n_nodes", "dsr_median", "dsr_mean", "dsr_max", "dsr_worst_node",
-    "dsr_foldable_n_nodes", "dsr_foldable_median", "dsr_foldable_max", "dsr_foldable_worst_node",
+    "dsr_pct_setting", "dsr_floor_setting", "pbi_ratio_setting",
+    "elemrate_n_nodes", "elemrate_median", "elemrate_mean", "elemrate_max", "elemrate_worst_node",
+    "elemrate_foldable_n_nodes", "elemrate_foldable_median", "elemrate_foldable_max", "elemrate_foldable_worst_node",
     "sensitivity_raw_sum", "sensitivity_norm_mean", "lexicographic",
     "stage1_lut_pct", "stage1_bram_pct", "stage1_dsp_pct", "stage1_sensitivity_raw_sum",
 ]
@@ -943,7 +885,7 @@ def _write_run_summary(
     total_cycles = diag.get("total_cycles")
     latency_ms = total_cycles / (args.clock_mhz * 1000) if total_cycles is not None else float("nan")
 
-    dsr = diag.get("chain_rate_imbalance", {})
+    elem = diag.get("chain_rate_imbalance", {})
     row = {
         "status": result["status"],
         "avg_weight_bits": avg_weight_bits, "avg_act_bits": avg_act_bits,
@@ -958,16 +900,15 @@ def _write_run_summary(
         "branch_imbalance_n_diamonds": diag.get("branch_imbalance", {}).get("n_diamonds"),
         "branch_imbalance_median_ratio": diag.get("branch_imbalance", {}).get("median_ratio"),
         "branch_imbalance_max_ratio": diag.get("branch_imbalance", {}).get("max_ratio"),
-        # DSR = downstream-rate ratio (chain_rate_imbalance diagnostic): measured whether or not --dsr-pct is set.
-        "dsr_ratio_setting": args.dsr_ratio, "pbi_ratio_setting": args.pbi_ratio,
-        "dsr_n_nodes": dsr.get("n_nodes"), "dsr_median": dsr.get("median_ratio"),
-        "dsr_mean": dsr.get("mean_ratio"), "dsr_max": dsr.get("max_ratio"),
-        "dsr_worst_node": (dsr.get("worst_nodes") or [{}])[0].get("node"),
-        # Same quantity --dsr-pct bounds: fixed-cycle nodes (pools, upsample, concat) exempt as
-        # constrained nodes and as descendants' own rate. dsr_foldable_max <= 1 + pct/100 when set.
-        "dsr_foldable_n_nodes": dsr.get("foldable_n_nodes"), "dsr_foldable_median": dsr.get("foldable_median_ratio"),
-        "dsr_foldable_max": dsr.get("foldable_max_ratio"),
-        "dsr_foldable_worst_node": dsr.get("foldable_worst_node"),
+        # element-rate ratio (cycles per OUTPUT element, downstream vs upstream; the chain_rate_imbalance diagnostic): measured only, no constraint uses it any more.
+        "dsr_pct_setting": args.dsr_pct, "dsr_floor_setting": args.dsr_floor, "pbi_ratio_setting": args.pbi_ratio,
+        "elemrate_n_nodes": elem.get("n_nodes"), "elemrate_median": elem.get("median_ratio"),
+        "elemrate_mean": elem.get("mean_ratio"), "elemrate_max": elem.get("max_ratio"),
+        "elemrate_worst_node": (elem.get("worst_nodes") or [{}])[0].get("node"),
+        # fixed-cycle nodes (pools, upsample, concat) exempt as constrained nodes and as descendants' own rate
+        "elemrate_foldable_n_nodes": elem.get("foldable_n_nodes"), "elemrate_foldable_median": elem.get("foldable_median_ratio"),
+        "elemrate_foldable_max": elem.get("foldable_max_ratio"),
+        "elemrate_foldable_worst_node": elem.get("foldable_worst_node"),
         "sensitivity_raw_sum": diag.get("sensitivity_raw_sum"), "sensitivity_norm_mean": diag.get("sensitivity_norm_mean"),
         "lexicographic": bool(diag.get("lexicographic")),
         "stage1_lut_pct": diag.get("lexicographic", {}).get("stage1_lut_pct"),
@@ -990,12 +931,11 @@ def _write_run_summary(
         "max-lut-fraction": args.max_lut_fraction, "max-bram-fraction": args.max_bram_fraction,
         "max-dsp-fraction": args.max_dsp_fraction, "max-uram-fraction": args.max_uram_fraction, "force-dsp": args.force_dsp,
         "max-latency-ms": args.max_latency_ms, "clock-mhz": args.clock_mhz, "target-fps": args.target_fps,
-        "dsr-pct": None if args.dsr_ratio is None else round((args.dsr_ratio - 1) * 100, 6), "dsr-ratio": args.dsr_ratio,
-        "dsr-pct-pass2": args.dsr_pct_pass2, "ratchet-pct": args.ratchet_pct, "ratchet-floor": args.ratchet_floor, "model-fifos": args.model_fifos, "target-fps-pass2": args.target_fps_pass2,
+        "dsr-pct": args.dsr_pct, "dsr-floor": args.dsr_floor, "model-fifos": args.model_fifos, "target-fps-pass2": args.target_fps_pass2,
         "pbi-ratio": args.pbi_ratio,
         "mvau-wwidth-max": args.mvau_wwidth_max, "min-resources": args.min_resources,
         "lexicographic": args.lexicographic,
-        "force-serial": FORCE_SERIAL, "min-dsr": args.min_dsr,
+        "force-serial": FORCE_SERIAL,
         "time-limit": args.time_limit, "gap-rel": args.gap_rel,
     }
     run_args = {
@@ -1019,7 +959,7 @@ DSR_OFF = -1.0                # sentinel for "none"
 
 
 def _dsr_arg(text: str) -> float:
-    """argparse type for --dsr-pct / --ratchet-pct: a percentage >= 0, or none/off to disable the constraint."""
+    """argparse type for --dsr-pct: a percentage >= 0, or none/off to disable the constraint."""
     if text.lower() in ("none", "off"):
         return DSR_OFF
     value = float(text)
@@ -1029,15 +969,8 @@ def _dsr_arg(text: str) -> float:
 
 
 def pct_to_ratio(pct: float) -> float:
-    """4 (%) -> 1.04: the slowest downstream rate may be at most (1 + pct/100) x a node's own rate."""
+    """4 (%) -> 1.04: a node may take at most (1 + pct/100) x the cycles of its nearest compute ancestor."""
     return 1.0 + pct / 100.0
-
-
-def resolve_dsr_ratio(pct: float | None, min_dsr: bool) -> float | None:
-    """--dsr-pct as given (None = flag absent = DSR off, DSR_OFF = 'none') -> the ratio the solve uses, None = no DSR constraint."""
-    if pct is None or pct == DSR_OFF:
-        return None
-    return pct_to_ratio(pct)
 
 
 def build_model_and_graph() -> tuple[
@@ -1086,51 +1019,6 @@ def build_model_and_graph() -> tuple[
     return model, geometries, extra_nodes, predecessor_map, dataflow_map, node_kinds
 
 
-# ---- --min-dsr: smallest feasible dsr ratio ----
-# DSR enters the model as `max_downstream_rate[L] <= ratio * rate[L]` (ratio times a linear expression in the fold binaries),
-# so making the ratio a variable would be bilinear. Feasibility is monotone in the ratio, so it is searched instead.
-
-_MIN_DSR_GRID = (101, 102, 105, 110, 125, 150, 200, 300, 500, 800, 1200, 2000)  # hundredths
-_probe_kwargs: dict = {}
-
-
-def _probe_dsr(hundredths: int) -> tuple[int, str]:
-    try:
-        return hundredths, solve_joint_perlayer(**_probe_kwargs, dsr_ratio=hundredths / 100, feasibility_only=True)["status"]
-    except Exception as error:  # e.g. solver time limit without a verdict: treat as not proven feasible
-        return hundredths, f"error: {error}"
-
-
-def find_min_dsr(solve_kwargs: dict) -> float:
-    """Smallest dsr ratio (multiple of 0.01, within 1.01..20) whose pass-1 problem (solve_kwargs, no objective) is feasible."""
-    import multiprocessing
-    import os
-
-    global _probe_kwargs
-    _probe_kwargs = solve_kwargs  # inherited by the forked workers
-    workers = max(1, min(8, os.cpu_count() or 1))
-    results: dict[int, str] = {}
-    with multiprocessing.get_context("fork").Pool(workers) as pool:
-        for h, st in pool.imap_unordered(_probe_dsr, _MIN_DSR_GRID):
-            results[h] = st
-            print(f"  --min-dsr probe {h - 100} pct (ratio {h / 100:.2f}): {st}", flush=True)
-        feasible = sorted(h for h, st in results.items() if st == "Optimal")
-        if not feasible:
-            raise SystemExit("--min-dsr: infeasible even at DSR 20.00 under the other constraints.")
-        hi = feasible[0]
-        lo = max([h for h, st in results.items() if h < hi] or [100])  # 1.00 is treated as infeasible
-        while hi - lo > 1:
-            k = min(workers - 1, hi - lo - 1)
-            points = sorted({lo + round((hi - lo) * (i + 1) / (k + 1)) for i in range(k)} - {lo, hi})
-            for h, st in pool.imap_unordered(_probe_dsr, points):
-                results[h] = st
-                print(f"  --min-dsr probe {h - 100} pct (ratio {h / 100:.2f}): {st}", flush=True)
-            hi = min([h for h in points if results[h] == "Optimal"] + [hi])
-            lo = max([h for h in points if results[h] != "Optimal" and h < hi] + [lo])
-    print(f"--min-dsr: smallest feasible DSR = {hi - 100} pct (ratio {hi / 100:.2f})", flush=True)
-    return hi / 100
-
-
 # ---- CLI (flag rationale: finn_milp.md "CLI flags") ----
 
 def main() -> None:
@@ -1152,21 +1040,13 @@ def main() -> None:
     parser.add_argument("--max-latency-ms", type=float, default=None,
                          help="Hard cap on the sum of cycles, as ms at --clock-mhz.")
     parser.add_argument("--clock-mhz", type=float, default=100.0, help="Clock for --max-latency-ms (default 100).")
-    parser.add_argument("--dsr-pct", type=_dsr_arg, default=None,
-                         help="Downstream-rate allowance in PERCENT: chain-coherence constraint on the ELEMENT rate (cycles per output element) bounding a node's "
-                              "rate against the slowest rate anywhere in its downstream subtree (slowest descendant <= (1 + pct/100) x own rate). OFF by default: "
-                              "the 1-channel network input pins the element rate at 1.0 and forces every later stage to run far faster than the fps target "
-                              "(S12-256: 1280 DSP). The default rate rule is --ratchet-pct.")
-    parser.add_argument("--ratchet-pct", type=_dsr_arg, default=DEFAULT_RATCHET_PCT,
-                         help=f"Frame-rate ratchet in PERCENT (default {DEFAULT_RATCHET_PCT:g}; 'none' = off): a node's cycles per FRAME may exceed those of its nearest foldable "
-                              f"upstream node by at most this much, but never below --ratchet-floor x the per-node budget (needs --target-fps).")
-    parser.add_argument("--ratchet-floor", type=float, default=DEFAULT_RATCHET_FLOOR,
-                         help=f"Fraction of the per-node cycle budget (clock/target-fps) a node may always use whatever the upstream node does (default {DEFAULT_RATCHET_FLOOR}).")
-    parser.add_argument("--min-dsr", action="store_true",
-                         help="Find the SMALLEST --dsr-pct (to 0.01 of ratio = 1 pct) for which the problem is feasible under all other "
-                              "constraints, then solve with it (both passes with --lexicographic). Feasibility probes run "
-                              "in parallel; the search covers 1.01..20 and aborts if even 20 is infeasible. Exclusive with "
-                              "--dsr-pct.")
+    parser.add_argument("--dsr-pct", type=_dsr_arg, default=DEFAULT_DSR_PCT,
+                         help=f"Downstream-rate (DSR) allowance in PERCENT (default {DEFAULT_DSR_PCT:g}; 'none' = off): a node's cycles per FRAME may exceed those of its nearest compute "
+                              f"ancestor by at most this much, but never below --dsr-floor x the per-node budget (needs --target-fps). Compute nodes = conv/MVAU layers, the pad-MVAU, the argmax; "
+                              f"thresholds, dup, add, pools, concat and upsample are relayed through. (Until 2026-10-08 this flag was an element-rate rule; that was removed and the frame-rate rule, "
+                              f"formerly --ratchet-pct, took the name.)")
+    parser.add_argument("--dsr-floor", type=float, default=DEFAULT_DSR_FLOOR,
+                         help=f"Fraction of the per-node cycle budget (clock/target-fps) a node may always use whatever the upstream node does (default {DEFAULT_DSR_FLOOR}).")
     parser.add_argument("--pbi-ratio", type=float, default=None,
                          help="DEPRECATED (kept so old runs reproduce): parallel-branch-imbalance join-balance "
                               "constraint. Never engaged by default; PBI is only reported in summary.csv.")
@@ -1177,10 +1057,6 @@ def main() -> None:
     parser.add_argument("--target-fps-pass2", type=float, default=None,
                          help="--lexicographic only: throughput target for pass 2 (default: same as --target-fps, which may "
                               "itself be unset = no throughput constraint in pass 1).")
-    parser.add_argument("--dsr-pct-pass2", type=float, default=None,
-                         help="--lexicographic only: dsr percent for pass 2 (default: same as --dsr-pct). Pass 2 pins the "
-                              "bits, so this only reshapes the folding. Pass 2's LUT/BRAM/DSP roof becomes the hard caps "
-                              "instead of pass 1's own use (pass 1 was not solved under this allowance).")
     parser.add_argument("--lexicographic", action="store_true",
                          help="Two passes with the SAME constraints. Pass 1: accuracy objective (sets the bits and a "
                               "resource roof = its own LUT/BRAM/DSP use). Pass 2: bits pinned to pass 1 (epsilon 0), "
@@ -1191,21 +1067,19 @@ def main() -> None:
                               "accuracy. For FIXED bits (one --candidate-bits value or --pin-bits-file): picks the "
                               "cheapest fold so runs differing only in a constraint (e.g. --dsr-pct) are comparable.")
     parser.add_argument("--force-serial", action="store_true", help="Restrict every node to PE=SIMD=1.")
-    parser.add_argument("--model-fifos", action="store_true",
-                         help="Price the skip FIFO of every residual diamond, the prefetch FIFO in front of every padded conv and every data-width converter (inter-node and "
-                              "internal) in the LUT / BRAM / URAM budgets and the --min-resources objective (fifo_model.py, estimates from MILP/analytical). Inter-block FIFOs "
-                              "are fixed at depth 2. Needs ONE --candidate-bits value. Off by default: output unchanged.")
+    parser.add_argument("--no-model-fifos", dest="model_fifos", action="store_false", default=True,
+                         help="FIFO / DWC modelling is ON by default (since 2026-10-08): the skip FIFO of every residual diamond, the prefetch FIFO in front of every padded conv and every "
+                              "data-width converter (inter-node and internal) are priced in the LUT / BRAM / URAM budgets and the --min-resources objective (fifo_model.py, estimates from "
+                              "MILP/analytical), and the lists are written as intra_block_fifos / inter_block_fifos / dwcs. Inter-block FIFOs are fixed at depth 2. The model prices streams at "
+                              "ONE bit width, so with several --candidate-bits values it switches itself off (with a note); this flag switches it off explicitly.")
+    parser.add_argument("--model-fifos", dest="_model_fifos_noop", action="store_true", help=argparse.SUPPRESS)      # old name: now the default, kept so earlier scripts still run
     parser.add_argument("--time-limit", type=int, default=1800, help="CBC time limit in seconds.")
     parser.add_argument("--gap-rel", type=float, default=0.02, help="CBC relative optimality gap.")
     parser.add_argument("--pin-bits-file", type=Path, default=None,
                          help="TEST-ONLY: pin y to a layer_bits_*.json (skips the bit-choice search; folding is still solved).")
     parser.add_argument("--out-file", type=Path, required=True)
     args = parser.parse_args()
-    if args.min_dsr and args.dsr_pct is not None:
-        parser.error("--min-dsr and --dsr-pct are mutually exclusive.")
-    args.dsr_ratio = resolve_dsr_ratio(args.dsr_pct, args.min_dsr)          # internal form: 1 + pct/100, None = off
-    args.ratchet_pct = None if args.ratchet_pct == DSR_OFF else args.ratchet_pct
-    args.dsr_ratio_pass2 = None if args.dsr_pct_pass2 is None else pct_to_ratio(args.dsr_pct_pass2)
+    args.dsr_pct = None if args.dsr_pct == DSR_OFF else args.dsr_pct
 
     load_config(args.config)
 
@@ -1216,6 +1090,10 @@ def main() -> None:
         global CANDIDATE_BITS
         CANDIDATE_BITS = tuple(sorted(int(b) for b in args.candidate_bits.split(",")))
         print(f"Overriding CANDIDATE_BITS to {CANDIDATE_BITS} (from --candidate-bits).")
+
+    if args.model_fifos and len(CANDIDATE_BITS) != 1:
+        print(f"NOTE: FIFO / DWC modelling is off for this run: it prices streams at one bit width and CANDIDATE_BITS = {CANDIDATE_BITS} (pass a single --candidate-bits value to get it).")
+        args.model_fifos = False
 
     if args.force_serial:
         global FORCE_SERIAL
@@ -1296,26 +1174,15 @@ def main() -> None:
         print(f"--max-latency-ms {args.max_latency_ms} @ {args.clock_mhz}MHz -> max_cycles={max_cycles:.0f} "
               f"(hard constraint).")
 
-    if args.min_dsr:
-        print("--min-dsr: searching for the smallest feasible DSR allowance...", flush=True)
-        args.dsr_ratio = find_min_dsr(dict(
-            sensitivity=sensitivity, geometries=geometries, max_lut_fraction=args.max_lut_fraction,
-            max_bram_fraction=args.max_bram_fraction, time_limit=args.time_limit, gap_rel=args.gap_rel,
-            max_cycles=max_cycles, pinned_bits=pinned_bits, predecessor_map=predecessor_map, force_dsp=args.force_dsp,
-            max_dsp_fraction=args.max_dsp_fraction, max_uram_fraction=args.max_uram_fraction, pbi_ratio=args.pbi_ratio,
-            max_node_cycles=max_node_cycles, mvau_wwidth_max=args.mvau_wwidth_max, extra_nodes=extra_nodes,
-            dataflow_map=dataflow_map, model_fifos=args.model_fifos, ratchet_pct=args.ratchet_pct, ratchet_floor=args.ratchet_floor,
-        ))
-
     result = solve_joint_perlayer(
         sensitivity, geometries, args.max_lut_fraction, args.max_bram_fraction,
         args.time_limit, args.gap_rel, max_cycles=max_cycles, pinned_bits=pinned_bits,
         predecessor_map=predecessor_map, force_dsp=args.force_dsp,
         max_dsp_fraction=args.max_dsp_fraction, max_uram_fraction=args.max_uram_fraction,
-        dsr_ratio=args.dsr_ratio, pbi_ratio=args.pbi_ratio, max_node_cycles=max_node_cycles,
+        pbi_ratio=args.pbi_ratio, max_node_cycles=max_node_cycles,
         min_resources=args.min_resources, mvau_wwidth_max=args.mvau_wwidth_max,
         extra_nodes=extra_nodes, dataflow_map=dataflow_map, model_fifos=args.model_fifos,
-        ratchet_pct=args.ratchet_pct, ratchet_floor=args.ratchet_floor,
+        dsr_pct=args.dsr_pct, dsr_floor=args.dsr_floor,
     )
     if args.lexicographic:
         if args.min_resources or args.pin_bits_file is not None:
@@ -1334,23 +1201,16 @@ def main() -> None:
             if args.target_fps_pass2 is not None:
                 max_node_cycles2 = args.clock_mhz * 1e6 / args.target_fps_pass2
                 print(f"--target-fps-pass2 {args.target_fps_pass2} -> pass 2 every node <= {max_node_cycles2:.0f} cycles.")
-            # --dsr-pct-pass2 adds a constraint pass 1's fold was never solved under, so pass 1's own use is no
-            # longer a feasible roof: bound pass 2 by the hard caps instead (bits stay pinned).
-            if args.dsr_ratio_pass2 is not None:
-                roofs = (args.max_lut_fraction, args.max_bram_fraction, args.max_dsp_fraction)
-                print(f"--dsr-pct-pass2 {args.dsr_pct_pass2:g}: pass 2 roof = hard caps {roofs} (not pass 1's use).")
-            else:
-                roofs = tuple(d1[k] / 100 * roof for k in ("lut_pct_of_budget", "bram_pct_of_budget", "dsp_pct_of_budget"))
+            roofs = tuple(d1[k] / 100 * roof for k in ("lut_pct_of_budget", "bram_pct_of_budget", "dsp_pct_of_budget"))
             result = solve_joint_perlayer(
                 sensitivity, geometries, roofs[0], roofs[1],
                 args.time_limit, args.gap_rel, max_cycles=max_cycles, pinned_bits=pinned2,
                 predecessor_map=predecessor_map, force_dsp=args.force_dsp,
                 max_dsp_fraction=roofs[2], max_uram_fraction=args.max_uram_fraction,
-                dsr_ratio=args.dsr_ratio if args.dsr_ratio_pass2 is None else args.dsr_ratio_pass2,
                 pbi_ratio=args.pbi_ratio, max_node_cycles=max_node_cycles2,
                 min_resources=True, mvau_wwidth_max=args.mvau_wwidth_max,
                 extra_nodes=extra_nodes, dataflow_map=dataflow_map, model_fifos=args.model_fifos,
-                ratchet_pct=args.ratchet_pct, ratchet_floor=args.ratchet_floor,
+                dsr_pct=args.dsr_pct, dsr_floor=args.dsr_floor,
             )
             if result["status"] == "Optimal":
                 result["_diagnostics"]["lexicographic"] = {

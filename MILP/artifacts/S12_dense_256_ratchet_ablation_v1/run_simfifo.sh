@@ -12,7 +12,7 @@ pids=()
 for arm in "${ARMS[@]}"; do
   mkdir -p "$HERE/${arm}_simfifo"
   python3 MILP/analytical/net_explicit.py "$HERE/$arm/layer_bits_folding_$arm.json" --out-dir "$HERE/${arm}_simfifo" --tag "${arm}_simfifo" \
-    --workers 5 --slack 0.03 --max-rounds 4 > "$HERE/${arm}_simfifo/run.log" 2>&1 &
+    --workers 3 --slack 0.03 --max-rounds 4 > "$HERE/${arm}_simfifo/run.log" 2>&1 &
   pids+=($!)
 done
 rc=0
