@@ -1,0 +1,1871 @@
+{
+ "fifos": [
+  {
+   "stage": "initial",
+   "klass": "skip FIFO",
+   "name": "initial.skip FIFO",
+   "producer": "initial.pool_quant",
+   "consumer": "initial.concat",
+   "depth": 4,
+   "width_bits": 6,
+   "mem": "srl",
+   "bram18": 0,
+   "uram": 0,
+   "lut": 14,
+   "words_per_px": 4
+  },
+  {
+   "stage": "initial",
+   "klass": "FIFO main",
+   "name": "initial.FIFO main",
+   "producer": "initial.conv",
+   "consumer": "initial.concat",
+   "depth": 12,
+   "width_bits": 6,
+   "mem": "srl",
+   "bram18": 0,
+   "uram": 0,
+   "lut": 14,
+   "words_per_px": 4
+  },
+  {
+   "stage": "down1",
+   "klass": "skip FIFO",
+   "name": "down1.skip FIFO",
+   "producer": "down1.thr_s",
+   "consumer": "down1.add",
+   "depth": 1088,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 16
+  },
+  {
+   "stage": "regular1.0",
+   "klass": "skip FIFO",
+   "name": "regular1.0.skip FIFO",
+   "producer": "regular1.0.thr_s",
+   "consumer": "regular1.0.add",
+   "depth": 1120,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 16
+  },
+  {
+   "stage": "regular1.1",
+   "klass": "skip FIFO",
+   "name": "regular1.1.skip FIFO",
+   "producer": "regular1.1.thr_s",
+   "consumer": "regular1.1.add",
+   "depth": 1120,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 16
+  },
+  {
+   "stage": "regular1.2",
+   "klass": "skip FIFO",
+   "name": "regular1.2.skip FIFO",
+   "producer": "regular1.2.thr_s",
+   "consumer": "regular1.2.add",
+   "depth": 1120,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 16
+  },
+  {
+   "stage": "regular1.3",
+   "klass": "skip FIFO",
+   "name": "regular1.3.skip FIFO",
+   "producer": "regular1.3.thr_s",
+   "consumer": "regular1.3.add",
+   "depth": 1120,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 16
+  },
+  {
+   "stage": "down2",
+   "klass": "skip FIFO",
+   "name": "down2.skip FIFO",
+   "producer": "down2.thr_s",
+   "consumer": "down2.add",
+   "depth": 1152,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 32
+  },
+  {
+   "stage": "stage2.0",
+   "klass": "skip FIFO",
+   "name": "stage2.0.skip FIFO",
+   "producer": "stage2.0.thr_s",
+   "consumer": "stage2.0.add",
+   "depth": 2208,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 2,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 32
+  },
+  {
+   "stage": "stage2.1",
+   "klass": "skip FIFO",
+   "name": "stage2.1.skip FIFO",
+   "producer": "stage2.1.thr_s",
+   "consumer": "stage2.1.add",
+   "depth": 4352,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 3,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 32
+  },
+  {
+   "stage": "stage2.2",
+   "klass": "skip FIFO",
+   "name": "stage2.2.skip FIFO",
+   "producer": "stage2.2.thr_s",
+   "consumer": "stage2.2.add",
+   "depth": 8640,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 6,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 32
+  },
+  {
+   "stage": "stage2.3",
+   "klass": "skip FIFO",
+   "name": "stage2.3.skip FIFO",
+   "producer": "stage2.3.thr_s",
+   "consumer": "stage2.3.add",
+   "depth": 17280,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 12,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 32
+  },
+  {
+   "stage": "stage2.4",
+   "klass": "skip FIFO",
+   "name": "stage2.4.skip FIFO",
+   "producer": "stage2.4.thr_s",
+   "consumer": "stage2.4.add",
+   "depth": 2208,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 2,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 32
+  },
+  {
+   "stage": "stage2.5",
+   "klass": "skip FIFO",
+   "name": "stage2.5.skip FIFO",
+   "producer": "stage2.5.thr_s",
+   "consumer": "stage2.5.add",
+   "depth": 4352,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 3,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 32
+  },
+  {
+   "stage": "stage2.6",
+   "klass": "skip FIFO",
+   "name": "stage2.6.skip FIFO",
+   "producer": "stage2.6.thr_s",
+   "consumer": "stage2.6.add",
+   "depth": 8640,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 6,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 32
+  },
+  {
+   "stage": "stage2.7",
+   "klass": "skip FIFO",
+   "name": "stage2.7.skip FIFO",
+   "producer": "stage2.7.thr_s",
+   "consumer": "stage2.7.add",
+   "depth": 17280,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 12,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 32
+  },
+  {
+   "stage": "stage3.0",
+   "klass": "skip FIFO",
+   "name": "stage3.0.skip FIFO",
+   "producer": "stage3.0.thr_s",
+   "consumer": "stage3.0.add",
+   "depth": 2208,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 2,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 32
+  },
+  {
+   "stage": "stage3.1",
+   "klass": "skip FIFO",
+   "name": "stage3.1.skip FIFO",
+   "producer": "stage3.1.thr_s",
+   "consumer": "stage3.1.add",
+   "depth": 4352,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 3,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 32
+  },
+  {
+   "stage": "stage3.2",
+   "klass": "skip FIFO",
+   "name": "stage3.2.skip FIFO",
+   "producer": "stage3.2.thr_s",
+   "consumer": "stage3.2.add",
+   "depth": 8640,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 6,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 32
+  },
+  {
+   "stage": "stage3.3",
+   "klass": "skip FIFO",
+   "name": "stage3.3.skip FIFO",
+   "producer": "stage3.3.thr_s",
+   "consumer": "stage3.3.add",
+   "depth": 17280,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 12,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 32
+  },
+  {
+   "stage": "stage3.4",
+   "klass": "skip FIFO",
+   "name": "stage3.4.skip FIFO",
+   "producer": "stage3.4.thr_s",
+   "consumer": "stage3.4.add",
+   "depth": 2208,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 2,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 32
+  },
+  {
+   "stage": "stage3.5",
+   "klass": "skip FIFO",
+   "name": "stage3.5.skip FIFO",
+   "producer": "stage3.5.thr_s",
+   "consumer": "stage3.5.add",
+   "depth": 4352,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 3,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 32
+  },
+  {
+   "stage": "stage3.6",
+   "klass": "skip FIFO",
+   "name": "stage3.6.skip FIFO",
+   "producer": "stage3.6.thr_s",
+   "consumer": "stage3.6.add",
+   "depth": 8640,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 6,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 32
+  },
+  {
+   "stage": "stage3.7",
+   "klass": "skip FIFO",
+   "name": "stage3.7.skip FIFO",
+   "producer": "stage3.7.thr_s",
+   "consumer": "stage3.7.add",
+   "depth": 17280,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 12,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 32
+  },
+  {
+   "stage": "up4",
+   "klass": "skip FIFO",
+   "name": "up4.skip FIFO",
+   "producer": "up4.thr_e",
+   "consumer": "up4.add",
+   "depth": 512,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 16
+  },
+  {
+   "stage": "up4",
+   "klass": "FIFO main",
+   "name": "up4.FIFO main",
+   "producer": "up4.thr_s",
+   "consumer": "up4.add",
+   "depth": 1536,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 16
+  },
+  {
+   "stage": "regular4.0",
+   "klass": "skip FIFO",
+   "name": "regular4.0.skip FIFO",
+   "producer": "regular4.0.thr_s",
+   "consumer": "regular4.0.add",
+   "depth": 1120,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 16
+  },
+  {
+   "stage": "regular4.1",
+   "klass": "skip FIFO",
+   "name": "regular4.1.skip FIFO",
+   "producer": "regular4.1.thr_s",
+   "consumer": "regular4.1.add",
+   "depth": 1120,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 16
+  },
+  {
+   "stage": "up5",
+   "klass": "skip FIFO",
+   "name": "up5.skip FIFO",
+   "producer": "up5.thr_e",
+   "consumer": "up5.add",
+   "depth": 256,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 4
+  },
+  {
+   "stage": "up5",
+   "klass": "FIFO main",
+   "name": "up5.FIFO main",
+   "producer": "up5.thr_s",
+   "consumer": "up5.add",
+   "depth": 768,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 4
+  },
+  {
+   "stage": "regular5.0",
+   "klass": "skip FIFO",
+   "name": "regular5.0.skip FIFO",
+   "producer": "regular5.0.thr_s",
+   "consumer": "regular5.0.add",
+   "depth": 564,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": 4
+  },
+  {
+   "stage": "initial",
+   "klass": "window prefetch",
+   "name": "initial.conv.prefetch",
+   "producer": "initial.conv",
+   "consumer": "initial.conv.fmpad",
+   "depth": 260,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "down1",
+   "klass": "window prefetch",
+   "name": "down1.conv.0.prefetch",
+   "producer": "down1.conv.0",
+   "consumer": "down1.conv.0.fmpad",
+   "depth": 134,
+   "width_bits": 12,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "regular1.0",
+   "klass": "window prefetch",
+   "name": "regular1.0.conv.prefetch",
+   "producer": "regular1.0.conv",
+   "consumer": "regular1.0.conv.fmpad",
+   "depth": 134,
+   "width_bits": 12,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "regular1.1",
+   "klass": "window prefetch",
+   "name": "regular1.1.conv.prefetch",
+   "producer": "regular1.1.conv",
+   "consumer": "regular1.1.conv.fmpad",
+   "depth": 134,
+   "width_bits": 12,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "regular1.2",
+   "klass": "window prefetch",
+   "name": "regular1.2.conv.prefetch",
+   "producer": "regular1.2.conv",
+   "consumer": "regular1.2.conv.fmpad",
+   "depth": 134,
+   "width_bits": 12,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "regular1.3",
+   "klass": "window prefetch",
+   "name": "regular1.3.conv.prefetch",
+   "producer": "regular1.3.conv",
+   "consumer": "regular1.3.conv.fmpad",
+   "depth": 134,
+   "width_bits": 12,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "down2",
+   "klass": "window prefetch",
+   "name": "down2.conv.0.prefetch",
+   "producer": "down2.conv.0",
+   "consumer": "down2.conv.0.fmpad",
+   "depth": 70,
+   "width_bits": 24,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "stage2.0",
+   "klass": "window prefetch",
+   "name": "stage2.0.conv.prefetch",
+   "producer": "stage2.0.conv",
+   "consumer": "stage2.0.conv.fmpad",
+   "depth": 136,
+   "width_bits": 24,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "stage2.1",
+   "klass": "window prefetch",
+   "name": "stage2.1.conv.prefetch",
+   "producer": "stage2.1.conv",
+   "consumer": "stage2.1.conv.fmpad",
+   "depth": 268,
+   "width_bits": 24,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "stage2.2",
+   "klass": "window prefetch",
+   "name": "stage2.2.conv.prefetch",
+   "producer": "stage2.2.conv",
+   "consumer": "stage2.2.conv.fmpad",
+   "depth": 532,
+   "width_bits": 24,
+   "mem": "bram",
+   "bram18": 2,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "stage2.3",
+   "klass": "window prefetch",
+   "name": "stage2.3.conv.prefetch",
+   "producer": "stage2.3.conv",
+   "consumer": "stage2.3.conv.fmpad",
+   "depth": 1060,
+   "width_bits": 24,
+   "mem": "bram",
+   "bram18": 3,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "stage2.4",
+   "klass": "window prefetch",
+   "name": "stage2.4.conv.prefetch",
+   "producer": "stage2.4.conv",
+   "consumer": "stage2.4.conv.fmpad",
+   "depth": 136,
+   "width_bits": 24,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "stage2.5",
+   "klass": "window prefetch",
+   "name": "stage2.5.conv.prefetch",
+   "producer": "stage2.5.conv",
+   "consumer": "stage2.5.conv.fmpad",
+   "depth": 268,
+   "width_bits": 24,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "stage2.6",
+   "klass": "window prefetch",
+   "name": "stage2.6.conv.prefetch",
+   "producer": "stage2.6.conv",
+   "consumer": "stage2.6.conv.fmpad",
+   "depth": 532,
+   "width_bits": 24,
+   "mem": "bram",
+   "bram18": 2,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "stage2.7",
+   "klass": "window prefetch",
+   "name": "stage2.7.conv.prefetch",
+   "producer": "stage2.7.conv",
+   "consumer": "stage2.7.conv.fmpad",
+   "depth": 1060,
+   "width_bits": 24,
+   "mem": "bram",
+   "bram18": 3,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "stage3.0",
+   "klass": "window prefetch",
+   "name": "stage3.0.conv.prefetch",
+   "producer": "stage3.0.conv",
+   "consumer": "stage3.0.conv.fmpad",
+   "depth": 136,
+   "width_bits": 24,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "stage3.1",
+   "klass": "window prefetch",
+   "name": "stage3.1.conv.prefetch",
+   "producer": "stage3.1.conv",
+   "consumer": "stage3.1.conv.fmpad",
+   "depth": 268,
+   "width_bits": 24,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "stage3.2",
+   "klass": "window prefetch",
+   "name": "stage3.2.conv.prefetch",
+   "producer": "stage3.2.conv",
+   "consumer": "stage3.2.conv.fmpad",
+   "depth": 532,
+   "width_bits": 24,
+   "mem": "bram",
+   "bram18": 2,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "stage3.3",
+   "klass": "window prefetch",
+   "name": "stage3.3.conv.prefetch",
+   "producer": "stage3.3.conv",
+   "consumer": "stage3.3.conv.fmpad",
+   "depth": 1060,
+   "width_bits": 24,
+   "mem": "bram",
+   "bram18": 3,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "stage3.4",
+   "klass": "window prefetch",
+   "name": "stage3.4.conv.prefetch",
+   "producer": "stage3.4.conv",
+   "consumer": "stage3.4.conv.fmpad",
+   "depth": 136,
+   "width_bits": 24,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "stage3.5",
+   "klass": "window prefetch",
+   "name": "stage3.5.conv.prefetch",
+   "producer": "stage3.5.conv",
+   "consumer": "stage3.5.conv.fmpad",
+   "depth": 268,
+   "width_bits": 24,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "stage3.6",
+   "klass": "window prefetch",
+   "name": "stage3.6.conv.prefetch",
+   "producer": "stage3.6.conv",
+   "consumer": "stage3.6.conv.fmpad",
+   "depth": 532,
+   "width_bits": 24,
+   "mem": "bram",
+   "bram18": 2,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "stage3.7",
+   "klass": "window prefetch",
+   "name": "stage3.7.conv.prefetch",
+   "producer": "stage3.7.conv",
+   "consumer": "stage3.7.conv.fmpad",
+   "depth": 1060,
+   "width_bits": 24,
+   "mem": "bram",
+   "bram18": 3,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "regular4.0",
+   "klass": "window prefetch",
+   "name": "regular4.0.conv.prefetch",
+   "producer": "regular4.0.conv",
+   "consumer": "regular4.0.conv.fmpad",
+   "depth": 134,
+   "width_bits": 12,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "regular4.1",
+   "klass": "window prefetch",
+   "name": "regular4.1.conv.prefetch",
+   "producer": "regular4.1.conv",
+   "consumer": "regular4.1.conv.fmpad",
+   "depth": 134,
+   "width_bits": 12,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  },
+  {
+   "stage": "regular5.0",
+   "klass": "window prefetch",
+   "name": "regular5.0.conv.prefetch",
+   "producer": "regular5.0.conv",
+   "consumer": "regular5.0.conv.fmpad",
+   "depth": 132,
+   "width_bits": 6,
+   "mem": "bram",
+   "bram18": 1,
+   "uram": 0,
+   "lut": 0,
+   "words_per_px": null
+  }
+ ],
+ "dwcs": [
+  {
+   "stage": "initial",
+   "name": "SWG->MVAU_c",
+   "in_width": 54,
+   "out_width": 18,
+   "lut": 17.394000000000002
+  },
+  {
+   "stage": "initial",
+   "name": "FIFOmain->Concat",
+   "in_width": 6,
+   "out_width": 18,
+   "lut": 16.5243
+  },
+  {
+   "stage": "initial",
+   "name": "Concat->Thr_act",
+   "in_width": 24,
+   "out_width": 6,
+   "lut": 6.9576
+  },
+  {
+   "stage": "down1",
+   "name": "MVAU_r->Thr_r",
+   "in_width": 34,
+   "out_width": 17,
+   "lut": 15.6546
+  },
+  {
+   "stage": "down1",
+   "name": "Thr_r->FMPad",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "down1",
+   "name": "MVAU_m->Thr_m",
+   "in_width": 36,
+   "out_width": 18,
+   "lut": 16.5243
+  },
+  {
+   "stage": "down1",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "down1",
+   "name": "Dup->MaxPool",
+   "in_width": 6,
+   "out_width": 24,
+   "lut": 22.6122
+  },
+  {
+   "stage": "down1",
+   "name": "MaxPool->MVAU_s",
+   "in_width": 24,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "regular1.0",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "regular1.0",
+   "name": "Thr_r->SWG_m",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "regular1.0",
+   "name": "MVAU_m->Thr_m",
+   "in_width": 36,
+   "out_width": 18,
+   "lut": 16.5243
+  },
+  {
+   "stage": "regular1.0",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "regular1.1",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "regular1.1",
+   "name": "Thr_r->SWG_m",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "regular1.1",
+   "name": "MVAU_m->Thr_m",
+   "in_width": 36,
+   "out_width": 18,
+   "lut": 16.5243
+  },
+  {
+   "stage": "regular1.1",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "regular1.2",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "regular1.2",
+   "name": "Thr_r->SWG_m",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "regular1.2",
+   "name": "MVAU_m->Thr_m",
+   "in_width": 36,
+   "out_width": 18,
+   "lut": 16.5243
+  },
+  {
+   "stage": "regular1.2",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "regular1.3",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "regular1.3",
+   "name": "Thr_r->SWG_m",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "regular1.3",
+   "name": "MVAU_m->Thr_m",
+   "in_width": 36,
+   "out_width": 18,
+   "lut": 16.5243
+  },
+  {
+   "stage": "regular1.3",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "down2",
+   "name": "Dup->SWG_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "down2",
+   "name": "MVAU_r->Thr_r",
+   "in_width": 38,
+   "out_width": 19,
+   "lut": 17.394000000000002
+  },
+  {
+   "stage": "down2",
+   "name": "Thr_r->FMPad",
+   "in_width": 6,
+   "out_width": 24,
+   "lut": 22.6122
+  },
+  {
+   "stage": "down2",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "down2",
+   "name": "Dup->MaxPool",
+   "in_width": 6,
+   "out_width": 96,
+   "lut": 86.97
+  },
+  {
+   "stage": "down2",
+   "name": "MaxPool->MVAU_s",
+   "in_width": 96,
+   "out_width": 24,
+   "lut": 22.6122
+  },
+  {
+   "stage": "stage2.0",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage2.0",
+   "name": "Thr_r->SWG_m",
+   "in_width": 6,
+   "out_width": 24,
+   "lut": 22.6122
+  },
+  {
+   "stage": "stage2.0",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage2.1",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage2.1",
+   "name": "Thr_r->SWG_m",
+   "in_width": 6,
+   "out_width": 24,
+   "lut": 22.6122
+  },
+  {
+   "stage": "stage2.1",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage2.2",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage2.2",
+   "name": "Thr_r->SWG_m",
+   "in_width": 6,
+   "out_width": 24,
+   "lut": 22.6122
+  },
+  {
+   "stage": "stage2.2",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage2.3",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage2.3",
+   "name": "Thr_r->SWG_m",
+   "in_width": 6,
+   "out_width": 24,
+   "lut": 22.6122
+  },
+  {
+   "stage": "stage2.3",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage2.4",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage2.4",
+   "name": "Thr_r->SWG_m",
+   "in_width": 6,
+   "out_width": 24,
+   "lut": 22.6122
+  },
+  {
+   "stage": "stage2.4",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage2.5",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage2.5",
+   "name": "Thr_r->SWG_m",
+   "in_width": 6,
+   "out_width": 24,
+   "lut": 22.6122
+  },
+  {
+   "stage": "stage2.5",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage2.6",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage2.6",
+   "name": "Thr_r->SWG_m",
+   "in_width": 6,
+   "out_width": 24,
+   "lut": 22.6122
+  },
+  {
+   "stage": "stage2.6",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage2.7",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage2.7",
+   "name": "Thr_r->SWG_m",
+   "in_width": 6,
+   "out_width": 24,
+   "lut": 22.6122
+  },
+  {
+   "stage": "stage2.7",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage3.0",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage3.0",
+   "name": "Thr_r->SWG_m",
+   "in_width": 6,
+   "out_width": 24,
+   "lut": 22.6122
+  },
+  {
+   "stage": "stage3.0",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage3.1",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage3.1",
+   "name": "Thr_r->SWG_m",
+   "in_width": 6,
+   "out_width": 24,
+   "lut": 22.6122
+  },
+  {
+   "stage": "stage3.1",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage3.2",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage3.2",
+   "name": "Thr_r->SWG_m",
+   "in_width": 6,
+   "out_width": 24,
+   "lut": 22.6122
+  },
+  {
+   "stage": "stage3.2",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage3.3",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage3.3",
+   "name": "Thr_r->SWG_m",
+   "in_width": 6,
+   "out_width": 24,
+   "lut": 22.6122
+  },
+  {
+   "stage": "stage3.3",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage3.4",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage3.4",
+   "name": "Thr_r->SWG_m",
+   "in_width": 6,
+   "out_width": 24,
+   "lut": 22.6122
+  },
+  {
+   "stage": "stage3.4",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage3.5",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage3.5",
+   "name": "Thr_r->SWG_m",
+   "in_width": 6,
+   "out_width": 24,
+   "lut": 22.6122
+  },
+  {
+   "stage": "stage3.5",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage3.6",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage3.6",
+   "name": "Thr_r->SWG_m",
+   "in_width": 6,
+   "out_width": 24,
+   "lut": 22.6122
+  },
+  {
+   "stage": "stage3.6",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage3.7",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "stage3.7",
+   "name": "Thr_r->SWG_m",
+   "in_width": 6,
+   "out_width": 24,
+   "lut": 22.6122
+  },
+  {
+   "stage": "stage3.7",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "up4",
+   "name": "Dup->MVAU_p",
+   "in_width": 6,
+   "out_width": 24,
+   "lut": 22.6122
+  },
+  {
+   "stage": "up4",
+   "name": "Thr_p->UpNN",
+   "in_width": 6,
+   "out_width": 96,
+   "lut": 86.97
+  },
+  {
+   "stage": "up4",
+   "name": "UpNN->Thr_s",
+   "in_width": 96,
+   "out_width": 6,
+   "lut": 8.697000000000001
+  },
+  {
+   "stage": "up4",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "up4",
+   "name": "Thr_r->FMPadPix",
+   "in_width": 6,
+   "out_width": 48,
+   "lut": 44.3547
+  },
+  {
+   "stage": "up4",
+   "name": "Thr_u->MVAU_e",
+   "in_width": 6,
+   "out_width": 24,
+   "lut": 22.6122
+  },
+  {
+   "stage": "regular4.0",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "regular4.0",
+   "name": "Thr_r->SWG_m",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "regular4.0",
+   "name": "MVAU_m->Thr_m",
+   "in_width": 36,
+   "out_width": 18,
+   "lut": 16.5243
+  },
+  {
+   "stage": "regular4.0",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "regular4.1",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "regular4.1",
+   "name": "Thr_r->SWG_m",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "regular4.1",
+   "name": "MVAU_m->Thr_m",
+   "in_width": 36,
+   "out_width": 18,
+   "lut": 16.5243
+  },
+  {
+   "stage": "regular4.1",
+   "name": "Thr_m->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "up5",
+   "name": "Dup->MVAU_p",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "up5",
+   "name": "Thr_p->UpNN",
+   "in_width": 6,
+   "out_width": 24,
+   "lut": 22.6122
+  },
+  {
+   "stage": "up5",
+   "name": "UpNN->Thr_s",
+   "in_width": 24,
+   "out_width": 6,
+   "lut": 6.9576
+  },
+  {
+   "stage": "up5",
+   "name": "Dup->MVAU_r",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "up5",
+   "name": "Thr_r->FMPadPix",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "up5",
+   "name": "MVAU_u->Thr_u",
+   "in_width": 68,
+   "out_width": 17,
+   "lut": 16.5243
+  },
+  {
+   "stage": "up5",
+   "name": "Thr_u->MVAU_e",
+   "in_width": 6,
+   "out_width": 12,
+   "lut": 11.3061
+  },
+  {
+   "stage": "final",
+   "name": "SWG_u->MVAU_f",
+   "in_width": 96,
+   "out_width": 48,
+   "lut": 42.615300000000005
+  }
+ ],
+ "folds": {
+  "initial.conv": [
+   1,
+   3
+  ],
+  "initial.pool": [
+   1,
+   1
+  ],
+  "down1.reduce.0": [
+   2,
+   1
+  ],
+  "down1.conv.0": [
+   2,
+   2
+  ],
+  "down1.expand.0": [
+   1,
+   2
+  ],
+  "down1.pool": [
+   1,
+   1
+  ],
+  "regular1.0.reduce.0": [
+   1,
+   2
+  ],
+  "regular1.0.conv": [
+   2,
+   2
+  ],
+  "regular1.0.expand.0": [
+   1,
+   2
+  ],
+  "regular1.1.reduce.0": [
+   1,
+   2
+  ],
+  "regular1.1.conv": [
+   2,
+   2
+  ],
+  "regular1.1.expand.0": [
+   1,
+   2
+  ],
+  "regular1.2.reduce.0": [
+   1,
+   2
+  ],
+  "regular1.2.conv": [
+   2,
+   2
+  ],
+  "regular1.2.expand.0": [
+   1,
+   2
+  ],
+  "regular1.3.reduce.0": [
+   1,
+   2
+  ],
+  "regular1.3.conv": [
+   2,
+   2
+  ],
+  "regular1.3.expand.0": [
+   1,
+   2
+  ],
+  "down2.reduce.0": [
+   2,
+   2
+  ],
+  "down2.conv.0": [
+   1,
+   4
+  ],
+  "down2.expand.0": [
+   1,
+   2
+  ],
+  "down2.pool": [
+   1,
+   1
+  ],
+  "stage2.0.reduce.0": [
+   1,
+   2
+  ],
+  "stage2.0.conv": [
+   1,
+   4
+  ],
+  "stage2.0.expand.0": [
+   1,
+   2
+  ],
+  "stage2.1.reduce.0": [
+   1,
+   2
+  ],
+  "stage2.1.conv": [
+   1,
+   4
+  ],
+  "stage2.1.expand.0": [
+   1,
+   2
+  ],
+  "stage2.2.reduce.0": [
+   1,
+   2
+  ],
+  "stage2.2.conv": [
+   1,
+   4
+  ],
+  "stage2.2.expand.0": [
+   1,
+   2
+  ],
+  "stage2.3.reduce.0": [
+   1,
+   2
+  ],
+  "stage2.3.conv": [
+   1,
+   4
+  ],
+  "stage2.3.expand.0": [
+   1,
+   2
+  ],
+  "stage2.4.reduce.0": [
+   1,
+   2
+  ],
+  "stage2.4.conv": [
+   1,
+   4
+  ],
+  "stage2.4.expand.0": [
+   1,
+   2
+  ],
+  "stage2.5.reduce.0": [
+   1,
+   2
+  ],
+  "stage2.5.conv": [
+   1,
+   4
+  ],
+  "stage2.5.expand.0": [
+   1,
+   2
+  ],
+  "stage2.6.reduce.0": [
+   1,
+   2
+  ],
+  "stage2.6.conv": [
+   1,
+   4
+  ],
+  "stage2.6.expand.0": [
+   1,
+   2
+  ],
+  "stage2.7.reduce.0": [
+   1,
+   2
+  ],
+  "stage2.7.conv": [
+   1,
+   4
+  ],
+  "stage2.7.expand.0": [
+   1,
+   2
+  ],
+  "stage3.0.reduce.0": [
+   1,
+   2
+  ],
+  "stage3.0.conv": [
+   1,
+   4
+  ],
+  "stage3.0.expand.0": [
+   1,
+   2
+  ],
+  "stage3.1.reduce.0": [
+   1,
+   2
+  ],
+  "stage3.1.conv": [
+   1,
+   4
+  ],
+  "stage3.1.expand.0": [
+   1,
+   2
+  ],
+  "stage3.2.reduce.0": [
+   1,
+   2
+  ],
+  "stage3.2.conv": [
+   1,
+   4
+  ],
+  "stage3.2.expand.0": [
+   1,
+   2
+  ],
+  "stage3.3.reduce.0": [
+   1,
+   2
+  ],
+  "stage3.3.conv": [
+   1,
+   4
+  ],
+  "stage3.3.expand.0": [
+   1,
+   2
+  ],
+  "stage3.4.reduce.0": [
+   1,
+   2
+  ],
+  "stage3.4.conv": [
+   1,
+   4
+  ],
+  "stage3.4.expand.0": [
+   1,
+   2
+  ],
+  "stage3.5.reduce.0": [
+   1,
+   2
+  ],
+  "stage3.5.conv": [
+   1,
+   4
+  ],
+  "stage3.5.expand.0": [
+   1,
+   2
+  ],
+  "stage3.6.reduce.0": [
+   1,
+   2
+  ],
+  "stage3.6.conv": [
+   1,
+   4
+  ],
+  "stage3.6.expand.0": [
+   1,
+   2
+  ],
+  "stage3.7.reduce.0": [
+   1,
+   2
+  ],
+  "stage3.7.conv": [
+   1,
+   4
+  ],
+  "stage3.7.expand.0": [
+   1,
+   2
+  ],
+  "up4.main_proj.0": [
+   1,
+   4
+  ],
+  "up4.reduce.0": [
+   1,
+   2
+  ],
+  "up4.up.0": [
+   1,
+   8
+  ],
+  "up4.expand.0": [
+   1,
+   4
+  ],
+  "regular4.0.reduce.0": [
+   1,
+   2
+  ],
+  "regular4.0.conv": [
+   2,
+   2
+  ],
+  "regular4.0.expand.0": [
+   1,
+   2
+  ],
+  "regular4.1.reduce.0": [
+   1,
+   2
+  ],
+  "regular4.1.conv": [
+   2,
+   2
+  ],
+  "regular4.1.expand.0": [
+   1,
+   2
+  ],
+  "up5.main_proj.0": [
+   1,
+   2
+  ],
+  "up5.reduce.0": [
+   1,
+   2
+  ],
+  "up5.up.0": [
+   4,
+   2
+  ],
+  "up5.expand.0": [
+   1,
+   2
+  ],
+  "regular5.0.reduce.0": [
+   1,
+   1
+  ],
+  "regular5.0.conv": [
+   1,
+   1
+  ],
+  "regular5.0.expand.0": [
+   1,
+   1
+  ],
+  "final": [
+   5,
+   8
+  ]
+ },
+ "dsp": 241,
+ "node_lut": 76918.20020888903,
+ "slowest": [
+  "regular5.0.conv",
+  147715
+ ]
+}

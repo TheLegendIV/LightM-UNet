@@ -1,9 +1,9 @@
-"""Summarise the ratchet-ablation arms (run run_ablation.sh first).
+"""Summarise the DSR ablation arms (folder / arm names keep the old word "ratchet") (run run_ablation.sh first).
 
     python3 MILP/artifacts/S12_dense_256_ratchet_ablation_v1/summarize_arms.py
 
 Writes next to this file: arms_summary.csv (one row per arm), arms_to_build.txt (one representative arm per DISTINCT folding, in arm order: arms with an identical folding share one hardware build)
-and arm_groups.json (fingerprint -> arms). Also checks, per arm: the ratchet holds on every compute edge, mvau-wwidth-max 72 holds, every layer is INT6.
+and arm_groups.json (fingerprint -> arms). Also checks, per arm: the DSR rule holds on every compute edge, mvau-wwidth-max 72 holds, every layer is INT6.
 """
 import csv
 import hashlib
@@ -20,6 +20,25 @@ BUILD_ONLY = list(SIMFIFO)
 # hardware-only variants: same folding as their base arm, but the folding json is written WITHOUT the FIFO lists, so the FINN bridge forces nothing and FINN's own rtlsim autosizer sets every FIFO depth
 VARIANTS = {"analytical_25pct_finnfifo": "analytical_25pct"}
 WWIDTH_MAX, BITS = 72, 6
+
+
+def expected_target():
+    """arms_config.sh is the one definition of the target every arm must carry: {fps, floor, wwidth, bits}."""
+    import re
+    txt = (HERE / "arms_config.sh").read_text()
+    get = lambda k: float(re.search(rf"^{k}=([0-9.]+)", txt, re.M).group(1))
+    return dict(fps=get("FPS"), floor=get("DSR_FLOOR"), wwidth=int(get("WWIDTH")), bits=int(get("BITS")))
+
+
+def target_of(d):
+    """What a result file was actually run with: {fps, floor (None when the DSR rule is off), wwidth, bits}. MILP and analytical files keep these in different places."""
+    g = d["_diagnostics"]
+    a = g.get("analytical")
+    cfg = _dsr_cfg(d)
+    floor = None if cfg["pct"] is None else cfg["floor"]
+    wwidth = a.get("mvau_wwidth_max") if a else g.get("mvau_wwidth_max")
+    bits = sorted(set(d["layer_weight_bits"].values()) | set(d["layer_act_bits"].values()))
+    return dict(fps=round(1e8 / g["max_node_cycles"], 6), floor=floor, wwidth=wwidth, bits=bits[0] if len(bits) == 1 else bits)
 
 
 def load(arm):
@@ -43,18 +62,19 @@ def fingerprint(d):
     return hashlib.sha1(json.dumps(items).encode()).hexdigest()[:10]
 
 
-def _ratchet_cfg(d):
-    """MILP arm: _diagnostics.ratchet; analytical arm (net_fold.py): _diagnostics.analytical.{ratchet_pct, ratchet_floor} (its native rule is block to block; the edge check below is the MILP's node rule)."""
+def _dsr_cfg(d):
+    """MILP arm: _diagnostics.dsr (before 2026-10-08: .ratchet); analytical arm (net_fold.py): _diagnostics.analytical.{dsr_pct, dsr_floor} (before: ratchet_pct, ratchet_floor) (its native rule is block to block; the edge check below is the MILP's node rule)."""
     g = d["_diagnostics"]
-    if "ratchet" in g:
-        return g["ratchet"]
+    for key in ("dsr", "ratchet"):
+        if key in g:
+            return g[key]
     a = g["analytical"]
-    return dict(pct=a["ratchet_pct"], floor=a["ratchet_floor"], n_constraints=None)
+    return dict(pct=a.get("dsr_pct", a.get("ratchet_pct")), floor=a.get("dsr_floor", a.get("ratchet_floor")), n_constraints=None)
 
 
-def ratchet_violations(d):
+def dsr_violations(d):
     """Edges (nearest compute ancestor -> compute node) that break cycles[C] <= max(floor * F, (1 + pct/100) * cycles[P]); same node set as finn_milp.py."""
-    r = _ratchet_cfg(d)
+    r = _dsr_cfg(d)
     if r["pct"] is None:
         return None
     F = d["_diagnostics"]["max_node_cycles"]
@@ -83,6 +103,7 @@ def ratchet_violations(d):
 
 def main():
     rows, prints, groups = [], [], {}
+    target_errors = []
     off = load("ratchet_off")
     for arm in ARMS:
         d = load(arm)
@@ -108,27 +129,31 @@ def main():
             n_fifos = sum(1 for f in d.get("intra_block_fifos", []) if f["depth"] > 2)
         fp = fingerprint(d)
         groups.setdefault(fp if (arm not in VARIANTS and arm not in SIMFIFO) else f"{fp}:{arm}", []).append(arm)         # a variant (FIFO-stripped / simulated FIFOs) always gets its own build
-        bad = ratchet_violations(d)
+        bad = dsr_violations(d)
         weights = {n: v["simd"] * v["weight_bits"] for n, v in d["per_layer"].items() if not n.endswith(".pool")}   # the analytical pad-MVAU (INT8 weights) is capped in its search too
-        rc = _ratchet_cfg(d)
+        rc = _dsr_cfg(d)
         row.update(
-            ratchet_pct=rc["pct"], ratchet_floor=rc["floor"], ratchet_constraints=rc["n_constraints"],
+            dsr_pct=rc["pct"], dsr_floor=rc["floor"], dsr_constraints=rc["n_constraints"],
             lut_total=round(lut_total), lut_nodes=round(lut_total - fifo_lut), lut_fifo_dwc=round(fifo_lut),
             bram18=bram_total, bram18_fifos=fifo_bram, dsp=g["total_dsp"],
             slowest_node=g["bottleneck_node"], slowest_cycles=g["bottleneck_cycles"], fps=round(1e8 / g["bottleneck_cycles"], 1),
             sum_node_cycles_ms=round(g["total_cycles"] / 1e5, 1), n_dwcs=n_dwcs, n_fifos_gt2=n_fifos,
             layers_diff_vs_off=(sum((v["pe"], v["simd"]) != (off["per_layer"][n]["pe"], off["per_layer"][n]["simd"]) for n, v in d["per_layer"].items())
                                 if off and off["status"] == "Optimal" else None),
-            fingerprint=fp, ratchet_violations=(None if bad is None else len(bad)), wwidth_max_seen=max(weights.values()),
+            fingerprint=fp, dsr_violations=(None if bad is None else len(bad)), wwidth_max_seen=max(weights.values()),
             all_int6=all(v == BITS for v in d["layer_weight_bits"].values()) and all(v == BITS for v in d["layer_act_bits"].values()),
         )
         assert row["wwidth_max_seen"] <= WWIDTH_MAX, (arm, row["wwidth_max_seen"])
+        got, want = target_of(d), expected_target()
+        bad_t = {k: (got[k], want[k]) for k in want if got[k] != want[k] and not (k == "floor" and got[k] is None)}
+        if bad_t:
+            target_errors.append((arm, bad_t))
         if arm in VARIANTS:
             for k in ("lut_total", "lut_fifo_dwc", "bram18", "bram18_fifos", "n_dwcs", "n_fifos_gt2"):
                 row[k] = None                                                                  # FINN autosizes the FIFOs: no model number
         rows.append(row)
-    cols = ["arm", "status", "ratchet_pct", "ratchet_floor", "ratchet_constraints", "lut_total", "lut_nodes", "lut_fifo_dwc", "bram18", "bram18_fifos", "dsp", "slowest_node",
-            "slowest_cycles", "fps", "sum_node_cycles_ms", "n_dwcs", "n_fifos_gt2", "layers_diff_vs_off", "fingerprint", "ratchet_violations", "wwidth_max_seen", "all_int6"]
+    cols = ["arm", "status", "dsr_pct", "dsr_floor", "dsr_constraints", "lut_total", "lut_nodes", "lut_fifo_dwc", "bram18", "bram18_fifos", "dsp", "slowest_node",
+            "slowest_cycles", "fps", "sum_node_cycles_ms", "n_dwcs", "n_fifos_gt2", "layers_diff_vs_off", "fingerprint", "dsr_violations", "wwidth_max_seen", "all_int6"]
     with open(HERE / "arms_summary.csv", "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=cols, extrasaction="ignore")
         w.writeheader()
@@ -151,7 +176,10 @@ def main():
             print(f"{r['arm']:14s}{r['status']:11s}{'-':>8s}{r['lut_nodes']:9d}{'-':>8s}{r['dsp']:6.0f}{r['slowest_cycles']:9d}{r['fps']:7.1f}{str(r['layers_diff_vs_off']):>8s}  {r['fingerprint']}  (same folding as {VARIANTS[r['arm']]}, FINN FIFO autosize)")
             continue
         print(f"{r['arm']:14s}{r['status']:11s}{r['lut_total']:8d}{r['lut_nodes']:9d}{r['bram18']:8.0f}{r['dsp']:6.0f}{r['slowest_cycles']:9d}{r['fps']:7.1f}"
-              f"{str(r['layers_diff_vs_off']):>8s}  {r['fingerprint']}  {r['ratchet_violations']}")
+              f"{str(r['layers_diff_vs_off']):>8s}  {r['fingerprint']}  {r['dsr_violations']}")
+    if target_errors:
+        raise SystemExit("arms NOT run on the unified target of arms_config.sh (got, want): " + "; ".join(f"{a}: {e}" for a, e in target_errors))
+    print(f"\nunified target OK for every arm: {expected_target()}")
     print("\nidentical foldings:", {fp: arms for fp, arms in groups.items()})
     print("arms to build (one per distinct folding):", build)
 

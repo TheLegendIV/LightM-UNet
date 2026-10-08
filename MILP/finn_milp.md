@@ -32,7 +32,7 @@ extra dataflow node (see "Dataflow graph"):
   here, evaluated by `finn_cost_model.layer_cost_pe_simd` at that exact point.
 - `z[node, pe, simd, ram_style, variant, w, bits]` — the same, for an extra
   node, over that node's own legal options (`extra_node_options`).
-- `max_downstream_rate[node]` — continuous, only with `--dsr-pct`.
+- (the `max_downstream_rate[node]` variables of the old element-rate chain constraint were removed 2026-10-08.)
 
 **Objective**
 ```
@@ -56,7 +56,7 @@ ever needed again, reintroduce the dial rather than repurposing this one.
   at the chosen bits.
 - Extra nodes: exactly one option each; threshold bits with sources tied to
   `max(sources)` (below).
-- Optional rate coherence (`--pbi-ratio` / `--dsr-pct`, below).
+- Rate rules: the downstream-rate rule `--dsr-pct` / `--dsr-floor` (default on) and the deprecated `--pbi-ratio` (below).
 - Hard budgets, always enforced (not soft penalties):
   `Σ z·LUT ≤ f_lut·230,400`, `Σ z·BRAM18 ≤ f_bram·624`,
   `Σ z·DSP ≤ f_dsp·1,728`, `Σ z·URAM ≤ f_uram·96` (xczu7ev-ffvc1156-2-e).
@@ -187,13 +187,15 @@ Notes and evidence:
   4,592 LUT and ~247 BRAM18-eq unpriced before 2026-09-26 — older solves
   under-report BRAM badly (the deployed `bram20` plan reported 124 BRAM18).
 
-## FIFOs and DWCs: `--model-fifos` (opt-in, 2026-10-06)
+## FIFOs and DWCs: modelled by default (`--no-model-fifos` to switch off)
 
-Off by default (the output is then byte-compatible with earlier runs). With the flag, `fifo_model.py` prices what the analytical blocks (`MILP/analytical/`) showed to matter, inside the solve:
+**Default since 2026-10-08** (opt-in `--model-fifos` before; the old flag is accepted and ignored). With a single `--candidate-bits` value the FIFO / DWC terms are in every solve; with several values the model switches itself off
+(it prices streams at one bit width) and says so. `--no-model-fifos` reproduces the earlier output. `fifo_model.py` prices what the analytical blocks (`MILP/analytical/`) showed to matter, inside the solve:
 
 * the **skip FIFO** of every residual diamond (`find_fork_join_diamonds`, join kind `add`, long branch holding a padded windowed conv): `(n_fill + max(4, 8.5% n_fill))` pixels of `Cout/PE` words,
   `n_fill = pad*W + pad + 1` (x1.10 for downsampling blocks). Its size in bits is ~fold-independent; the PE of the node before the join only sets the stream width (BRAM aspect, pow2 rounding via
   `bottleneck.fifo_memory`). Verified against the 25 residual blocks of the analytical artifact (est. within -1%..+8%, test_fifo_model.py);
+* the two join FIFOs of every **up block** (added 2026-10-08, from the simulation with the real row-buffer `UpsampleNearestNeighbour`): `skip FIFO` at the ext end (reduce -> transposed conv -> expand) = ONE input row, `W * (Cout/PE)` words (paced need W-1 px at every fold swept, final depth = need + 1 px; up4 512 / up5 256 words at PE 1); `FIFO main` at the main end (main_proj -> upsampler -> skip_quant) = a 3 x W px bound, `3 W * (Cout/PE)` words (paced need 1..89 px at W=32, 5..145 px at W=64 over the folds of budgets 16..96 / 4..24 cycles per output pixel, the MILP's own folds need 22 / 40.5 px; one BRAM18 each). The analytical block model's own latency estimate for these two is 32 / 8 words and 64 / 84 words (16-32x and 4-10x too small); `fifo_model.UP_SKIP_ROWS` / `UP_MAIN_ROWS` hold the constants. Still unpriced: the initial block's `FIFO main` (3-4 words), the down block's `Dup -> SWG_r` feed and the dup outputs (simulation-only);
 * the **prefetch FIFO** in front of every padded 3x3 conv's FMPadding: `n_fill*(Cin/SIMD_swu) + 2` words of `SIMD_swu*bits` (matches the verified depths within 4 words);
 * every **DWC**: the internal ones of a node (MVAU -> its threshold when PE != PE_t, parallel_window SWG -> MVAU) and the one on each dataflow edge whose stream widths differ
   (`fcm.dwc_cost`; widths = PE/SIMD x bits, accumulator bits inside conv nodes). Inter-node DWCs use width-class indicators and pair variables m >= u_P[w] + u_C[w'] - 1.
@@ -202,22 +204,24 @@ Inter-block FIFOs are fixed at depth 2 (priced like the analytical artifact). NO
 initial-block `FIFO main`. Needs one `--candidate-bits` value. Extra output: top-level `intra_block_fifos` (priced FIFOs), `inter_block_fifos`, `dwcs`, `_diagnostics.fifo_model`.
 On S12-256 INT6 (force-dsp, min-resources, 250 fps) it finds 25 skip + 26 prefetch FIFOs = 146 BRAM18 (the analytical design: 143) and 175 DWCs (4.7k LUT; the analytical folding has 99).
 
-## Rate coherence: `--pbi-ratio RATIO` (join balance) and `--dsr-pct PCT` (chain coherence)
+## Rate rules: `--dsr-pct` / `--dsr-floor` (downstream rate, frame cycles) and `--pbi-ratio RATIO` (join balance, deprecated)
 
-**Frame-rate ratchet: `--ratchet-pct 4 --ratchet-floor 0.6` (2026-10-06, ON by default, needs `--target-fps`).** "Downstream no slower than upstream" in cycles PER FRAME (comparable across resolutions,
+**Downstream-rate rule (DSR): `--dsr-pct 4 --dsr-floor 0.6` (ON by default, needs `--target-fps`; renamed 2026-10-08 from `--ratchet-pct` / `--ratchet-floor`, see the note below).** "Downstream no slower than upstream" in cycles PER FRAME (comparable across resolutions,
 unlike per element): for every dataflow edge P -> C between COMPUTE nodes (conv / MVAU layers, the downsampling pad-MVAU, the argmax) `cycles[C] <= max(floor * F, (1 + pct/100) * cycles[P])`, F = clock / target-fps (400,000 at 250 fps, so the floor is 240,000 cycles).
 Everything else (thresholds, dup, add, pools, upsample, concat, the 1-channel input quantizer) is relayed through (C is compared with its nearest compute ancestors); forks and joins need no special case. Thresholds / dup / add
-are NOT ratchet nodes: their slowest fold is tiny (a 4-channel threshold at PE 1 = 65,536 cycles) while the conv behind them cannot be faster than ~131,072 cycles under a 72-bit width cap, so an edge rule on them is
-infeasible at any small pct (found on the S12-256 ratchet ablation, where floor 0 is infeasible below +100% and the smallest feasible round floor is 0.33). Because each node picks
+are NOT DSR nodes: their slowest fold is tiny (a 4-channel threshold at PE 1 = 65,536 cycles) while the conv behind them cannot be faster than ~131,072 cycles under a 72-bit width cap, so an edge rule on them is
+infeasible at any small pct (found on the S12-256 ablation, where floor 0 is infeasible below +100% and the smallest feasible round floor is 0.33). Because each node picks
 from a few distinct cycle values, the disjunction is written as pair exclusions on cycle-class indicators: `u_P[c1] + sum(u_C[c2] for c2 > max(floor F, (1+pct) c1)) <= 1` (no big-M, no slack variable).
-It is the analytical build's block ratchet (`MILP/analytical/net_fold.py --ratchet-pct --ratchet-floor`) applied edge by edge instead of block by block. The floor is what usually binds: with it a node may always
-use up to 0.6 F, so the ratchet only bites when an upstream node is slower than 0.6 F / 1.04. `--ratchet-pct none` turns it off (old sweeps that passed `--target-fps` without the flag now get it: add `--ratchet-pct none`
+It is the analytical build's block rule (`MILP/analytical/net_fold.py --dsr-pct --dsr-floor`) applied edge by edge instead of block by block. The floor is what usually binds: with it a node may always
+use up to 0.6 F, so the rule only bites when an upstream node is slower than 0.6 F / 1.04. `--dsr-pct none` turns it off (old sweeps that passed `--target-fps` without the flag now get it: add `--dsr-pct none`
 to reproduce them).
 
-**`--dsr-pct` (2026-10-06, OFF by default):** the ELEMENT-rate DSR below, in PERCENT (replaces `--dsr-ratio R`; R = 1 + pct/100; `--dsr-ratio-pass2` became `--dsr-pct-pass2`; `--min-dsr` searches the smallest
-feasible allowance). It is no longer the default because the 1-channel network input has a fixed element rate of 1.0 cycle per element, so at 4% every later stage must produce an element per cycle too: low-resolution stages
-then run 16-18x faster per frame than the fps target needs (S12-256 INT6: 1,280 DSP / 120k LUT against 121-145 DSP / 93k LUT with the ratchet). Result JSONs keep the ratio form (`dsr_ratio`).
-The final `argmax` node is exempt like the fixed-cycle nodes (its output has one element per pixel against C at its input, so its element-rate would be C x the final conv's by construction).
+**What `--dsr-pct` used to mean (removed 2026-10-08).** Until then `--dsr-pct` (with `--dsr-pct-pass2` and `--min-dsr`) was an ELEMENT-rate chain constraint (cycles per OUTPUT element of a node vs the slowest rate anywhere
+downstream; off by default). It was removed and the frame-rate rule above took the name, because equal element rate forces every node with a small output tensor to be proportionally faster than the frame period needs:
+the 1-channel network input has a fixed element rate of 1.0 cycle per element, so at 4% every later stage had to produce an element per cycle too and low-resolution stages ran 16-18x faster per frame than the fps target
+needs (S12-256 INT6: 1,280 DSP / 120k LUT against 121-145 DSP / 93k LUT with the frame-rate rule). Scripts that pass `--dsr-pct` / `--min-dsr` / `--dsr-pct-pass2` from before this date (e.g. `S12_dense_256_fullwidth_joinsdist_v1`,
+`S12_dense_arms_bc_v1`) reproduce their old results only with the old finn_milp.py (git history). The element-rate ratio is still MEASURED (`chain_rate_imbalance`; `elemrate_*` columns in summary.csv, formerly `dsr_*`).
+Result JSONs written before the rename keep `_diagnostics.ratchet` and run_args `ratchet-pct` / `ratchet-floor` (now `_diagnostics.dsr`, `dsr-pct` / `dsr-floor`); artifact folders and arm names containing `ratchet` are historical names.
 
 Two independent constraint families on the dataflow graph (so threshold
 nodes and ordinary residual joins are included), each gated by its own flag.
@@ -252,7 +256,7 @@ names) each default to `None` (off); either, both, or neither may be set.
    from a diagnostic to the actual enforced constraint, and both now share
    `find_fork_join_diamonds` so they can never diverge on what counts as a
    diamond again.)
-2. **`--dsr-pct` — chain coherence (downstream rate).** `rate[D] ≤ ratio ·
+2. **(REMOVED 2026-10-08, was `--dsr-pct`) — element-rate chain coherence (downstream rate).** `rate[D] ≤ ratio ·
    rate[L]` for every descendant D of an ancestor L, with
    `rate = cycles / (C·H·W of the node's own output)` so nodes are
    comparable across resolution changes. Only the "producer outruns
@@ -385,8 +389,8 @@ Every run so far passed `--force-dsp`, which masked this.
 | `--force-dsp` | forced-DSP calibration factors (`finn_cost_model.md`; currently identity) instead of the auto-resType avg_bits table. |
 | `--target-fps` | throughput target: every node ≤ `clock_mhz·1e6/target_fps` cycles (the physically meaningful rate constraint for a dataflow pipeline). |
 | `--max-latency-ms` / `--clock-mhz` | hard cap on the sum of cycles — a sequential-execution proxy, not the pipeline's real latency (see "Formulation"). The builds run at 100 MHz. |
-| `--dsr-pct` / `--pbi-ratio` | see Rate coherence; independent flags, either/both/neither may be set. |
-| `--min-dsr` | find the smallest feasible `--dsr-pct` (to 0.01, search range 1.01..20; parallel zero-objective feasibility probes) and solve with it, both passes under `--lexicographic`. Exclusive with `--dsr-pct`. DSR multiplies a linear rate expression, so a DSR *variable* would be bilinear — it is searched, not optimized. |
+| `--dsr-pct` / `--dsr-floor` | downstream-rate rule on cycles per frame (default 4 % / 0.6, `--dsr-pct none` = off); see Rate rules. `--pbi-ratio` is the deprecated join-balance constraint. |
+| ~~`--min-dsr`~~ | removed 2026-10-08 together with the element-rate rule it searched (and `--dsr-pct-pass2`). |
 | `--max-lut-fraction` / `--max-bram-fraction` / `--max-dsp-fraction` / `--max-uram-fraction` | maximum fraction of the device (renamed from `--hard-*-fraction`, 2026-10-02). |
 | `--force-serial` | PE=SIMD=1 everywhere, thresholds included. |
 | `--time-limit` / `--gap-rel` | CBC limits (default 1800 s, 2%). |
@@ -484,6 +488,8 @@ cost model's calibration, not a certified hardware guarantee.
 
 ## History
 
+- 2026-10-08: FIFO / DWC modelling (`fifo_model.py`) is on by default for single-bit-width runs; `--no-model-fifos` turns it off, `--model-fifos` is a no-op.
+- 2026-10-08: the element-rate `--dsr-pct` (+ `--dsr-pct-pass2`, `--min-dsr`) was removed; the frame-rate rule formerly called the ratchet is now `--dsr-pct` / `--dsr-floor` (default 4 % / 0.6; JSON `_diagnostics.dsr`). summary.csv `dsr_*` measurement columns became `elemrate_*`.
 - 2026-10-06: `argmax` extra node (FINN LabelSelect over the 5 output channels, foldable PE | 5, DSR-exempt); `--dsr-ratio R` replaced by `--dsr-pct P` (still off by default); new default-on frame-rate ratchet `--ratchet-pct 4 --ratchet-floor 0.6`.
 
 - 2026-09-17: became self-contained (was `joint_bits_folding_ilp_perlayer.py`,

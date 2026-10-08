@@ -523,7 +523,7 @@
       "stage": "regular1.1",
       "pe": 4,
       "simd": 2,
-      "thr_ram_style": "block",
+      "thr_ram_style": "distributed",
       "variant": "rtl_dsp_noact1",
       "force_dsp": true,
       "mvau_noAct": true,
@@ -1160,7 +1160,7 @@
       "stage": "stage2.2",
       "pe": 2,
       "simd": 1,
-      "thr_ram_style": "distributed",
+      "thr_ram_style": "block",
       "variant": "rtl_dsp_noact1",
       "force_dsp": true,
       "mvau_noAct": true,
@@ -1736,7 +1736,7 @@
       "stage": "stage2.7",
       "pe": 2,
       "simd": 3,
-      "thr_ram_style": "block",
+      "thr_ram_style": "distributed",
       "variant": "rtl_dsp_noact1",
       "force_dsp": true,
       "mvau_noAct": true,
@@ -2708,7 +2708,7 @@
       "stage": "up4",
       "pe": 2,
       "simd": 1,
-      "thr_ram_style": "distributed",
+      "thr_ram_style": "block",
       "variant": "rtl_dsp_noact1",
       "force_dsp": true,
       "mvau_noAct": true,
@@ -2852,7 +2852,7 @@
       "stage": "regular4.0",
       "pe": 4,
       "simd": 2,
-      "thr_ram_style": "distributed",
+      "thr_ram_style": "block",
       "variant": "rtl_dsp_noact1",
       "force_dsp": true,
       "mvau_noAct": true,
@@ -3359,7 +3359,7 @@
       "stage": "initial",
       "pe": 1,
       "simd": 1,
-      "ram_style": "block",
+      "ram_style": "distributed",
       "weight_bits": null,
       "act_bits": 6,
       "bits_rule": "max_of_sources",
@@ -6398,6 +6398,24 @@
       "mem_uram18": 0
     },
     {
+      "stage": "up4",
+      "name": "up4.skip_FIFO",
+      "producer": "up4.thr_e",
+      "consumer": "up4.add",
+      "producer_milp": "up4.expand.0",
+      "consumer_milp": "up4.add",
+      "depth": 512,
+      "width_bits": 6,
+      "max_occupancy": 512,
+      "is_skip": true,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 1,
+      "mem_lut": 0,
+      "depth_alloc": 512,
+      "mem_uram18": 0
+    },
+    {
       "stage": "regular4.0",
       "name": "regular4.0.prefetch",
       "producer": "regular4.0.dwc",
@@ -6426,6 +6444,24 @@
       "width_bits": 12,
       "max_occupancy": 134,
       "is_skip": false,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 1,
+      "mem_lut": 0,
+      "depth_alloc": 256,
+      "mem_uram18": 0
+    },
+    {
+      "stage": "up5",
+      "name": "up5.skip_FIFO",
+      "producer": "up5.thr_e",
+      "consumer": "up5.add",
+      "producer_milp": "up5.expand.0",
+      "consumer_milp": "up5.add",
+      "depth": 256,
+      "width_bits": 6,
+      "max_occupancy": 256,
+      "is_skip": true,
       "mem": "bram",
       "finn_impl": "vivado/block",
       "mem_bram18": 1,
@@ -6848,6 +6884,24 @@
       "mem_uram18": 1
     },
     {
+      "stage": "up4",
+      "name": "up4.FIFO_main",
+      "producer": "up4.thr_s",
+      "consumer": "up4.add",
+      "producer_milp": "up4.skip_quant",
+      "consumer_milp": "up4.add",
+      "depth": 1536,
+      "width_bits": 6,
+      "max_occupancy": 1536,
+      "is_skip": false,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 1,
+      "mem_lut": 0,
+      "depth_alloc": 2048,
+      "mem_uram18": 0
+    },
+    {
       "stage": "regular4.0",
       "name": "regular4.0.skip_FIFO",
       "producer": "regular4.0.thr_s",
@@ -6881,6 +6935,24 @@
       "mem_bram18": 1,
       "mem_lut": 0,
       "depth_alloc": 2048,
+      "mem_uram18": 0
+    },
+    {
+      "stage": "up5",
+      "name": "up5.FIFO_main",
+      "producer": "up5.thr_s",
+      "consumer": "up5.add",
+      "producer_milp": "up5.skip_quant",
+      "consumer_milp": "up5.add",
+      "depth": 768,
+      "width_bits": 6,
+      "max_occupancy": 768,
+      "is_skip": false,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 1,
+      "mem_lut": 0,
+      "depth_alloc": 1024,
       "mem_uram18": 0
     },
     {
@@ -8121,7 +8193,7 @@
     "fifo_model": {
       "totals": {
         "lut": 0.0,
-        "bram18": 91.0,
+        "bram18": 95.0,
         "uram18": 4.0,
         "dwc_lut": 2513.433000000001
       },
@@ -8237,6 +8309,18 @@
           "n_fill_px": 529,
           "conv": "stage3.7.conv"
         },
+        "up4.expand.0": {
+          "join": "up4.add",
+          "n_fill_px": 32,
+          "conv": null,
+          "kind": "up_skip"
+        },
+        "up4.skip_quant": {
+          "join": "up4.add",
+          "n_fill_px": 32,
+          "conv": null,
+          "kind": "up_main"
+        },
         "regular4.0.skip_quant": {
           "join": "regular4.0.add",
           "n_fill_px": 66,
@@ -8246,6 +8330,18 @@
           "join": "regular4.1.add",
           "n_fill_px": 66,
           "conv": "regular4.1.conv"
+        },
+        "up5.expand.0": {
+          "join": "up5.add",
+          "n_fill_px": 64,
+          "conv": null,
+          "kind": "up_skip"
+        },
+        "up5.skip_quant": {
+          "join": "up5.add",
+          "n_fill_px": 64,
+          "conv": null,
+          "kind": "up_main"
         },
         "regular5.0.skip_quant": {
           "join": "regular5.0.add",
@@ -8261,7 +8357,7 @@
     "n_layers": 88,
     "n_binary_vars": 5316,
     "n_constraints": 8194,
-    "ratchet": {
+    "dsr": {
       "pct": 1.0,
       "floor": 0.33,
       "n_constraints": 2506
@@ -8374,9 +8470,9 @@
     "total_lut_calibrated": 99160.83133333332,
     "xczu7ev_lut_budget": 230400,
     "lut_pct_of_budget": 43.0385552662037,
-    "total_bram18k_calibrated": 101.0,
+    "total_bram18k_calibrated": 105.0,
     "xczu7ev_bram18k_budget": 624,
-    "bram_pct_of_budget": 16.185897435897434,
+    "bram_pct_of_budget": 16.826923076923077,
     "total_uram18": 4.0,
     "xczu7ev_uram_budget": 96,
     "uram_pct_of_budget": 4.166666666666667,
@@ -8394,10 +8490,8 @@
     "bottleneck_cycles": 147971,
     "sensitivity_raw_sum": 0.11902066909005832,
     "sensitivity_norm_mean": 0.06179682545568082,
-    "dsr_ratio": null,
     "pbi_ratio": null,
     "n_join_constraints": 0,
-    "n_chain_rate_constraints": 0,
     "solver_time_limit_s": 600,
     "solver_gap_rel": 0.001,
     "force_serial": false,

@@ -203,11 +203,16 @@ def model_up_bottleneck(
     l_ext = dup_px + cyc["MVAU_r"] + thr_px(cmid, tpe_r) + (Wo + 2) * cf_u + 4 * cmid / simd_u + cyc["MVAU_u"] + thr_px(cmid, tpe_u) + cyc["MVAU_e"] + thr_px(cout, tpe_e)
     ext_w, main_w = cout // tpe_e, cout // main_out_pe
     skip_px = max(1, math.ceil(max(0.0, l_main - l_ext) / T)) + 1
+    main_px = max(1, math.ceil(max(0.0, l_ext - l_main) / T)) + 1
+    if not skip_conv:
+        # The latency difference above misses the real upsampler (finn-hlslib row-buffer UpsampleNearestNeighbour, UpNNNode): it understates the ext-end skip FIFO 16-30x. Closed forms fitted to
+        # the simulation (fifo_model.UP_SKIP_ROWS / UP_MAIN_ROWS, MILP/finn_milp.md): skip = ONE input row (paced need W-1 px at every fold swept), FIFO main <= 3 input rows. verify_with_sim still measures both.
+        skip_px, main_px = W, 3 * W
     depth = skip_px * ext_w
     fw = tpe_e * A
     res.skip_fifo = SkipFifo(width_bits=fw, depth_words=depth, bits=fw * depth, bram18_if_block=_fifo_bram18(fw, depth),
                              lutram_luts_if_distributed=math.ceil(fw * depth / 64), pixels_buffered=skip_px, pe=tpe_e)
-    res.params["main_fifo_words"] = max(2, (max(1, math.ceil(max(0.0, l_ext - l_main) / T)) + 1) * main_w)
+    res.params["main_fifo_words"] = max(2, main_px * main_w)
     res.latency_first_out_cycles = int(math.ceil(max(l_main, l_ext) + cout / pe_a + cout / pe_to))
     res.frame_cycles = int(res.latency_first_out_cycles + (px_out - 1) * T)
     dwc_lut = sum(d.lut for d in dw)

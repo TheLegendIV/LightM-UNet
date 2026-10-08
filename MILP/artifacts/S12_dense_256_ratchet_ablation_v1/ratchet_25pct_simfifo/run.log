@@ -1,6 +1,6 @@
 ratchet_25pct_simfifo: 29 blocks built from the MILP folding (0 warnings)
 simulating 29 blocks (12 distinct shapes), 3 workers
-whole-net chain, target 327680 cycles/frame (slowest MILP node) + 3%, inter-block depth 2, up to 6 rounds
-  chain round 1: deadlock=False period=327899 (limit 337510) first_out=654512 full=0 [2569 s]
+whole-net chain: pass = no deadlock and period <= 400000 cycles/frame (network budget); slowest MILP node / block 327680, inter-block depth 2, up to 4 rounds
+  chain round 1: deadlock=False period=327899 (limit 400000) first_out=655793 full=0 [889 s]
 ratchet_25pct_simfifo: wrote MILP/artifacts/S12_dense_256_ratchet_ablation_v1/ratchet_25pct_simfifo/layer_bits_folding_ratchet_25pct_simfifo.json
-  blocks failing alone: 0, chain ok: True, intra FIFO BRAM18 91.0 (MILP) -> 147 (sim)
+  blocks failing alone: 0, chain ok: True, intra FIFO BRAM18 95.0 (MILP) -> 149 (sim)

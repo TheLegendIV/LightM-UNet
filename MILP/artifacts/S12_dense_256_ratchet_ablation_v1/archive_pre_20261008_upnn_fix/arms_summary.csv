@@ -1,0 +1,13 @@
+arm,status,dsr_pct,dsr_floor,dsr_constraints,lut_total,lut_nodes,lut_fifo_dwc,bram18,bram18_fifos,dsp,slowest_node,slowest_cycles,fps,sum_node_cycles_ms,n_dwcs,n_fifos_gt2,layers_diff_vs_off,fingerprint,dsr_violations,wwidth_max_seen,all_int6
+ratchet_1pct,Optimal,1.0,0.33,2506,99161,96255,2905,101.0,91.0,178,initial.conv,147971,675.8,166.7,113,51,82,ac5d302040,0,48,True
+ratchet_25pct,Optimal,25.0,0.33,2504,98466,95625,2841,101.0,91.0,147,down1.conv.0,147980,675.8,180.2,106,51,82,66b89d06ea,0,48,True
+ratchet_100pct,Optimal,100.0,0.33,2215,95913,93909,2004,101.0,91.0,115,down1.conv.0,294912,339.1,291.6,53,51,2,498a1eeb6d,0,48,True
+ratchet_200pct,Optimal,200.0,0.33,2165,95558,93629,1930,101.0,91.0,113,final.argmax,327680,305.2,295.2,52,51,1,caa01c4596,0,48,True
+ratchet_off,Optimal,,0.6,0,95274,93387,1887,101.0,91.0,101,final.argmax,327680,305.2,296.5,51,51,0,5ab4faa2be,,24,True
+analytical_25pct,Optimal,25.0,0.33,,87995,76918,11077,205.0,143.0,241,regular5.0.conv,147715,677.0,170.2,101,64,82,f4b436030f,1,48,True
+analytical_25pct_finnfifo,Optimal,25.0,0.33,,,76918,,,,241,regular5.0.conv,147715,677.0,170.2,,,82,f4b436030f,1,48,True
+ratchet_1pct_simfifo,Optimal,1.0,0.33,2506,109309,96255,13053,156.0,146.0,178,initial.conv,147971,675.8,166.7,112,170,82,ac5d302040,0,48,True
+ratchet_25pct_simfifo,Optimal,25.0,0.33,2504,109064,95625,13439,157.0,147.0,147,down1.conv.0,147980,675.8,180.2,105,140,82,66b89d06ea,0,48,True
+ratchet_100pct_simfifo,Optimal,100.0,0.33,2215,103274,93909,9365,197.0,187.0,115,down1.conv.0,294912,339.1,291.6,52,123,2,498a1eeb6d,0,48,True
+ratchet_200pct_simfifo,Optimal,200.0,0.33,2165,102815,93629,9187,197.0,187.0,113,final.argmax,327680,305.2,295.2,51,123,1,caa01c4596,0,48,True
+ratchet_off_simfifo,Optimal,,0.6,0,102403,93387,9016,197.0,187.0,101,final.argmax,327680,305.2,296.5,50,123,0,5ab4faa2be,,24,True

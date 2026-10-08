@@ -12946,9 +12946,9 @@
    "consumer_node": "Thr_p",
    "producer_milp": "up4.dwc#DWC(MVAU_p->Thr_p)",
    "consumer_milp": "up4.main_proj.0#thr",
-   "depth": 2,
+   "depth": 6,
    "width_bits": 18,
-   "max_occupancy": 1,
+   "max_occupancy": 6,
    "is_skip": false,
    "mem": "srl",
    "finn_impl": "rtl",
@@ -12965,9 +12965,9 @@
    "consumer_node": "DWC(Thr_p->UpNN)",
    "producer_milp": "up4.main_proj.0#thr",
    "consumer_milp": "up4.dwc#DWC(Thr_p->UpNN)",
-   "depth": 2,
+   "depth": 8,
    "width_bits": 6,
-   "max_occupancy": 1,
+   "max_occupancy": 8,
    "is_skip": false,
    "mem": "srl",
    "finn_impl": "rtl",
@@ -12984,9 +12984,9 @@
    "consumer_node": "UpNN",
    "producer_milp": "up4.dwc#DWC(Thr_p->UpNN)",
    "consumer_milp": "up4.upsample#upsample",
-   "depth": 7,
+   "depth": 8,
    "width_bits": 96,
-   "max_occupancy": 7,
+   "max_occupancy": 8,
    "is_skip": false,
    "mem": "srl",
    "finn_impl": "rtl",
@@ -13022,15 +13022,15 @@
    "consumer_node": "Add",
    "producer_milp": "up4.skip_quant#thr",
    "consumer_milp": "up4.add#add",
-   "depth": 664,
+   "depth": 368,
    "width_bits": 6,
-   "max_occupancy": 664,
+   "max_occupancy": 368,
    "is_skip": false,
    "mem": "bram",
    "finn_impl": "vivado/block",
    "mem_bram18": 1,
    "mem_lut": 0,
-   "milp_depth": null
+   "milp_depth": 1536
   },
   {
    "stage": "up4",
@@ -13269,15 +13269,15 @@
    "consumer_node": "Add",
    "producer_milp": "up4.expand.0#thr",
    "consumer_milp": "up4.add#add",
-   "depth": 17,
+   "depth": 512,
    "width_bits": 6,
-   "max_occupancy": 1,
+   "max_occupancy": 496,
    "is_skip": true,
-   "mem": "srl",
-   "finn_impl": "rtl",
-   "mem_bram18": 0,
-   "mem_lut": 14,
-   "milp_depth": null
+   "mem": "bram",
+   "finn_impl": "vivado/block",
+   "mem_bram18": 1,
+   "mem_lut": 0,
+   "milp_depth": 512
   },
   {
    "stage": "up4",
@@ -13915,9 +13915,9 @@
    "consumer_node": "DWC(MVAU_p->Thr_p)",
    "producer_milp": "up5.main_proj.0#mvau",
    "consumer_milp": "up5.dwc#DWC(MVAU_p->Thr_p)",
-   "depth": 9,
+   "depth": 16,
    "width_bits": 34,
-   "max_occupancy": 9,
+   "max_occupancy": 16,
    "is_skip": false,
    "mem": "srl",
    "finn_impl": "rtl",
@@ -14010,15 +14010,15 @@
    "consumer_node": "Add",
    "producer_milp": "up5.skip_quant#thr",
    "consumer_milp": "up5.add#add",
-   "depth": 314,
+   "depth": 166,
    "width_bits": 6,
-   "max_occupancy": 314,
+   "max_occupancy": 166,
    "is_skip": false,
    "mem": "bram",
    "finn_impl": "vivado/block",
    "mem_bram18": 1,
    "mem_lut": 0,
-   "milp_depth": null
+   "milp_depth": 768
   },
   {
    "stage": "up5",
@@ -14276,15 +14276,15 @@
    "consumer_node": "Add",
    "producer_milp": "up5.expand.0#thr",
    "consumer_milp": "up5.add#add",
-   "depth": 5,
+   "depth": 256,
    "width_bits": 6,
-   "max_occupancy": 1,
+   "max_occupancy": 252,
    "is_skip": true,
-   "mem": "srl",
-   "finn_impl": "rtl",
-   "mem_bram18": 0,
-   "mem_lut": 14,
-   "milp_depth": null
+   "mem": "bram",
+   "finn_impl": "vivado/block",
+   "mem_bram18": 1,
+   "mem_lut": 0,
+   "milp_depth": 256
   },
   {
    "stage": "up5",
@@ -15887,7 +15887,7 @@
   "n_layers": 88,
   "n_binary_vars": 5316,
   "n_constraints": 8192,
-  "ratchet": {
+  "dsr": {
    "pct": 25.0,
    "floor": 0.33,
    "n_constraints": 2504
@@ -16002,7 +16002,7 @@
   "lut_pct_of_budget": 42.73718710455246,
   "total_bram18k_calibrated": 10.0,
   "xczu7ev_bram18k_budget": 624,
-  "bram_pct_of_budget": 16.185897435897434,
+  "bram_pct_of_budget": 16.826923076923077,
   "total_uram18": 4.0,
   "xczu7ev_uram_budget": 96,
   "uram_pct_of_budget": 4.166666666666667,
@@ -16020,10 +16020,8 @@
   "bottleneck_cycles": 147980,
   "sensitivity_raw_sum": 0.11902066909005832,
   "sensitivity_norm_mean": 0.06179682545568082,
-  "dsr_ratio": null,
   "pbi_ratio": null,
   "n_join_constraints": 0,
-  "n_chain_rate_constraints": 0,
   "solver_time_limit_s": 600,
   "solver_gap_rel": 0.001,
   "force_serial": false,
@@ -16367,7 +16365,7 @@
    "fifo_model": {
     "totals": {
      "lut": 0.0,
-     "bram18": 91.0,
+     "bram18": 95.0,
      "uram18": 4.0,
      "dwc_lut": 2449.0752000000007
     },
@@ -16483,6 +16481,18 @@
       "n_fill_px": 529,
       "conv": "stage3.7.conv"
      },
+     "up4.expand.0": {
+      "join": "up4.add",
+      "n_fill_px": 32,
+      "conv": null,
+      "kind": "up_skip"
+     },
+     "up4.skip_quant": {
+      "join": "up4.add",
+      "n_fill_px": 32,
+      "conv": null,
+      "kind": "up_main"
+     },
      "regular4.0.skip_quant": {
       "join": "regular4.0.add",
       "n_fill_px": 66,
@@ -16493,6 +16503,18 @@
       "n_fill_px": 66,
       "conv": "regular4.1.conv"
      },
+     "up5.expand.0": {
+      "join": "up5.add",
+      "n_fill_px": 64,
+      "conv": null,
+      "kind": "up_skip"
+     },
+     "up5.skip_quant": {
+      "join": "up5.add",
+      "n_fill_px": 64,
+      "conv": null,
+      "kind": "up_main"
+     },
      "regular5.0.skip_quant": {
       "join": "regular5.0.add",
       "n_fill_px": 130,
@@ -16502,22 +16524,22 @@
     "note": "skip / prefetch FIFOs + DWCs priced in the solve (fifo_model.py); total_* below include them. Simulation-only FIFOs (down feed, up / init FIFO main) are not priced; inter-block FIFOs are fixed at depth 2."
    },
    "lut": 2841.0752000000007,
-   "bram18": 91.0,
+   "bram18": 95.0,
    "note": "the MILP's closed-form FIFO / DWC estimate that was removed from total_lut_calibrated / total_bram18k_calibrated (now nodes only)"
   },
   "inter_block_fifo_bram18": 0,
   "inter_block_fifo_lut": 392,
   "inter_block_fifo_uram18": 0,
   "intra_block_fifo_totals": {
-   "fifo_lut": 11057.0,
-   "fifo_bram18": 147.0,
+   "fifo_lut": 11029.0,
+   "fifo_bram18": 149.0,
    "fifo_uram18": 4.0,
    "dwc_lut": 1989.8735999999994
   },
-  "intra_block_fifo_bram18": 147,
+  "intra_block_fifo_bram18": 149,
   "intra_block_fifo_warnings": [],
-  "total_bram18k_with_all_fifos": 157.0,
-  "total_lut_with_all_fifos": 109064.27748888887
+  "total_bram18k_with_all_fifos": 159.0,
+  "total_lut_with_all_fifos": 109036.27748888887
  },
  "dataflow_graph": {
   "input": [
@@ -21072,14 +21094,40 @@
      "uram18": 0
     },
     {
+     "name": "MVAU_p->DWC->Thr_p",
+     "producer": "DWC(MVAU_p->Thr_p)",
+     "consumer": "Thr_p",
+     "width_bits": 18,
+     "depth": 6,
+     "max_occ": 6,
+     "mem": "srl",
+     "depth_alloc": 6,
+     "lut": 26,
+     "bram18": 0,
+     "uram18": 0
+    },
+    {
+     "name": "Thr_p->out",
+     "producer": "Thr_p",
+     "consumer": "DWC(Thr_p->UpNN)",
+     "width_bits": 6,
+     "depth": 8,
+     "max_occ": 8,
+     "mem": "srl",
+     "depth_alloc": 8,
+     "lut": 14,
+     "bram18": 0,
+     "uram18": 0
+    },
+    {
      "name": "Thr_p->DWC->UpNN",
      "producer": "DWC(Thr_p->UpNN)",
      "consumer": "UpNN",
      "width_bits": 96,
-     "depth": 7,
-     "max_occ": 7,
+     "depth": 8,
+     "max_occ": 8,
      "mem": "srl",
-     "depth_alloc": 7,
+     "depth_alloc": 8,
      "lut": 104,
      "bram18": 0,
      "uram18": 0
@@ -21102,10 +21150,10 @@
      "producer": "Thr_s",
      "consumer": "Add",
      "width_bits": 6,
-     "depth": 664,
-     "max_occ": 664,
+     "depth": 368,
+     "max_occ": 368,
      "mem": "bram",
-     "depth_alloc": 1024,
+     "depth_alloc": 512,
      "lut": 0,
      "bram18": 1,
      "uram18": 0
@@ -21193,16 +21241,16 @@
      "producer": "Thr_e",
      "consumer": "Add",
      "width_bits": 6,
-     "depth": 17,
-     "max_occ": 1,
-     "mem": "srl",
-     "depth_alloc": 17,
-     "lut": 14,
-     "bram18": 0,
+     "depth": 512,
+     "max_occ": 496,
+     "mem": "bram",
+     "depth_alloc": 512,
+     "lut": 0,
+     "bram18": 1,
      "uram18": 0
     }
    ],
-   "n_fifos_depth_le_2_removed_by_finn": 10,
+   "n_fifos_depth_le_2_removed_by_finn": 8,
    "dwcs": [
     {
      "edge": "MVAU_p->Thr_p",
@@ -21246,8 +21294,7 @@
     "MVAU_r runs at 100% of F: no (PE, SIMD) divisor pair lands exactly on F",
     "MVAU_u runs at 100% of F: no (PE, SIMD) divisor pair lands exactly on F",
     "MVAU_e runs at 100% of F: no (PE, SIMD) divisor pair lands exactly on F",
-    "FMPadPix / FMPad_k / UpNN LUT are not calibrated in finn_cost_model (priced 0 or provisional); MVAU_u counts the MACs on inserted zeros (FINN lowers ConvTranspose to zero insertion + conv)",
-    "skip FIFO set from the analytic 32 to 17 words by simulation"
+    "FMPadPix / FMPad_k / UpNN LUT are not calibrated in finn_cost_model (priced 0 or provisional); MVAU_u counts the MACs on inserted zeros (FINN lowers ConvTranspose to zero insertion + conv)"
    ]
   },
   "regular4.0": {
@@ -21409,10 +21456,10 @@
      "producer": "MVAU_p",
      "consumer": "DWC(MVAU_p->Thr_p)",
      "width_bits": 34,
-     "depth": 9,
-     "max_occ": 9,
+     "depth": 16,
+     "max_occ": 16,
      "mem": "srl",
-     "depth_alloc": 9,
+     "depth_alloc": 16,
      "lut": 42,
      "bram18": 0,
      "uram18": 0
@@ -21474,10 +21521,10 @@
      "producer": "Thr_s",
      "consumer": "Add",
      "width_bits": 6,
-     "depth": 314,
-     "max_occ": 314,
+     "depth": 166,
+     "max_occ": 166,
      "mem": "bram",
-     "depth_alloc": 512,
+     "depth_alloc": 256,
      "lut": 0,
      "bram18": 1,
      "uram18": 0
@@ -21578,12 +21625,12 @@
      "producer": "Thr_e",
      "consumer": "Add",
      "width_bits": 6,
-     "depth": 5,
-     "max_occ": 1,
-     "mem": "srl",
-     "depth_alloc": 5,
-     "lut": 14,
-     "bram18": 0,
+     "depth": 256,
+     "max_occ": 252,
+     "mem": "bram",
+     "depth_alloc": 256,
+     "lut": 0,
+     "bram18": 1,
      "uram18": 0
     }
    ],
@@ -21637,8 +21684,7 @@
     "MVAU_r runs at 100% of F: no (PE, SIMD) divisor pair lands exactly on F",
     "MVAU_u runs at 100% of F: no (PE, SIMD) divisor pair lands exactly on F",
     "MVAU_e runs at 100% of F: no (PE, SIMD) divisor pair lands exactly on F",
-    "FMPadPix / FMPad_k / UpNN LUT are not calibrated in finn_cost_model (priced 0 or provisional); MVAU_u counts the MACs on inserted zeros (FINN lowers ConvTranspose to zero insertion + conv)",
-    "skip FIFO set from the analytic 8 to 5 words by simulation"
+    "FMPadPix / FMPad_k / UpNN LUT are not calibrated in finn_cost_model (priced 0 or provisional); MVAU_u counts the MACs on inserted zeros (FINN lowers ConvTranspose to zero insertion + conv)"
    ]
   },
   "regular5.0": {
@@ -21735,7 +21781,7 @@
   "source": "layer_bits_folding_ratchet_25pct.json",
   "tag": "ratchet_25pct_simfifo",
   "bits": 6,
-  "seconds": 5910,
+  "seconds": 2206,
   "net_target_cycles": 327680,
   "slack": 0.03,
   "workers": 3,
@@ -22232,8 +22278,7 @@
      "MVAU_r runs at 100% of F: no (PE, SIMD) divisor pair lands exactly on F",
      "MVAU_u runs at 100% of F: no (PE, SIMD) divisor pair lands exactly on F",
      "MVAU_e runs at 100% of F: no (PE, SIMD) divisor pair lands exactly on F",
-     "FMPadPix / FMPad_k / UpNN LUT are not calibrated in finn_cost_model (priced 0 or provisional); MVAU_u counts the MACs on inserted zeros (FINN lowers ConvTranspose to zero insertion + conv)",
-     "skip FIFO set from the analytic 32 to 17 words by simulation"
+     "FMPadPix / FMPad_k / UpNN LUT are not calibrated in finn_cost_model (priced 0 or provisional); MVAU_u counts the MACs on inserted zeros (FINN lowers ConvTranspose to zero insertion + conv)"
     ]
    },
    "regular4.0": {
@@ -22291,8 +22336,7 @@
      "MVAU_r runs at 100% of F: no (PE, SIMD) divisor pair lands exactly on F",
      "MVAU_u runs at 100% of F: no (PE, SIMD) divisor pair lands exactly on F",
      "MVAU_e runs at 100% of F: no (PE, SIMD) divisor pair lands exactly on F",
-     "FMPadPix / FMPad_k / UpNN LUT are not calibrated in finn_cost_model (priced 0 or provisional); MVAU_u counts the MACs on inserted zeros (FINN lowers ConvTranspose to zero insertion + conv)",
-     "skip FIFO set from the analytic 8 to 5 words by simulation"
+     "FMPadPix / FMPad_k / UpNN LUT are not calibrated in finn_cost_model (priced 0 or provisional); MVAU_u counts the MACs on inserted zeros (FINN lowers ConvTranspose to zero insertion + conv)"
     ]
    },
    "regular5.0": {
@@ -22345,12 +22389,13 @@
    "rounds": [
     {
      "round": 1,
+     "meets_milp_node": true,
      "deadlock": false,
      "period": 327899,
-     "first_out": 654512,
+     "first_out": 655793,
      "ok": true,
      "full": [],
-     "seconds": 2569
+     "seconds": 889
     }
    ],
    "interface_depths": [
@@ -22386,20 +22431,22 @@
    "grown": [],
    "last": {
     "round": 1,
+    "meets_milp_node": true,
     "deadlock": false,
     "period": 327899,
-    "first_out": 654512,
+    "first_out": 655793,
     "ok": true,
     "full": [],
-    "seconds": 2569
+    "seconds": 889
    },
    "target": 327680,
-   "limit": 337510.4
+   "limit": 400000,
+   "milp_limit": 337510.4
   },
   "chain_ok": true,
   "build_warnings": [],
-  "bram18_milp_estimate": 91.0,
-  "bram18_sim": 147,
+  "bram18_milp_estimate": 95.0,
+  "bram18_sim": 149,
   "note": "folding identical to the source MILP json; FIFO depths = the smallest per-block depths that sustain each block's own slowest MILP node in simulation, grown further by the whole-net chain on a deadlock"
  }
 }
