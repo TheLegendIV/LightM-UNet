@@ -320,7 +320,41 @@ class FINNQuantENet(nn.Module):
 # Export helpers
 # ---------------------------------------------------------------------------
 
-def export_model(model: nn.Module, name: str, dummy: torch.Tensor, force_output_dtype: str | None = "INT8") -> Path:
+def split_convtranspose_bias(qm):
+    """ConvTranspose(x, W, b) -> ConvTranspose(x, W) + Add(b as (1,C,1,1)); returns the model.
+
+    FINN's FoldQuantWeights folds a bias Quant like a weight Quant (its scale becomes a Mul on the whole
+    ConvTranspose output) and InferPixelPaddingDeconv drops the bias input; as an Add the bias is folded correctly."""
+    from onnx import helper
+    from qonnx.transformation.infer_shapes import InferShapes
+
+    n_split = 0
+    for node in list(qm.graph.node):
+        if node.op_type != "ConvTranspose" or len(node.input) < 3 or node.input[2] == "":
+            continue
+        bias_t = node.input[2]
+        prod = qm.find_producer(bias_t)
+        const_t = prod.input[0] if prod is not None and prod.op_type == "Quant" else bias_t
+        b = qm.get_initializer(const_t)
+        assert b is not None, f"{node.name}: bias is not a constant"
+        qm.set_initializer(const_t, b.reshape(1, -1, 1, 1))
+        qm.set_tensor_shape(bias_t, [1, b.size, 1, 1])  # drop the stale (C,) shape annotation
+        out_name = node.output[0]
+        pre_bias = qm.make_new_valueinfo_name()
+        node.output[0] = pre_bias
+        del node.input[2]
+        add = helper.make_node("Add", [pre_bias, bias_t], [out_name], name=f"{node.name}_bias_add")
+        qm.graph.node.insert(list(qm.graph.node).index(node) + 1, add)
+        n_split += 1
+    if n_split:
+        qm = qm.transform(InferShapes())
+    return qm
+
+
+def export_model(
+    model: nn.Module, name: str, dummy: torch.Tensor, force_output_dtype: str | None = "INT8",
+    force_input_dtype: str = "INT8",
+) -> Path:
     """Export model to cleaned QONNX, set INT8 datatypes, verify with onnx.checker.
 
     force_output_dtype: forced onto the graph's output tensor after cleanup (default
@@ -342,7 +376,8 @@ def export_model(model: nn.Module, name: str, dummy: torch.Tensor, force_output_
     qonnx_cleanup(str(out_path), out_file=str(out_path))
 
     qm = ModelWrapper(str(out_path))
-    qm.set_tensor_datatype(qm.graph.input[0].name,  DataType["INT8"])
+    qm = split_convtranspose_bias(qm)
+    qm.set_tensor_datatype(qm.graph.input[0].name,  DataType[force_input_dtype])
     if force_output_dtype is not None:
         qm.set_tensor_datatype(qm.graph.output[0].name, DataType[force_output_dtype])
     qm.save(str(out_path))

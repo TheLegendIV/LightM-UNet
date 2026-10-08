@@ -98,9 +98,11 @@ from finn_partition_build_steps import (  # noqa: E402
     step_combine_partitions,
     step_generate_estimate_reports_multi,
     step_measure_rtlsim_performance_multi,
+    measure_partition_rtlsim,
 )
 from finn_stage_partition import validate_partition_single_output  # noqa: E402
 import finn_s12_blocks  # noqa: E402
+import flow_gates  # noqa: E402
 from finn_s12_build_steps import (  # noqa: E402
     URAM_BUDGET_BLOCKS,
     URAM_PARTITIONS,
@@ -141,6 +143,7 @@ def _build_one_partition(fn, cfg, prefix, folding_file, idx, full, fold_suffix, 
     m = step_target_fps_parallelization(m, cfg)
     if folding_file:
         m = step_apply_folding_config(m, cfg)
+        flow_gates.gate_folding_landed(m, folding_file, log)
     else:
         print(f"{log} auto-fold: skipping step_apply_folding_config", flush=True)
     m = step_minimize_bit_width_standalone_thresh_aware(m, cfg)
@@ -163,6 +166,7 @@ def _build_one_partition(fn, cfg, prefix, folding_file, idx, full, fold_suffix, 
         report_dir = os.path.dirname(fn) if full else cfg.output_dir
         with open(os.path.join(report_dir, f"fifo_force_report_partition_{idx}.json"), "w") as f:
             json.dump(fifo_report, f, indent=2)
+        flow_gates.gate_fifos_landed(m, fifo_report, log)
     if allocate_uram:
         # MUST run before SplitLargeFIFOs -- see step_allocate_uram_fifos's own docstring.
         budget = (uram_budget_blocks or URAM_BUDGET_BLOCKS) // URAM_PARTITIONS
@@ -193,6 +197,17 @@ def _build_one_partition(fn, cfg, prefix, folding_file, idx, full, fold_suffix, 
         with open(os.path.join(cfg.output_dir, "report", f"ooc_synth_partition_{idx}.json"), "w") as f:
             json.dump(res, f, indent=2)
         print(f"{log} OOC synth done: {res}", flush=True)
+        # Zero-backpressure rtlsim of this partition alone (Verilator 5 recipe). Runs AFTER OOC (stock
+        # order) and never fails the build: a deadlock is recorded and flagged in the final summary.
+        rtl_path = os.path.join(cfg.output_dir, "report", f"rtlsim_partition_{idx}.json")
+        try:
+            rtl = measure_partition_rtlsim(m)
+            print(f"{log} rtlsim {'DEADLOCK' if rtl['deadlock'] else 'PASS'}: {rtl}", flush=True)
+        except Exception as e:
+            rtl = {"error": str(e)[-2000:], "deadlock": None}
+            print(f"{log} rtlsim FAILED to run, continuing: {e}", flush=True)
+        with open(rtl_path, "w") as f:
+            json.dump(rtl, f, indent=2)
         return res
 
     m = m.transform(CreateStitchedIP(fpga_part, clk))
@@ -344,6 +359,18 @@ def main():
         return
 
     _aggregate_full(results, os.path.join(output_dir, "report"))
+    rtl_summary = {}
+    for i in part_ids:
+        p = os.path.join(output_dir, "report", f"rtlsim_partition_{i}.json")
+        if os.path.isfile(p):
+            with open(p) as f:
+                rtl_summary[f"partition_{i}"] = json.load(f)
+    with open(os.path.join(output_dir, "report", "rtlsim_per_partition.json"), "w") as f:
+        json.dump(rtl_summary, f, indent=2)
+    for k, v in rtl_summary.items():
+        status = "ERROR" if v.get("deadlock") is None else ("DEADLOCK" if v["deadlock"] else "PASS")
+        print(f"per-partition rtlsim {k}: {status} latency_cycles={v.get('latency_cycles')} "
+              f"N_OUT_TXNS={v.get('N_OUT_TXNS')}/{v.get('expected_out_txns')}", flush=True)
     parent_ckpt = os.path.join(output_dir, "intermediate_models", "dataflow_parent_built.onnx")
     os.makedirs(os.path.dirname(parent_ckpt), exist_ok=True)
     parent.save(parent_ckpt)

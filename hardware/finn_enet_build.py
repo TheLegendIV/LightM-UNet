@@ -273,6 +273,40 @@ def step_enet_streamline(model: ModelWrapper, cfg: DataflowBuildConfig):
     model = model.transform(GiveReadableTensorNames())  # safe to rename once all transforms done
     model = model.transform(InferDataLayouts())
     model = model.transform(InferDataTypes())   # types Im2Col outputs here
+    model = _restore_integer_final_bias(model)
+    return model
+
+
+def _restore_integer_final_bias(model: ModelWrapper):
+    """Rewrite the output tail `Mul(s) -> Add(b_float)` into `Add(b_int) -> Mul(s)`.
+
+    Streamlining pushes the dequant scale ahead of the bias Add, leaving a float
+    bias that cannot lower to an integer ChannelwiseOp; step_insert_argmax_output
+    then drops it as glue and the on-chip argmax runs without the bias."""
+    import numpy as np
+
+    out = model.graph.output[0].name
+    add = model.find_producer(out)
+    if add is None or add.op_type != "Add":
+        return model
+    mul = model.find_producer(add.input[0])
+    b = model.get_initializer(add.input[1])
+    s = model.get_initializer(mul.input[1]) if mul is not None and mul.op_type == "Mul" else None
+    if b is None or s is None or s.size != 1 or float(s) <= 0:
+        return model
+    b_int = np.round(b / float(s))
+    err = float(np.abs(b / float(s) - b_int).max())
+    assert err < 1e-2, f"final bias is not an integer multiple of the output scale (max err {err})"
+    model.set_initializer(add.input[1], b_int.astype(np.float32))
+    lo, hi = float(b_int.min()), float(b_int.max())
+    model.set_tensor_datatype(add.input[1], DataType["INT32"])
+    mid = mul.output[0]
+    add.input[0], mul.input[0] = mul.input[0], mid
+    add.output[0], mul.output[0] = mid, out
+    model = model.transform(SortGraph())
+    model = model.transform(InferShapes())
+    model = model.transform(InferDataTypes())
+    print(f"[_restore_integer_final_bias] bias/scale integer (max err {err:.2e}), range [{lo:.0f}, {hi:.0f}]")
     return model
 
 

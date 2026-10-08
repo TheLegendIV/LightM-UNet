@@ -28,7 +28,7 @@ parent_ckpt = os.path.join(
     base.ENET_DIR, "finn_deployment_outputs", "S12_256_analytical_namefix_20261006_195156",
     "intermediate_models", "dataflow_parent_built.onnx",
 )
-output_dir = os.path.join(base.ENET_DIR, "finn_deployment_outputs", "S12_256_analytical_namefix_recombine_20261007")
+output_dir = os.path.join(base.ENET_DIR, "finn_deployment_outputs", "S12_256_analytical_namefix_recombine_v5sim_20261008")
 os.makedirs(os.path.join(output_dir, "report"), exist_ok=True)
 
 cfg = dataclasses.replace(

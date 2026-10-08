@@ -48,6 +48,7 @@ import re
 import json
 import concurrent.futures
 import shutil
+import subprocess
 from copy import deepcopy
 from functools import partial
 
@@ -673,7 +674,7 @@ def step_generate_estimate_reports_multi(model, cfg):
     return model
 
 
-def verilator_fifosim_multi(model, n_inputs, ishape_folded, oshape_folded, max_iters=100000000):
+def verilator_fifosim_multi(model, n_inputs, ishape_folded, oshape_folded, max_iters=10000000):
     """Same as finn.util.pyverilator.verilator_fifosim, but for a combined
     multi-partition model: the top-level graph's own declared input/output
     tensors are consumed/produced by non-hw Transpose/Mul nodes (software
@@ -690,43 +691,99 @@ def verilator_fifosim_multi(model, n_inputs, ishape_folded, oshape_folded, max_i
     """
 
     vivado_stitch_proj_dir = prepare_stitched_ip_for_verilator(model)
-    verilog_header_dir = vivado_stitch_proj_dir + "/pyverilator_vh"
-    build_dir = make_build_dir("verilator_fifosim_")
+    return run_verilator_fifosim(
+        vivado_stitch_proj_dir, "finn_design_wrapper", n_inputs, ishape_folded, oshape_folded, max_iters
+    )
+
+
+# Verilator 5.x installed in the FINN container (user site). The stock `verilator` on PATH is 4.224,
+# which crashes ("stack smashing detected") on the flat combined design and the xpm_* sources.
+_VERILATOR5_BIN = "/tmp/home_dir/.local/lib/python3.10/site-packages/verilator/bin/verilator"
+
+
+def _resolve_verilator_bin():
+    env_bin = os.environ.get("VERILATOR_BIN")
+    if env_bin:
+        return env_bin
+    if os.path.isfile(_VERILATOR5_BIN):
+        return _VERILATOR5_BIN
+    which_verilator = shutil.which("verilator")
+    if which_verilator is None:
+        raise Exception("'verilator' executable not found")
+    return which_verilator
+
+
+def _run_logged(args, log_path, cwd, env=None, timeout=None):
+    with open(log_path, "w") as logf:
+        return subprocess.run(
+            args, cwd=cwd, env=env, stdout=logf, stderr=subprocess.STDOUT, timeout=timeout
+        )
+
+
+def _log_tail(log_path, n=25):
+    try:
+        with open(log_path, "r", errors="replace") as f:
+            return "".join(f.readlines()[-n:])
+    except OSError:
+        return "<no log>"
+
+
+def run_verilator_fifosim(
+    vivado_stitch_proj_dir,
+    top_module,
+    n_inputs,
+    ishape_folded,
+    oshape_folded,
+    max_iters=10000000,
+    build_dir=None,
+    sim_timeout_s=14400,
+):
+    """Zero-backpressure Verilator rtlsim of an already prepared stitched IP
+    (prepare_stitched_ip_for_verilator must have been called on its model).
+
+    Uses the per-partition-proven recipe (Verilator 5.x, c++17, --no-timing, no --threads,
+    CFG_CXXFLAGS_PCH_I=-include, absolute merged source) so the same recipe applies to a single
+    partition (top_module = <prefix>) and the combined design (top_module = finn_design_wrapper).
+    max_iters is the no-NEW-output timeout in clock cycles, so a deadlock ends the sim after
+    max_iters cycles instead of the stock 100M. Returns the results.txt dict (ints); a deadlock shows
+    up as latency_cycles == 0 and/or N_OUT_TXNS < ITERS_PER_OUTPUT * n_inputs.
+    """
+
+    verilog_header_dir = os.path.join(vivado_stitch_proj_dir, "pyverilator_vh")
+    if build_dir is None:
+        build_dir = make_build_dir("verilator_fifosim_")
+    os.makedirs(build_dir, exist_ok=True)
     fifosim_cpp_fname = os.environ["FINN_ROOT"] + "/src/finn/qnn-data/cpp/verilator_fifosim.cpp"
     with open(fifosim_cpp_fname, "r") as f:
         fifosim_cpp_template = f.read()
 
     template_dict = {
-        "ITERS_PER_INPUT": np.prod(ishape_folded[:-1]),
-        "ITERS_PER_OUTPUT": np.prod(oshape_folded[:-1]),
-        "N_INPUTS": n_inputs,
-        "MAX_ITERS": max_iters,
+        "ITERS_PER_INPUT": int(np.prod(ishape_folded[:-1])),
+        "ITERS_PER_OUTPUT": int(np.prod(oshape_folded[:-1])),
+        "N_INPUTS": int(n_inputs),
+        "MAX_ITERS": int(max_iters),
         "FIFO_DEPTH_LOGGING": "",
     }
-
     for key, val in template_dict.items():
         fifosim_cpp_template = fifosim_cpp_template.replace(f"@{key}@", str(val))
+    fifosim_cpp_template = fifosim_cpp_template.replace("finn_design_wrapper", top_module)
 
-    with open(build_dir + "/verilator_fifosim.cpp", "w") as f:
+    cpp_fname = "verilator_fifosim_%s.cpp" % top_module
+    with open(os.path.join(build_dir, cpp_fname), "w") as f:
         f.write(fifosim_cpp_template)
 
-    which_verilator = shutil.which("verilator")
-    if which_verilator is None:
-        raise Exception("'verilator' executable not found")
+    merged_src = os.path.join(vivado_stitch_proj_dir, top_module + ".v")
+    assert os.path.isfile(merged_src), "merged source not found: %s" % merged_src
 
-    # add defines to make certain XPM src files work with Verilator
-    xpm_args = ["-DDISABLE_XPM_ASSERTIONS", "-DOBSOLETE", "-DONESPIN", "--bbox-unsup"]
     vivado_path = os.environ["VIVADO_PATH"]
-    # additional SystemVerilog modules to make XPMs work with Verilator
     xpm_memory = f"{vivado_path}/data/ip/xpm/xpm_memory/hdl/xpm_memory.sv"
     xpm_cdc = f"{vivado_path}/data/ip/xpm/xpm_cdc/hdl/xpm_cdc.sv"
     xpm_fifo = f"{vivado_path}/data/ip/xpm/xpm_fifo/hdl/xpm_fifo.sv"
     swg_pkg = os.environ["FINN_ROOT"] + "/finn-rtllib/swg/swg_pkg.sv"
-    verilog_file_arg = [swg_pkg, "finn_design_wrapper.v", xpm_memory, xpm_cdc, xpm_fifo]
 
     verilator_args = [
         "perl",
-        which_verilator,
+        _resolve_verilator_bin(),
         "-Wno-fatal",
         "-Mdir",
         build_dir,
@@ -735,7 +792,7 @@ def verilator_fifosim_multi(model, n_inputs, ishape_folded, oshape_folded, max_i
         "-y",
         verilog_header_dir,
         "--CFLAGS",
-        "--std=c++11",
+        "--std=c++17",
         "-O3",
         "--x-assign",
         "fast",
@@ -743,48 +800,89 @@ def verilator_fifosim_multi(model, n_inputs, ishape_folded, oshape_folded, max_i
         "fast",
         "--noassert",
         "--cc",
-        *verilog_file_arg,
+        swg_pkg,
+        merged_src,
+        xpm_memory,
+        xpm_cdc,
+        xpm_fifo,
         "--top-module",
-        "finn_design_wrapper",
+        top_module,
         "--exe",
-        "verilator_fifosim.cpp",
-        "--threads",
-        "4",
-        *xpm_args,
+        cpp_fname,
+        "--no-timing",
+        "-DDISABLE_XPM_ASSERTIONS",
+        "-DOBSOLETE",
+        "-DONESPIN",
+        "--bbox-unsup",
     ]
-
-    proc_env = os.environ.copy()
-    gcc_args = "-O3 -march=native"
-    proc_env["OPT_FAST"] = gcc_args
     make_args = [
         "make",
         "-j4",
-        "-C",
-        build_dir,
         "-f",
-        "Vfinn_design_wrapper.mk",
-        "Vfinn_design_wrapper",
+        "V%s.mk" % top_module,
+        "V%s" % top_module,
+        "CFG_CXXFLAGS_PCH_I=-include",
     ]
+    proc_env = os.environ.copy()
+    proc_env["CFG_CXXFLAGS_PCH_I"] = "-include"
 
     with open(build_dir + "/compile.sh", "w") as f:
         f.write("#!/bin/bash \n")
-        f.write("export OPT_FAST='%s'\n" % gcc_args)
         f.write(" ".join(verilator_args) + "\n")
         f.write(" ".join(make_args) + "\n")
 
-    launch_process_helper(verilator_args, cwd=build_dir)
-    launch_process_helper(make_args, proc_env=proc_env, cwd=build_dir)
+    verilate_log = os.path.join(build_dir, "verilate.log")
+    if _run_logged(verilator_args, verilate_log, build_dir).returncode != 0:
+        raise RuntimeError("verilate failed (%s):\n%s" % (verilate_log, _log_tail(verilate_log)))
+    make_log = os.path.join(build_dir, "make.log")
+    if _run_logged(make_args, make_log, build_dir, env=proc_env).returncode != 0:
+        raise RuntimeError("verilator make failed (%s):\n%s" % (make_log, _log_tail(make_log)))
 
-    sim_launch_args = ["./Vfinn_design_wrapper"]
-    launch_process_helper(sim_launch_args, cwd=build_dir)
+    run_log = os.path.join(build_dir, "run.log")
+    results_path = os.path.join(build_dir, "results.txt")
+    if os.path.isfile(results_path):
+        os.remove(results_path)
+    try:
+        _run_logged(["./V%s" % top_module], run_log, build_dir, timeout=sim_timeout_s)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("rtlsim wall-clock timeout after %ds (%s)" % (sim_timeout_s, run_log))
+    if not os.path.isfile(results_path):
+        raise RuntimeError("rtlsim produced no results.txt (%s):\n%s" % (run_log, _log_tail(run_log)))
 
-    with open(build_dir + "/results.txt", "r") as f:
-        results = f.read().strip().split("\n")
     ret_dict = {}
-    for result_line in results:
-        key, val = result_line.split("\t")
-        ret_dict[key] = int(val)
+    with open(results_path, "r") as f:
+        for result_line in f.read().strip().split("\n"):
+            key, val = result_line.split("\t")
+            ret_dict[key] = int(val)
+    ret_dict["build_dir"] = build_dir
+    ret_dict["expected_out_txns"] = template_dict["ITERS_PER_OUTPUT"] * template_dict["N_INPUTS"]
     return ret_dict
+
+
+def measure_partition_rtlsim(kernel_model, n_inputs=1, max_iters=5000000, build_dir=None):
+    """Zero-backpressure rtlsim of ONE stitched partition (kernel model after CreateStitchedIP).
+    Works on a deepcopy so the caller's metadata/files used by later steps are untouched.
+    Returns the results dict plus a boolean 'deadlock' (nonzero latency and full output count = pass)."""
+
+    km = deepcopy(kernel_model)
+    vivado_stitch_proj_dir = prepare_stitched_ip_for_verilator(km)
+    wrapper_filename = km.get_metadata_prop("wrapper_filename")
+    top_module = os.path.splitext(os.path.basename(wrapper_filename))[0]
+    first_node = km.find_consumer(km.graph.input[0].name)
+    last_node = km.find_producer(km.graph.output[0].name)
+    ishape_folded = getCustomOp(first_node).get_folded_input_shape()
+    oshape_folded = getCustomOp(last_node).get_folded_output_shape()
+    if build_dir is None:
+        build_dir = os.path.realpath(os.path.join(vivado_stitch_proj_dir, "..", "rtlsim_single"))
+    res = run_verilator_fifosim(
+        vivado_stitch_proj_dir, top_module, n_inputs, ishape_folded, oshape_folded, max_iters, build_dir,
+        sim_timeout_s=3600,
+    )
+    res["top_module"] = top_module
+    res["deadlock"] = bool(
+        res["latency_cycles"] == 0 or res["N_OUT_TXNS"] < res["expected_out_txns"]
+    )
+    return res
 
 
 def step_measure_rtlsim_performance_multi(model, cfg):

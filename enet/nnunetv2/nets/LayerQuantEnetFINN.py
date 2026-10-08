@@ -396,9 +396,14 @@ class LayerQuantEnetFINN(nn.Module):
         in_channels: int = 1, out_channels: int = 5,
         channels: tuple[int, int, int, int, int], bottlenecks_per_stage: tuple[int, int, int, int, int],
         context_pattern: str, final_bias: bool = True, separable_dilated: bool = False,
-        decoder_type: str = "upsample_conv",
+        decoder_type: str = "upsample_conv", uint8_input: bool = False,
     ):
         super().__init__()
+        # Hardware input contract (see forward). Non-persistent buffer: never in state_dict, so
+        # existing checkpoints/trainers are unaffected; filled by bind_input_scale().
+        self.uint8_input = uint8_input
+        self.register_buffer("_input_scale", torch.ones(()), persistent=False)
+        self._input_scale_bound = False
         c0, c1, c23, c4, c5 = channels
         n1, n2, n3, n4, n5 = bottlenecks_per_stage
 
@@ -441,7 +446,34 @@ class LayerQuantEnetFINN(nn.Module):
             weight_bit_width=layer_weight_bits["final"], weight_quant=Int8WeightPerTensorFloat,
         )
 
+    @torch.no_grad()
+    def bind_input_scale(self) -> float:
+        """Read the trained input_quant scale into the uint8-input affine. Call after the
+        weights/act scales are loaded (from_pretrained does it) and again if they change."""
+        q = self.initial.input_quant
+        was_training = q.training
+        q.eval()
+        scale = float(q(torch.zeros(1, 1, 2, 2)).scale)
+        q.train(was_training)
+        self._input_scale.fill_(scale)
+        self._input_scale_bound = True
+        return scale
+
+    @staticmethod
+    def encode_uint8(z: torch.Tensor, input_scale: float) -> torch.Tensor:
+        """Host-side encoder for the uint8_input contract: per-image z-scored float ->
+        u = clip(round(z / input_scale) + 128, 0, 255), the exact INT6 level + 128."""
+        return torch.clamp(torch.round(z / input_scale) + 128, 0, 255)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.uint8_input:
+            # Hardware contract: x = u in 0..255 (host: u = clip(round(z/s)+128, 0, 255), z = per-image
+            # z-score). (u-128)*s is exactly the INT6 level * s, so input_quant is the identity on
+            # 96..159 and saturates outside. FINN absorbs the Add/Mul into the first MultiThreshold,
+            # whose thresholds become integers (j+97) in the u domain.
+            if not self._input_scale_bound:
+                raise RuntimeError("uint8_input=True but bind_input_scale() was never called")
+            x = (x - 128.0) * self._input_scale
         x = self.initial(x)
         x = self.regular1(self.down1(x))
         x = self.stage2(self.down2(x))
@@ -485,16 +517,30 @@ class LayerQuantEnetFINN(nn.Module):
             key: value for key, value in source_state_dict.items()
             if key in model_state_dict and model_state_dict[key].shape == value.shape
         }
+        # Runtime-stats act-quantizer scales (...scaling_impl.value) are Parameters that model.state_dict() omits but a QAT/
+        # calibrated checkpoint stores; skipping them leaves every act scale at its 1.0 default (degenerate network).
+        model_params = dict(model.named_parameters(remove_duplicate=False))
+        transferable.update({
+            key: value for key, value in source_state_dict.items()
+            if key not in model_state_dict and key in model_params and model_params[key].shape == value.shape
+        })
         missing, unexpected = model.load_state_dict(transferable, strict=False)
         assert not unexpected, f"unexpected keys after strict=False load (should be impossible): {unexpected}"
         n_shape_mismatch = sum(
             1 for key, value in source_state_dict.items()
             if key in model_state_dict and model_state_dict[key].shape != value.shape
         )
+        n_scales = sum(1 for key in transferable if key.endswith("scaling_impl.value"))
         print(
             f"LayerQuantEnetFINN.from_pretrained({checkpoint_path}): transferred {len(transferable)}/"
-            f"{len(model_state_dict)} model keys ({n_shape_mismatch} shape mismatches, "
+            f"{len(model_state_dict)} model keys (incl. {n_scales} trained act scales; {n_shape_mismatch} shape mismatches, "
             f"{len(missing)} left uninitialized -- expected for Brevitas-only quantizer params "
             f"plus the frozen substitute-block params)."
         )
+        n_scales_expected = sum(1 for key in model_params if key.endswith("scaling_impl.value"))
+        if n_scales != n_scales_expected:
+            print(f"  WARNING: only {n_scales}/{n_scales_expected} act-quantizer scales came from the checkpoint; "
+                  f"the rest stay at their 1.0 default (degenerate network unless intended).")
+        if model.uint8_input:
+            print(f"  uint8_input: bound input scale {model.bind_input_scale():.8f}")
         return model

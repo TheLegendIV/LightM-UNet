@@ -1,10 +1,6 @@
 Nothing to build in platform 'zcu106_s12'
 
-16:20:42 **** Clean-only build of configuration Debug for project lwip_test ****
-make clean 
-rm -rf  ./src/i2c_access.o ./src/iic_phyreset.o ./src/main.o ./src/platform.o ./src/platform_mb.o ./src/platform_ppc.o ./src/platform_zynq.o ./src/platform_zynqmp.o ./src/run.o ./src/sfp.o ./src/si5324.o ./src/sys_time.o  ./src/i2c_access.d ./src/iic_phyreset.d ./src/main.d ./src/platform.d ./src/platform_mb.d ./src/platform_ppc.d ./src/platform_zynq.d ./src/platform_zynqmp.d ./src/run.d ./src/sfp.d ./src/si5324.d ./src/sys_time.d  lwip_test.elf.size  lwip_test.elf
-' '
-16:20:43 **** Incremental Build of configuration Debug for project lwip_test ****
+14:55:14 **** Incremental Build of configuration Debug for project lwip_test ****
 make all 
 'Building file: ../src/i2c_access.c'
 'Invoking: ARM v8 gcc compiler'
@@ -29,26 +25,6 @@ aarch64-none-elf-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/main.o" -IC:/DE
       |         ^~~~~~~~~~~~~
       |         sys_timeout
 'Finished building: ../src/main.c'
-' '
-'Building file: ../src/platform.c'
-'Invoking: ARM v8 gcc compiler'
-aarch64-none-elf-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/platform.o" -IC:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/standalone_domain/bspinclude/include -MMD -MP -MF"src/platform.d" -MT"src/platform.o" -o "src/platform.o" "../src/platform.c"
-'Finished building: ../src/platform.c'
-' '
-'Building file: ../src/platform_mb.c'
-'Invoking: ARM v8 gcc compiler'
-aarch64-none-elf-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/platform_mb.o" -IC:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/standalone_domain/bspinclude/include -MMD -MP -MF"src/platform_mb.d" -MT"src/platform_mb.o" -o "src/platform_mb.o" "../src/platform_mb.c"
-'Finished building: ../src/platform_mb.c'
-' '
-'Building file: ../src/platform_ppc.c'
-'Invoking: ARM v8 gcc compiler'
-aarch64-none-elf-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/platform_ppc.o" -IC:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/standalone_domain/bspinclude/include -MMD -MP -MF"src/platform_ppc.d" -MT"src/platform_ppc.o" -o "src/platform_ppc.o" "../src/platform_ppc.c"
-'Finished building: ../src/platform_ppc.c'
-' '
-'Building file: ../src/platform_zynq.c'
-'Invoking: ARM v8 gcc compiler'
-aarch64-none-elf-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/platform_zynq.o" -IC:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/sw/zcu106_s12/standalone_domain/bspinclude/include -MMD -MP -MF"src/platform_zynq.d" -MT"src/platform_zynq.o" -o "src/platform_zynq.o" "../src/platform_zynq.c"
-'Finished building: ../src/platform_zynq.c'
 ' '
 'Building file: ../src/platform_zynqmp.c'
 'Invoking: ARM v8 gcc compiler'

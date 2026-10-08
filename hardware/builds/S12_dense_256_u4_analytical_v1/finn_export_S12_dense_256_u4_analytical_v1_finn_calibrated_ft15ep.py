@@ -68,6 +68,7 @@ DEFAULT_CHECKPOINT = (
     / f"{NET_NAME}__nnUNetPlans__2d" / "fold_0" / "checkpoint_best.pth"
 )
 DEFAULT_REAL_PRED_DIR = NNUNET_RAW / f"labelsPr_{NET_NAME}"
+NET_NAME_SHORT = "quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated_ft15ep_u8in"
 
 
 def main() -> None:
@@ -83,7 +84,11 @@ def main() -> None:
     parser.add_argument("--calibrate", action="store_true",
                          help="fine-tuned checkpoint already has its own runtime-stats activation scales "
                               "from training -- skipped by default; pass this to force an EXTRA pass")
-    parser.add_argument("--skip-cross-test", action="store_true")
+    parser.add_argument("--skip-verify", action="store_true",
+                         help="skip the mandatory post-export Dice/agreement gate (hardware/verify_export.py)")
+    parser.add_argument("--min-fg-dice", type=float, default=0.5,
+                         help="gate: minimum foreground Dice of the PyTorch model on the val split "
+                              "(ft15ep INT6 measures 0.638)")
     parser.add_argument("--skip-export", action="store_true")
     args = parser.parse_args()
 
@@ -107,7 +112,7 @@ def main() -> None:
         checkpoint_path, layer_weight_bits, layer_act_bits,
         in_channels=args.in_channels, out_channels=args.out_channels,
         channels=CHANNELS, bottlenecks_per_stage=BOTTLENECKS_PER_STAGE, context_pattern=CONTEXT_PATTERN,
-        decoder_type=DECODER_TYPE,
+        decoder_type=DECODER_TYPE, uint8_input=True,
     ).eval()
 
     if args.calibrate:
@@ -121,38 +126,30 @@ def main() -> None:
 
     if not args.skip_export:
         print("\n=== Forward-pass sanity check + QONNX export ===")
-        dummy = torch.rand(1, args.in_channels, 256, 256) * 2 - 1
+        # hardware input contract: u = clip(round(z/s_in)+128, 0, 255) as UINT8-valued float
+        dummy = torch.randint(0, 256, (1, args.in_channels, 256, 256)).float()
         with torch.no_grad():
             out = model(dummy)
         assert out.shape[2:] == (256, 256), f"output HxW {tuple(out.shape[2:])} != (256,256)"
         assert out.shape[1] == args.out_channels, f"output channels {out.shape[1]} != {args.out_channels}"
         print(f"  forward OK: output shape {tuple(out.shape)}")
-        name = "quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated_ft15ep"
-        export_model(model, name, dummy)
+        name = "quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated_ft15ep_u8in"
+        onnx_path = export_model(model, name, dummy, force_input_dtype="UINT8")
         print("\nExported. Copy to FINN container with:")
         print(f"  docker cp hardware/builds/S12_dense_256_u4_analytical_v1/outputs/{name}.onnx <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/")
 
-    if not args.skip_cross_test:
-        print("\n=== Cross test: FINN mirror vs. real model, full imagesTs/labelsTs (300 cases) ===")
-        images_ts_dir = NNUNET_RAW / "imagesTs"
-        labels_ts_dir = NNUNET_RAW / "labelsTs"
-        predictions = run_finn_inference(model, images_ts_dir)
-
-        finn_metrics = evaluate(predictions, labels_ts_dir)
-        print(f"\nFINN mirror dice vs. ground truth ({finn_metrics['n_cases']} cases):")
-        for k, v in finn_metrics.items():
-            if k != "n_cases":
-                print(f"  {k}: {v:.4f}")
-
-        real_pred_dir = Path(args.real_pred_dir)
-        if real_pred_dir.exists():
-            agreement = compare_to_real_predictions(predictions, real_pred_dir)
-            print(f"\nFINN mirror vs. real model prediction agreement ({agreement['n_cases']} cases):")
-            for k, v in agreement.items():
-                if k != "n_cases":
-                    print(f"  {k}: {v:.4f}" if isinstance(v, float) else f"  {k}: {v}")
-        else:
-            print(f"\n  WARNING: real-pred-dir not found ({real_pred_dir}), skipping agreement comparison.")
+    if not args.skip_verify:
+        import verify_export  # noqa: E402
+        print("\n=== Post-export verification gate (hardware/verify_export.py) ===")
+        ref_npz = finn_enet_prod_export.OUT_DIR / f"{NET_NAME_SHORT}_verify_ref.npz"
+        verify_export.build_reference(model, Path(args.preprocessed_dir), ref_npz, min_fg_dice=args.min_fg_dice)
+        if not args.skip_export:
+            verify_export.check_onnx(ref_npz, onnx_path, "qonnx_export")
+        print("\nVERIFY OK. After the FINN preamble, also run (container):")
+        print(f"  python3 verify_export.py --ref {ref_npz.name} --onnx streamline=<preamble>/intermediate_models/step_enet_streamline.onnx "
+              f"--first-thresholds <preamble>/intermediate_models/step_enet_streamline.onnx")
+    else:
+        print("\n  WARNING: --skip-verify given -- this export has NOT been Dice-checked.")
 
 
 if __name__ == "__main__":
