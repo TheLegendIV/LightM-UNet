@@ -17,16 +17,12 @@ set -e
 # 3x3 tent-kernel conv (INT8, `_nearest_depthwise_bilinear_kernel`: UpsampleNearestNeighbour -> FMPadding -> depthwise SWG -> VVAU_hls), modelled in the analytical flow as
 # MILP/analytical/up_bottleneck.py `skip_dw=True`. The FP32 training net has the real bilinear op; nothing about the hardware substitute is learned (it is parameter-free).
 #
-# Why this job exists: the bilinear S12 net (nnUNetTrainerENet_12_dense_relu / _warmstart150ep, upsample_conv, 24,261-parameter family) was only ever trained at 512x512 (Dataset509);
-# the 256x256 runs so far (Dataset510) are the nearest_conv_upsample and nearest_upsample families. The 512 weights do not transfer to the 256 data as they are (the 256 dataset is a
-# half-scale version of the 512 images; see stage_12_dense_relu_nearest_upsample_256.job: mean dice 0.12 without retraining), so this net has to be trained on Dataset510.
+# Why this job exists: the bilinear S12 net was only ever trained at 512x512 (Dataset509: stage_12_dense_relu.job / _warmstart150ep); the 256x256 runs so far (Dataset510) are the
+# nearest_conv_upsample and nearest_upsample families. The 512 weights do not work on the 256 data as they are (the 256 dataset is a half-scale version of the 512 images), so this net is
+# trained on Dataset510 FROM SCRATCH: no warm start, no dependency on any 512 checkpoint.
 #
-# Recipe: byte-for-byte stage_12_dense_relu_nearest_upsample_256.job (CHANNELS 4,16,32,16,4, bottlenecks 4,8,8,2,1, ENET_CONTEXT_PATTERN "dense_dilation", plain ReLU, dense dilated convs)
-# with ONE difference, ENET_DECODER_TYPE="upsample_conv" instead of "nearest_upsample" (so every other weight shape is identical and the warm start transfers completely):
-#   * DATASET: Dataset510_ARCADE_256_4c (256x256 patches, batch 49 from its own plans) instead of Dataset509.
-#   * WARM START from the 512 bilinear net's best checkpoint (nnUNetTrainerENet_12_dense_relu_warmstart150ep, dice 0.7954; fully convolutional so the name+shape state_dict transfer is
-#     complete) via -pretrained_weights, only on a genuinely fresh start (a resubmitted run uses --c, as every job here).
-#   * ENET_LR is NOT lowered: the data scale changes (2x), so the trainer's default peak LR (1e-3) with a fresh 150-epoch PolyLR schedule is used (as the nearest_upsample_256 job).
+# Recipe: stage_12_dense_relu.job's own (CHANNELS 4,16,32,16,4, bottlenecks 4,8,8,2,1, ENET_CONTEXT_PATTERN "dense_dilation", ENET_DECODER_TYPE "upsample_conv", plain ReLU, dense dilated
+# convs, a complete 150-epoch PolyLR schedule at the trainer's default peak LR 1e-3, random initialisation) on Dataset510_ARCADE_256_4c (256x256 patches, batch 49 from its own plans).
 # ENET_CONTEXT_PATTERN stays "dense_dilation" (dilations 2,4,8,16 repeated over the 16 context blocks), the pattern of the nearest net and of the S12 U4 analytical artifacts.
 #
 # Output: $nnUNet_results/Dataset510_ARCADE_256_4c/nnUNetTrainerENet_12_dense_relu_bilinear_upsample_256__nnUNetPlans__2d/fold_0/checkpoint_best.pth
@@ -35,10 +31,8 @@ set -e
 
 DATASET_ID=510
 DATASET_NAME="Dataset510_ARCADE_256_4c"
-SOURCE_DATASET_NAME="Dataset509_ARCADE_1x1_4c"      # where the 512x512 FP32 bilinear warm-start net lives
 TRAINER_CLASS="nnUNetTrainerENet"
 RUN_NAME="12_dense_relu_bilinear_upsample_256"
-SOURCE_NET_NAME="nnUNetTrainerENet_12_dense_relu_warmstart150ep"
 
 mkdir -p logs
 
@@ -81,19 +75,11 @@ export ENET_DSC_NO_PROJECTION=0
 export ENET_EPOCHS=150
 export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
 
-SOURCE_CHECKPOINT="$nnUNet_results/${SOURCE_DATASET_NAME}/${SOURCE_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
-
 echo "=== Job info ==="
 echo "Host: $(hostname)"
 echo "Date: $(date)"
-echo "Run: ${RUN_NAME} (warm-started from ${SOURCE_CHECKPOINT}, default LR, ${ENET_EPOCHS} epochs)"
+echo "Run: ${RUN_NAME} (from scratch, default LR, ${ENET_EPOCHS} epochs)"
 echo "Output folder: ${ENET_OUTPUT_FOLDER}"
-
-echo "=== Checking source checkpoint exists ==="
-if [ ! -f "$SOURCE_CHECKPOINT" ]; then
-    echo "ERROR: source checkpoint not found: $SOURCE_CHECKPOINT -- the 512x512 stage_12_dense_relu_warmstart150ep.job must have run first." >&2
-    exit 1
-fi
 
 echo "=== GPU info ==="
 nvidia-smi
@@ -131,15 +117,15 @@ elif [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
 fi
 
 if [ -z "$EXISTING_CHECKPOINT" ]; then
-    echo "=== Start training (fresh, warm-started from ${SOURCE_NET_NAME}): ${RUN_NAME} ==="
-    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}" -pretrained_weights "${SOURCE_CHECKPOINT}"
+    echo "=== Start training (fresh, from scratch): ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
 else
     CURRENT_EPOCH=$(cd "$HOME/LightM-UNet" && python -c "import torch; print(torch.load('${EXISTING_CHECKPOINT}', map_location='cpu', weights_only=False)['current_epoch'])")
     echo "Existing checkpoint (${EXISTING_CHECKPOINT}) is at epoch ${CURRENT_EPOCH}/${ENET_EPOCHS}."
     if [ "$CURRENT_EPOCH" -ge "$ENET_EPOCHS" ]; then
         echo "Real 150-epoch schedule already complete -- skipping training."
     else
-        echo "=== Resuming training with --c (continues the SAME 150-epoch LR schedule from epoch ${CURRENT_EPOCH} -- pretrained_weights NOT re-applied, this run's own progress already carries the warm-started weights) ==="
+        echo "=== Resuming training with --c (continues the SAME 150-epoch LR schedule from epoch ${CURRENT_EPOCH}) ==="
         nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}" --c
     fi
 fi
