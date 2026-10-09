@@ -1,0 +1,56 @@
+﻿.\.venv\Scripts\python.exe : C:\DEV\repos\LightM-UNet\.venv\lib\site-packages\b
+revitas\graph\equalize.py:70: UserWarning: fast_hadamard_transform package not 
+found, using standard pytorch kernels
+At line:1 char:53
++ ... NG='utf-8'; .\.venv\Scripts\python.exe hardware/builds/S12_dense_256_ ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (C:\DEV\repos\Li...pytorch kernels 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  warnings.warn("fast_hadamard_transform package not found, using standard 
+pytorch kernels")
+W1009 23:54:09.940524 41452 
+Lib\site-packages\torch\onnx\_internal\exporter\_registration.py:107] 
+torchvision is not installed. Skipping torchvision::nms
+W1009 23:54:09.943528 41452 
+Lib\site-packages\torch\onnx\_internal\exporter\_registration.py:107] 
+torchvision is not installed. Skipping torchvision::roi_align
+W1009 23:54:09.944524 41452 
+Lib\site-packages\torch\onnx\_internal\exporter\_registration.py:107] 
+torchvision is not installed. Skipping torchvision::roi_pool
+W1009 23:54:09.946525 41452 
+Lib\site-packages\torch\onnx\_internal\exporter\_registration.py:107] 
+torchvision is not installed. Skipping torchvision::deform_conv2d
+
+=== Building REAL-weight (fine-tuned 15ep) bilinear-decoder S12_dense_256_u4 -- 85 weight sites, 110 act sites ===
+LayerQuantEnetFINN.from_pretrained(C:\DEV\repos\LightM-UNet\data\nnUNet_results\Dataset510_ARCADE_256_4c\nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_bilinear_upsample_256_perlayer_12_dense_relu_bilinear_upsample_256_uniform_int6_perlayer_ft15ep__nnUNetPlans__2d\fold_0\checkpoint_best.pth.txt): transferred 673/533 model keys (incl. 140 trained act scales; 0 shape mismatches, 0 left uninitialized -- expected for Brevitas-only quantizer params plus the frozen substitute-block params).
+  uint8_input: bound input scale 0.09323809
+
+=== Forward-pass sanity check + QONNX export ===
+  forward OK: output shape (1, 5, 256, 256)
+[torch.onnx] Obtain model graph for `LayerQuantEnetFINN([...]` with `torch.export.export(..., strict=False)`...
+[torch.onnx] Obtain model graph for `LayerQuantEnetFINN([...]` with `torch.export.export(..., strict=False)`... Γ£à
+[torch.onnx] Run decompositions...
+[torch.onnx] Run decompositions... Γ£à
+[torch.onnx] Translate the graph into ONNX...
+[torch.onnx] Translate the graph into ONNX... Γ£à
+[torch.onnx] Optimize the ONNX graph...
+[torch.onnx] Optimize the ONNX graph... Γ£à
+  quantEnet_S12_dense_256_u4_bilinear_analytical_v1_ft15ep_u8in: 549 nodes ΓÇö {'Add': 28, 'BatchNormalization': 84, 'Concat': 1, 'Conv': 86, 'ConvTranspose': 3, 'MaxPool': 3, 'Mul': 1, 'Quant': 258, 'Relu': 82, 'Resize': 2, 'Sub': 1}
+  Saved: C:\DEV\repos\LightM-UNet\hardware\builds\S12_dense_256_u4_bilinear_analytical_v1\outputs\quantEnet_S12_dense_256_u4_bilinear_analytical_v1_ft15ep_u8in.onnx
+
+Exported. Copy to FINN container with:
+  docker cp hardware/builds/S12_dense_256_u4_bilinear_analytical_v1/outputs/quantEnet_S12_dense_256_u4_bilinear_analytical_v1_ft15ep_u8in.onnx <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/
+
+=== Post-export verification gate (hardware/verify_export.py) ===
+[G0] PyTorch uint8-contract vs GT (165 val cases): dice_c1=0.6106  dice_c2=0.7729  dice_c3=0.5703  dice_c4=0.6868  fg_dice=0.6601  binary_dice=0.7283  max_class_fraction=0.9671
+[G0] PyTorch float-z       vs GT                     : dice_c1=0.6106  dice_c2=0.7729  dice_c3=0.5703  dice_c4=0.6868  fg_dice=0.6601  binary_dice=0.7283  max_class_fraction=0.9671
+[G1] uint8 vs float pixel agreement: 1.000000
+  reference written: C:\DEV\repos\LightM-UNet\hardware\builds\S12_dense_256_u4_bilinear_analytical_v1\outputs\quantEnet_S12_dense_256_u4_bilinear_analytical_v1_ft15ep_u8in_verify_ref.npz
+[G2:qonnx_export] 10 cases  agreement vs PyTorch=1.000000
+[G2:qonnx_export]   onnx : dice_c1=0.7359  dice_c2=0.7445  dice_c3=0.7407  dice_c4=0.6252  fg_dice=0.7116  binary_dice=0.7395  max_class_fraction=0.9688
+[G2:qonnx_export]   torch: dice_c1=0.7359  dice_c2=0.7445  dice_c3=0.7407  dice_c4=0.6252  fg_dice=0.7116  binary_dice=0.7395  max_class_fraction=0.9688
+
+VERIFY OK. After the FINN preamble, also run (container):
+  python3 verify_export.py --ref quantEnet_S12_dense_256_u4_bilinear_analytical_v1_ft15ep_u8in_verify_ref.npz --onnx streamline=<preamble>/intermediate_models/step_enet_streamline.onnx --first-thresholds <preamble>/intermediate_models/step_enet_streamline.onnx

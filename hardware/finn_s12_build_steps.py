@@ -30,6 +30,7 @@ from finn.transformation.fpgadataflow.specialize_layers import SpecializeLayers 
 from finn.util.fpgadataflow import is_fpgadataflow_node  # noqa: E402
 
 WEIGHT_OP_TYPES = ("MVAU_hls", "MVAU_rtl", "VVAU_hls", "VVAU_rtl")
+RTL_WEIGHT_OP_TYPES = ("MVAU_rtl", "VVAU_rtl")
 THRESH_OP_TYPES = ("Thresholding_hls", "Thresholding_rtl")
 SWU_OP_TYPES = ("ConvolutionInputGenerator_hls", "ConvolutionInputGenerator_rtl")
 FMPAD_OP_TYPES = ("FMPadding_hls", "FMPadding_rtl", "FMPadding_Pixel", "FMPadding_Pixel_hls", "FMPadding_Pixel_rtl")
@@ -267,11 +268,37 @@ def _widen_standalone_mvau_acc_for_downstream_threshold(inst, node, model):
     return True
 
 
+def force_signed_rtl_weight_dtype(model):
+    """MinimizeWeightBitWidth gives a non-negative weight tensor an UNSIGNED type (e.g. UINT7 for {0,127}), but the RTL
+    MVU/VVU datapath (mvu_8sx8u_dsp48.sv: `input logic signed [..] w`) reads every weight as two's complement, so the top
+    bit becomes a sign bit (127 -> -1). Widen such nodes to the signed type one bit wider (UINT7 -> INT8)."""
+    n_fixed = 0
+    for node in model.graph.node:
+        if node.op_type not in RTL_WEIGHT_OP_TYPES:
+            continue
+        inst = getCustomOp(node)
+        dt = DataType[inst.get_nodeattr("weightDataType")]
+        if dt.signed():
+            continue
+        w = model.get_initializer(node.input[1])
+        new_dt = DataType[f"INT{dt.bitwidth() + 1}"]
+        assert new_dt.allowed(float(w.min())) and new_dt.allowed(float(w.max())), (node.name, new_dt, w.min(), w.max())
+        inst.set_nodeattr("weightDataType", new_dt.name)
+        model.set_tensor_datatype(node.input[1], new_dt)
+        print(f"[force_signed_rtl_weight_dtype] {node.name}: {dt.name} -> {new_dt.name} "
+              f"(w_min={float(w.min())}, w_max={float(w.max())})")
+        n_fixed += 1
+    if n_fixed:
+        print(f"[force_signed_rtl_weight_dtype] widened {n_fixed} RTL weight node(s) to a signed type")
+    return model
+
+
 def step_minimize_bit_width_standalone_thresh_aware(model, cfg):
     """Drop-in replacement for FINN's step_minimize_bit_width."""
     if not cfg.minimize_bit_width:
         return model
     model = model.transform(MinimizeWeightBitWidth())
+    model = force_signed_rtl_weight_dtype(model)
     n_widened = 0
     for node_id in range(len(model.graph.node)):
         node = model.graph.node[node_id]
@@ -307,7 +334,7 @@ def _get_pe_simd_bounds(inst):
         return inst.get_nodeattr("Channels"), k_h * k_w
 
 
-REALIGN_WINDOW = 12  # how far ahead to search conv_order.json for a weight-count match on mismatch
+REALIGN_WINDOW = 12  # how far ahead to search conv_order.json for a weight-layout match on mismatch
 
 
 def _shape_count(shape):
@@ -315,6 +342,18 @@ def _shape_count(shape):
     for d in shape:
         n *= d
     return n
+
+
+def weight_layout_matches(weight_shape, init_shape, module_type=""):
+    """conv_order.json weight_shape [O, I/groups, kh, kw] vs a hw-converted initializer: MVAU stores (I*kh*kw, O),
+    VVAU keeps the 4-D conv layout. Element count alone is ambiguous (shortcut_proj [16,4,1,1] vs reduce [4,4,2,2]).
+    ConvTranspose weights are [I, O, kh, kw] instead."""
+    init_shape = tuple(init_shape)
+    if len(init_shape) == 2:
+        if "Transpose" in (module_type or ""):
+            return init_shape == (weight_shape[0] * _shape_count(weight_shape[2:]), weight_shape[1])
+        return init_shape == (weight_shape[1] * _shape_count(weight_shape[2:]), weight_shape[0])
+    return init_shape == tuple(weight_shape)
 
 
 def match_conv_order_to_nodes(full_model, conv_order_file):
@@ -344,28 +383,29 @@ def match_conv_order_to_nodes(full_model, conv_order_file):
             continue
         if pos >= len(all_names):
             raise RuntimeError(f"ran out of conv_order.json entries at node_idx={node_idx} -- do not proceed.")
-        actual_count = None
+        actual_shape = None
         if wt is not None:
             arr = full_model.get_initializer(wt)
             if arr is not None:
-                actual_count = int(np.prod(arr.shape))
+                actual_shape = tuple(arr.shape)
         entry = all_names[pos]
-        if (actual_count is not None and entry["weight_shape"] is not None
-                and _shape_count(entry["weight_shape"]) != actual_count):
+        if (actual_shape is not None and entry["weight_shape"] is not None
+                and not weight_layout_matches(entry["weight_shape"], actual_shape, entry.get("module_type"))):
             match_j = next(
                 (j for j in range(pos + 1, min(pos + 1 + REALIGN_WINDOW, len(all_names)))
-                 if all_names[j]["weight_shape"] is not None and _shape_count(all_names[j]["weight_shape"]) == actual_count),
+                 if all_names[j]["weight_shape"] is not None
+                 and weight_layout_matches(all_names[j]["weight_shape"], actual_shape, all_names[j].get("module_type"))),
                 None,
             )
             if match_j is None:
                 raise RuntimeError(
                     f"node_idx={node_idx} ({node.name}): conv_order.json entry at pos={pos} "
                     f"({entry['logical_name']!r}, weight_shape={entry['weight_shape']}) doesn't match this "
-                    f"node's real weight element count ({actual_count}), and no match found within the next "
+                    f"node's real weight layout {actual_shape}, and no match found within the next "
                     f"{REALIGN_WINDOW} entries -- do not proceed."
                 )
             print(f"[bridge] REALIGN: conv_order.json pos={pos} ({entry['logical_name']!r}) doesn't match "
-                  f"node_idx={node_idx} ({node.name})'s real weight (count={actual_count}) -- swapping in "
+                  f"node_idx={node_idx} ({node.name})'s real weight layout {actual_shape} -- swapping in "
                   f"pos={match_j} ({all_names[match_j]['logical_name']!r}) instead.")
             all_names[pos], all_names[match_j] = all_names[match_j], all_names[pos]
             entry = all_names[pos]
@@ -410,11 +450,17 @@ def load_partition_logical_names(preamble_dir, conv_order_file, n_partitions=8):
     return result
 
 
-def _resolve_folding_entry(logical_name, per_layer):
+def _resolve_folding_entry(logical_name, per_layer, extra_nodes=None):
     if logical_name in per_layer:
         return per_layer[logical_name], logical_name
     if logical_name.endswith(".conv.0") and logical_name[:-2] in per_layer:
         return per_layer[logical_name[:-2]], logical_name[:-2]
+    if extra_nodes is not None and logical_name.endswith(".shortcut_proj"):
+        # dn blocks' frozen identity channel-pad 1x1 conv has no per_layer entry; the MILP prices it as the
+        # extra node '<stage>.skip_pad' (kind 'pad_mvau', own pe/simd, no SWU, its Thr is '<stage>.skip_quant').
+        key = logical_name[: -len(".shortcut_proj")] + ".skip_pad"
+        if (extra_nodes.get(key) or {}).get("kind") == "pad_mvau":
+            return extra_nodes[key], key
     return None, None
 
 
@@ -725,32 +771,23 @@ def _find_init_block_extra_nodes(kernel_model, stage, dup_node, conv_path_head):
     return by_name
 
 
-def _find_dn_block_via_skip(kernel_model, skip_mvau_node):
-    """'dn'-kind block's per_layer leaf 'reduce.0' is actually the MILP's SKIP-branch conv (role 'mvau_s'),
-    fed DIRECTLY by its own StreamingMaxPool (no SWU -- a true 1x1), itself fed directly by Dup. The MAIN
-    chain's entry conv ('shortcut_proj', role 'mvau_r') sits on Dup's OTHER branch behind its own SWU
-    (swg_r) and has NO per_layer/logical_name entry at all (never claimed by the main per-leaf loop above).
-    Confirmed via direct topology trace (recheck_p1_topology.py), contradicting the naive assumption
-    'reduce.0 == MILP's mvau_r' that 'reg' kind's (truly-1x1, no-SWU, main-chain-entry) reduce.0 would
-    suggest:
-        Dup -+-> MaxPool -> MVAU_s(='reduce.0' per_layer leaf) -> Thr_s --(skip FIFO)--> Add
-             +-> SWG_r -> MVAU_r(='shortcut_proj', UNCLAIMED) -> Thr_r -> FMPad -> SWG_m -> MVAU_m(='conv.0') -> ...
-    Returns (maxpool_node|None, dup_node|None, swg_r_node|None, shortcut_mvau_node|None)."""
-    maxpool = _real_producer_skip_dwc(kernel_model, skip_mvau_node)
-    if maxpool is None or not maxpool.op_type.startswith("StreamingMaxPool"):
-        return None, None, None, None
-    dup = _real_producer_skip_dwc(kernel_model, maxpool)
+def _find_dn_block_via_reduce(kernel_model, swg_r):
+    """'dn'-kind block topology from the main-chain entry conv ('reduce.0', 2x2, role 'mvau_r') and its SWU (swg_r):
+        Dup -+-> SWG_r -> MVAU_r(='reduce.0') -> Thr_r -> FMPad -> SWG_m -> MVAU_m(='conv.0') -> ...
+             +-> MaxPool -> MVAU_s(='shortcut_proj', identity channel pad, MILP extra_node '<stage>.skip_pad') -> Thr_s -> Add
+    Returns (maxpool_node|None, dup_node|None, pad_mvau_node|None)."""
+    dup = _real_producer_skip_dwc(kernel_model, swg_r)
     if dup is None or not dup.op_type.startswith("DuplicateStreams"):
-        return maxpool, None, None, None
-    swg_r = shortcut_mvau = None
+        return None, None, None
+    maxpool = pad_mvau = None
     for out_tensor in dup.output:
         c = kernel_model.find_consumer(out_tensor)
         while c is not None and c.op_type.startswith(_SKIP_FIFO_DWC_OPS):
             c = kernel_model.find_consumer(c.output[0])
-        if c is not None and c.name != maxpool.name and c.op_type in SWU_OP_TYPES:
-            swg_r = c
-            shortcut_mvau = _real_consumer_skip_dwc(kernel_model, swg_r)
-    return maxpool, dup, swg_r, shortcut_mvau
+        if c is not None and c.op_type.startswith("StreamingMaxPool"):
+            maxpool = c
+            pad_mvau = _real_consumer_skip_dwc(kernel_model, c)
+    return maxpool, dup, pad_mvau
 
 
 def _find_up_block_upnn(kernel_model, thr_p_node):
@@ -769,9 +806,9 @@ def build_partition_role_nodes(kernel_model, logical_names, per_layer):
     mvau_f), the dense-conv's FMPadding/SWU (fmpad/swg_m, via _find_dense_swu_fmpad, resolved for 'init' kind
     too; 'up' kind's own 2x2-lowered conv gets fmpadpix/fmpad_u/swg_u via _find_up_block_fmpad_chain, which
     unlike the dense case has TWO chained FMPadding nodes to resolve), each block's Dup (feeding its
-    entry MVAU), 'dn' kind's own skip-branch MaxPool/SWG_r/shortcut-conv (mvau_r/thr_r, UNCLAIMED by the
-    main per-leaf loop -- see _find_dn_block_via_skip for why 'reduce.0' is actually the MILP's 'mvau_s'
-    skip-conv, not 'mvau_r'), 'up' kind's own UpsampleNearestNeighbour (_find_up_block_upnn), and -- for
+    entry MVAU), 'dn' kind's own skip branch (MaxPool, and the identity-pad MVAU 'shortcut_proj' as
+    mvau_s/thr_s, located by topology from reduce.0's SWU/Dup; its folding comes from the MILP
+    extra_node '<stage>.skip_pad'), 'up' kind's own UpsampleNearestNeighbour (_find_up_block_upnn), and -- for
     'init' kind only -- its own thr_in/thr_m/maxpool/concat/thr_act (_find_init_block_extra_nodes). Does NOT
     cover add/skip_quant/residual_add/out_act -- see _find_block_join_nodes."""
     weight_nodes = [n for n in kernel_model.graph.node if n.op_type in WEIGHT_OP_TYPES]
@@ -790,10 +827,6 @@ def build_partition_role_nodes(kernel_model, logical_names, per_layer):
         mvau_role, thr_role = _LEAF_ROLES[leaf]
         if leaf == "conv" and stage == "initial":
             mvau_role, thr_role = "mvau_c", "thr_c"
-        elif leaf == "reduce.0" and kind == "dn":
-            # see _find_dn_block_via_skip: dn_bottleneck.py's 'reduce.0' is the MILP's SKIP-branch conv,
-            # not the main-chain entry _LEAF_ROLES assumes (that's 'reg' kind's shape, not 'dn' kind's).
-            mvau_role, thr_role = "mvau_s", "thr_s"
         by_name[f"{stage}.{mvau_role}"] = node.name
         thr = _find_following_thresholding(kernel_model, node)
         if thr is not None:
@@ -809,6 +842,11 @@ def build_partition_role_nodes(kernel_model, logical_names, per_layer):
                 by_name[f"{stage}.swg"] = swu_node.name
             if fmpad_node is not None:
                 by_name[f"{stage}.fmpad"] = fmpad_node.name
+        elif leaf == "reduce.0" and kind == "dn":
+            # 2x2 stride-2 reduce: its SWU is role 'swg_r' (no FMPadding in front)
+            _, swu_node = _find_dense_swu_fmpad(kernel_model, node)
+            if swu_node is not None:
+                by_name[f"{stage}.swg_r"] = swu_node.name
         elif leaf == "up.0":
             # up_bottleneck.py's 2x2-lowered transposed conv: FMPadPix -> FMPad_u -> SWG_u -> MVAU_u -- TWO
             # chained FMPadding nodes (roles 'fmpadpix'/'fmpad_u'), unlike every other conv's single
@@ -824,21 +862,18 @@ def build_partition_role_nodes(kernel_model, logical_names, per_layer):
                 by_name[f"{stage}.fmpadpix"] = fmpadpix_node.name
         if leaf == _ENTRY_LEAF_BY_KIND.get(kind):
             if kind == "dn":
-                # 'reduce.0' (this node, role 'mvau_s') is fed directly by MaxPool, itself fed directly by
-                # Dup -- walk back through those (no FMPad/SWU on THIS branch) to find Dup, then across to
-                # the other, unclaimed main-chain-entry branch (swg_r -> mvau_r/thr_r).
-                maxpool, dup, swg_r, shortcut_mvau = _find_dn_block_via_skip(kernel_model, node)
-                if maxpool is not None:
-                    by_name[f"{stage}.maxpool"] = maxpool.name
-                if dup is not None:
-                    by_name[f"{stage}.dup"] = dup.name
-                if swg_r is not None:
-                    by_name[f"{stage}.swg_r"] = swg_r.name
-                if shortcut_mvau is not None and shortcut_mvau.op_type in WEIGHT_OP_TYPES:
-                    by_name[f"{stage}.mvau_r"] = shortcut_mvau.name
-                    thr_r = _find_following_thresholding(kernel_model, shortcut_mvau)
-                    if thr_r is not None:
-                        by_name[f"{stage}.thr_r"] = thr_r.name
+                # skip branch (MaxPool -> pad MVAU 'mvau_s' -> Thr_s) hangs off the same Dup as swg_r
+                if swu_node is not None:
+                    maxpool, dup, pad_mvau = _find_dn_block_via_reduce(kernel_model, swu_node)
+                    if maxpool is not None:
+                        by_name[f"{stage}.maxpool"] = maxpool.name
+                    if dup is not None:
+                        by_name[f"{stage}.dup"] = dup.name
+                    if pad_mvau is not None and pad_mvau.op_type in WEIGHT_OP_TYPES:
+                        by_name[f"{stage}.mvau_s"] = pad_mvau.name
+                        thr_s = _find_following_thresholding(kernel_model, pad_mvau)
+                        if thr_s is not None:
+                            by_name[f"{stage}.thr_s"] = thr_s.name
             else:
                 # 'init' kind's entry leaf ('conv') has FMPad/SWG/DWC between Dup and the MVAU itself; every
                 # other (non-'dn') kind's entry MVAU is fed directly by Dup.
@@ -1061,7 +1096,7 @@ def build_partition_folding_config(partition_model_fn, sdp_node_name, logical_na
     folding_config = {"Defaults": {}}
     unmatched = []
     for node, logical_name in zip(weight_nodes, logical_names):
-        entry, json_key = _resolve_folding_entry(logical_name, per_layer)
+        entry, json_key = _resolve_folding_entry(logical_name, per_layer, extra_nodes)
         if entry is None:
             unmatched.append(logical_name)
             print(f"{log} {node.name:30s} {node.op_type:12s} {logical_name:25s} <NO MATCH>")
@@ -1141,6 +1176,11 @@ def build_partition_folding_config(partition_model_fn, sdp_node_name, logical_na
                 print(f"{log} WARNING {thr_name}: no ram_style for {block}.{kind} in folding json (got {style!r}) -- left on auto")
                 continue
             folding_config.setdefault(thr_name, {})["depth_trigger_bram"] = THRESH_TRIGGER_BY_STYLE[style]
+            if kind == "skip_quant":
+                # the pad MVAU's own Thr: MILP prices it at '<stage>.skip_quant'.pe (other join thrs keep FINN's PE)
+                skip_pe = (extra_nodes.get(f"{block}.{kind}") or {}).get("pe")
+                if skip_pe:
+                    folding_config[thr_name]["PE"] = skip_pe
             n_join += 1
             print(f"{log} {thr_name:30s} Thresholding  (join {kind}) {block} ram_style={style} "
                   f"depth_trigger_bram={THRESH_TRIGGER_BY_STYLE[style]}")

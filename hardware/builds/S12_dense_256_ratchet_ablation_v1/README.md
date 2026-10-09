@@ -1,6 +1,6 @@
 # S12_dense_256_ratchet_ablation_v1 (hardware side)
 
-Partition-2 OOC builds for the DSR (formerly "ratchet") ablation of the 256x256 S12 dense nearest-upsample (noconv) ReLU net, uniform INT6. The MILP arms live in
+Standalone partition-2 OOC builds (`PARTS="2 5"` selects other partitions) for the DSR (formerly "ratchet") ablation of the 256x256 S12 dense nearest-upsample (noconv) ReLU net, uniform INT6. The MILP arms live in
 `MILP/artifacts/S12_dense_256_ratchet_ablation_v1/` (see its README for the arms, the DSR rule and the results). Written but NOT launched: the FINN container is run by hand.
 
 ## What gets built (partition 2, one build per distinct MILP folding + the control)
@@ -17,12 +17,12 @@ Partition-2 OOC builds for the DSR (formerly "ratchet") ablation of the 256x256 
 | `ratchet_<arm>_simfifo` (5 builds) | the SAME foldings A-E as the MILP arms, FIFO lists replaced by the simulated ones (`MILP/analytical/net_explicit.py`, every FIFO of the block simulation, grown until the whole-net chain passes) | ratchet_<arm>_simfifo |
 | `ratchet_ablation_finn_autofold` | none: FINN `step_target_fps_parallelization`, `--target-fps 250 --mvau-wwidth-max 72` | FINN auto-fold control |
 
-`arms_to_build.txt` now lists ONLY the five `ratchet_<arm>_simfifo` builds (the other rows were built earlier; the control is rebuilt only with `WITH_CONTROL=1`). The list comes from `MILP/artifacts/S12_dense_256_ratchet_ablation_v1/arms_to_build.txt` (rerun `summarize_arms.py` after re-solving: if two arms stop sharing a folding they get their own build).
+`arms_to_build.txt` lists ONLY the five `ratchet_<arm>_simfifo` builds (the other rows were built earlier for partition 2). The control `ratchet_ablation_finn_autofold` (FINN auto-fold + FINN's rtlsim FIFO autosizer, same `--target-fps 250 --mvau-wwidth-max 72`) is queued for partition 2 by `run_arms.sh`. The list comes from `MILP/artifacts/S12_dense_256_ratchet_ablation_v1/arms_to_build.txt` (rerun `summarize_arms.py` after re-solving: if two arms stop sharing a folding they get their own build).
 Partition 2 = stage2.0 .. stage2.4 (dilations 2, 4, 8, 16, 2); confirm with the conv order before trusting the label.
 
 ## Inputs (docker cp into the flat `/home/thelegendiv/finn/notebooks/enet/`)
 
-* `hardware/builds/S12_dense_256_u4_analytical_v1/outputs/quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated_ft15ep.onnx` (+ `.onnx.data`) - the QAT'd export (use `..._finn_calibrated.onnx` for the PTQ one and change `MODEL` in the script).
+* `hardware/builds/S12_dense_256_u4_analytical_v1/outputs/quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated_ft15ep_u8in.onnx` (+ `.onnx.data`) - the QAT'd uint8-input export (`MODEL` in the script).
 * `.../outputs/quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated_conv_order.json` (shared by both exports).
 * `MILP/artifacts/S12_dense_256_ratchet_ablation_v1/<arm>/layer_bits_folding_<arm>.json` for every arm in `arms_to_build.txt`, and `arms_to_build.txt` itself.
 * The active build scripts: `hardware/finn_s12_preamble.py`, `finn_s12_build.py`, `finn_s12_build_steps.py`, `dump_milpfold_landed_partition.py`, `checks/check_milp_vs_landed_folding.py`
@@ -43,8 +43,8 @@ Read the first run before launching builds:
 
 ## Collect
 
-Copy `finn_deployment_outputs/*_partition2_*` out of the container, then
-`python3 hardware/builds/S12_dense_256_ratchet_ablation_v1/collect_results_partitions.py --deployment-root <copy> --arm-map MILP/artifacts/S12_dense_256_ratchet_ablation_v1/arm_build_map.csv [--dsp-overrides-json real_dsp.json]`
+Copy `finn_deployment_outputs/*_partition<N>_*` out of the container, then run the collector once per partition:
+`python3 hardware/builds/S12_dense_256_ratchet_ablation_v1/collect_results_partitions.py --partition <N> --deployment-root <copy> --arm-map MILP/artifacts/S12_dense_256_ratchet_ablation_v1/arm_build_map.csv [--dsp-overrides-json real_dsp.json]`
 upserts one row per arm (identical foldings share the build and say so in `notes`) into `hardware/results.csv` as `model_name=S12_dense_256_u4_analytical_v1`, `config=<arm>_milpfold_partition_2_ooc_synth`
 (control: `ratchet_ablation_finn_autofold_autofold_partition_2_ooc_synth`). FINN's DSP field is unreliable (known parser bug): pass the real DSP counts from each build's `vivado.log` via `--dsp-overrides-json`
 (`{"<tag>_milpfold": 123, ...}`).

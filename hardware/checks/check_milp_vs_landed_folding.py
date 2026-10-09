@@ -26,6 +26,10 @@ this against each landed node's real weight-initializer element count (the
 same fix applied in finn_s12_build_steps.load_partition_logical_names);
 without it, such swaps print as false MISMATCHes even though the landed fold
 is actually correct.
+
+KNOWN LIMITS: the weight-count match cannot tell down*.shortcut_proj ([16,4,1,1]) from down*.reduce.0 ([4,4,2,2])
+(equal element counts), and shortcut_proj has no MILP per_layer entry at all, so down1/down2 print false MISMATCHes.
+For the S12 8-way bridge use check_partition_bridge.py (layout-based) instead.
 """
 from __future__ import annotations
 
