@@ -34,7 +34,7 @@ import net_fold  # noqa: E402
 from bottleneck import fifo_memory, finalize_fifo_costs  # noqa: E402
 from node_names import block_output_name, milp_node  # noqa: E402
 
-MAX_TRIES = 8                      # the extended _SIZING_SCHEDULE has 8 entries (up/int/fnl default to 6)
+MAX_TRIES = 10                     # the extended _SIZING_SCHEDULE has 10 entries (up/int/fnl default to 6)
 FRAMES = 3
 INTRA_GROWTH = 4                  # a full intra-block FIFO of a deadlocked chain is grown x4 per round (every round of the real nets costs minutes); interfaces x2
 

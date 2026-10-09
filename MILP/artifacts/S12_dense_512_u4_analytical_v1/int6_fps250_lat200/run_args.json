@@ -1,0 +1,23 @@
+{
+  "config": "config_12_dense_relu_nearest_upsample",
+  "bits": "6",
+  "fps": "250.0",
+  "clock_mhz": "100.0",
+  "max_latency_ms": "200.0",
+  "dsr_pct": "4.0",
+  "dsr_floor": "0.6",
+  "mvau_wwidth_max": "None",
+  "no_dsr": "False",
+  "tag": "final",
+  "out_dir": "MILP/artifacts/S12_dense_512_u4_analytical_v1/int6_fps250_lat200",
+  "no_sites": "False",
+  "inter_fifo": "fixed",
+  "inter_fifo_depth": "2",
+  "fifo_target_fps": "None",
+  "fifo_slack": "0.0",
+  "workers": "6",
+  "whole_net_check": "False",
+  "no_verify": "False",
+  "no_onnx": "False",
+  "bilinear_up": "False"
+}

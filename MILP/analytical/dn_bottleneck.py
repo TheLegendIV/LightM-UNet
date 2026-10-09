@@ -257,7 +257,7 @@ def model_dn_bottleneck(
 _SIZING_SCHEDULE = reg._SIZING_SCHEDULE
 
 
-def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02, max_tries: int = 8, shrink: bool = True,
+def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02, max_tries: int = 10, shrink: bool = True,
                     tol_soft: float = 0.03, fifo_mem: str = "auto") -> dict:
     """Same recipe as bottleneck.verify_with_sim, on the downsampling network: (1) paced input at T_in with an unbounded skip
     FIFO measures the skip depth really needed, (2) a saturated run doubles one uniform depth (and the elastic FIFOs in front of

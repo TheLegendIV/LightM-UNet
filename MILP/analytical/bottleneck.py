@@ -531,10 +531,11 @@ def _fifo_attrs(r: "BottleneckResult", fname: str) -> dict:
 
 
 # escalation schedule: (elastic scale, FIFO after FMPad holds the next frame's padding, uniform depth multiplier)
-_SIZING_SCHEDULE = ((1, False, 1), (1, True, 1), (2, True, 1), (2, True, 2), (4, True, 2), (4, True, 4), (8, True, 8), (8, True, 16))   # last two: only reached by a block that fails at x4
+_SIZING_SCHEDULE = ((1, False, 1), (1, True, 1), (2, True, 1), (2, True, 2), (4, True, 2), (4, True, 4), (8, True, 8), (8, True, 16),
+                    (8, True, 32), (8, True, 64))   # last four: only reached by a block that fails at x4 (the 512x512 down1 block needs uniform depth 64: its nodes are balanced at ~T / 1.04)
 
 
-def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02, max_tries: int = 8, shrink: bool = True,
+def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02, max_tries: int = 10, shrink: bool = True,
                     tol_soft: float = 0.03, fifo_mem: str = "auto") -> dict:
     """Run bottleneck_sim on the chosen foldings and size the FIFOs until the simulated throughput meets T.
 

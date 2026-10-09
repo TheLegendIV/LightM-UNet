@@ -482,7 +482,7 @@ def _verify_task(args):
     import bottleneck, dn_bottleneck, fnl_block, int_bottleneck, up_bottleneck
     ver = {"reg": bottleneck, "dn": dn_bottleneck, "up": up_bottleneck, "init": int_bottleneck, "final": fnl_block}[kind].verify_with_sim
     try:
-        ver(r, max_tries=8)             # the full sizing schedule (up / initial / final default to 6)
+        ver(r, max_tries=10)            # the full sizing schedule (up / initial / final default to 6)
     except RuntimeError as e:
         raise RuntimeError(f"block {stage}: {e}") from None
     return r
