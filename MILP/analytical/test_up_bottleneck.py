@@ -164,5 +164,63 @@ class TestUpSim(unittest.TestCase):
                 self.assertIn(i, produced)
 
 
+class TestUpBilinearDepthwise(unittest.TestCase):
+    """skip_dw=True: the bilinear substitute of LayerQuantEnetFINN, nearest upsample + frozen depthwise 3x3 tent conv (UpNN -> FMPadding -> depthwise SWG -> VVAU_hls -> Thr_k)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.r = model_up_bottleneck(**REF, skip_conv=True, skip_dw=True)
+        cls.n = {x.name: x for x in cls.r.nodes}
+
+    def test_vvau_cycles_follow_the_depthwise_formula(self):
+        k = self.n["MVAU_k"]
+        self.assertEqual(k.op, "VVAU_hls 3x3 depthwise bilinear (tent)")
+        self.assertEqual(k.frame_cycles, 64 * 64 * (16 // k.pe) * (9 // k.simd))
+        self.assertIn(k.simd, (1, 3, 9))
+        self.assertEqual(16 % k.pe, 0)
+        self.assertLessEqual(k.frame_cycles, F_REF)
+
+    def test_depthwise_has_far_fewer_macs_than_the_dense_skip_conv(self):
+        dense = {x.name: x for x in model_up_bottleneck(**REF, skip_conv=True).nodes}
+        self.assertLess(self.n["MVAU_k"].dsp, dense["MVAU_k"].dsp)
+        self.assertEqual(self.n["SWG_k"].simd, self.n["MVAU_k"].pe)              # depthwise SWG SIMD = PE
+
+    def test_parallel_window_iff_simd_above_one_and_a_dwc_narrows_it(self):
+        par = self.n["MVAU_k"].simd > 1
+        self.assertEqual("parallel_window" in self.n["SWG_k"].op, par)
+        self.assertEqual(any(d.edge == "SWG_k->MVAU_k" for d in self.r.dwcs), par and self.n["MVAU_k"].simd != 9)
+
+    def test_needs_the_windowed_conv_slot(self):
+        with self.assertRaises(ValueError):
+            model_up_bottleneck(**REF, skip_conv=False, skip_dw=True)
+
+    def test_explicit_fold_must_be_legal_for_a_depthwise_conv(self):
+        from bottleneck import explicit_folds
+        with explicit_folds({"skipdw": (4, 3)}):
+            r = model_up_bottleneck(**REF, skip_conv=True, skip_dw=True)
+            self.assertEqual((r.nodes[[x.name for x in r.nodes].index("MVAU_k")].pe, r.nodes[[x.name for x in r.nodes].index("MVAU_k")].simd), (4, 3))
+        for bad in ((5, 3), (4, 2)):
+            with explicit_folds({"skipdw": bad}):
+                with self.assertRaises(ValueError):
+                    model_up_bottleneck(**REF, skip_conv=True, skip_dw=True)
+
+    def test_verifies_in_simulation_and_exports(self):
+        r = model_up_bottleneck(**REF, skip_conv=True, skip_dw=True)
+        v = verify_with_sim(r, max_tries=8)
+        self.assertTrue(v["ok"])
+        self.assertFalse(v["deadlock"])
+        cfg = to_folding_config(r)
+        n = {x.name: x for x in r.nodes}
+        self.assertEqual(cfg["folding"]["swg_k"]["parallel_window"], int(n["MVAU_k"].simd > 1))
+        self.assertEqual(cfg["folding"]["mvau_k"], {"PE": n["MVAU_k"].pe, "SIMD": n["MVAU_k"].simd})
+        try:
+            import onnx  # noqa: F401
+        except ImportError:
+            return
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            export_onnx(r, os.path.join(d, "up_dw.onnx"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

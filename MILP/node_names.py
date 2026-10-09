@@ -28,12 +28,22 @@ _TABLE = {
     "up": {**_COMMON, "MVAU_p": ("main_proj.0", "mvau"), "Thr_p": ("main_proj.0", "thr"), "UpNN": ("upsample", "upsample"),
            "FMPadPix": ("up.0", "fmpadpix"), "FMPad_u": ("up.0", "fmpad"), "SWG_u": ("up.0", "swg"), "MVAU_u": ("up.0", "mvau"), "Thr_u": ("up.0", "thr"),
            "FMPad_k": ("skip_conv", "fmpad"), "SWG_k": ("skip_conv", "swg"), "MVAU_k": ("skip_conv", "mvau"), "Thr_k": ("skip_conv", "thr")},
+    # bilinear decoder (LayerQuantEnetFINN `_nearest_depthwise_bilinear_kernel`, analytical up_bottleneck skip_dw=True): the main branch's windowed slot is the frozen depthwise 3x3 conv
+    # `<stage>.main_up.1` (FMPadding -> depthwise SWG -> VVAU_hls); its threshold is the block's skip_quant
+    "updw": {**_COMMON, "MVAU_p": ("main_proj.0", "mvau"), "Thr_p": ("main_proj.0", "thr"), "UpNN": ("upsample", "upsample"),
+             "FMPadPix": ("up.0", "fmpadpix"), "FMPad_u": ("up.0", "fmpad"), "SWG_u": ("up.0", "swg"), "MVAU_u": ("up.0", "mvau"), "Thr_u": ("up.0", "thr"),
+             "FMPad_k": ("main_up.1", "fmpad"), "SWG_k": ("main_up.1", "swg"), "MVAU_k": ("main_up.1", "mvau"), "Thr_k": ("skip_quant", "thr")},
     "init": {"Thr_in": ("input_quant", "thr"), "Dup": (None, "dup"), "FMPad": ("conv", "fmpad"), "SWG": ("conv", "swg"), "MVAU_c": ("conv", "mvau"),
              "Thr_c": ("conv", "thr"), "Thr_m": ("pool_quant", "thr"), "MaxPool": ("pool", "pool"), "SWG_p": ("pool", "swg"), "Pool": ("pool", "pool"),
              "Concat": ("concat", "concat"), "Thr_act": ("act", "thr")},
     "final": {"FMPadPix": (None, "fmpadpix"), "FMPad_u": (None, "fmpad"), "SWG_u": (None, "swg"), "MVAU_f": (None, "mvau"), "Bias": (None, "bias"),
               "LabelSelect": ("argmax", "argmax")},
 }
+
+
+def table_kind(kind: str, params: dict | None = None) -> str:
+    """The name-table key of a block: an up block with the bilinear depthwise upsampler (params['skip_dw']) has its own table."""
+    return "updw" if kind == "up" and params and params.get("skip_dw") else kind
 
 
 def block_output_name(stage: str, kind: str) -> str:

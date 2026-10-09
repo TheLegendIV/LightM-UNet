@@ -72,5 +72,21 @@ class TestNodeNames(unittest.TestCase):
         self.assertTrue(any(f["consumer_milp"] == "final.argmax#argmax" for f in fifos))
 
 
+class TestBilinearUpNames(unittest.TestCase):
+    """The bilinear up block (up_bottleneck skip_dw=True) has its own table: the windowed slot is `<stage>.main_up.1`, its threshold is the block's skip_quant."""
+
+    def test_every_node_of_the_depthwise_up_block_is_mapped(self):
+        from node_names import table_kind
+        from up_bottleneck import model_up_bottleneck
+        r = model_up_bottleneck(32, 16, 4, 6, 32, 32, F=147456 * 4, skip_conv=True, skip_dw=True)
+        self.assertEqual(table_kind("up", r.params), "updw")
+        self.assertEqual(table_kind("up", {"skip_dw": False}), "up")
+        names = {x.name: milp_node("up4", "updw", x.name, "stage3.7.out_act") for x in r.nodes}
+        self.assertFalse([n for n, (m, part) in names.items() if part == "unmapped"], names)
+        self.assertEqual(names["MVAU_k"], ("up4.main_up.1", "mvau"))
+        self.assertEqual(names["Thr_k"], ("up4.skip_quant", "thr"))
+        self.assertEqual(names["FMPad_k"], ("up4.main_up.1", "fmpad"))
+
+
 if __name__ == "__main__":
     unittest.main()

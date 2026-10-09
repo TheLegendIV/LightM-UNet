@@ -50,7 +50,7 @@ from finn_milp import (  # noqa: E402
 )
 from milp_outputs import compute_branch_imbalance_report, compute_chain_rate_imbalance_report  # noqa: E402
 
-from node_names import block_output_name, milp_role  # noqa: E402
+from node_names import block_output_name, milp_role, table_kind  # noqa: E402
 from bottleneck import _retarget_threshold, model_bottleneck  # noqa: E402
 from bottleneck import to_folding_config as _fold_reg, verify_with_sim as _verify_reg  # noqa: E402
 from dn_bottleneck import model_dn_bottleneck  # noqa: E402
@@ -80,9 +80,32 @@ def xopts(node):
     return _XOPT_CACHE[key]
 
 
+BILINEAR_UP = False                # --bilinear-up: the up blocks' main branch is nearest + frozen depthwise 3x3 tent conv (LayerQuantEnetFINN bilinear substitute), see add_bilinear_dw
+DW_SUFFIX = ".main_up.1"
+DW_WEIGHT_BITS = 8                 # the frozen tent kernel is built with Int8WeightPerTensorFloat
 THR_RAM_STYLE = "block"              # the analytical models price every standalone threshold with ram_style="block" (depth_trigger_bram 1024 in the probes)
 _BRAM18_ASPECTS = ((1, 16384), (2, 8192), (4, 4096), (9, 2048), (18, 1024), (36, 512))   # UG573 table 1-10 (width, depth)
 FOLDABLE = ("MVAU", "Thr", "Add", "Dup", "Label")
+
+
+def add_bilinear_dw(geoms: list, dmap: dict) -> list[str]:
+    """--bilinear-up: turn the traced NEAREST decoder into the bilinear hardware substitute. In every up block insert the frozen depthwise 3x3 conv `<stage>.main_up.1` (cin = cout = C, at the
+    upsampled resolution, pad 1) behind the nearest upsample and before the block's skip_quant threshold: upsample -> main_up.1 -> skip_quant -> add. The trace comes from the plain nearest
+    config (same shapes everywhere else; the real bilinear F.interpolate has no layer to trace). Mutates geoms / dmap in place; returns the new layer names."""
+    import dataclasses
+    new = []
+    for stage in block_order(geoms):
+        if block_kind(stage) != "up":
+            continue
+        mp = next(g for g in geoms if g.name == f"{stage}.main_proj.0")
+        ho, wo = 2 * mp.hin, 2 * mp.win
+        dw = dataclasses.replace(mp, name=f"{stage}{DW_SUFFIX}", cin=mp.cout, cout=mp.cout, hin=ho, win=wo, hout=ho, wout=wo, kh=3, kw=3, sh=1, sw=1, dh=1, dw=1,
+                                 groups=mp.cout, ph=1, pw=1)
+        geoms.insert(geoms.index(mp) + 1, dw)
+        dmap[dw.name] = [f"{stage}.upsample"]
+        dmap[f"{stage}.skip_quant"] = [dw.name]
+        new.append(dw.name)
+    return new
 
 
 # ---------------------------------------------------------------------------------------------- block bookkeeping
@@ -154,11 +177,15 @@ def _run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool,
     elif kind == "up":
         mp = geom[f"{stage}.main_proj.0"]
         cin, cout, cmid = mp.cin, mp.cout, geom[f"{stage}.reduce.0"].cout
-        r = model_up_bottleneck(cin, cout, cin // cmid, bits, mp.hin, mp.win, T_out=F_k / (4 * mp.hin * mp.win), skip_conv=False)
+        r = model_up_bottleneck(cin, cout, cin // cmid, bits, mp.hin, mp.win, T_out=F_k / (4 * mp.hin * mp.win), skip_conv=BILINEAR_UP, skip_dw=BILINEAR_UP)
         n = {x.name: x for x in r.nodes}
         put(f"{stage}.main_proj.0", n["MVAU_p"], n["Thr_p"]); put(f"{stage}.reduce.0", n["MVAU_r"], n["Thr_r"])
         put(f"{stage}.up.0", n["MVAU_u"], n["Thr_u"]); put(f"{stage}.expand.0", n["MVAU_e"], n["Thr_e"])
-        xf[f"{stage}.skip_quant"] = (n["Thr_s"].pe, 1, THR_RAM_STYLE)
+        if BILINEAR_UP:
+            put(f"{stage}{DW_SUFFIX}", n["MVAU_k"], None)                                       # the depthwise conv's threshold is the block's skip_quant (Thr_k)
+            xf[f"{stage}.skip_quant"] = (n["Thr_k"].pe, 1, THR_RAM_STYLE)
+        else:
+            xf[f"{stage}.skip_quant"] = (n["Thr_s"].pe, 1, THR_RAM_STYLE)
         xf[f"{stage}.add"] = (n["Add"].pe, 1, None)
         xf[f"{stage}.residual_add"] = (n["Thr_out"].pe, 1, THR_RAM_STYLE)
         xf[f"{stage}.out_act"] = (n["Thr_out"].pe, 1, THR_RAM_STYLE)
@@ -202,7 +229,7 @@ def _fifo_entries(kind: str, r, stage: str, prev_output: str | None = None) -> l
             "stage": stage, "name": f"{stage}.{f['name'].replace(' ', '_')}",
             "producer": f"{stage}.{f['producer']}", "consumer": f"{stage}.{f['consumer']}",
             "producer_node": f["producer_node"], "consumer_node": f["consumer_node"],
-            "producer_milp": milp_role(stage, kind, f["producer_node"], prev_output), "consumer_milp": milp_role(stage, kind, f["consumer_node"], prev_output),
+            "producer_milp": milp_role(stage, table_kind(kind, r.params), f["producer_node"], prev_output), "consumer_milp": milp_role(stage, table_kind(kind, r.params), f["consumer_node"], prev_output),
             "depth": f["depth"], "width_bits": f["width_bits"], "max_occupancy": f["max_occupancy"],
             "is_skip": f["is_skip"], "mem": f.get("mem"), "finn_impl": f.get("finn_impl"),
             "mem_bram18": f.get("mem_bram18", 0), "mem_lut": f.get("mem_lut", 0),
@@ -349,7 +376,8 @@ def assemble(a, ctx, F_top: int, compute_intra_fifos: bool = False, keep_blocks:
         blocks.append((stage, kind, r))
         prev_output = block_output_name(stage, kind)
         for lname, (pe, simd, thr_pe, an_cycles) in lf.items():
-            e = layer_entry(geom[lname], a.bits, pe, simd, thr_pe, stage, no_thr=(lname == "final"))
+            is_dw = lname.endswith(DW_SUFFIX)
+            e = layer_entry(geom[lname], a.bits, pe, simd, thr_pe, stage, wbits=(DW_WEIGHT_BITS if is_dw else None), no_thr=(lname == "final" or is_dw))
             if e["mvu_cycles"] != an_cycles:
                 mismatches.append((lname, an_cycles, e["mvu_cycles"]))
             per_layer[lname] = e
@@ -359,6 +387,8 @@ def assemble(a, ctx, F_top: int, compute_intra_fifos: bool = False, keep_blocks:
         if f"{stage}.skip_pad" in xf:                    # downsampling skip: the pad-MVAU's cost also carries the skip threshold's accumulator width
             ppe, psimd, _ = xf[f"{stage}.skip_pad"]
             pad_cost = pad_mvau_cost(xnode[f"{stage}.skip_pad"], a.bits, ppe, psimd)
+        elif f"{stage}{DW_SUFFIX}" in per_layer:         # bilinear up block: the skip_quant threshold sits behind the depthwise VVAU, its input width is the VVAU's accumulator
+            pad_cost = per_layer[f"{stage}{DW_SUFFIX}"]
         for xn in (n for n in extras if n.geom.stage == stage):
             pe, simd, rs = xf.get(xn.geom.name) or best_extra_fold(xn, a.bits, F_k)
             extra_out[xn.geom.name] = extra_entry(xn, a.bits, pe, simd, rs, pad_cost=pad_cost if xn.kind in ("pad_mvau", "skip_quant") else None)
@@ -404,7 +434,7 @@ def assemble(a, ctx, F_top: int, compute_intra_fifos: bool = False, keep_blocks:
     hardware_nodes = [*geoms, *(n.geom for n in extras)]
     result = {
         "status": "Optimal",
-        "layer_weight_bits": {n: a.bits for n in per_layer},
+        "layer_weight_bits": {n: (DW_WEIGHT_BITS if n.endswith(DW_SUFFIX) else a.bits) for n in per_layer},
         "layer_act_bits": {n: a.bits for n in per_layer},
         "per_layer": per_layer,
         "extra_nodes": extra_out,
@@ -425,7 +455,7 @@ def assemble(a, ctx, F_top: int, compute_intra_fifos: bool = False, keep_blocks:
             "bottleneck_node": bott, "bottleneck_cycles": node_cycles[bott],
             "max_node_cycles": int(a.clock_mhz * 1e6 / a.fps), "per_node_budget_used": F_top, "target_fps": a.fps, "clock_mhz": a.clock_mhz,
             "max_latency_ms": a.max_latency_ms, "fps": a.clock_mhz * 1e6 / node_cycles[bott],
-            "analytical": {"source": "MILP/analytical/net_fold.py", "dsr_pct": a.dsr_pct, "dsr_floor": a.dsr_floor, "mvau_wwidth_max": a.mvau_wwidth_max, "dsr": not a.no_dsr,
+            "analytical": {"source": "MILP/analytical/net_fold.py", "bilinear_up": BILINEAR_UP, "dsr_pct": a.dsr_pct, "dsr_floor": a.dsr_floor, "mvau_wwidth_max": a.mvau_wwidth_max, "dsr": not a.no_dsr,
                            "sum_of_block_first_out_latencies_cycles": rough_latency, "block_profile": profile,
                            "mvau_cycle_mismatches_vs_milp_cost_model": mismatches},
             "note": "Folding assembled from the analytical per-block models (U4 widths), costed with the MILP's own layer_cost_pe_simd / extra_node_options. Not an ILP solve. "
@@ -452,7 +482,7 @@ def _verify_task(args):
     import bottleneck, dn_bottleneck, fnl_block, int_bottleneck, up_bottleneck
     ver = {"reg": bottleneck, "dn": dn_bottleneck, "up": up_bottleneck, "init": int_bottleneck, "final": fnl_block}[kind].verify_with_sim
     try:
-        ver(r)
+        ver(r, max_tries=8)             # the full sizing schedule (up / initial / final default to 6)
     except RuntimeError as e:
         raise RuntimeError(f"block {stage}: {e}") from None
     return r
@@ -593,6 +623,9 @@ def main() -> int:
     ap.add_argument("--whole-net-check", action="store_true", help="run a closing whole-net simulation of the chained blocks with the inter-block depths (slow, ~10 min; off by default)")
     ap.add_argument("--no-verify", action="store_true", help="skip block verification, intra-block FIFO report, FIFO sizing and the ONNX picture (implies --inter-fifo standard)")
     ap.add_argument("--no-onnx", action="store_true", help="skip the whole-net ONNX picture")
+    ap.add_argument("--bilinear-up", action="store_true",
+                    help="bilinear decoder: every up block's main branch is nearest upsample + the frozen depthwise 3x3 tent-kernel conv (LayerQuantEnetFINN `_nearest_depthwise_bilinear_kernel`; UpsampleNearestNeighbour -> "
+                         "FMPadding -> depthwise SWG -> VVAU_hls -> skip_quant threshold), modelled by up_bottleneck skip_dw=True. Traces the nearest config and inserts the layer; no SITES file (no ENet counterpart).")
     a = ap.parse_args()
 
     import bottleneck as _bn
@@ -600,6 +633,11 @@ def main() -> int:
     finn_milp.load_config(a.config)
     finn_milp.CANDIDATE_BITS = tuple(sorted(set(finn_milp.CANDIDATE_BITS) | {a.bits}))
     model, geoms, extras, _pred, dmap, kinds = build_model_and_graph()
+    global BILINEAR_UP
+    BILINEAR_UP = a.bilinear_up
+    if a.bilinear_up:
+        print("bilinear decoder: added", add_bilinear_dw(geoms, dmap), "(nearest trace + frozen depthwise 3x3 tent conv per up block); SITES file skipped", flush=True)
+        a.no_sites = True
     ctx = (geoms, extras, {g.name: g for g in geoms}, {n.geom.name: n for n in extras}, dmap, kinds)
     F = int(a.clock_mhz * 1e6 / a.fps)
     cap = a.max_latency_ms * a.clock_mhz * 1e3 if a.max_latency_ms else None

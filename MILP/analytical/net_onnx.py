@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))      # MILP/ (node_names)
 import finn_cost_model as fcm  # noqa: E402
 from bottleneck import fifo_memory  # noqa: E402
-from node_names import block_output_name, milp_role  # noqa: E402
+from node_names import block_output_name, milp_role, table_kind  # noqa: E402
 
 DOMAIN = "finn_milp"
 
@@ -46,7 +46,7 @@ def export_net_onnx(blocks: list, interfaces: list, path: str, summary: str = ""
     out_tensor = None
     prev_output = None
     for i, (stage, kind, r) in enumerate(blocks):
-        role = lambda node: milp_role(stage, kind, node, prev_output)
+        role = lambda node: milp_role(stage, table_kind(kind, r.params), node, prev_output)
         g = r.fifo_graph
         by_name = {n.name: n for n in r.nodes}
         act_bits = r.params.get("bits")
