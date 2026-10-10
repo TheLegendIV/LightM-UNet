@@ -137,6 +137,10 @@ def main() -> None:
     parser.add_argument("--pad-to-multiple", type=int, default=0,
                          help="Reflect-pad each calibration image's H/W to a multiple of this (use 8) so the odd-size edge "
                               "patches are used instead of skipped. Default 0 = off (legacy behaviour).")
+    parser.add_argument("--trainer-name", default=None,
+                         help="trainer_name written into the checkpoint (collect_results.py/nnUNetv2_predict resolve the network class from it). Default: the 256 bilinear perlayer trainer of "
+                              "--model-class. Override to calibrate another resolution/dataset of the same bilinear net, e.g. the 512 net (--source-net-name nnUNetTrainerENet_12_dense_relu_warmstart150ep "
+                              "--dataset-name Dataset509_ARCADE_1x1_4c): the FINN trainer is resolution-agnostic, the 512 LayerQuantENet one is nnUNetTrainerLayerQuantENet_12_dense_relu_warmstart150ep_perlayer.")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
 
@@ -190,7 +194,7 @@ def main() -> None:
     network_weights.update(dict(quant_model.named_parameters(remove_duplicate=False)))
     new_checkpoint = dict(reference_checkpoint)
     new_checkpoint["network_weights"] = network_weights
-    new_checkpoint["trainer_name"] = (
+    new_checkpoint["trainer_name"] = args.trainer_name or (
         "nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_bilinear_upsample_256_perlayer" if args.model_class == "finn"
         else "nnUNetTrainerLayerQuantENet_12_dense_relu_bilinear_upsample_256_perlayer")
     out_checkpoint_path = out_fold_dir / "checkpoint_best.pth"
