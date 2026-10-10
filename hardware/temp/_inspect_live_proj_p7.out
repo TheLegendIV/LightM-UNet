@@ -1,0 +1,151 @@
+﻿== proj dir
+total 9284
+drwxr-xr-x 12 thelegendiv thelegendiv    4096 Oct  9 08:56 .
+drwxr-xr-x  3 thelegendiv thelegendiv    4096 Oct  6 11:16 ..
+drwxr-xr-x  2 thelegendiv thelegendiv    4096 Oct  8 12:12 archive_pre_20261008_ip_repo_swap_v2
+drwxr-xr-x  2 thelegendiv thelegendiv    4096 Oct  9 08:15 archive_pre_20261009_ip_repo_swap_p1fix
+drwxr-xr-x  2 thelegendiv thelegendiv    4096 Oct  8 23:57 archive_pre_20261009_ip_repo_swap_u8in
+-rw-r--r--  1 thelegendiv thelegendiv   29033 Oct  8 12:16 ip_upgrade.log
+drwxr-xr-x  5 thelegendiv thelegendiv    4096 Oct  9 08:19 s12_256_analytical.cache
+drwxr-xr-x  3 thelegendiv thelegendiv    4096 Oct  9 08:19 s12_256_analytical.gen
+drwxr-xr-x  2 thelegendiv thelegendiv    4096 Oct  9 08:19 s12_256_analytical.hw
+drwxr-xr-x  6 thelegendiv thelegendiv    4096 Oct  9 08:19 s12_256_analytical.ip_user_files
+drwxr-xr-x 13 thelegendiv thelegendiv    4096 Oct  9 08:22 s12_256_analytical.runs
+drwxr-xr-x  2 thelegendiv thelegendiv    4096 Oct  9 08:19 s12_256_analytical.sim
+drwxr-xr-x  4 thelegendiv thelegendiv    4096 Oct  9 08:19 s12_256_analytical.srcs
+-rw-r--r--  1 thelegendiv thelegendiv   54013 Oct  9 08:53 s12_256_analytical.xpr
+-rw-r--r--  1 thelegendiv thelegendiv 4275737 Oct  9 08:56 top_wrapper.xsa
+-rw-r--r--  1 thelegendiv thelegendiv 1290162 Oct  7 01:41 top_wrapper_echo.xsa
+-rw-r--r--  1 thelegendiv thelegendiv 3797158 Oct  7 13:26 top_wrapper_ila.xsa
+== xpr ip repo paths
+IPRepoPath" Val="$PPRDIR/../../../finn-rtllib/memstream"/>
+IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v1_ft15ep_int6_fps250_lat200/GenericPartition_0/code_gen_ipgen_IODMA_hls_0_2aozvq23/project_IODMA_hls_0/sol1/impl/ip"/>
+IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v1_ft15ep_int6_fps250_lat200/GenericPartition_7/code_gen_ipgen_IODMA_hls_0_094h060g/project_IODMA_hls_0/sol1/impl/ip"/>
+IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_0/code_gen_ipgen_GenericPartition_0_DuplicateStreams_hls_0_dzg8mrnm/project_GenericPartition_0_DuplicateStreams_hls_0/sol1/impl/ip"/>
+IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_0/code_gen_ipgen_GenericPartition_0_StreamingConcat_hls_0_gzd20w3c/project_GenericPartition_0_StreamingConcat_hls_0/sol1/impl/ip"/>
+IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_0/code_gen_ipgen_GenericPartition_0_StreamingMaxPool_hls_0_ibgiv4ht/project_GenericPartition_0_StreamingMaxPool_hls_0/sol1/impl/ip"/>
+IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_0/vivado_stitch_proj_6d4v7znz/ip"/>
+IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_2/code_gen_ipgen_GenericPartition_2_AddStreams_hls_0_7mtsmzpx/project_GenericPartition_2_AddStreams_hls_0/sol1/impl/ip"/>
+IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_2/code_gen_ipgen_GenericPartition_2_AddStreams_hls_1_11noz95a/project_GenericPartition_2_AddStreams_hls_1/sol1/impl/ip"/>
+IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_2/code_gen_ipgen_GenericPartition_2_AddStreams_hls_2_zi0505ij/project_GenericPartition_2_AddStreams_hls_2/sol1/impl/ip"/>
+49:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../finn-rtllib/memstream"/>
+50:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v1_ft15ep_int6_fps250_lat200/GenericPartition_0/code_gen_ipgen_IODMA_hls_0_2aozvq23/project_IODMA_hls_0/sol1/impl/ip"/>
+51:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v1_ft15ep_int6_fps250_lat200/GenericPartition_7/code_gen_ipgen_IODMA_hls_0_094h060g/project_IODMA_hls_0/sol1/impl/ip"/>
+52:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_0/code_gen_ipgen_GenericPartition_0_DuplicateStreams_hls_0_dzg8mrnm/project_GenericPartition_0_DuplicateStreams_hls_0/sol1/impl/ip"/>
+53:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_0/code_gen_ipgen_GenericPartition_0_StreamingConcat_hls_0_gzd20w3c/project_GenericPartition_0_StreamingConcat_hls_0/sol1/impl/ip"/>
+54:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_0/code_gen_ipgen_GenericPartition_0_StreamingMaxPool_hls_0_ibgiv4ht/project_GenericPartition_0_StreamingMaxPool_hls_0/sol1/impl/ip"/>
+55:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_0/vivado_stitch_proj_6d4v7znz/ip"/>
+56:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_2/code_gen_ipgen_GenericPartition_2_AddStreams_hls_0_7mtsmzpx/project_GenericPartition_2_AddStreams_hls_0/sol1/impl/ip"/>
+57:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_2/code_gen_ipgen_GenericPartition_2_AddStreams_hls_1_11noz95a/project_GenericPartition_2_AddStreams_hls_1/sol1/impl/ip"/>
+58:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_2/code_gen_ipgen_GenericPartition_2_AddStreams_hls_2_zi0505ij/project_GenericPartition_2_AddStreams_hls_2/sol1/impl/ip"/>
+59:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_2/code_gen_ipgen_GenericPartition_2_AddStreams_hls_3_xyht0bj_/project_GenericPartition_2_AddStreams_hls_3/sol1/impl/ip"/>
+60:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_2/code_gen_ipgen_GenericPartition_2_AddStreams_hls_4_wflq1e6a/project_GenericPartition_2_AddStreams_hls_4/sol1/impl/ip"/>
+61:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_2/code_gen_ipgen_GenericPartition_2_DuplicateStreams_hls_0_p20f0rxs/project_GenericPartition_2_DuplicateStreams_hls_0/sol1/impl/ip"/>
+62:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_2/code_gen_ipgen_GenericPartition_2_DuplicateStreams_hls_1_eq_e9rkv/project_GenericPartition_2_DuplicateStreams_hls_1/sol1/impl/ip"/>
+63:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_2/code_gen_ipgen_GenericPartition_2_DuplicateStreams_hls_2_ilq7iud0/project_GenericPartition_2_DuplicateStreams_hls_2/sol1/impl/ip"/>
+64:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_2/code_gen_ipgen_GenericPartition_2_DuplicateStreams_hls_3_r8okmxj4/project_GenericPartition_2_DuplicateStreams_hls_3/sol1/impl/ip"/>
+65:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_2/code_gen_ipgen_GenericPartition_2_DuplicateStreams_hls_4_uvao2d3k/project_GenericPartition_2_DuplicateStreams_hls_4/sol1/impl/ip"/>
+66:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_2/vivado_stitch_proj_jxrgryec/ip"/>
+67:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_3/code_gen_ipgen_GenericPartition_3_AddStreams_hls_0_8v4ws7hg/project_GenericPartition_3_AddStreams_hls_0/sol1/impl/ip"/>
+68:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_3/code_gen_ipgen_GenericPartition_3_AddStreams_hls_1_a746w8c7/project_GenericPartition_3_AddStreams_hls_1/sol1/impl/ip"/>
+69:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_3/code_gen_ipgen_GenericPartition_3_AddStreams_hls_2_g5av120q/project_GenericPartition_3_AddStreams_hls_2/sol1/impl/ip"/>
+70:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_3/code_gen_ipgen_GenericPartition_3_AddStreams_hls_3_7q45wdgf/project_GenericPartition_3_AddStreams_hls_3/sol1/impl/ip"/>
+71:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_3/code_gen_ipgen_GenericPartition_3_DuplicateStreams_hls_0_dpaoia15/project_GenericPartition_3_DuplicateStreams_hls_0/sol1/impl/ip"/>
+72:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_3/code_gen_ipgen_GenericPartition_3_DuplicateStreams_hls_1_lszs39fb/project_GenericPartition_3_DuplicateStreams_hls_1/sol1/impl/ip"/>
+73:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_3/code_gen_ipgen_GenericPartition_3_DuplicateStreams_hls_2_76rhf3k5/project_GenericPartition_3_DuplicateStreams_hls_2/sol1/impl/ip"/>
+74:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_3/code_gen_ipgen_GenericPartition_3_DuplicateStreams_hls_3_6bdoi78v/project_GenericPartition_3_DuplicateStreams_hls_3/sol1/impl/ip"/>
+75:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_3/vivado_stitch_proj_dutr27mc/ip"/>
+76:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_4/code_gen_ipgen_GenericPartition_4_AddStreams_hls_0_5nvxzro0/project_GenericPartition_4_AddStreams_hls_0/sol1/impl/ip"/>
+77:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_4/code_gen_ipgen_GenericPartition_4_AddStreams_hls_1_h9i9uf6d/project_GenericPartition_4_AddStreams_hls_1/sol1/impl/ip"/>
+78:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_4/code_gen_ipgen_GenericPartition_4_AddStreams_hls_2_hzvs2swc/project_GenericPartition_4_AddStreams_hls_2/sol1/impl/ip"/>
+79:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_4/code_gen_ipgen_GenericPartition_4_AddStreams_hls_3_bpmtecrw/project_GenericPartition_4_AddStreams_hls_3/sol1/impl/ip"/>
+80:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_4/code_gen_ipgen_GenericPartition_4_DuplicateStreams_hls_0_uk1d3rwy/project_GenericPartition_4_DuplicateStreams_hls_0/sol1/impl/ip"/>
+81:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_4/code_gen_ipgen_GenericPartition_4_DuplicateStreams_hls_1_2avnbd22/project_GenericPartition_4_DuplicateStreams_hls_1/sol1/impl/ip"/>
+82:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_4/code_gen_ipgen_GenericPartition_4_DuplicateStreams_hls_2_2s1daz7l/project_GenericPartition_4_DuplicateStreams_hls_2/sol1/impl/ip"/>
+83:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_4/code_gen_ipgen_GenericPartition_4_DuplicateStreams_hls_3_5t7phaxr/project_GenericPartition_4_DuplicateStreams_hls_3/sol1/impl/ip"/>
+84:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_4/vivado_stitch_proj_wqxkeh5y/ip"/>
+85:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_5/code_gen_ipgen_GenericPartition_5_AddStreams_hls_0__r03f27u/project_GenericPartition_5_AddStreams_hls_0/sol1/impl/ip"/>
+86:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_5/code_gen_ipgen_GenericPartition_5_AddStreams_hls_1_clv9beco/project_GenericPartition_5_AddStreams_hls_1/sol1/impl/ip"/>
+87:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_5/code_gen_ipgen_GenericPartition_5_AddStreams_hls_2_v5erzkgz/project_GenericPartition_5_AddStreams_hls_2/sol1/impl/ip"/>
+88:    <Option Name="IPRepoPath" Val="$PPRDIR/../../../notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_5/code_gen_ipgen_GenericPartition_5_AddStreams_hls_3_pyqr28mh/project_GenericPartition_5_AddStreams_hls_3/sol1/impl/ip"/>
+== BD file GenericPartition cells
+"GenericPartition_0_0"
+"GenericPartition_0_0": 
+"GenericPartition_0_0": "",
+"GenericPartition_1_0"
+"GenericPartition_1_0": 
+"GenericPartition_1_0": ""
+"GenericPartition_2_0"
+"GenericPartition_2_0": 
+"GenericPartition_2_0": "",
+"GenericPartition_3_0"
+"GenericPartition_3_0": 
+"GenericPartition_3_0": "",
+"GenericPartition_4_0"
+"GenericPartition_4_0": 
+"GenericPartition_4_0": "",
+"GenericPartition_5_0"
+"GenericPartition_5_0": 
+"GenericPartition_5_0": "",
+"GenericPartition_6_0"
+"GenericPartition_6_0": 
+GenericPartition_7:1.0
+GenericPartition_7_0
+GenericPartition_7_0/ap_clk
+GenericPartition_7_0/ap_rst_n
+GenericPartition_7_0/m_axis_0
+GenericPartition_7_0/s_axis_0
+GenericPartition_7_0_0
+GenericPartition_7_0_0/top_GenericPartition_7_0_0.xci
+GenericPartition_7_0_m_axis_0
+== p7 builds
+-- S12_dense_256_u4_u8in_int6_p7mvu2
+drwxr-xr-x 53 thelegendiv thelegendiv 4096 2026-10-09 15:08 /home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_p7mvu2/GenericPartition_7
+vivado_stitch_proj_3ui7e11k
+GenericPartition_7
+-- S12_dense_256_u4_u8in_int6_p7mvu
+drwxr-xr-x 54 thelegendiv thelegendiv 4096 2026-10-09 11:03 /home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_p7mvu/GenericPartition_7
+vivado_stitch_proj_d0kkgx18
+GenericPartition_7
+-- S12_dense_256_u4_analytical_v1_ft15ep_int6_fps250_lat200_namefix
+drwxr-xr-x 52 thelegendiv thelegendiv 4096 2026-10-07 15:13 /home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v1_ft15ep_int6_fps250_lat200_namefix/GenericPartition_7
+vivado_stitch_proj_28ivxkr6
+GenericPartition_0
+GenericPartition_1
+GenericPartition_2
+GenericPartition_3
+GenericPartition_4
+GenericPartition_5
+GenericPartition_6
+GenericPartition_7
+combined_stitch_proj_7jqljqyy
+combined_stitch_proj_drp47atx
+combined_stitch_proj_pizd474o
+verilator_fifosim_bsbq6l4b
+verilator_fifosim_nothreads
+verilator_fifosim_usc4d8dh
+verilator_fifosim_v5
+verilator_fifosim_ynscokk_
+-- S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200
+drwxr-xr-x 52 thelegendiv thelegendiv 4096 2026-10-08 06:31 /home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_7
+vivado_stitch_proj_i6cc54bp
+GenericPartition_0
+GenericPartition_1
+GenericPartition_2
+GenericPartition_3
+GenericPartition_4
+GenericPartition_5
+GenericPartition_6
+GenericPartition_7
+combined_stitch_proj_7w793kfp
+verilator_fifosim_hvag2s75
+== combined stitch proj (current)
+/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v1_ft15ep_int6_fps250_lat200/combined_stitch_proj_90htlxvu
+/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v1_ft15ep_int6_fps250_lat200_namefix/combined_stitch_proj_7jqljqyy
+/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v1_ft15ep_int6_fps250_lat200_namefix/combined_stitch_proj_drp47atx
+/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v1_ft15ep_int6_fps250_lat200_namefix/combined_stitch_proj_pizd474o
+/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/combined_stitch_proj_7w793kfp
+/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_fps250_lat200/combined_stitch_proj_hn_e1s0u
+/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_nn_upsample_256_v2/combined_stitch_proj_8ui3j1v2
+/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_nn_upsample_256_w8_16_v4/combined_stitch_proj_8_2nw77l
+/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/tied_dsr104/combined_stitch_proj_2p39qyyo

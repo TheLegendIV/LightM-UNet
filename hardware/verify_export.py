@@ -58,7 +58,7 @@ def _fmt(report: dict) -> str:
 
 
 # ------------------------------------------------------------------ data
-def load_val_cases(pre_dir: Path, n: int | None) -> tuple[list[str], np.ndarray, np.ndarray]:
+def load_val_cases(pre_dir: Path, n: int | None, hw: int = 256) -> tuple[list[str], np.ndarray, np.ndarray]:
     """(names, z (N,1,H,W) float32 per-image z-scored, gt (N,H,W) uint8) from a nnU-Net preprocessed dir
     (<pre_dir>/nnUNetPlans_2d/val_*_p0000.npy and <pre_dir>/gt_segmentations/val_*_p0000.png)."""
     from PIL import Image
@@ -69,7 +69,7 @@ def load_val_cases(pre_dir: Path, n: int | None) -> tuple[list[str], np.ndarray,
     paths = [p for p in paths if not p.stem.endswith("_seg")]
     # nnU-Net's nonzero-crop shrinks some cases (e.g. 256x254); the hardware always sees the full
     # 256x256 frame, so only uncropped cases are valid hardware inputs / match the 256x256 GT PNGs.
-    paths = [p for p in paths if np.load(p, mmap_mode="r").shape[-2:] == (256, 256)]
+    paths = [p for p in paths if np.load(p, mmap_mode="r").shape[-2:] == (hw, hw)]
     if not paths:
         raise FileNotFoundError(f"no val_*_p0000.npy under {pre_dir / 'nnUNetPlans_2d'}")
     paths = paths if n is None else paths[:n]
@@ -86,7 +86,7 @@ def load_val_cases(pre_dir: Path, n: int | None) -> tuple[list[str], np.ndarray,
 # ------------------------------------------------------------------ G0 / G1: PyTorch reference
 def build_reference(
     model, pre_dir: Path, out_npz: Path, *, n_cases: int | None = 200, n_onnx_cases: int = 10,
-    min_fg_dice: float = 0.0, min_agreement: float = 0.9999,
+    min_fg_dice: float = 0.0, min_agreement: float = 0.9999, hw: int = 256,
 ) -> dict:
     """G0+G1 on a LayerQuantEnetFINN(uint8_input=True) with trained scales bound. Writes out_npz."""
     import torch
@@ -95,7 +95,7 @@ def build_reference(
     model.eval()
     s_in = model.bind_input_scale()
     assert abs(s_in - 1.0) > 1e-6, "input_quant scale is the 1.0 default -- trained act scales were not loaded"
-    names, z, gt = load_val_cases(pre_dir, n_cases)
+    names, z, gt = load_val_cases(pre_dir, n_cases, hw)
     zt = torch.from_numpy(z)
     u = model.encode_uint8(zt, s_in)
 

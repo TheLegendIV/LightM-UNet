@@ -1,0 +1,64 @@
+﻿== p7mvu2 log tail
+1806:[partition 7] OOC synth done: {'vivado_proj_folder': '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_p7mvu2/GenericPartition_7/synth_out_of_context_wz2qcblb/results_GenericPartition_7_wrapper', 'LUT': 3681.0, 'LUTRAM': 344.0, 'FF': 4956.0, 'DSP': 0.0, 'BRAM': 0.
+1807:[partition 7] rtlsim PASS: {'N_IN_TXNS': 65536, 'N_OUT_TXNS': 65536, 'cycles': 656027, 'N': 1, 'latency_cycles': 656027, 'build_dir': '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_p7mvu2/GenericPartition_7/rtlsim_single', 'expected_out_txns': 65536, 'top_modul
+== p7mvu2 build dir
+/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_p7mvu2/GenericPartition_7/vivado_stitch_proj_3ui7e11k/ip
+6
+component.bak
+component.xml
+data
+sim
+src
+verilog
+xgui
+== p7mvu build dir
+/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_u8in_int6_p7mvu/GenericPartition_7/vivado_stitch_proj_d0kkgx18/ip
+== live project currently-registered P7 repos
+S12_dense_256_u4_analytical_v1_ft15ep_int6_fps250_lat200/GenericPartition_7/code_gen_ipgen_IODMA_hls_0_094h060g/project_IODMA_hls_0/sol1/impl/ip"/>
+S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_7/code_gen_ipgen_GenericPartition_7_AddStreams_hls_0_y2pevnq7/project_GenericPartition_7_AddStreams_hls_0/sol1/impl/ip"/>
+S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_7/code_gen_ipgen_GenericPartition_7_ChannelwiseOp_hls_0_9dl6ht6n/project_GenericPartition_7_ChannelwiseOp_hls_0/sol1/impl/ip"/>
+S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_7/code_gen_ipgen_GenericPartition_7_DuplicateStreams_hls_0_1n7vvga8/project_GenericPartition_7_DuplicateStreams_hls_0/sol1/impl/ip"/>
+S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_7/code_gen_ipgen_GenericPartition_7_FMPadding_Pixel_hls_0_40txg2p9/project_GenericPartition_7_FMPadding_Pixel_hls_0/sol1/impl/ip"/>
+S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_7/code_gen_ipgen_GenericPartition_7_LabelSelect_hls_0_x_mmrm8g/project_GenericPartition_7_LabelSelect_hls_0/sol1/impl/ip"/>
+S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_7/code_gen_ipgen_GenericPartition_7_VVAU_hls_0_0smfoads/project_GenericPartition_7_VVAU_hls_0/sol1/impl/ip"/>
+S12_dense_256_u4_u8in_int6_fps250_lat200/GenericPartition_7/vivado_stitch_proj_ul86bwbf/ip"/>
+== other-partition build tags in live xpr
+      1     <Option Name="IPRepoPath" Val="$PPRDIR/../../../finn-rtllib/memstream"/>
+      1 S12_dense_256_u4_analytical_v1_ft15ep_int6_fps250_lat200 GenericPartition_0
+      1 S12_dense_256_u4_analytical_v1_ft15ep_int6_fps250_lat200 GenericPartition_7
+      4 S12_dense_256_u4_u8in_int6_fps250_lat200 GenericPartition_0
+     11 S12_dense_256_u4_u8in_int6_fps250_lat200 GenericPartition_2
+      9 S12_dense_256_u4_u8in_int6_fps250_lat200 GenericPartition_3
+      9 S12_dense_256_u4_u8in_int6_fps250_lat200 GenericPartition_4
+     11 S12_dense_256_u4_u8in_int6_fps250_lat200 GenericPartition_5
+      9 S12_dense_256_u4_u8in_int6_fps250_lat200 GenericPartition_6
+      7 S12_dense_256_u4_u8in_int6_fps250_lat200 GenericPartition_7
+     15 S12_dense_256_u4_u8in_int6_p1fix GenericPartition_1
+== bd P7 cell ref
+35:      "GenericPartition_7_0": "",
+1885:      "GenericPartition_7_0": {
+1886:        "vlnv": "xilinx_finn:finn:GenericPartition_7:1.0",
+1887:        "xci_name": "top_GenericPartition_7_0_0",
+1888:        "xci_path": "ip/top_GenericPartition_7_0_0/top_GenericPartition_7_0_0.xci",
+1889:        "inst_hier_path": "GenericPartition_7_0"
+1992:          "GenericPartition_7_0/s_axis_0",
+2004:      "GenericPartition_7_0_m_axis_0": {
+2007:          "GenericPartition_7_0/m_axis_0",
+2089:          "GenericPartition_7_0/ap_rst_n",
+== p7 port compat: stitched component.xml bus/ports
+spirit:name>m_axis_0
+spirit:name>m_axis_0_tdata
+spirit:name>m_axis_0_tready
+spirit:name>m_axis_0_tvalid
+spirit:name>s_axis_0
+spirit:name>s_axis_0_tdata
+spirit:name>s_axis_0_tready
+spirit:name>s_axis_0_tvalid
+spirit:name>m_axis_0
+spirit:name>m_axis_0_tdata
+spirit:name>m_axis_0_tready
+spirit:name>m_axis_0_tvalid
+spirit:name>s_axis_0
+spirit:name>s_axis_0_tdata
+spirit:name>s_axis_0_tready
+spirit:name>s_axis_0_tvalid
