@@ -737,6 +737,7 @@ def run_verilator_fifosim(
     max_iters=10000000,
     build_dir=None,
     sim_timeout_s=14400,
+    fifo_depth_logging="",
 ):
     """Zero-backpressure Verilator rtlsim of an already prepared stitched IP
     (prepare_stitched_ip_for_verilator must have been called on its model).
@@ -762,7 +763,7 @@ def run_verilator_fifosim(
         "ITERS_PER_OUTPUT": int(np.prod(oshape_folded[:-1])),
         "N_INPUTS": int(n_inputs),
         "MAX_ITERS": int(max_iters),
-        "FIFO_DEPTH_LOGGING": "",
+        "FIFO_DEPTH_LOGGING": fifo_depth_logging,
     }
     for key, val in template_dict.items():
         fifosim_cpp_template = fifosim_cpp_template.replace(f"@{key}@", str(val))
@@ -857,6 +858,30 @@ def run_verilator_fifosim(
     ret_dict["build_dir"] = build_dir
     ret_dict["expected_out_txns"] = template_dict["ITERS_PER_OUTPUT"] * template_dict["N_INPUTS"]
     return ret_dict
+
+
+def verilator_fifosim_v5(model, n_inputs, max_iters=100000000):
+    """Drop-in for finn.util.pyverilator.verilator_fifosim (used by InsertAndSetFIFODepths 'largefifo_rtlsim'),
+    which compiles with the PATH verilator (4.224, cannot build the alpha MVU RTL). Same depth-monitor
+    'maxcount' logging, Verilator 5 recipe."""
+
+    vivado_stitch_proj_dir = prepare_stitched_ip_for_verilator(model)
+    first_node = model.find_consumer(model.graph.input[0].name)
+    last_node = model.find_producer(model.graph.output[0].name)
+    assert first_node is not None and last_node is not None, "Failed to find first/last nodes"
+    ishape_folded = getCustomOp(first_node).get_folded_input_shape()
+    oshape_folded = getCustomOp(last_node).get_folded_output_shape()
+    templ = '    results_file << "maxcount%s" << "\\t" << to_string(top->maxcount%s) << endl;'
+    log_lines, ind = [], 0
+    for fifo_node in model.get_nodes_by_op_type("StreamingFIFO_rtl"):
+        if getCustomOp(fifo_node).get_nodeattr("depth_monitor") == 1:
+            suffix = "" if ind == 0 else "_%d" % ind
+            log_lines.append(templ % (suffix, suffix))
+            ind += 1
+    return run_verilator_fifosim(
+        vivado_stitch_proj_dir, "finn_design_wrapper", n_inputs, ishape_folded, oshape_folded, max_iters,
+        fifo_depth_logging="\n".join(log_lines),
+    )
 
 
 def measure_partition_rtlsim(kernel_model, n_inputs=1, max_iters=5000000, build_dir=None):

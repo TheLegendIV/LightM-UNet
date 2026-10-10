@@ -119,6 +119,13 @@ from finn_s12_build_steps import (  # noqa: E402
 
 install_relaxed_stage_boundaries()
 
+# FINN's FIFO autosizer and standalone rtlsim step compile with the PATH verilator (4.224), which cannot build the alpha MVU RTL.
+import finn.transformation.fpgadataflow.set_fifo_depths as _sfd  # noqa: E402
+from finn_partition_build_steps import verilator_fifosim_v5  # noqa: E402
+import finn.builder.build_dataflow_steps as _bds  # noqa: E402
+_sfd.verilator_fifosim = verilator_fifosim_v5
+_bds.verilator_fifosim = verilator_fifosim_v5
+
 
 def _build_one_partition(fn, cfg, prefix, folding_file, idx, full, fold_suffix, tag, build_dir,
                           allocate_uram=False, uram_budget_blocks=None, fifo_plan=None, fifo_autosize="fixed2"):
@@ -148,6 +155,7 @@ def _build_one_partition(fn, cfg, prefix, folding_file, idx, full, fold_suffix, 
         print(f"{log} auto-fold: skipping step_apply_folding_config", flush=True)
     m = step_minimize_bit_width_standalone_thresh_aware(m, cfg)
     m = step_fix_weight_dtype_bipolar_bug(m, cfg)
+    flow_gates.gate_rtl_weights_signed(m, log)
     m = step_force_dsp(m, cfg)
     # Rename with the per-partition prefix HERE, right before the real ipgen/HLS-synth
     # trigger (step_hw_codegen -> PrepareIP bakes self.onnx_node.name into the generated

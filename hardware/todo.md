@@ -1,0 +1,4 @@
+# hardware/ backlog
+
+- Fix the SWU model in `MILP/finn_cost_model.py` (`_finn_swu`, non-parallel path): FINN's SWU sees the padded `IFMDim` (padding is a separate `FMPadding` node), the model uses the unpadded `win` in `buffer_min_size`, `buffer_depth` and the read-block term. Seen as 2 SWU-cycle mismatches in the landed-folding check on every ablation arm (`stage2.2.conv` 77960 vs 80008, `stage2.3.conv` 82184 vs 90376 at the simfifo arms; same ratio for the analytical arms). Probably also undercounts SWU BRAM/LUT for dilated layers. After the fix, regenerate the MILP foldings and re-check whether the chosen folding changes.
+- `hardware/checks/check_milp_vs_landed_folding.py`: `find_offset` takes the first of several tied windows; prefer the offset whose per-node weight counts all match.

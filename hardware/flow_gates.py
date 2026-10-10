@@ -4,6 +4,7 @@ Flow: export -> accuracy gate (verify_export.py) -> preamble (+ accuracy gate on
       -> folding landed -> build -> FIFO sizes landed.
 
   gate_folding_landed(model, folding_file, label)   in-build, right after step_apply_folding_config
+  gate_rtl_weights_signed(model, label)             in-build, right after the weight bit-width steps
   gate_fifos_landed(model, report, label)           in-build, right after step_force_fifo_depths_from_milp
   python3 flow_gates.py fifos <output_dir>          re-check a finished build from its checkpoints
 """
@@ -47,6 +48,26 @@ def gate_folding_landed(model, folding_file: str, label: str) -> None:
     errors += [f"{n}: weight node has no folding entry (FINN auto-fold stayed)" for n in unfolded]
     print(f"{label} folding landed: {len(cfg) - 1} entries checked, {len(errors)} error(s)", flush=True)
     assert not errors, f"{label} folding did not land:\n  " + "\n  ".join(errors)
+
+
+def gate_rtl_weights_signed(model, label: str) -> None:
+    """RTL MVAU/VVAU read weights as signed: no unsigned weightDataType, and every weight value must fit its declared type."""
+    errors, n = [], 0
+    for node in model.graph.node:
+        if node.op_type not in ("MVAU_rtl", "VVAU_rtl"):
+            continue
+        n += 1
+        wdt = _attrs(node).get("weightDataType")
+        if wdt is None or not wdt.startswith("INT"):
+            errors.append(f"{node.name}: weightDataType {wdt!r} is not a signed INTn type")
+            continue
+        w = model.get_initializer(node.input[1])
+        bits = int(wdt[3:])
+        lo, hi = -(2 ** (bits - 1)), 2 ** (bits - 1) - 1
+        if w.min() < lo or w.max() > hi:
+            errors.append(f"{node.name}: weights [{w.min()}, {w.max()}] do not fit {wdt}")
+    print(f"{label} RTL weights signed: {n} node(s) checked, {len(errors)} error(s)", flush=True)
+    assert not errors, f"{label} RTL weight dtype check failed:\n  " + "\n  ".join(errors)
 
 
 def gate_fifos_landed(model, report: list[dict], label: str) -> dict:
