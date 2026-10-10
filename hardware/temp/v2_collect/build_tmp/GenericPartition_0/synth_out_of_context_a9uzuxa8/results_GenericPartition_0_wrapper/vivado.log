@@ -1,0 +1,1573 @@
+#-----------------------------------------------------------
+# Vivado v2022.2 (64-bit)
+# SW Build 3671981 on Fri Oct 14 04:59:54 MDT 2022
+# IP Build 3669848 on Fri Oct 14 08:30:02 MDT 2022
+# Start of session at: Thu Oct  8 04:09:45 2026
+# Process ID: 1110299
+# Current directory: /home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper
+# Command line: vivado -mode tcl -source GenericPartition_0_wrapper.tcl -tclargs GenericPartition_0_wrapper
+# Log file: /home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/vivado.log
+# Journal file: /home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/vivado.jou
+# Running On: finn_dev_thelegendiv, OS: Linux, CPU Frequency: 4104.016 MHz, CPU Physical cores: 6, Host memory: 84340 MB
+#-----------------------------------------------------------
+source GenericPartition_0_wrapper.tcl
+# set fpga_part "xczu7ev-ffvc1156-2-e"
+# set origin_dir "."
+# if { [info exists ::origin_dir_loc] } {
+#   set origin_dir $::origin_dir_loc
+# }
+# variable script_file
+# set script_file "vivadocompile.tcl"
+# proc help {} {
+#   variable script_file
+#   puts "\nDescription:"
+#   puts "Recreate a Vivado project from this script. The created project will be"
+#   puts "functionally equivalent to the original project for which this script was"
+#   puts "generated. The script contains commands for creating a project, filesets,"
+#   puts "runs, adding/importing sources and setting properties on various objects.\n"
+#   puts "Syntax:"
+#   puts "$script_file"
+#   puts "$script_file -tclargs \[--origin_dir <path>\]"
+#   puts "$script_file -tclargs \[--help\]\n"
+#   puts "Usage:"
+#   puts "Name                   Description"
+#   puts "-------------------------------------------------------------------------"
+#   puts "\[--origin_dir <path>\]  Determine source file paths wrt this path. Default"
+#   puts "                       origin_dir path value is \".\", otherwise, the value"
+#   puts "                       that was set with the \"-paths_relative_to\" switch"
+#   puts "                       when this script was generated.\n"
+#   puts "\[--help\]               Print help information for this script"
+#   puts "-------------------------------------------------------------------------\n"
+#   exit 0
+# }
+# if { $::argc > 0 } {
+#   for {set i 0} {$i < [llength $::argc]} {incr i} {
+#     set option [string trim [lindex $::argv $i]]
+#     switch -regexp -- $option {
+#       "--origin_dir" { incr i; set origin_dir [lindex $::argv $i] }
+#       "--help"       { help }
+#       default {
+#         if { [regexp {^-} $option] } {
+#           puts "ERROR: Unknown option '$option' specified, please type '$script_file -tclargs --help' for usage info.\n"
+#           return 1
+#         }
+#       }
+#     }
+#   }
+# }
+# set orig_proj_dir "[file normalize "$origin_dir/vivadocompile"]"
+# create_project -force vivadocompile ./vivadocompile -part $fpga_part
+# set proj_dir [get_property directory [current_project]]
+# set obj [get_projects vivadocompile]
+# set_property "default_lib" "xil_defaultlib" $obj
+# set_property "sim.ip.auto_export_scripts" "1" $obj
+# set_property "simulator_language" "Mixed" $obj
+# if {[string equal [get_filesets -quiet sources_1] ""]} {
+#   create_fileset -srcset sources_1
+# }
+# set obj [get_filesets sources_1]
+# source sources.tcl
+## set files [list \
+## "[file normalize "$origin_dir/dummy_nachiket_fooling_zsh_for_loops.h"]"\
+## "[file normalize "$origin_dir/GenericPartition_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_ConvolutionInputGenerator_rtl_0_wrapper.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_DuplicateStreams_hls_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_DuplicateStreams_hls_0_flow_control_loop_pipe_no_ap_cont.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_DuplicateStreams_hls_0_hls_deadlock_idx0_monitor.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_DuplicateStreams_hls_0_regslice_both.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_FMPadding_rtl_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_ConvolutionInputGenerator_rtl_0_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_DuplicateStreams_hls_0_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_FMPadding_rtl_0_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_MVAU_rtl_0_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_MVAU_rtl_0_wstrm_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_StreamingConcat_hls_0_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_StreamingDataWidthConverter_rtl_0_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_StreamingDataWidthConverter_rtl_1_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_StreamingDataWidthConverter_rtl_2_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_0_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_10_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_11_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_12_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_13_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_14_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_15_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_1_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_2_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_3_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_4_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_5_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_6_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_7_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_8_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_9_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_StreamingMaxPool_hls_0_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_Thresholding_rtl_0_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_Thresholding_rtl_1_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_Thresholding_rtl_2_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_GenericPartition_0_Thresholding_rtl_3_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_MVAU_rtl_0_wrapper.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingConcat_hls_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingConcat_hls_0_flow_control_loop_pipe_no_ap_cont.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingConcat_hls_0_hls_deadlock_idx0_monitor.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingConcat_hls_0_regslice_both.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingDataWidthConverter_rtl_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingDataWidthConverter_rtl_1.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingDataWidthConverter_rtl_2.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingFIFO_rtl_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingFIFO_rtl_1.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingFIFO_rtl_10.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingFIFO_rtl_11.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingFIFO_rtl_12.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingFIFO_rtl_13.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingFIFO_rtl_14.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingFIFO_rtl_15.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingFIFO_rtl_2.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingFIFO_rtl_3.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingFIFO_rtl_4.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingFIFO_rtl_5.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingFIFO_rtl_6.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingFIFO_rtl_7.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingFIFO_rtl_8.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingFIFO_rtl_9.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingMaxPool_hls_0.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingMaxPool_hls_0_GenericPartition_0_StreamingMaxPool_hls_0_Pipeline_VITIS_LOOP_147_1.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingMaxPool_hls_0_GenericPartition_0_StreamingMaxPool_hls_0_Pipeline_VITIS_LOOP_158_6.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingMaxPool_hls_0_GenericPartition_0_StreamingMaxPool_hls_0_Pipeline_VITIS_LOOP_174_8.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingMaxPool_hls_0_buf_V_RAM_AUTO_1R1W.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingMaxPool_hls_0_flow_control_loop_pipe_sequential_init.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingMaxPool_hls_0_hls_deadlock_idx0_monitor.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_StreamingMaxPool_hls_0_regslice_both.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_Thresholding_rtl_0_axi_wrapper.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_Thresholding_rtl_1_axi_wrapper.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_Thresholding_rtl_2_axi_wrapper.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_Thresholding_rtl_3_axi_wrapper.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_wrapper.v"]"\
+## "[file normalize "$origin_dir/Q_srl.v"]"\
+## "[file normalize "$origin_dir/axilite_if.v"]"\
+## "[file normalize "$origin_dir/memstream_axi_wrapper.v"]"\
+## "[file normalize "$origin_dir/GenericPartition_0_ConvolutionInputGenerator_rtl_0_impl.sv"]"\
+## "[file normalize "$origin_dir/axi2we.sv"]"\
+## "[file normalize "$origin_dir/dummy_sv_file.sv"]"\
+## "[file normalize "$origin_dir/dwc.sv"]"\
+## "[file normalize "$origin_dir/dwc_axi.sv"]"\
+## "[file normalize "$origin_dir/fmpadding.sv"]"\
+## "[file normalize "$origin_dir/fmpadding_axi.sv"]"\
+## "[file normalize "$origin_dir/memstream.sv"]"\
+## "[file normalize "$origin_dir/memstream_axi.sv"]"\
+## "[file normalize "$origin_dir/mvu_4sx4u.sv"]"\
+## "[file normalize "$origin_dir/mvu_8sx8u_dsp48.sv"]"\
+## "[file normalize "$origin_dir/mvu_vvu_8sx9_dsp58.sv"]"\
+## "[file normalize "$origin_dir/mvu_vvu_axi.sv"]"\
+## "[file normalize "$origin_dir/replay_buffer.sv"]"\
+## "[file normalize "$origin_dir/swg_common.sv"]"\
+## "[file normalize "$origin_dir/swg_pkg.sv"]"\
+## "[file normalize "$origin_dir/thresholding.sv"]"\
+## "[file normalize "$origin_dir/thresholding_axi.sv"]"\
+## "[file normalize "$origin_dir/dummy_vhdl_file.vhd"]"\
+## ]
+## add_files -norecurse -fileset $obj $files
+# add_files -norecurse -fileset $obj $files
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/dummy_nachiket_fooling_zsh_for_loops.h' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_ConvolutionInputGenerator_rtl_0_wrapper.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_DuplicateStreams_hls_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_DuplicateStreams_hls_0_flow_control_loop_pipe_no_ap_cont.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_DuplicateStreams_hls_0_hls_deadlock_idx0_monitor.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_DuplicateStreams_hls_0_regslice_both.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_FMPadding_rtl_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_ConvolutionInputGenerator_rtl_0_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_DuplicateStreams_hls_0_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_FMPadding_rtl_0_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_MVAU_rtl_0_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_MVAU_rtl_0_wstrm_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_StreamingConcat_hls_0_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_StreamingDataWidthConverter_rtl_0_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_StreamingDataWidthConverter_rtl_1_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_StreamingDataWidthConverter_rtl_2_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_0_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_10_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_11_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_12_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_13_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_14_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_15_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_1_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_2_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_3_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_4_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_5_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_6_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_7_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_8_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_StreamingFIFO_rtl_9_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_StreamingMaxPool_hls_0_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_Thresholding_rtl_0_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_Thresholding_rtl_1_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_Thresholding_rtl_2_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_GenericPartition_0_Thresholding_rtl_3_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_MVAU_rtl_0_wrapper.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingConcat_hls_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingConcat_hls_0_flow_control_loop_pipe_no_ap_cont.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingConcat_hls_0_hls_deadlock_idx0_monitor.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingConcat_hls_0_regslice_both.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingDataWidthConverter_rtl_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingDataWidthConverter_rtl_1.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingDataWidthConverter_rtl_2.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingFIFO_rtl_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingFIFO_rtl_1.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingFIFO_rtl_10.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingFIFO_rtl_11.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingFIFO_rtl_12.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingFIFO_rtl_13.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingFIFO_rtl_14.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingFIFO_rtl_15.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingFIFO_rtl_2.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingFIFO_rtl_3.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingFIFO_rtl_4.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingFIFO_rtl_5.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingFIFO_rtl_6.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingFIFO_rtl_7.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingFIFO_rtl_8.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingFIFO_rtl_9.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingMaxPool_hls_0.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingMaxPool_hls_0_GenericPartition_0_StreamingMaxPool_hls_0_Pipeline_VITIS_LOOP_147_1.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingMaxPool_hls_0_GenericPartition_0_StreamingMaxPool_hls_0_Pipeline_VITIS_LOOP_158_6.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingMaxPool_hls_0_GenericPartition_0_StreamingMaxPool_hls_0_Pipeline_VITIS_LOOP_174_8.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingMaxPool_hls_0_buf_V_RAM_AUTO_1R1W.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingMaxPool_hls_0_flow_control_loop_pipe_sequential_init.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingMaxPool_hls_0_hls_deadlock_idx0_monitor.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_StreamingMaxPool_hls_0_regslice_both.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_Thresholding_rtl_0_axi_wrapper.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_Thresholding_rtl_1_axi_wrapper.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_Thresholding_rtl_2_axi_wrapper.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_Thresholding_rtl_3_axi_wrapper.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_wrapper.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/Q_srl.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/axilite_if.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/memstream_axi_wrapper.v' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_ConvolutionInputGenerator_rtl_0_impl.sv' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/axi2we.sv' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/dummy_sv_file.sv' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/dwc.sv' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/dwc_axi.sv' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/fmpadding.sv' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/fmpadding_axi.sv' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/memstream.sv' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/memstream_axi.sv' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/mvu_4sx4u.sv' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/mvu_8sx8u_dsp48.sv' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/mvu_vvu_8sx9_dsp58.sv' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/mvu_vvu_axi.sv' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/replay_buffer.sv' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/swg_common.sv' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/swg_pkg.sv' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/thresholding.sv' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/thresholding_axi.sv' cannot be added to the project because it already exists in the project, skipping this file
+WARNING: [filemgmt 56-12] File '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/dummy_vhdl_file.vhd' cannot be added to the project because it already exists in the project, skipping this file
+# source headers.tcl
+## set file "$origin_dir/dummy_nachiket_fooling_zsh_for_loops.h"
+## set file [file normalize $file]
+## set file_obj [get_files -of_objects [get_filesets sources_1] [list "*$file"]]
+## set_property "file_type" "Verilog Header" $file_obj
+# set obj [get_filesets sources_1]
+# set_property "top" "$argv" $obj
+# if {[string equal [get_filesets -quiet constrs_1] ""]} {
+#   create_fileset -constrset constrs_1
+# }
+# set obj [get_filesets constrs_1]
+# set file "[file normalize "$origin_dir/$argv.xdc"]"
+# set file_added [add_files -norecurse -fileset $obj $file]
+# set file "$origin_dir/$argv.xdc"
+# set file [file normalize $file]
+# set file_obj [get_files -of_objects [get_filesets constrs_1] [list "*$file"]]
+# set_property "file_type" "XDC" $file_obj
+# set obj [get_filesets constrs_1]
+# if {[string equal [get_filesets -quiet sim_1] ""]} {
+#   create_fileset -simset sim_1
+# }
+# set obj [get_filesets sim_1]
+# set obj [get_filesets sim_1]
+# set_property "top" "$argv" $obj
+# set_property "xelab.nosort" "1" $obj
+# set_property "xelab.unifast" "" $obj
+# set_property strategy "Vivado Synthesis Defaults" [get_runs synth_1]
+# set_property strategy "Flow_PerfOptimized_high" [get_runs synth_1]
+# set_param synth.elaboration.rodinMoreOptions {rt::set_parameter ignoreVhdlAssertStmts false}
+# set obj [get_runs synth_1]
+# set_property -name {steps.synth_design.args.more options} -value {-mode out_of_context} -objects $obj
+# set_property STEPS.SYNTH_DESIGN.ARGS.RETIMING true [get_runs synth_1]
+# current_run -synthesis [get_runs synth_1]
+# set_property strategy "Vivado Implementation Defaults" [get_runs impl_1]
+# current_run -implementation [get_runs impl_1]
+# puts "INFO: Project created:vivadocompile"
+INFO: Project created:vivadocompile
+# launch_runs -jobs 8 impl_1 -to_step route_design
+[Thu Oct  8 04:09:55 2026] Launched synth_1...
+Run output will be captured here: /home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/vivadocompile/vivadocompile.runs/synth_1/runme.log
+[Thu Oct  8 04:09:56 2026] Launched impl_1...
+Run output will be captured here: /home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/vivadocompile/vivadocompile.runs/impl_1/runme.log
+# wait_on_run impl_1
+[Thu Oct  8 04:09:56 2026] Waiting for impl_1 to finish...
+
+*** Running vivado
+    with args -log GenericPartition_0_wrapper.vdi -applog -m64 -product Vivado -messageDb vivado.pb -mode batch -source GenericPartition_0_wrapper.tcl -notrace
+
+
+****** Vivado v2022.2 (64-bit)
+  **** SW Build 3671981 on Fri Oct 14 04:59:54 MDT 2022
+  **** IP Build 3669848 on Fri Oct 14 08:30:02 MDT 2022
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+
+source GenericPartition_0_wrapper.tcl -notrace
+Command: link_design -top GenericPartition_0_wrapper -part xczu7ev-ffvc1156-2-e
+Design is defaulting to srcset: sources_1
+Design is defaulting to constrset: constrs_1
+INFO: [Device 21-403] Loading part xczu7ev-ffvc1156-2-e
+Netlist sorting complete. Time (s): cpu = 00:00:00.02 ; elapsed = 00:00:00.02 . Memory (MB): peak = 2311.699 ; gain = 0.000 ; free physical = 67660 ; free virtual = 94108
+INFO: [Netlist 29-17] Analyzing 127 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
+INFO: [Project 1-479] Netlist was created with Vivado 2022.2
+INFO: [Project 1-570] Preparing netlist for logic optimization
+Parsing XDC File [/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_wrapper.xdc]
+Finished Parsing XDC File [/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/GenericPartition_0_wrapper.xdc]
+INFO: [Opt 31-138] Pushed 0 inverter(s) to 0 load pin(s).
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 2367.727 ; gain = 0.000 ; free physical = 67436 ; free virtual = 93931
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 37 instances were transformed.
+  DSP48E1 => DSP48E2 (DSP_ALU, DSP_A_B_DATA, DSP_C_DATA, DSP_MULTIPLIER, DSP_M_DATA, DSP_OUTPUT, DSP_PREADD, DSP_PREADD_DATA): 3 instances
+  RAM128X1S => RAM128X1S (MUXF7, RAMS64E(x2)): 6 instances
+  RAM16X1S => RAM32X1S (RAMS32): 18 instances
+  RAM32M => RAM32M (RAMD32(x6), RAMS32(x2)): 1 instance 
+  RAM32M16 => RAM32M16 (RAMD32(x14), RAMS32(x2)): 1 instance 
+  RAM64M8 => RAM64M8 (RAMD64E(x8)): 8 instances
+
+7 Infos, 0 Warnings, 0 Critical Warnings and 0 Errors encountered.
+link_design completed successfully
+link_design: Time (s): cpu = 00:00:11 ; elapsed = 00:00:12 . Memory (MB): peak = 2367.727 ; gain = 1050.434 ; free physical = 67436 ; free virtual = 93931
+Command: opt_design
+Attempting to get a license for feature 'Implementation' and/or device 'xczu7ev'
+INFO: [Common 17-349] Got license for feature 'Implementation' and/or device 'xczu7ev'
+Running DRC as a precondition to command opt_design
+
+Starting DRC Task
+INFO: [DRC 23-27] Running DRC with 8 threads
+INFO: [Project 1-461] DRC finished with 0 Errors
+INFO: [Project 1-462] Please refer to the DRC report (report_drc) for more information.
+
+Time (s): cpu = 00:00:02 ; elapsed = 00:00:01 . Memory (MB): peak = 2458.508 ; gain = 90.781 ; free physical = 67425 ; free virtual = 93922
+
+Starting Cache Timing Information Task
+INFO: [Timing 38-35] Done setting XDC timing constraints.
+Ending Cache Timing Information Task | Checksum: 3e229047
+
+Time (s): cpu = 00:00:02 ; elapsed = 00:00:02 . Memory (MB): peak = 2768.312 ; gain = 309.805 ; free physical = 67207 ; free virtual = 93704
+
+Starting Logic Optimization Task
+
+Phase 1 Retarget
+INFO: [Opt 31-138] Pushed 2 inverter(s) to 533 load pin(s).
+INFO: [Opt 31-49] Retargeted 0 cell(s).
+Phase 1 Retarget | Checksum: 1456c6a52
+
+Time (s): cpu = 00:00:00.32 ; elapsed = 00:00:00.2 . Memory (MB): peak = 3045.234 ; gain = 0.000 ; free physical = 66902 ; free virtual = 93399
+INFO: [Opt 31-389] Phase Retarget created 3 cells and removed 9 cells
+
+Phase 2 Constant propagation
+INFO: [Opt 31-138] Pushed 0 inverter(s) to 0 load pin(s).
+Phase 2 Constant propagation | Checksum: 1c163d8e0
+
+Time (s): cpu = 00:00:00.35 ; elapsed = 00:00:00.22 . Memory (MB): peak = 3045.234 ; gain = 0.000 ; free physical = 66902 ; free virtual = 93399
+INFO: [Opt 31-389] Phase Constant propagation created 0 cells and removed 0 cells
+
+Phase 3 Sweep
+Phase 3 Sweep | Checksum: 112bd5158
+
+Time (s): cpu = 00:00:00.39 ; elapsed = 00:00:00.27 . Memory (MB): peak = 3045.234 ; gain = 0.000 ; free physical = 66901 ; free virtual = 93398
+INFO: [Opt 31-389] Phase Sweep created 0 cells and removed 0 cells
+
+Phase 4 BUFG optimization
+INFO: [Opt 31-1077] Phase BUFG optimization inserted 0 global clock buffer(s) for CLOCK_LOW_FANOUT.
+Phase 4 BUFG optimization | Checksum: 112bd5158
+
+Time (s): cpu = 00:00:00.41 ; elapsed = 00:00:00.29 . Memory (MB): peak = 3077.250 ; gain = 32.016 ; free physical = 66900 ; free virtual = 93397
+INFO: [Opt 31-662] Phase BUFG optimization created 0 cells of which 0 are BUFGs and removed 0 cells.
+
+Phase 5 Shift Register Optimization
+INFO: [Opt 31-1064] SRL Remap converted 0 SRLs to 0 registers and converted 0 registers of register chains to 0 SRLs
+Phase 5 Shift Register Optimization | Checksum: 112bd5158
+
+Time (s): cpu = 00:00:00.42 ; elapsed = 00:00:00.3 . Memory (MB): peak = 3077.250 ; gain = 32.016 ; free physical = 66899 ; free virtual = 93396
+INFO: [Opt 31-389] Phase Shift Register Optimization created 0 cells and removed 0 cells
+
+Phase 6 Post Processing Netlist
+Phase 6 Post Processing Netlist | Checksum: 112bd5158
+
+Time (s): cpu = 00:00:00.44 ; elapsed = 00:00:00.32 . Memory (MB): peak = 3077.250 ; gain = 32.016 ; free physical = 66899 ; free virtual = 93396
+INFO: [Opt 31-389] Phase Post Processing Netlist created 0 cells and removed 0 cells
+Opt_design Change Summary
+=========================
+
+
+-------------------------------------------------------------------------------------------------------------------------
+|  Phase                        |  #Cells created  |  #Cells Removed  |  #Constrained objects preventing optimizations  |
+-------------------------------------------------------------------------------------------------------------------------
+|  Retarget                     |               3  |               9  |                                              0  |
+|  Constant propagation         |               0  |               0  |                                              0  |
+|  Sweep                        |               0  |               0  |                                              0  |
+|  BUFG optimization            |               0  |               0  |                                              0  |
+|  Shift Register Optimization  |               0  |               0  |                                              0  |
+|  Post Processing Netlist      |               0  |               0  |                                              0  |
+-------------------------------------------------------------------------------------------------------------------------
+
+
+
+Starting Connectivity Check Task
+
+Time (s): cpu = 00:00:00.01 ; elapsed = 00:00:00.01 . Memory (MB): peak = 3077.250 ; gain = 0.000 ; free physical = 66896 ; free virtual = 93393
+Ending Logic Optimization Task | Checksum: 112861093
+
+Time (s): cpu = 00:00:00.51 ; elapsed = 00:00:00.37 . Memory (MB): peak = 3077.250 ; gain = 32.016 ; free physical = 66896 ; free virtual = 93393
+
+Starting Power Optimization Task
+INFO: [Pwropt 34-132] Skipping clock gating for clocks with a period < 2.00 ns.
+Ending Power Optimization Task | Checksum: 112861093
+
+Time (s): cpu = 00:00:00.01 ; elapsed = 00:00:00.01 . Memory (MB): peak = 3077.250 ; gain = 0.000 ; free physical = 66896 ; free virtual = 93393
+
+Starting Final Cleanup Task
+Ending Final Cleanup Task | Checksum: 112861093
+
+Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 3077.250 ; gain = 0.000 ; free physical = 66896 ; free virtual = 93393
+
+Starting Netlist Obfuscation Task
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 3077.250 ; gain = 0.000 ; free physical = 66896 ; free virtual = 93393
+Ending Netlist Obfuscation Task | Checksum: 112861093
+
+Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 3077.250 ; gain = 0.000 ; free physical = 66896 ; free virtual = 93393
+INFO: [Common 17-83] Releasing license: Implementation
+25 Infos, 0 Warnings, 0 Critical Warnings and 0 Errors encountered.
+opt_design completed successfully
+opt_design: Time (s): cpu = 00:00:07 ; elapsed = 00:00:07 . Memory (MB): peak = 3077.250 ; gain = 709.523 ; free physical = 66896 ; free virtual = 93393
+INFO: [Timing 38-35] Done setting XDC timing constraints.
+INFO: [Timing 38-480] Writing timing data to binary archive.
+INFO: [Common 17-1381] The checkpoint '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/vivadocompile/vivadocompile.runs/impl_1/GenericPartition_0_wrapper_opt.dcp' has been generated.
+INFO: [runtcl-4] Executing : report_drc -file GenericPartition_0_wrapper_drc_opted.rpt -pb GenericPartition_0_wrapper_drc_opted.pb -rpx GenericPartition_0_wrapper_drc_opted.rpx
+Command: report_drc -file GenericPartition_0_wrapper_drc_opted.rpt -pb GenericPartition_0_wrapper_drc_opted.pb -rpx GenericPartition_0_wrapper_drc_opted.rpx
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository '/tools/Xilinx/Vivado/2022.2/data/ip'.
+INFO: [DRC 23-27] Running DRC with 8 threads
+INFO: [Vivado_Tcl 2-168] The results of DRC are in file /home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/vivadocompile/vivadocompile.runs/impl_1/GenericPartition_0_wrapper_drc_opted.rpt.
+report_drc completed successfully
+Command: place_design
+Attempting to get a license for feature 'Implementation' and/or device 'xczu7ev'
+INFO: [Common 17-349] Got license for feature 'Implementation' and/or device 'xczu7ev'
+INFO: [DRC 23-27] Running DRC with 8 threads
+INFO: [Vivado_Tcl 4-198] DRC finished with 0 Errors
+INFO: [Vivado_Tcl 4-199] Please refer to the DRC report (report_drc) for more information.
+Running DRC as a precondition to command place_design
+INFO: [DRC 23-27] Running DRC with 8 threads
+INFO: [Vivado_Tcl 4-198] DRC finished with 0 Errors
+INFO: [Vivado_Tcl 4-199] Please refer to the DRC report (report_drc) for more information.
+
+Starting Placer Task
+INFO: [Place 30-611] Multithreading enabled for place_design using a maximum of 8 CPUs
+
+Phase 1 Placer Initialization
+
+Phase 1.1 Placer Initialization Netlist Sorting
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 3233.469 ; gain = 0.000 ; free physical = 66865 ; free virtual = 93363
+Phase 1.1 Placer Initialization Netlist Sorting | Checksum: 929d4ea7
+
+Time (s): cpu = 00:00:00.01 ; elapsed = 00:00:00.01 . Memory (MB): peak = 3233.469 ; gain = 0.000 ; free physical = 66865 ; free virtual = 93363
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 3233.469 ; gain = 0.000 ; free physical = 66865 ; free virtual = 93363
+
+Phase 1.2 IO Placement/ Clock Placement/ Build Placer Device
+Phase 1.2 IO Placement/ Clock Placement/ Build Placer Device | Checksum: 4490d194
+
+Time (s): cpu = 00:00:26 ; elapsed = 00:00:29 . Memory (MB): peak = 4248.531 ; gain = 1015.062 ; free physical = 66034 ; free virtual = 92716
+
+Phase 1.3 Build Placer Netlist Model
+Phase 1.3 Build Placer Netlist Model | Checksum: d4df0fde
+
+Time (s): cpu = 00:00:28 ; elapsed = 00:00:30 . Memory (MB): peak = 4287.574 ; gain = 1054.105 ; free physical = 66000 ; free virtual = 92683
+
+Phase 1.4 Constrain Clocks/Macros
+Phase 1.4 Constrain Clocks/Macros | Checksum: d4df0fde
+
+Time (s): cpu = 00:00:28 ; elapsed = 00:00:30 . Memory (MB): peak = 4287.574 ; gain = 1054.105 ; free physical = 66000 ; free virtual = 92683
+Phase 1 Placer Initialization | Checksum: d4df0fde
+
+Time (s): cpu = 00:00:28 ; elapsed = 00:00:30 . Memory (MB): peak = 4287.574 ; gain = 1054.105 ; free physical = 66000 ; free virtual = 92683
+
+Phase 2 Global Placement
+
+Phase 2.1 Floorplanning
+
+Phase 2.1.1 Partition Driven Placement
+
+Phase 2.1.1.1 PBP: Partition Driven Placement
+Phase 2.1.1.1 PBP: Partition Driven Placement | Checksum: c73e2b2f
+
+Time (s): cpu = 00:00:29 ; elapsed = 00:00:31 . Memory (MB): peak = 4287.574 ; gain = 1054.105 ; free physical = 66439 ; free virtual = 93121
+
+Phase 2.1.1.2 PBP: Clock Region Placement
+Phase 2.1.1.2 PBP: Clock Region Placement | Checksum: c73e2b2f
+
+Time (s): cpu = 00:00:29 ; elapsed = 00:00:31 . Memory (MB): peak = 4287.574 ; gain = 1054.105 ; free physical = 66439 ; free virtual = 93121
+
+Phase 2.1.1.3 PBP: Compute Congestion
+Phase 2.1.1.3 PBP: Compute Congestion | Checksum: c73e2b2f
+
+Time (s): cpu = 00:00:31 ; elapsed = 00:00:32 . Memory (MB): peak = 4333.938 ; gain = 1100.469 ; free physical = 66211 ; free virtual = 92946
+
+Phase 2.1.1.4 PBP: UpdateTiming
+Phase 2.1.1.4 PBP: UpdateTiming | Checksum: 7fe47c6c
+
+Time (s): cpu = 00:00:32 ; elapsed = 00:00:32 . Memory (MB): peak = 4363.953 ; gain = 1130.484 ; free physical = 66211 ; free virtual = 92946
+
+Phase 2.1.1.5 PBP: Add part constraints
+Phase 2.1.1.5 PBP: Add part constraints | Checksum: 7fe47c6c
+
+Time (s): cpu = 00:00:32 ; elapsed = 00:00:32 . Memory (MB): peak = 4363.953 ; gain = 1130.484 ; free physical = 66211 ; free virtual = 92946
+Phase 2.1.1 Partition Driven Placement | Checksum: 7fe47c6c
+
+Time (s): cpu = 00:00:32 ; elapsed = 00:00:32 . Memory (MB): peak = 4363.953 ; gain = 1130.484 ; free physical = 66211 ; free virtual = 92946
+Phase 2.1 Floorplanning | Checksum: 10d46b230
+
+Time (s): cpu = 00:00:32 ; elapsed = 00:00:32 . Memory (MB): peak = 4363.953 ; gain = 1130.484 ; free physical = 66211 ; free virtual = 92946
+
+Phase 2.2 Update Timing before SLR Path Opt
+Phase 2.2 Update Timing before SLR Path Opt | Checksum: 10d46b230
+
+Time (s): cpu = 00:00:32 ; elapsed = 00:00:32 . Memory (MB): peak = 4363.953 ; gain = 1130.484 ; free physical = 66211 ; free virtual = 92946
+
+Phase 2.3 Post-Processing in Floorplanning
+Phase 2.3 Post-Processing in Floorplanning | Checksum: 10d46b230
+
+Time (s): cpu = 00:00:32 ; elapsed = 00:00:32 . Memory (MB): peak = 4363.953 ; gain = 1130.484 ; free physical = 66211 ; free virtual = 92946
+
+Phase 2.4 Global Placement Core
+
+Phase 2.4.1 UpdateTiming Before Physical Synthesis
+Phase 2.4.1 UpdateTiming Before Physical Synthesis | Checksum: 1a82a0686
+
+Time (s): cpu = 00:00:47 ; elapsed = 00:00:40 . Memory (MB): peak = 4390.980 ; gain = 1157.512 ; free physical = 66623 ; free virtual = 93362
+
+Phase 2.4.2 Physical Synthesis In Placer
+INFO: [Physopt 32-1035] Found 0 LUTNM shape to break, 205 LUT instances to create LUTNM shape
+INFO: [Physopt 32-1044] Break lutnm for timing: one critical 0, two critical 0, total 0, new lutff created 0
+INFO: [Physopt 32-1138] End 1 Pass. Optimized 93 nets or LUTs. Breaked 0 LUT, combined 93 existing LUTs and moved 0 existing LUT
+INFO: [Physopt 32-69] No nets found for rewiring optimization.
+INFO: [Physopt 32-661] Optimized 0 net.  Re-placed 0 instance.
+INFO: [Physopt 32-775] End 1 Pass. Optimized 0 net or cell. Created 0 new cell, deleted 0 existing cell and moved 0 existing cell
+INFO: [Physopt 32-65] No nets found for high-fanout optimization.
+INFO: [Physopt 32-232] Optimized 0 net. Created 0 new instance.
+INFO: [Physopt 32-775] End 1 Pass. Optimized 0 net or cell. Created 0 new cell, deleted 0 existing cell and moved 0 existing cell
+INFO: [Physopt 32-670] No setup violation found.  DSP Register Optimization was not performed.
+INFO: [Physopt 32-670] No setup violation found.  Shift Register to Pipeline Optimization was not performed.
+INFO: [Physopt 32-670] No setup violation found.  Shift Register Optimization was not performed.
+INFO: [Physopt 32-670] No setup violation found.  BRAM Register Optimization was not performed.
+INFO: [Physopt 32-670] No setup violation found.  URAM Register Optimization was not performed.
+INFO: [Physopt 32-949] No candidate nets found for dynamic/static region interface net replication
+INFO: [Physopt 32-775] End 1 Pass. Optimized 0 net or cell. Created 0 new cell, deleted 0 existing cell and moved 0 existing cell
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00.01 . Memory (MB): peak = 4390.980 ; gain = 0.000 ; free physical = 66623 ; free virtual = 93362
+
+Summary of Physical Synthesis Optimizations
+============================================
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+|  Optimization                                     |  Added Cells  |  Removed Cells  |  Optimized Cells/Nets  |  Dont Touch  |  Iterations  |  Elapsed   |
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+|  LUT Combining                                    |            0  |             93  |                    93  |           0  |           1  |  00:00:00  |
+|  Retime                                           |            0  |              0  |                     0  |           0  |           1  |  00:00:00  |
+|  Equivalent Driver Rewiring                       |            0  |              0  |                     0  |           0  |           1  |  00:00:00  |
+|  Very High Fanout                                 |            0  |              0  |                     0  |           0  |           1  |  00:00:00  |
+|  DSP Register                                     |            0  |              0  |                     0  |           0  |           0  |  00:00:00  |
+|  Shift Register to Pipeline                       |            0  |              0  |                     0  |           0  |           0  |  00:00:00  |
+|  Shift Register                                   |            0  |              0  |                     0  |           0  |           0  |  00:00:00  |
+|  BRAM Register                                    |            0  |              0  |                     0  |           0  |           0  |  00:00:00  |
+|  URAM Register                                    |            0  |              0  |                     0  |           0  |           0  |  00:00:00  |
+|  Dynamic/Static Region Interface Net Replication  |            0  |              0  |                     0  |           0  |           1  |  00:00:00  |
+|  Total                                            |            0  |             93  |                    93  |           0  |           5  |  00:00:00  |
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+Phase 2.4.2 Physical Synthesis In Placer | Checksum: 86bd3e9e
+
+Time (s): cpu = 00:00:48 ; elapsed = 00:00:41 . Memory (MB): peak = 4390.980 ; gain = 1157.512 ; free physical = 66623 ; free virtual = 93362
+Phase 2.4 Global Placement Core | Checksum: a93f6413
+
+Time (s): cpu = 00:00:51 ; elapsed = 00:00:42 . Memory (MB): peak = 4390.980 ; gain = 1157.512 ; free physical = 66610 ; free virtual = 93349
+Phase 2 Global Placement | Checksum: a93f6413
+
+Time (s): cpu = 00:00:51 ; elapsed = 00:00:42 . Memory (MB): peak = 4390.980 ; gain = 1157.512 ; free physical = 66610 ; free virtual = 93349
+
+Phase 3 Detail Placement
+
+Phase 3.1 Commit Multi Column Macros
+Phase 3.1 Commit Multi Column Macros | Checksum: 14463046e
+
+Time (s): cpu = 00:00:54 ; elapsed = 00:00:43 . Memory (MB): peak = 4390.980 ; gain = 1157.512 ; free physical = 66517 ; free virtual = 93256
+
+Phase 3.2 Commit Most Macros & LUTRAMs
+Phase 3.2 Commit Most Macros & LUTRAMs | Checksum: acd0d3aa
+
+Time (s): cpu = 00:00:54 ; elapsed = 00:00:44 . Memory (MB): peak = 4390.980 ; gain = 1157.512 ; free physical = 66435 ; free virtual = 93174
+
+Phase 3.3 Small Shape DP
+
+Phase 3.3.1 Small Shape Clustering
+Phase 3.3.1 Small Shape Clustering | Checksum: 13aaa5d17
+
+Time (s): cpu = 00:00:55 ; elapsed = 00:00:44 . Memory (MB): peak = 4390.980 ; gain = 1157.512 ; free physical = 66269 ; free virtual = 93008
+
+Phase 3.3.2 Flow Legalize Slice Clusters
+Phase 3.3.2 Flow Legalize Slice Clusters | Checksum: d53d596f
+
+Time (s): cpu = 00:00:55 ; elapsed = 00:00:44 . Memory (MB): peak = 4390.980 ; gain = 1157.512 ; free physical = 66251 ; free virtual = 92990
+
+Phase 3.3.3 Slice Area Swap
+
+Phase 3.3.3.1 Slice Area Swap Initial
+Phase 3.3.3.1 Slice Area Swap Initial | Checksum: ce3fe3bc
+
+Time (s): cpu = 00:00:55 ; elapsed = 00:00:45 . Memory (MB): peak = 4390.980 ; gain = 1157.512 ; free physical = 66214 ; free virtual = 92954
+Phase 3.3.3 Slice Area Swap | Checksum: ce3fe3bc
+
+Time (s): cpu = 00:00:55 ; elapsed = 00:00:45 . Memory (MB): peak = 4390.980 ; gain = 1157.512 ; free physical = 66214 ; free virtual = 92954
+Phase 3.3 Small Shape DP | Checksum: f42453e2
+
+Time (s): cpu = 00:00:56 ; elapsed = 00:00:45 . Memory (MB): peak = 4390.980 ; gain = 1157.512 ; free physical = 66214 ; free virtual = 92954
+
+Phase 3.4 Re-assign LUT pins
+Phase 3.4 Re-assign LUT pins | Checksum: 14b1eb38f
+
+Time (s): cpu = 00:00:56 ; elapsed = 00:00:45 . Memory (MB): peak = 4390.980 ; gain = 1157.512 ; free physical = 66214 ; free virtual = 92954
+
+Phase 3.5 Pipeline Register Optimization
+Phase 3.5 Pipeline Register Optimization | Checksum: 9c95d3ed
+
+Time (s): cpu = 00:00:56 ; elapsed = 00:00:45 . Memory (MB): peak = 4390.980 ; gain = 1157.512 ; free physical = 66214 ; free virtual = 92954
+Phase 3 Detail Placement | Checksum: 9c95d3ed
+
+Time (s): cpu = 00:00:56 ; elapsed = 00:00:45 . Memory (MB): peak = 4390.980 ; gain = 1157.512 ; free physical = 66214 ; free virtual = 92954
+
+Phase 4 Post Placement Optimization and Clean-Up
+
+Phase 4.1 Post Commit Optimization
+INFO: [Timing 38-35] Done setting XDC timing constraints.
+
+Phase 4.1.1 Post Placement Optimization
+Post Placement Optimization Initialization | Checksum: f6d9653f
+
+Phase 4.1.1.1 BUFG Insertion
+
+Starting Physical Synthesis Task
+
+Phase 1 Physical Synthesis Initialization
+INFO: [Physopt 32-721] Multithreading enabled for phys_opt_design using a maximum of 8 CPUs
+INFO: [Physopt 32-619] Estimated Timing Summary | WNS=7.810 | TNS=0.000 |
+Phase 1 Physical Synthesis Initialization | Checksum: ee99ed8e
+
+Time (s): cpu = 00:00:00.17 ; elapsed = 00:00:00.07 . Memory (MB): peak = 4390.980 ; gain = 0.000 ; free physical = 66157 ; free virtual = 92897
+INFO: [Place 46-56] BUFG insertion identified 0 candidate nets. Inserted BUFG: 0, Replicated BUFG Driver: 0, Skipped due to Placement/Routing Conflicts: 0, Skipped due to Timing Degradation: 0, Skipped due to Illegal Netlist: 0.
+Ending Physical Synthesis Task | Checksum: 10967f502
+
+Time (s): cpu = 00:00:00.21 ; elapsed = 00:00:00.11 . Memory (MB): peak = 4390.980 ; gain = 0.000 ; free physical = 66157 ; free virtual = 92897
+Phase 4.1.1.1 BUFG Insertion | Checksum: f6d9653f
+
+Time (s): cpu = 00:01:00 ; elapsed = 00:00:47 . Memory (MB): peak = 4390.980 ; gain = 1157.512 ; free physical = 66157 ; free virtual = 92897
+
+Phase 4.1.1.2 Post Placement Timing Optimization
+INFO: [Place 30-746] Post Placement Timing Summary WNS=7.810. For the most accurate timing information please run report_timing.
+Phase 4.1.1.2 Post Placement Timing Optimization | Checksum: 1383c70fe
+
+Time (s): cpu = 00:01:00 ; elapsed = 00:00:47 . Memory (MB): peak = 4390.980 ; gain = 1157.512 ; free physical = 66141 ; free virtual = 92881
+
+Time (s): cpu = 00:01:00 ; elapsed = 00:00:47 . Memory (MB): peak = 4390.980 ; gain = 1157.512 ; free physical = 66141 ; free virtual = 92881
+Phase 4.1 Post Commit Optimization | Checksum: 1383c70fe
+
+Time (s): cpu = 00:01:00 ; elapsed = 00:00:47 . Memory (MB): peak = 4390.980 ; gain = 1157.512 ; free physical = 66141 ; free virtual = 92881
+
+Phase 4.2 Post Placement Cleanup
+Phase 4.2 Post Placement Cleanup | Checksum: 1383c70fe
+
+Time (s): cpu = 00:01:08 ; elapsed = 00:00:53 . Memory (MB): peak = 4463.980 ; gain = 1230.512 ; free physical = 66160 ; free virtual = 92903
+
+Phase 4.3 Placer Reporting
+
+Phase 4.3.1 Print Estimated Congestion
+INFO: [Place 30-612] Post-Placement Estimated Congestion 
+ ________________________________________________________________________
+|           | Global Congestion | Long Congestion   | Short Congestion  |
+| Direction | Region Size       | Region Size       | Region Size       |
+|___________|___________________|___________________|___________________|
+|      North|                1x1|                1x1|                1x1|
+|___________|___________________|___________________|___________________|
+|      South|                1x1|                1x1|                1x1|
+|___________|___________________|___________________|___________________|
+|       East|                1x1|                1x1|                1x1|
+|___________|___________________|___________________|___________________|
+|       West|                1x1|                1x1|                1x1|
+|___________|___________________|___________________|___________________|
+
+Phase 4.3.1 Print Estimated Congestion | Checksum: 1383c70fe
+
+Time (s): cpu = 00:01:08 ; elapsed = 00:00:53 . Memory (MB): peak = 4463.980 ; gain = 1230.512 ; free physical = 66160 ; free virtual = 92903
+Phase 4.3 Placer Reporting | Checksum: 1383c70fe
+
+Time (s): cpu = 00:01:08 ; elapsed = 00:00:53 . Memory (MB): peak = 4463.980 ; gain = 1230.512 ; free physical = 66160 ; free virtual = 92903
+
+Phase 4.4 Final Placement Cleanup
+Netlist sorting complete. Time (s): cpu = 00:00:00.01 ; elapsed = 00:00:00 . Memory (MB): peak = 4463.980 ; gain = 0.000 ; free physical = 66160 ; free virtual = 92903
+
+Time (s): cpu = 00:01:08 ; elapsed = 00:00:53 . Memory (MB): peak = 4463.980 ; gain = 1230.512 ; free physical = 66160 ; free virtual = 92903
+Phase 4 Post Placement Optimization and Clean-Up | Checksum: 1a92c7989
+
+Time (s): cpu = 00:01:08 ; elapsed = 00:00:53 . Memory (MB): peak = 4463.980 ; gain = 1230.512 ; free physical = 66160 ; free virtual = 92903
+Ending Placer Task | Checksum: fa6f3ba1
+
+Time (s): cpu = 00:01:08 ; elapsed = 00:00:53 . Memory (MB): peak = 4463.980 ; gain = 1230.512 ; free physical = 66160 ; free virtual = 92903
+INFO: [Common 17-83] Releasing license: Implementation
+65 Infos, 0 Warnings, 0 Critical Warnings and 0 Errors encountered.
+place_design completed successfully
+place_design: Time (s): cpu = 00:01:11 ; elapsed = 00:00:54 . Memory (MB): peak = 4463.980 ; gain = 1233.480 ; free physical = 66305 ; free virtual = 93047
+INFO: [Timing 38-480] Writing timing data to binary archive.
+Writing XDEF routing.
+Writing XDEF routing logical nets.
+Writing XDEF routing special nets.
+Write XDEF Complete: Time (s): cpu = 00:00:00.81 ; elapsed = 00:00:00.35 . Memory (MB): peak = 4463.980 ; gain = 0.000 ; free physical = 66304 ; free virtual = 93053
+INFO: [Common 17-1381] The checkpoint '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/vivadocompile/vivadocompile.runs/impl_1/GenericPartition_0_wrapper_placed.dcp' has been generated.
+INFO: [runtcl-4] Executing : report_io -file GenericPartition_0_wrapper_io_placed.rpt
+report_io: Time (s): cpu = 00:00:00.22 ; elapsed = 00:00:00.34 . Memory (MB): peak = 4463.980 ; gain = 0.000 ; free physical = 66295 ; free virtual = 93040
+INFO: [runtcl-4] Executing : report_utilization -file GenericPartition_0_wrapper_utilization_placed.rpt -pb GenericPartition_0_wrapper_utilization_placed.pb
+INFO: [runtcl-4] Executing : report_control_sets -verbose -file GenericPartition_0_wrapper_control_sets_placed.rpt
+report_control_sets: Time (s): cpu = 00:00:00.03 ; elapsed = 00:00:00.15 . Memory (MB): peak = 4463.980 ; gain = 0.000 ; free physical = 66295 ; free virtual = 93039
+Command: phys_opt_design
+Attempting to get a license for feature 'Implementation' and/or device 'xczu7ev'
+INFO: [Common 17-349] Got license for feature 'Implementation' and/or device 'xczu7ev'
+
+Starting Initial Update Timing Task
+WARNING: [Timing 38-242] The property HD.CLK_SRC of clock port "ap_clk" is not set. In out-of-context mode, this prevents timing estimation for clock delay/skew
+Resolution: Set the HD.CLK_SRC property of the out-of-context port to the location of the clock buffer instance in the top-level design
+
+Time (s): cpu = 00:00:01 ; elapsed = 00:00:00.36 . Memory (MB): peak = 4463.980 ; gain = 0.000 ; free physical = 66119 ; free virtual = 92864
+INFO: [Vivado_Tcl 4-383] Design worst setup slack (WNS) is greater than or equal to 0.000 ns. Skipping all physical synthesis optimizations.
+INFO: [Vivado_Tcl 4-232] No setup violation found. The netlist was not modified.
+INFO: [Common 17-83] Releasing license: Implementation
+74 Infos, 1 Warnings, 0 Critical Warnings and 0 Errors encountered.
+phys_opt_design completed successfully
+INFO: [Timing 38-480] Writing timing data to binary archive.
+Writing XDEF routing.
+Writing XDEF routing logical nets.
+Writing XDEF routing special nets.
+Write XDEF Complete: Time (s): cpu = 00:00:00.63 ; elapsed = 00:00:00.27 . Memory (MB): peak = 4463.980 ; gain = 0.000 ; free physical = 66119 ; free virtual = 92871
+INFO: [Common 17-1381] The checkpoint '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/vivadocompile/vivadocompile.runs/impl_1/GenericPartition_0_wrapper_physopt.dcp' has been generated.
+Command: route_design
+Attempting to get a license for feature 'Implementation' and/or device 'xczu7ev'
+INFO: [Common 17-349] Got license for feature 'Implementation' and/or device 'xczu7ev'
+Running DRC as a precondition to command route_design
+INFO: [DRC 23-27] Running DRC with 8 threads
+INFO: [Vivado_Tcl 4-198] DRC finished with 0 Errors
+INFO: [Vivado_Tcl 4-199] Please refer to the DRC report (report_drc) for more information.
+
+
+Starting Routing Task
+INFO: [Route 35-254] Multithreading enabled for route_design using a maximum of 8 CPUs
+
+Phase 1 Build RT Design
+Checksum: PlaceDB: 8828399d ConstDB: 0 ShapeSum: 72470204 RouteDB: 0
+Nodegraph reading from file.  Time (s): cpu = 00:00:00.9 ; elapsed = 00:00:00.95 . Memory (MB): peak = 4463.980 ; gain = 0.000 ; free physical = 66117 ; free virtual = 92869
+WARNING: [Route 35-197] Clock port "ap_clk" does not have an associated HD.CLK_SRC. Without this constraint, timing analysis may not be accurate and upstream checks cannot be done to ensure correct clock placement.
+WARNING: [Route 35-198] Port "ap_rst_n" does not have an associated HD.PARTPIN_LOCS, which will prevent the partial routing of the signal "ap_rst_n". Without this partial route, timing analysis to/from this port will not be accurate, and no routing information for this port can be exported.
+WARNING: [Route 35-198] Port "m_axis_0_tready" does not have an associated HD.PARTPIN_LOCS, which will prevent the partial routing of the signal "m_axis_0_tready". Without this partial route, timing analysis to/from this port will not be accurate, and no routing information for this port can be exported.
+WARNING: [Route 35-198] Port "s_axis_0_tdata[2]" does not have an associated HD.PARTPIN_LOCS, which will prevent the partial routing of the signal "s_axis_0_tdata[2]". Without this partial route, timing analysis to/from this port will not be accurate, and no routing information for this port can be exported.
+WARNING: [Route 35-198] Port "s_axis_0_tdata[7]" does not have an associated HD.PARTPIN_LOCS, which will prevent the partial routing of the signal "s_axis_0_tdata[7]". Without this partial route, timing analysis to/from this port will not be accurate, and no routing information for this port can be exported.
+WARNING: [Route 35-198] Port "s_axis_0_tdata[1]" does not have an associated HD.PARTPIN_LOCS, which will prevent the partial routing of the signal "s_axis_0_tdata[1]". Without this partial route, timing analysis to/from this port will not be accurate, and no routing information for this port can be exported.
+WARNING: [Route 35-198] Port "s_axis_0_tdata[0]" does not have an associated HD.PARTPIN_LOCS, which will prevent the partial routing of the signal "s_axis_0_tdata[0]". Without this partial route, timing analysis to/from this port will not be accurate, and no routing information for this port can be exported.
+WARNING: [Route 35-198] Port "s_axis_0_tdata[3]" does not have an associated HD.PARTPIN_LOCS, which will prevent the partial routing of the signal "s_axis_0_tdata[3]". Without this partial route, timing analysis to/from this port will not be accurate, and no routing information for this port can be exported.
+WARNING: [Route 35-198] Port "s_axis_0_tdata[4]" does not have an associated HD.PARTPIN_LOCS, which will prevent the partial routing of the signal "s_axis_0_tdata[4]". Without this partial route, timing analysis to/from this port will not be accurate, and no routing information for this port can be exported.
+WARNING: [Route 35-198] Port "s_axis_0_tvalid" does not have an associated HD.PARTPIN_LOCS, which will prevent the partial routing of the signal "s_axis_0_tvalid". Without this partial route, timing analysis to/from this port will not be accurate, and no routing information for this port can be exported.
+WARNING: [Route 35-198] Port "s_axis_0_tdata[5]" does not have an associated HD.PARTPIN_LOCS, which will prevent the partial routing of the signal "s_axis_0_tdata[5]". Without this partial route, timing analysis to/from this port will not be accurate, and no routing information for this port can be exported.
+WARNING: [Route 35-198] Port "s_axis_0_tdata[6]" does not have an associated HD.PARTPIN_LOCS, which will prevent the partial routing of the signal "s_axis_0_tdata[6]". Without this partial route, timing analysis to/from this port will not be accurate, and no routing information for this port can be exported.
+Post Restoration Checksum: NetGraph: 2d63e4c7 NumContArr: e6224b9f Constraints: 0 Timing: 0
+Phase 1 Build RT Design | Checksum: 113863066
+
+Time (s): cpu = 00:00:08 ; elapsed = 00:00:06 . Memory (MB): peak = 4463.980 ; gain = 0.000 ; free physical = 66068 ; free virtual = 92822
+
+Phase 2 Router Initialization
+
+Phase 2.1 Fix Topology Constraints
+Phase 2.1 Fix Topology Constraints | Checksum: 113863066
+
+Time (s): cpu = 00:00:08 ; elapsed = 00:00:06 . Memory (MB): peak = 4463.980 ; gain = 0.000 ; free physical = 66068 ; free virtual = 92822
+
+Phase 2.2 Pre Route Cleanup
+Phase 2.2 Pre Route Cleanup | Checksum: 113863066
+
+Time (s): cpu = 00:00:08 ; elapsed = 00:00:07 . Memory (MB): peak = 4463.980 ; gain = 0.000 ; free physical = 66068 ; free virtual = 92822
+
+Phase 2.3 Global Clock Net Routing
+Phase 2.3 Global Clock Net Routing | Checksum: 113863066
+
+Time (s): cpu = 00:00:09 ; elapsed = 00:00:07 . Memory (MB): peak = 4511.141 ; gain = 47.160 ; free physical = 66012 ; free virtual = 92782
+
+Phase 2.4 Update Timing
+Phase 2.4 Update Timing | Checksum: 120bcbfd0
+
+Time (s): cpu = 00:00:10 ; elapsed = 00:00:07 . Memory (MB): peak = 4511.141 ; gain = 47.160 ; free physical = 66004 ; free virtual = 92774
+INFO: [Route 35-416] Intermediate Timing Summary | WNS=8.005  | TNS=0.000  | WHS=-0.003 | THS=-0.024 |
+
+
+Router Utilization Summary
+  Global Vertical Routing Utilization    = 0 %
+  Global Horizontal Routing Utilization  = 0 %
+  Routable Net Status*
+  *Does not include unroutable nets such as driverless and loadless.
+  Run report_route_status for detailed report.
+  Number of Failed Nets               = 2788
+    (Failed Nets is the sum of unrouted and partially routed nets)
+  Number of Unrouted Nets             = 2493
+  Number of Partially Routed Nets     = 295
+  Number of Node Overlaps             = 0
+
+Phase 2 Router Initialization | Checksum: 17d25e966
+
+Time (s): cpu = 00:00:13 ; elapsed = 00:00:08 . Memory (MB): peak = 4516.203 ; gain = 52.223 ; free physical = 66085 ; free virtual = 92855
+
+Phase 3 Initial Routing
+
+Phase 3.1 Global Routing
+Phase 3.1 Global Routing | Checksum: 17d25e966
+
+Time (s): cpu = 00:00:13 ; elapsed = 00:00:08 . Memory (MB): peak = 4516.203 ; gain = 52.223 ; free physical = 66084 ; free virtual = 92855
+Phase 3 Initial Routing | Checksum: 19eda0678
+
+Time (s): cpu = 00:00:16 ; elapsed = 00:00:09 . Memory (MB): peak = 4516.203 ; gain = 52.223 ; free physical = 66081 ; free virtual = 92856
+
+Phase 4 Rip-up And Reroute
+
+Phase 4.1 Global Iteration 0
+ Number of Nodes with overlaps = 367
+ Number of Nodes with overlaps = 0
+INFO: [Route 35-416] Intermediate Timing Summary | WNS=7.249  | TNS=0.000  | WHS=0.019  | THS=0.000  |
+
+Phase 4.1 Global Iteration 0 | Checksum: 158b2d37a
+
+Time (s): cpu = 00:00:19 ; elapsed = 00:00:11 . Memory (MB): peak = 4516.203 ; gain = 52.223 ; free physical = 66190 ; free virtual = 92966
+
+Phase 4.2 Additional Iteration for Hold
+Phase 4.2 Additional Iteration for Hold | Checksum: 1b83c0ef6
+
+Time (s): cpu = 00:00:19 ; elapsed = 00:00:11 . Memory (MB): peak = 4516.203 ; gain = 52.223 ; free physical = 66190 ; free virtual = 92966
+Phase 4 Rip-up And Reroute | Checksum: 1b83c0ef6
+
+Time (s): cpu = 00:00:19 ; elapsed = 00:00:11 . Memory (MB): peak = 4516.203 ; gain = 52.223 ; free physical = 66190 ; free virtual = 92966
+
+Phase 5 Delay and Skew Optimization
+
+Phase 5.1 Delay CleanUp
+Phase 5.1 Delay CleanUp | Checksum: 1b83c0ef6
+
+Time (s): cpu = 00:00:19 ; elapsed = 00:00:11 . Memory (MB): peak = 4516.203 ; gain = 52.223 ; free physical = 66188 ; free virtual = 92964
+
+Phase 5.2 Clock Skew Optimization
+Phase 5.2 Clock Skew Optimization | Checksum: 1b83c0ef6
+
+Time (s): cpu = 00:00:19 ; elapsed = 00:00:11 . Memory (MB): peak = 4516.203 ; gain = 52.223 ; free physical = 66188 ; free virtual = 92964
+Phase 5 Delay and Skew Optimization | Checksum: 1b83c0ef6
+
+Time (s): cpu = 00:00:19 ; elapsed = 00:00:11 . Memory (MB): peak = 4516.203 ; gain = 52.223 ; free physical = 66188 ; free virtual = 92964
+
+Phase 6 Post Hold Fix
+
+Phase 6.1 Hold Fix Iter
+
+Phase 6.1.1 Update Timing
+Phase 6.1.1 Update Timing | Checksum: 125ea1802
+
+Time (s): cpu = 00:00:20 ; elapsed = 00:00:11 . Memory (MB): peak = 4516.203 ; gain = 52.223 ; free physical = 66175 ; free virtual = 92951
+INFO: [Route 35-416] Intermediate Timing Summary | WNS=7.249  | TNS=0.000  | WHS=0.019  | THS=0.000  |
+
+Phase 6.1 Hold Fix Iter | Checksum: 125ea1802
+
+Time (s): cpu = 00:00:20 ; elapsed = 00:00:11 . Memory (MB): peak = 4516.203 ; gain = 52.223 ; free physical = 66175 ; free virtual = 92951
+Phase 6 Post Hold Fix | Checksum: 125ea1802
+
+Time (s): cpu = 00:00:20 ; elapsed = 00:00:11 . Memory (MB): peak = 4516.203 ; gain = 52.223 ; free physical = 66175 ; free virtual = 92951
+
+Phase 7 Route finalize
+
+Router Utilization Summary
+  Global Vertical Routing Utilization    = 0.0544642 %
+  Global Horizontal Routing Utilization  = 0.0862931 %
+  Routable Net Status*
+  *Does not include unroutable nets such as driverless and loadless.
+  Run report_route_status for detailed report.
+  Number of Failed Nets               = 0
+    (Failed Nets is the sum of unrouted and partially routed nets)
+  Number of Unrouted Nets             = 0
+  Number of Partially Routed Nets     = 0
+  Number of Node Overlaps             = 0
+
+Phase 7 Route finalize | Checksum: 10d0d38a1
+
+Time (s): cpu = 00:00:21 ; elapsed = 00:00:11 . Memory (MB): peak = 4516.203 ; gain = 52.223 ; free physical = 66158 ; free virtual = 92934
+
+Phase 8 Verifying routed nets
+
+ Verification completed successfully
+Phase 8 Verifying routed nets | Checksum: 10d0d38a1
+
+Time (s): cpu = 00:00:21 ; elapsed = 00:00:11 . Memory (MB): peak = 4516.203 ; gain = 52.223 ; free physical = 66155 ; free virtual = 92931
+
+Phase 9 Depositing Routes
+Phase 9 Depositing Routes | Checksum: 10d0d38a1
+
+Time (s): cpu = 00:00:21 ; elapsed = 00:00:12 . Memory (MB): peak = 4532.211 ; gain = 68.230 ; free physical = 66154 ; free virtual = 92931
+
+Phase 10 Resolve XTalk
+Phase 10 Resolve XTalk | Checksum: 10d0d38a1
+
+Time (s): cpu = 00:00:21 ; elapsed = 00:00:12 . Memory (MB): peak = 4532.211 ; gain = 68.230 ; free physical = 66154 ; free virtual = 92931
+
+Phase 11 Post Router Timing
+INFO: [Route 35-57] Estimated Timing Summary | WNS=7.249  | TNS=0.000  | WHS=0.019  | THS=0.000  |
+
+INFO: [Route 35-327] The final timing numbers are based on the router estimated timing analysis. For a complete and accurate timing signoff, please run report_timing_summary.
+Phase 11 Post Router Timing | Checksum: 10d0d38a1
+
+Time (s): cpu = 00:00:21 ; elapsed = 00:00:12 . Memory (MB): peak = 4532.211 ; gain = 68.230 ; free physical = 66138 ; free virtual = 92915
+INFO: [Route 35-16] Router Completed Successfully
+
+Time (s): cpu = 00:00:21 ; elapsed = 00:00:12 . Memory (MB): peak = 4532.211 ; gain = 68.230 ; free physical = 66138 ; free virtual = 92915
+
+Routing Is Done.
+INFO: [Common 17-83] Releasing license: Implementation
+88 Infos, 13 Warnings, 0 Critical Warnings and 0 Errors encountered.
+route_design completed successfully
+route_design: Time (s): cpu = 00:00:25 ; elapsed = 00:00:13 . Memory (MB): peak = 4532.211 ; gain = 68.230 ; free physical = 66138 ; free virtual = 92915
+INFO: [Timing 38-480] Writing timing data to binary archive.
+Writing XDEF routing.
+Writing XDEF routing logical nets.
+Writing XDEF routing special nets.
+Write XDEF Complete: Time (s): cpu = 00:00:00.78 ; elapsed = 00:00:00.39 . Memory (MB): peak = 4532.211 ; gain = 0.000 ; free physical = 66158 ; free virtual = 92942
+INFO: [Common 17-1381] The checkpoint '/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/vivadocompile/vivadocompile.runs/impl_1/GenericPartition_0_wrapper_routed.dcp' has been generated.
+INFO: [runtcl-4] Executing : report_drc -file GenericPartition_0_wrapper_drc_routed.rpt -pb GenericPartition_0_wrapper_drc_routed.pb -rpx GenericPartition_0_wrapper_drc_routed.rpx
+Command: report_drc -file GenericPartition_0_wrapper_drc_routed.rpt -pb GenericPartition_0_wrapper_drc_routed.pb -rpx GenericPartition_0_wrapper_drc_routed.rpx
+INFO: [IP_Flow 19-1839] IP Catalog is up to date.
+INFO: [DRC 23-27] Running DRC with 8 threads
+INFO: [Vivado_Tcl 2-168] The results of DRC are in file /home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/vivadocompile/vivadocompile.runs/impl_1/GenericPartition_0_wrapper_drc_routed.rpt.
+report_drc completed successfully
+INFO: [runtcl-4] Executing : report_methodology -file GenericPartition_0_wrapper_methodology_drc_routed.rpt -pb GenericPartition_0_wrapper_methodology_drc_routed.pb -rpx GenericPartition_0_wrapper_methodology_drc_routed.rpx
+Command: report_methodology -file GenericPartition_0_wrapper_methodology_drc_routed.rpt -pb GenericPartition_0_wrapper_methodology_drc_routed.pb -rpx GenericPartition_0_wrapper_methodology_drc_routed.rpx
+INFO: [Timing 38-35] Done setting XDC timing constraints.
+WARNING: [Timing 38-242] The property HD.CLK_SRC of clock port "ap_clk" is not set. In out-of-context mode, this prevents timing estimation for clock delay/skew
+Resolution: Set the HD.CLK_SRC property of the out-of-context port to the location of the clock buffer instance in the top-level design
+INFO: [DRC 23-133] Running Methodology with 8 threads
+INFO: [Vivado_Tcl 2-1520] The results of Report Methodology are in file /home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v2_ft15ep_int6_fps250_lat200/GenericPartition_0/synth_out_of_context_a9uzuxa8/results_GenericPartition_0_wrapper/vivadocompile/vivadocompile.runs/impl_1/GenericPartition_0_wrapper_methodology_drc_routed.rpt.
+report_methodology completed successfully
+INFO: [runtcl-4] Executing : report_power -file GenericPartition_0_wrapper_power_routed.rpt -pb GenericPartition_0_wrapper_power_summary_routed.pb -rpx GenericPartition_0_wrapper_power_routed.rpx
+Command: report_power -file GenericPartition_0_wrapper_power_routed.rpt -pb GenericPartition_0_wrapper_power_summary_routed.pb -rpx GenericPartition_0_wrapper_power_routed.rpx
+INFO: [Timing 38-35] Done setting XDC timing constraints.
+Running Vector-less Activity Propagation...
+
+Finished Running Vector-less Activity Propagation
+100 Infos, 14 Warnings, 0 Critical Warnings and 0 Errors encountered.
+report_power completed successfully
+INFO: [runtcl-4] Executing : report_route_status -file GenericPartition_0_wrapper_route_status.rpt -pb GenericPartition_0_wrapper_route_status.pb
+INFO: [runtcl-4] Executing : report_timing_summary -max_paths 10 -report_unconstrained -file GenericPartition_0_wrapper_timing_summary_routed.rpt -pb GenericPartition_0_wrapper_timing_summary_routed.pb -rpx GenericPartition_0_wrapper_timing_summary_routed.rpx -warn_on_violation 
+INFO: [Timing 38-91] UpdateTimingParams: Speed grade: -2, Temperature grade: E, Delay Type: min_max.
+INFO: [Timing 38-191] Multithreading enabled for timing update using a maximum of 8 CPUs
+INFO: [runtcl-4] Executing : report_incremental_reuse -file GenericPartition_0_wrapper_incremental_reuse_routed.rpt
+INFO: [Vivado_Tcl 4-1062] Incremental flow is disabled. No incremental reuse Info to report.
+INFO: [runtcl-4] Executing : report_clock_utilization -file GenericPartition_0_wrapper_clock_utilization_routed.rpt
+INFO: [runtcl-4] Executing : report_bus_skew -warn_on_violation -file GenericPartition_0_wrapper_bus_skew_routed.rpt -pb GenericPartition_0_wrapper_bus_skew_routed.pb -rpx GenericPartition_0_wrapper_bus_skew_routed.rpx
+INFO: [Timing 38-91] UpdateTimingParams: Speed grade: -2, Temperature grade: E, Delay Type: min_max.
+INFO: [Timing 38-191] Multithreading enabled for timing update using a maximum of 8 CPUs
+INFO: [Common 17-206] Exiting Vivado at Thu Oct  8 04:12:55 2026...
+[Thu Oct  8 04:13:01 2026] impl_1 finished
+wait_on_runs: Time (s): cpu = 00:01:07 ; elapsed = 00:03:05 . Memory (MB): peak = 1255.898 ; gain = 0.000 ; free physical = 68548 ; free virtual = 95331
+# open_run impl_1
+INFO: [Device 21-403] Loading part xczu7ev-ffvc1156-2-e
+Netlist sorting complete. Time (s): cpu = 00:00:00.02 ; elapsed = 00:00:00.02 . Memory (MB): peak = 2313.844 ; gain = 0.000 ; free physical = 68042 ; free virtual = 94826
+INFO: [Netlist 29-17] Analyzing 124 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 0 CPU seconds
+INFO: [Project 1-479] Netlist was created with Vivado 2022.2
+INFO: [Project 1-570] Preparing netlist for logic optimization
+INFO: [Timing 38-478] Restoring timing data from binary archive.
+INFO: [Timing 38-479] Binary timing data restore complete.
+INFO: [Project 1-856] Restoring constraints from binary archive.
+INFO: [Project 1-853] Binary constraint restore complete.
+Reading XDEF placement.
+Reading placer database...
+Reading XDEF routing.
+Read XDEF Files: Time (s): cpu = 00:00:00.48 ; elapsed = 00:00:00.51 . Memory (MB): peak = 2707.461 ; gain = 0.000 ; free physical = 67542 ; free virtual = 94328
+Restored from archive | CPU: 0.520000 secs | Memory: 4.670609 MB |
+Finished XDEF File Restore: Time (s): cpu = 00:00:00.49 ; elapsed = 00:00:00.51 . Memory (MB): peak = 2707.461 ; gain = 0.000 ; free physical = 67542 ; free virtual = 94328
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 3110.945 ; gain = 0.000 ; free physical = 67183 ; free virtual = 93993
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 37 instances were transformed.
+  DSP48E1 => DSP48E2 (inverted pins: OPMODE[5], RSTD, RSTM, RSTP) (DSP_ALU, DSP_A_B_DATA, DSP_C_DATA, DSP_MULTIPLIER, DSP_M_DATA, DSP_OUTPUT, DSP_PREADD, DSP_PREADD_DATA): 3 instances
+  RAM128X1S => RAM128X1S (MUXF7, RAMS64E(x2)): 6 instances
+  RAM16X1S => RAM32X1S (RAMS32): 18 instances
+  RAM32M => RAM32M (RAMD32(x6), RAMS32(x2)): 1 instance 
+  RAM32M16 => RAM32M16 (RAMD32(x14), RAMS32(x2)): 1 instance 
+  RAM64M8 => RAM64M8 (RAMD64E(x8)): 8 instances
+
+open_run: Time (s): cpu = 00:00:25 ; elapsed = 00:00:29 . Memory (MB): peak = 3110.945 ; gain = 1855.047 ; free physical = 67183 ; free virtual = 93993
+# report_utilization
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2022.2 (lin64) Build 3671981 Fri Oct 14 04:59:54 MDT 2022
+| Date         : Thu Oct  8 04:13:29 2026
+| Host         : finn_dev_thelegendiv running 64-bit Ubuntu 22.04.1 LTS
+| Command      : report_utilization
+| Design       : GenericPartition_0_wrapper
+| Device       : xczu7ev-ffvc1156-2-e
+| Speed File   : -2
+| Design State : Routed
+------------------------------------------------------------------------------------
+
+Utilization Design Information
+
+Table of Contents
+-----------------
+1. CLB Logic
+1.1 Summary of Registers by Type
+2. CLB Logic Distribution
+3. BLOCKRAM
+4. ARITHMETIC
+5. I/O
+6. CLOCK
+7. ADVANCED
+8. CONFIGURATION
+9. Primitives
+10. Black Boxes
+11. Instantiated Netlists
+
+1. CLB Logic
+------------
+
++----------------------------+------+-------+------------+-----------+-------+
+|          Site Type         | Used | Fixed | Prohibited | Available | Util% |
++----------------------------+------+-------+------------+-----------+-------+
+| CLB LUTs                   | 1497 |     0 |          0 |    230400 |  0.65 |
+|   LUT as Logic             | 1321 |     0 |          0 |    230400 |  0.57 |
+|   LUT as Memory            |  176 |     0 |          0 |    101760 |  0.17 |
+|     LUT as Distributed RAM |   97 |     0 |            |           |       |
+|     LUT as Shift Register  |   79 |     0 |            |           |       |
+| CLB Registers              | 2170 |     0 |          0 |    460800 |  0.47 |
+|   Register as Flip Flop    | 2170 |     0 |          0 |    460800 |  0.47 |
+|   Register as Latch        |    0 |     0 |          0 |    460800 |  0.00 |
+| CARRY8                     |   36 |     0 |          0 |     28800 |  0.13 |
+| F7 Muxes                   |   45 |     0 |          0 |    115200 |  0.04 |
+| F8 Muxes                   |   12 |     0 |          0 |     57600 |  0.02 |
+| F9 Muxes                   |    0 |     0 |          0 |     28800 |  0.00 |
++----------------------------+------+-------+------------+-----------+-------+
+* Warning! LUT value is adjusted to account for LUT combining.
+
+
+1.1 Summary of Registers by Type
+--------------------------------
+
++-------+--------------+-------------+--------------+
+| Total | Clock Enable | Synchronous | Asynchronous |
++-------+--------------+-------------+--------------+
+| 0     |            _ |           - |            - |
+| 0     |            _ |           - |          Set |
+| 0     |            _ |           - |        Reset |
+| 0     |            _ |         Set |            - |
+| 0     |            _ |       Reset |            - |
+| 0     |          Yes |           - |            - |
+| 0     |          Yes |           - |          Set |
+| 0     |          Yes |           - |        Reset |
+| 94    |          Yes |         Set |            - |
+| 2076  |          Yes |       Reset |            - |
++-------+--------------+-------------+--------------+
+
+
+2. CLB Logic Distribution
+-------------------------
+
++--------------------------------------------+------+-------+------------+-----------+-------+
+|                  Site Type                 | Used | Fixed | Prohibited | Available | Util% |
++--------------------------------------------+------+-------+------------+-----------+-------+
+| CLB                                        |  376 |     0 |          0 |     28800 |  1.31 |
+|   CLBL                                     |  191 |     0 |            |           |       |
+|   CLBM                                     |  185 |     0 |            |           |       |
+| LUT as Logic                               | 1321 |     0 |          0 |    230400 |  0.57 |
+|   using O5 output only                     |   82 |       |            |           |       |
+|   using O6 output only                     | 1025 |       |            |           |       |
+|   using O5 and O6                          |  214 |       |            |           |       |
+| LUT as Memory                              |  176 |     0 |          0 |    101760 |  0.17 |
+|   LUT as Distributed RAM                   |   97 |     0 |            |           |       |
+|     using O5 output only                   |    0 |       |            |           |       |
+|     using O6 output only                   |   76 |       |            |           |       |
+|     using O5 and O6                        |   21 |       |            |           |       |
+|   LUT as Shift Register                    |   79 |     0 |            |           |       |
+|     using O5 output only                   |    0 |       |            |           |       |
+|     using O6 output only                   |   79 |       |            |           |       |
+|     using O5 and O6                        |    0 |       |            |           |       |
+| CLB Registers                              | 2170 |     0 |          0 |    460800 |  0.47 |
+|   Register driven from within the CLB      | 1020 |       |            |           |       |
+|   Register driven from outside the CLB     | 1150 |       |            |           |       |
+|     LUT in front of the register is unused |  977 |       |            |           |       |
+|     LUT in front of the register is used   |  173 |       |            |           |       |
+| Unique Control Sets                        |  113 |       |          0 |     57600 |  0.20 |
++--------------------------------------------+------+-------+------------+-----------+-------+
+* * Note: Available Control Sets calculated as Slices * 2, Review the Control Sets Report for more information regarding control sets.
+
+
+3. BLOCKRAM
+-----------
+
++----------------+------+-------+------------+-----------+-------+
+|    Site Type   | Used | Fixed | Prohibited | Available | Util% |
++----------------+------+-------+------------+-----------+-------+
+| Block RAM Tile |    0 |     0 |          0 |       312 |  0.00 |
+|   RAMB36/FIFO* |    0 |     0 |          0 |       312 |  0.00 |
+|   RAMB18       |    0 |     0 |          0 |       624 |  0.00 |
+| URAM           |    0 |     0 |          0 |        96 |  0.00 |
++----------------+------+-------+------------+-----------+-------+
+* Note: Each Block RAM Tile only has one FIFO logic available and therefore can accommodate only one FIFO36E2 or one FIFO18E2. However, if a FIFO18E2 occupies a Block RAM Tile, that tile can still accommodate a RAMB18E2
+
+
+4. ARITHMETIC
+-------------
+
++----------------+------+-------+------------+-----------+-------+
+|    Site Type   | Used | Fixed | Prohibited | Available | Util% |
++----------------+------+-------+------------+-----------+-------+
+| DSPs           |    3 |     0 |          0 |      1728 |  0.17 |
+|   DSP48E2 only |    3 |       |            |           |       |
++----------------+------+-------+------------+-----------+-------+
+
+
+5. I/O
+------
+
++------------------+------+-------+------------+-----------+-------+
+|     Site Type    | Used | Fixed | Prohibited | Available | Util% |
++------------------+------+-------+------------+-----------+-------+
+| Bonded IOB       |    0 |     0 |          0 |       360 |  0.00 |
+| HPIOB_M          |    0 |     0 |          0 |       144 |  0.00 |
+| HPIOB_S          |    0 |     0 |          0 |       144 |  0.00 |
+| HDIOB_M          |    0 |     0 |          0 |        24 |  0.00 |
+| HDIOB_S          |    0 |     0 |          0 |        24 |  0.00 |
+| HPIOB_SNGL       |    0 |     0 |          0 |        24 |  0.00 |
+| HPIOBDIFFINBUF   |    0 |     0 |          0 |       192 |  0.00 |
+| HPIOBDIFFOUTBUF  |    0 |     0 |          0 |       192 |  0.00 |
+| HDIOBDIFFINBUF   |    0 |     0 |          0 |        48 |  0.00 |
+| BITSLICE_CONTROL |    0 |     0 |          0 |        64 |  0.00 |
+| BITSLICE_RX_TX   |    0 |     0 |          0 |      2496 |  0.00 |
+| BITSLICE_TX      |    0 |     0 |          0 |        64 |  0.00 |
+| RIU_OR           |    0 |     0 |          0 |        32 |  0.00 |
++------------------+------+-------+------------+-----------+-------+
+
+
+6. CLOCK
+--------
+
++----------------------+------+-------+------------+-----------+-------+
+|       Site Type      | Used | Fixed | Prohibited | Available | Util% |
++----------------------+------+-------+------------+-----------+-------+
+| GLOBAL CLOCK BUFFERs |    0 |     0 |          0 |       544 |  0.00 |
+|   BUFGCE             |    0 |     0 |          0 |       208 |  0.00 |
+|   BUFGCE_DIV         |    0 |     0 |          0 |        32 |  0.00 |
+|   BUFG_GT            |    0 |     0 |          0 |       144 |  0.00 |
+|   BUFG_PS            |    0 |     0 |          0 |        96 |  0.00 |
+|   BUFGCTRL*          |    0 |     0 |          0 |        64 |  0.00 |
+| PLL                  |    0 |     0 |          0 |        16 |  0.00 |
+| MMCM                 |    0 |     0 |          0 |         8 |  0.00 |
++----------------------+------+-------+------------+-----------+-------+
+* Note: Each used BUFGCTRL counts as two GLOBAL CLOCK BUFFERs. This table does not include global clocking resources, only buffer cell usage. See the Clock Utilization Report (report_clock_utilization) for detailed accounting of global clocking resource availability.
+
+
+7. ADVANCED
+-----------
+
++-----------------+------+-------+------------+-----------+-------+
+|    Site Type    | Used | Fixed | Prohibited | Available | Util% |
++-----------------+------+-------+------------+-----------+-------+
+| GTHE4_CHANNEL   |    0 |     0 |          0 |        20 |  0.00 |
+| GTHE4_COMMON    |    0 |     0 |          0 |         5 |  0.00 |
+| OBUFDS_GTE4     |    0 |     0 |          0 |        10 |  0.00 |
+| OBUFDS_GTE4_ADV |    0 |     0 |          0 |        10 |  0.00 |
+| PCIE40E4        |    0 |     0 |          0 |         2 |  0.00 |
+| PS8             |    0 |     0 |          0 |         1 |  0.00 |
+| SYSMONE4        |    0 |     0 |          0 |         1 |  0.00 |
+| VCU             |    0 |     0 |          0 |         1 |  0.00 |
++-----------------+------+-------+------------+-----------+-------+
+
+
+8. CONFIGURATION
+----------------
+
++-------------+------+-------+------------+-----------+-------+
+|  Site Type  | Used | Fixed | Prohibited | Available | Util% |
++-------------+------+-------+------------+-----------+-------+
+| BSCANE2     |    0 |     0 |          0 |         4 |  0.00 |
+| DNA_PORTE2  |    0 |     0 |          0 |         1 |  0.00 |
+| EFUSE_USR   |    0 |     0 |          0 |         1 |  0.00 |
+| FRAME_ECCE4 |    0 |     0 |          0 |         1 |  0.00 |
+| ICAPE3      |    0 |     0 |          0 |         2 |  0.00 |
+| MASTER_JTAG |    0 |     0 |          0 |         1 |  0.00 |
+| STARTUPE3   |    0 |     0 |          0 |         1 |  0.00 |
++-------------+------+-------+------------+-----------+-------+
+
+
+9. Primitives
+-------------
+
++----------+------+---------------------+
+| Ref Name | Used | Functional Category |
++----------+------+---------------------+
+| FDRE     | 2076 |            Register |
+| LUT5     |  365 |                 CLB |
+| LUT6     |  331 |                 CLB |
+| LUT3     |  324 |                 CLB |
+| LUT4     |  307 |                 CLB |
+| LUT2     |  172 |                 CLB |
+| FDSE     |   94 |            Register |
+| RAMD64E  |   64 |                 CLB |
+| SRLC32E  |   48 |                 CLB |
+| MUXF7    |   45 |                 CLB |
+| LUT1     |   36 |                 CLB |
+| CARRY8   |   36 |                 CLB |
+| SRL16E   |   31 |                 CLB |
+| RAMS32   |   22 |                 CLB |
+| RAMD32   |   20 |                 CLB |
+| RAMS64E  |   12 |                 CLB |
+| MUXF8    |   12 |                 CLB |
+| DSP48E2  |    3 |          Arithmetic |
++----------+------+---------------------+
+
+
+10. Black Boxes
+---------------
+
++----------+------+
+| Ref Name | Used |
++----------+------+
+
+
+11. Instantiated Netlists
+-------------------------
+
++----------+------+
+| Ref Name | Used |
++----------+------+
+
+
+# report_timing
+INFO: [Timing 38-91] UpdateTimingParams: Speed grade: -2, Temperature grade: E, Delay Type: max.
+INFO: [Timing 38-191] Multithreading enabled for timing update using a maximum of 8 CPUs
+WARNING: [Timing 38-242] The property HD.CLK_SRC of clock port "ap_clk" is not set. In out-of-context mode, this prevents timing estimation for clock delay/skew
+Resolution: Set the HD.CLK_SRC property of the out-of-context port to the location of the clock buffer instance in the top-level design
+INFO: [Timing 38-78] ReportTimingParams: -max_paths 1 -nworst 1 -delay_type max -sort_by slack.
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+-----------------------------------------------------------------------------------------
+| Tool Version      : Vivado v.2022.2 (lin64) Build 3671981 Fri Oct 14 04:59:54 MDT 2022
+| Date              : Thu Oct  8 04:13:31 2026
+| Host              : finn_dev_thelegendiv running 64-bit Ubuntu 22.04.1 LTS
+| Command           : report_timing
+| Design            : GenericPartition_0_wrapper
+| Device            : xczu7ev-ffvc1156
+| Speed File        : -2  PRODUCTION 1.30 05-15-2022
+| Temperature Grade : E
+-----------------------------------------------------------------------------------------
+
+Timing Report
+
+Slack (MET) :             7.248ns  (required time - arrival time)
+  Source:                 GenericPartition_0_i/GenericPartition_0_ConvolutionInputGenerator_rtl_0/inst/impl/Current_elem_reg[11]/C
+                            (rising edge-triggered cell FDRE clocked by ap_clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            GenericPartition_0_i/GenericPartition_0_ConvolutionInputGenerator_rtl_0/inst/impl/window_buffer_inst/ram_buffer_inst_1/Out_reg_reg_pipe_9_reg/CE
+                            (rising edge-triggered cell FDRE clocked by ap_clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Path Group:             ap_clk
+  Path Type:              Setup (Max at Slow Process Corner)
+  Requirement:            10.000ns  (ap_clk rise@10.000ns - ap_clk rise@0.000ns)
+  Data Path Delay:        2.647ns  (logic 0.646ns (24.407%)  route 2.001ns (75.593%))
+  Logic Levels:           5  (CARRY8=2 LUT2=1 LUT4=1 LUT6=1)
+  Clock Path Skew:        -0.009ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    0.021ns = ( 10.021 - 10.000 ) 
+    Source Clock Delay      (SCD):    0.030ns
+    Clock Pessimism Removal (CPR):    0.000ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock ap_clk rise edge)     0.000     0.000 r  
+                                                      0.000     0.000 r  ap_clk (IN)
+                         net (fo=2384, unset)         0.030     0.030    GenericPartition_0_i/GenericPartition_0_ConvolutionInputGenerator_rtl_0/inst/impl/ap_clk
+    SLICE_X63Y58         FDRE                                         r  GenericPartition_0_i/GenericPartition_0_ConvolutionInputGenerator_rtl_0/inst/impl/Current_elem_reg[11]/C
+  -------------------------------------------------------------------    -------------------
+    SLICE_X63Y58         FDRE (Prop_DFF_SLICEM_C_Q)
+                                                      0.078     0.108 r  GenericPartition_0_i/GenericPartition_0_ConvolutionInputGenerator_rtl_0/inst/impl/Current_elem_reg[11]/Q
+                         net (fo=6, routed)           0.566     0.674    GenericPartition_0_i/GenericPartition_0_ConvolutionInputGenerator_rtl_0/inst/impl/Current_elem[11]
+    SLICE_X60Y57         LUT4 (Prop_F6LUT_SLICEL_I0_O)
+                                                      0.148     0.822 r  GenericPartition_0_i/GenericPartition_0_ConvolutionInputGenerator_rtl_0/inst/impl/Addr_r[7]_i_42/O
+                         net (fo=1, routed)           0.011     0.833    GenericPartition_0_i/GenericPartition_0_ConvolutionInputGenerator_rtl_0/inst/impl/Addr_r[7]_i_42_n_3
+    SLICE_X60Y57         CARRY8 (Prop_CARRY8_SLICEL_S[5]_CO[7])
+                                                      0.155     0.988 r  GenericPartition_0_i/GenericPartition_0_ConvolutionInputGenerator_rtl_0/inst/impl/Addr_r_reg[7]_i_13/CO[7]
+                         net (fo=1, routed)           0.026     1.014    GenericPartition_0_i/GenericPartition_0_ConvolutionInputGenerator_rtl_0/inst/impl/Addr_r_reg[7]_i_13_n_3
+    SLICE_X60Y58         CARRY8 (Prop_CARRY8_SLICEL_CI_CO[0])
+                                                      0.052     1.066 r  GenericPartition_0_i/GenericPartition_0_ConvolutionInputGenerator_rtl_0/inst/impl/Addr_r_reg[7]_i_6/CO[0]
+                         net (fo=28, routed)          0.178     1.245    GenericPartition_0_i/GenericPartition_0_ConvolutionInputGenerator_rtl_0/inst/impl/window_buffer_inst/ram_buffer_inst_1/Addr_r_reg[0]_1[0]
+    SLICE_X60Y58         LUT6 (Prop_G6LUT_SLICEL_I3_O)
+                                                      0.089     1.334 r  GenericPartition_0_i/GenericPartition_0_ConvolutionInputGenerator_rtl_0/inst/impl/window_buffer_inst/ram_buffer_inst_1/Addr_r[7]_i_1/O
+                         net (fo=96, routed)          0.440     1.774    GenericPartition_0_i/GenericPartition_0_ConvolutionInputGenerator_rtl_0/inst/impl/window_buffer_inst/ram_buffer_inst_1/E[0]
+    SLICE_X60Y48         LUT2 (Prop_H6LUT_SLICEL_I0_O)
+                                                      0.124     1.898 r  GenericPartition_0_i/GenericPartition_0_ConvolutionInputGenerator_rtl_0/inst/impl/window_buffer_inst/ram_buffer_inst_1/Out_reg_reg_pipe_1_i_1/O
+                         net (fo=52, routed)          0.779     2.677    GenericPartition_0_i/GenericPartition_0_ConvolutionInputGenerator_rtl_0/inst/impl/window_buffer_inst/ram_buffer_inst_1/ap_rst_n_0
+    SLICE_X64Y46         FDRE                                         r  GenericPartition_0_i/GenericPartition_0_ConvolutionInputGenerator_rtl_0/inst/impl/window_buffer_inst/ram_buffer_inst_1/Out_reg_reg_pipe_9_reg/CE
+  -------------------------------------------------------------------    -------------------
+
+                         (clock ap_clk rise edge)    10.000    10.000 r  
+                                                      0.000    10.000 r  ap_clk (IN)
+                         net (fo=2384, unset)         0.021    10.021    GenericPartition_0_i/GenericPartition_0_ConvolutionInputGenerator_rtl_0/inst/impl/window_buffer_inst/ram_buffer_inst_1/ap_clk
+    SLICE_X64Y46         FDRE                                         r  GenericPartition_0_i/GenericPartition_0_ConvolutionInputGenerator_rtl_0/inst/impl/window_buffer_inst/ram_buffer_inst_1/Out_reg_reg_pipe_9_reg/C
+                         clock pessimism              0.000    10.021    
+                         clock uncertainty           -0.035     9.986    
+    SLICE_X64Y46         FDRE (Setup_EFF_SLICEM_C_CE)
+                                                     -0.061     9.925    GenericPartition_0_i/GenericPartition_0_ConvolutionInputGenerator_rtl_0/inst/impl/window_buffer_inst/ram_buffer_inst_1/Out_reg_reg_pipe_9_reg
+  -------------------------------------------------------------------
+                         required time                          9.925    
+                         arrival time                          -2.677    
+  -------------------------------------------------------------------
+                         slack                                  7.248    
+
+
+
+
+# report_power
+Command: report_power
+Running Vector-less Activity Propagation...
+
+Finished Running Vector-less Activity Propagation
+Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+----------------------------------------------------------------------------------------
+| Tool Version     : Vivado v.2022.2 (lin64) Build 3671981 Fri Oct 14 04:59:54 MDT 2022
+| Date             : Thu Oct  8 04:13:38 2026
+| Host             : finn_dev_thelegendiv running 64-bit Ubuntu 22.04.1 LTS
+| Command          : report_power
+| Design           : GenericPartition_0_wrapper
+| Device           : xczu7ev-ffvc1156-2-e
+| Design State     : routed
+| Grade            : extended
+| Process          : typical
+| Characterization : Production
+----------------------------------------------------------------------------------------
+
+Power Report
+
+Table of Contents
+-----------------
+1. Summary
+1.1 On-Chip Components
+1.2 Power Supply Summary
+1.3 Confidence Level
+2. Settings
+2.1 Environment
+2.2 Clock Constraints
+3. Detailed Reports
+3.1 By Hierarchy
+
+1. Summary
+----------
+
++--------------------------+--------------+
+| Total On-Chip Power (W)  | 0.607        |
+| Design Power Budget (W)  | Unspecified* |
+| Power Budget Margin (W)  | NA           |
+| Dynamic (W)              | 0.016        |
+| Device Static (W)        | 0.592        |
+| Effective TJA (C/W)      | 1.0          |
+| Max Ambient (C)          | 99.4         |
+| Junction Temperature (C) | 25.6         |
+| Confidence Level         | Medium       |
+| Setting File             | ---          |
+| Simulation Activity File | ---          |
+| Design Nets Matched      | NA           |
++--------------------------+--------------+
+* Specify Design Power Budget using, set_operating_conditions -design_power_budget <value in Watts>
+
+
+1.1 On-Chip Components
+----------------------
+
++--------------------------+-----------+----------+-----------+-----------------+
+| On-Chip                  | Power (W) | Used     | Available | Utilization (%) |
++--------------------------+-----------+----------+-----------+-----------------+
+| Clocks                   |     0.010 |        3 |       --- |             --- |
+| CLB Logic                |     0.003 |     4107 |       --- |             --- |
+|   LUT as Logic           |     0.002 |     1321 |    230400 |            0.57 |
+|   LUT as Distributed RAM |    <0.001 |       97 |    101760 |            0.10 |
+|   LUT as Shift Register  |    <0.001 |       79 |    101760 |            0.08 |
+|   Register               |    <0.001 |     2170 |    460800 |            0.47 |
+|   CARRY8                 |    <0.001 |       36 |     28800 |            0.13 |
+|   Others                 |     0.000 |      112 |       --- |             --- |
+|   F7/F8 Muxes            |     0.000 |       57 |    230400 |            0.02 |
+| Signals                  |     0.002 |     2786 |       --- |             --- |
+| DSPs                     |    <0.001 |        3 |      1728 |            0.17 |
+| Static Power             |     0.592 |          |           |                 |
+| Total                    |     0.607 |          |           |                 |
++--------------------------+-----------+----------+-----------+-----------------+
+
+
+1.2 Power Supply Summary
+------------------------
+
++-----------------+-------------+-----------+-------------+------------+-------------+-------------+------------+
+| Source          | Voltage (V) | Total (A) | Dynamic (A) | Static (A) | Powerup (A) | Budget (A)  | Margin (A) |
++-----------------+-------------+-----------+-------------+------------+-------------+-------------+------------+
+| Vccint          |       0.850 |     0.154 |       0.018 |      0.135 |       NA    | Unspecified | NA         |
+| Vccint_io       |       0.850 |     0.070 |       0.000 |      0.070 |       NA    | Unspecified | NA         |
+| Vccbram         |       0.850 |     0.002 |       0.000 |      0.002 |       NA    | Unspecified | NA         |
+| Vccaux          |       1.800 |     0.148 |       0.000 |      0.148 |       NA    | Unspecified | NA         |
+| Vccaux_io       |       1.800 |     0.055 |       0.000 |      0.055 |       NA    | Unspecified | NA         |
+| Vcco33          |       3.300 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
+| Vcco25          |       2.500 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
+| Vcco18          |       1.800 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
+| Vcco15          |       1.500 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
+| Vcco135         |       1.350 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
+| Vcco12          |       1.200 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
+| Vcco10          |       1.000 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
+| Vccadc          |       1.800 |     0.008 |       0.000 |      0.008 |       NA    | Unspecified | NA         |
+| VCC_PSINTFP     |       0.850 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
+| VCC_PSINTLP     |       0.850 |     0.005 |       0.000 |      0.005 |       NA    | Unspecified | NA         |
+| VPS_MGTRAVCC    |       0.850 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
+| VCC_PSINTFP_DDR |       0.850 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
+| VCC_PSPLL       |       1.200 |     0.002 |       0.000 |      0.002 |       NA    | Unspecified | NA         |
+| VPS_MGTRAVTT    |       1.800 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
+| VCCO_PSDDR_504  |       1.200 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
+| VCC_PSAUX       |       1.800 |     0.002 |       0.000 |      0.002 |       NA    | Unspecified | NA         |
+| VCC_PSBATT      |       1.200 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
+| VCC_PSDDR_PLL   |       1.800 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
+| VCCO_PSIO0_500  |       3.300 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
+| VCCO_PSIO1_501  |       3.300 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
+| VCCO_PSIO2_502  |       3.300 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
+| VCCO_PSIO3_503  |       3.300 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
+| VCC_PSADC       |       1.800 |     0.002 |       0.000 |      0.002 |       NA    | Unspecified | NA         |
+| VCCINT_VCU      |       0.900 |     0.025 |       0.000 |      0.025 |       NA    | Unspecified | NA         |
+| MGTAVcc         |       0.900 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
+| MGTAVtt         |       1.200 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
+| MGTVccaux       |       1.800 |     0.000 |       0.000 |      0.000 |       NA    | Unspecified | NA         |
++-----------------+-------------+-----------+-------------+------------+-------------+-------------+------------+
+
+
+1.3 Confidence Level
+--------------------
+
++-----------------------------+------------+------------------------------------------------+------------------------------------------------------------------------------------------------------------+
+| User Input Data             | Confidence | Details                                        | Action                                                                                                     |
++-----------------------------+------------+------------------------------------------------+------------------------------------------------------------------------------------------------------------+
+| Design implementation state | High       | Design is routed                               |                                                                                                            |
+| Clock nodes activity        | High       | User specified more than 95% of clocks         |                                                                                                            |
+| I/O nodes activity          | High       | User specified more than 95% of inputs         |                                                                                                            |
+| Internal nodes activity     | Medium     | User specified less than 25% of internal nodes | Provide missing internal nodes activity with simulation results or by editing the "By Resource Type" views |
+| Device models               | High       | Device models are Production                   |                                                                                                            |
+|                             |            |                                                |                                                                                                            |
+| Overall confidence level    | Medium     |                                                |                                                                                                            |
++-----------------------------+------------+------------------------------------------------+------------------------------------------------------------------------------------------------------------+
+
+
+2. Settings
+-----------
+
+2.1 Environment
+---------------
+
++-----------------------+--------------------------+
+| Ambient Temp (C)      | 25.0                     |
+| ThetaJA (C/W)         | 1.0                      |
+| Airflow (LFM)         | 250                      |
+| Heat Sink             | medium (Medium Profile)  |
+| ThetaSA (C/W)         | 1.5                      |
+| Board Selection       | medium (10"x10")         |
+| # of Board Layers     | 12to15 (12 to 15 Layers) |
+| Board Temperature (C) | 25.0                     |
++-----------------------+--------------------------+
+
+
+2.2 Clock Constraints
+---------------------
+
++--------+--------+-----------------+
+| Clock  | Domain | Constraint (ns) |
++--------+--------+-----------------+
+| ap_clk | ap_clk |            10.0 |
++--------+--------+-----------------+
+
+
+3. Detailed Reports
+-------------------
+
+3.1 By Hierarchy
+----------------
+
++--------------------------------------------------------+-----------+
+| Name                                                   | Power (W) |
++--------------------------------------------------------+-----------+
+| GenericPartition_0_wrapper                             |     0.016 |
+|   GenericPartition_0_i                                 |     0.016 |
+|     GenericPartition_0_ConvolutionInputGenerator_rtl_0 |     0.002 |
+|       inst                                             |     0.002 |
+|     GenericPartition_0_MVAU_rtl_0                      |     0.002 |
+|       GenericPartition_0_MVAU_rtl_0                    |     0.002 |
+|     GenericPartition_0_StreamingMaxPool_hls_0          |     0.001 |
+|       inst                                             |     0.001 |
+|     GenericPartition_0_Thresholding_rtl_2              |     0.002 |
+|       inst                                             |     0.002 |
+|     GenericPartition_0_Thresholding_rtl_3              |     0.001 |
+|       inst                                             |     0.001 |
++--------------------------------------------------------+-----------+
+
+
+0 Infos, 0 Warnings, 0 Critical Warnings and 0 Errors encountered.
+report_power completed successfully
+report_power: Time (s): cpu = 00:00:09 ; elapsed = 00:00:07 . Memory (MB): peak = 3468.816 ; gain = 307.188 ; free physical = 67255 ; free virtual = 94066
+# set util [report_utilization -return_string]
+# set util_lut [exec echo $util | grep LUT | head -n 1 | cut -d| -f3 | tr -d " "]
+# set util_lutram [exec echo $util | grep LUT | head -n 3 | tail -1 | cut -d| -f3 | tr -d " "]
+# set util_ff [llength [get_cells -hier -filter {PRIMITIVE_TYPE =~ *.F*E*}]]
+WARNING: [Vivado 12-180] No cells matched 'get_cells -hier -filter {PRIMITIVE_GROUP == DSP}'.
+# set util_dsp [llength [get_cells -hier -filter {PRIMITIVE_GROUP == DSP}]]
+# set time_wns [get_property SLACK [get_timing_paths]]
+WARNING: [Vivado 12-180] No cells matched 'get_cells -hier -filter {PRIMITIVE_TYPE =~ *RAMB18*}'.
+# set util_bram18 [llength [get_cells -hier -filter {PRIMITIVE_TYPE =~ *RAMB18*}]]
+WARNING: [Vivado 12-180] No cells matched 'get_cells -hier -filter {PRIMITIVE_TYPE =~ *RAMB36*}'.
+# set util_bram36 [llength [get_cells -hier -filter {PRIMITIVE_TYPE =~ *RAMB36*}]]
+# set util_carry [llength [get_cells -hier -filter {PRIMITIVE_TYPE =~ *CARRY*}]]
+WARNING: [Vivado 12-180] No cells matched 'get_cells -hier -filter {PRIMITIVE_TYPE =~ *URAM*}'.
+# set util_uram [llength [get_cells -hier -filter {PRIMITIVE_TYPE =~ *URAM*}]]
+# set vivado_version [version -short]
+# set vivado_build_no [exec echo $util | grep Build | head -n 1 | cut -d\  -f9]
+# set util_bram [expr $util_bram18/2 + $util_bram36]
+# puts "LUT: $util_lut FF: $util_ff DSP: $util_dsp BRAM: $util_bram"
+LUT: 1497 FF: 2170 DSP: 0 BRAM: 0
+# set fp [open res.txt w]
+# puts $fp "LUT=$util_lut"
+# puts $fp "LUTRAM=$util_lutram"
+# puts $fp "FF=$util_ff"
+# puts $fp "DSP=$util_dsp"
+# puts $fp "BRAM=$util_bram"
+# puts $fp "BRAM_18K=$util_bram18"
+# puts $fp "BRAM_36K=$util_bram36"
+# puts $fp "URAM=$util_uram"
+# puts $fp "Carry=$util_carry"
+# puts $fp "WNS=$time_wns"
+# puts $fp "Delay=$time_wns"
+# puts $fp "vivado_version=$vivado_version"
+# puts $fp "vivado_build_no=$vivado_build_no"
+# close $fp
+# exit
+INFO: [Common 17-206] Exiting Vivado at Thu Oct  8 04:13:40 2026...
