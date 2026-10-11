@@ -128,10 +128,19 @@ class TestModelFifosSolve(unittest.TestCase):
         self.assertGreaterEqual(3 * 64 * 4, 160)
 
     def test_bram_is_the_analytical_designs_order_of_magnitude(self):
-        # analytical design: 143 BRAM18. The MILP may pick stream widths whose BRAM aspect / pow2 rounding is cheaper (91 with the default --dsr-pct), never more than ~30% above.
+        # real post-route FIFO BRAM of the bilinear-256 build: 75 BRAM18eq (the old model said 143 because it sent every FIFO deeper than 64 to BRAM and rounded unsplit depths up to a
+        # power of two). The MILP may pick stream widths whose BRAM aspect rounding differs, so only the order of magnitude is pinned.
         bram = self.on["_diagnostics"]["fifo_model"]["totals"]["bram18"]
-        self.assertGreater(bram, 143 * 0.5)
-        self.assertLess(bram, 143 * 1.3)
+        self.assertGreater(bram, 75 * 0.5)
+        self.assertLess(bram, 75 * 1.3)
+
+    def test_every_dataflow_edge_without_a_deep_fifo_carries_a_depth2_fifo(self):
+        ft = self.on["_diagnostics"]["fifo_model"]["totals"]
+        self.assertGreater(ft["n_edge_fifos"], 300)                      # real bilinear-256 build: 440 depth-2 FIFOs
+        self.assertGreater(ft["edge_fifo_lut"] / ft["n_edge_fifos"], 8)  # 6.3 + 1.0 * width at PE 1 x 6 bit is ~12; real mean 19.5
+        self.assertAlmostEqual(
+            self.on["_diagnostics"]["total_lut_calibrated"],
+            sum(v["lut_calibrated"] for v in [*self.on["per_layer"].values(), *self.on["extra_nodes"].values()]) + ft["lut"] + ft["dwc_lut"] + ft["edge_fifo_lut"], places=3)
 
     def test_inter_block_fifos_are_fixed_at_depth_2(self):
         self.assertEqual(len(self.on["inter_block_fifos"]), 28)

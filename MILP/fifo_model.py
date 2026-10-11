@@ -4,7 +4,8 @@ What the analytical models showed (see MILP/analytical/analytical.md and the S12
   * The memory that matters is a handful of FIFOs per block: the SKIP FIFO of every residual diamond (depth ~ n_fill + a few pixels, n_fill = pad*W + pad + 1 of the diamond's
     windowed conv) and the PREFETCH FIFO in front of every padded conv's FMPadding ((pad*W + pad + 1)*cf + 2 words). Their size in BITS is almost fixed by the geometry
     (dilation, width, channels); folding only changes the stream width (-> BRAM aspect / pow2 rounding) and a few pixels of latency. Every other FIFO of a verified block
-    is <= 2 deep, which FINN's RemoveShallowFIFOs deletes. Inter-block FIFOs are fixed at depth 2 (priced 0).
+    is <= 2 deep. The real build does NOT run RemoveShallowFIFOs (step_set_fifo_depths_fixed2), so each of them stays a depth-2 SRL FIFO on its edge (~6.3 + 1.0*width LUT, 8.6k LUT in
+    the bilinear-256 build): priced per edge by _build_edge_fifos, inter-block edges included.
   * A StreamingDataWidthConverter sits on every edge whose stream widths differ: a function of the PE / SIMD choice of the two neighbouring nodes.
 Both are expressed here as terms LINEAR in the solver's one-hot fold variables z:
   * skip / prefetch / internal DWCs (MVAU -> threshold, parallel-window SWG -> MVAU) depend on ONE node's option -> a per-option constant added to that option's LUT / BRAM / URAM;
@@ -86,8 +87,10 @@ class FifoModel:
         self.const: dict[tuple, dict] = {}            # key -> {lut, bram18, uram18} added to that option (skip / prefetch / internal DWCs)
         self.items: dict[tuple, list] = {}            # key -> descriptions of the FIFOs / DWCs it brings (for the output lists)
         self.skip_nodes: dict[str, dict] = {}         # skip FIFO site: node name -> {join, n_fill_px, kind}
+        self.replaced_edges: set[tuple] = set()       # (producer, consumer) edges whose depth-2 FIFO is replaced by a deeper skip / prefetch FIFO
         self._acc_final = None
         self._build_constants()
+        self._build_edge_fifos()
         self.edge_terms = []                          # filled by add_edge_terms
 
     # ------------------------------------------------------------------ port widths
@@ -177,6 +180,7 @@ class FifoModel:
         for name, g in self.geom.items():
             if g.op_type == "MaxPool2d" or g.kh * g.kw == 1 or not (g.ph or g.pw):
                 continue
+            self.replaced_edges.update((p, name) for p in self.dmap.get(name, []))
             for key, _ in self.options[name]:
                 c = self.cost[key]
                 self._fifo_item(key, f"{name}.prefetch", c["simd_swu"] * A, prefetch_depth_words(g, c["simd_swu"]), g.stage, producer=f"{name}", consumer=f"{name}.fmpad",
@@ -200,10 +204,44 @@ class FifoModel:
             dn = self.extras[d["join"]].geom.stage.startswith("down")
             cout = self.extras[d["join"]].geom.cout
             self.skip_nodes[node] = dict(join=d["join"], n_fill_px=n_fill_px(conv), conv=conv.name)
+            self.replaced_edges.add((node, d["join"]))
             for key, _ in self.options[node]:
                 pe = key[1]
                 self._fifo_item(key, f"{d['join']}.skip", pe * A, skip_depth_words(conv, cout, pe, dn), self.extras[d["join"]].geom.stage, is_skip=True,
                                 producer=node, consumer=d["join"], role_kind="skip")
+
+    def _build_edge_fifos(self) -> None:
+        """The real build (hardware/finn_s12_build_steps.step_set_fifo_depths_fixed2) keeps ONE depth-2 StreamingFIFO on EVERY dataflow edge (no RemoveShallowFIFOs); it is a few LUTs of SRL
+        per FIFO (bottleneck.fifo_memory: 6.3 + 1.0*width), 8.6k LUT over the 440 of the bilinear-256 build. The width is the producer's output stream -> a per-option constant of the
+        producer, one per outgoing edge; edges carrying a deeper skip / prefetch FIFO (self.replaced_edges) are priced by that FIFO instead."""
+        for consumer, preds in self.dmap.items():
+            if consumer not in self.options:
+                continue
+            for pred in preds:
+                if pred not in self.options or (pred, consumer) in self.replaced_edges:
+                    continue
+                for key, _ in self.options[pred]:
+                    self._edge_fifo(key, f"{pred}->{consumer}", self.ports(key)["out_w"])
+        # FIFOs INSIDE a conv's FINN subgraph (FMPadding -> SWG -> MVAU -> Thresholding: one per node output; the Thr output is the dataflow edge above), and one after every DWC
+        for name, g in self.geom.items():
+            if g.op_type == "MaxPool2d":
+                continue
+            for key, _ in self.options[name]:
+                c = self.cost[key]
+                A = self.A
+                if g.kh * g.kw > 1:
+                    if g.ph or g.pw:
+                        self._edge_fifo(key, f"{name}.fmpad->swg", c["simd_swu"] * A)
+                    parallel = key[2] > g.cin                                                # parallel_window: the SWG emits a whole KxK window per word
+                    self._edge_fifo(key, f"{name}.swg->mvau", (g.kh * g.kw if parallel else 1) * c["simd_swu"] * A)
+                self._edge_fifo(key, f"{name}.mvau->thr", key[1] * c["acc_bits"])
+                for label, w1, w2 in self.ports(key)["internal"]:
+                    if w1 != w2:
+                        self._edge_fifo(key, f"{name}.{label}.dwc_out", w2)
+
+    def _edge_fifo(self, key, label, width) -> None:
+        lut = fifo_memory(int(width), 2)["lut"]
+        self._add_const(key, lut=lut, item=dict(kind="edge_fifo", name=label, width_bits=int(width), lut=float(lut)))
 
     def _up_block_fifos(self, d: dict) -> None:
         """Both join FIFOs of an up block: ext end (`skip FIFO`) and main end (`FIFO main`). The main branch is the one holding the upsample node. Per-option constants like the regular skip FIFO."""
@@ -221,6 +259,7 @@ class FifoModel:
                 pe = (self.cost[key].get("thr_pe") or key[1]) if node in self.geom else key[1]          # a conv's own threshold PE sets its output stream
                 self._fifo_item(key, f"{d['join']}.{'skip' if is_skip else 'main'}", pe * A, fn(w_in, cout, pe), stage, is_skip=is_skip, producer=node, consumer=d["join"], role_kind=role)
             self.skip_nodes[node] = dict(join=d["join"], n_fill_px=w_in, conv=None, kind=role)
+            self.replaced_edges.add((node, d["join"]))
 
     # ------------------------------------------------------------------ solver terms
     def add_terms(self, pulp, prob, tag: str = "fifo"):
@@ -241,7 +280,7 @@ class FifoModel:
                     for w2, zs2 in in_cls.items():
                         if w1 == w2:
                             continue
-                        cost = fcm.dwc_cost(w1, w2)["total_lut"]
+                        cost = fcm.dwc_cost(w1, w2)["total_lut"] + fifo_memory(int(w2), 2)["lut"]      # the DWC node and the depth-2 FIFO behind it
                         if len(out_cls) == 1 and len(in_cls) == 1:
                             lut.append(cost)
                             self.edge_terms.append((pred, consumer, w1, w2, None))
@@ -264,10 +303,13 @@ class FifoModel:
     def describe(self, pulp, chosen: dict) -> dict:
         """After the solve. chosen: node name -> chosen z key. Returns the FIFO / DWC lists and the totals."""
         fifos, dwcs = [], []
-        tot = dict(lut=0.0, bram18=0.0, uram18=0.0, dwc_lut=0.0)
+        tot = dict(lut=0.0, bram18=0.0, uram18=0.0, dwc_lut=0.0, edge_fifo_lut=0.0, n_edge_fifos=0)
         for name, key in chosen.items():
             for it in self.items.get(key, []):
-                if it["kind"] == "fifo":
+                if it["kind"] == "edge_fifo":
+                    tot["edge_fifo_lut"] += it["lut"]
+                    tot["n_edge_fifos"] += 1
+                elif it["kind"] == "fifo":
                     fifos.append(self._bridge_entry(it, chosen))
                     tot["lut"] += it["lut"]
                     tot["bram18"] += it["mem_bram18"]
@@ -281,6 +323,8 @@ class FifoModel:
             lut = fcm.dwc_cost(w1, w2)["total_lut"]
             dwcs.append(dict(name=f"{pred}->{consumer}", stage=_stage(consumer, self.geom, self.extras), in_width=int(w1), out_width=int(w2), lut=float(lut)))
             tot["dwc_lut"] += lut
+            tot["edge_fifo_lut"] += fifo_memory(int(w2), 2)["lut"]
+            tot["n_edge_fifos"] += 1
         return dict(fifos=fifos, dwcs=dwcs, totals=tot)
 
     def _bridge_entry(self, it: dict, chosen: dict) -> dict:
@@ -313,7 +357,8 @@ class FifoModel:
         return self.in_w_for_edge(key, pred) if side == "in" else self.ports(key)["out_w"]
 
     def inter_block_fifos(self, chosen: dict, depth: int = 2) -> list[dict]:
-        """One depth-`depth` FIFO per dataflow edge leaving a block (the same list net_fold.py writes)."""
+        """One depth-`depth` FIFO per dataflow edge leaving a block (the same list net_fold.py writes). REPORT only: since 2026-10-11 these edges are priced inside the solve by
+        _build_edge_fifos (together with all the other depth-2 edge FIFOs), so their LUT must not be added to the totals a second time."""
         out = []
         for consumer, preds in self.dmap.items():
             if consumer not in chosen:

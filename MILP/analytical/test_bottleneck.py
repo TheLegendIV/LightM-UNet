@@ -9,7 +9,7 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from bottleneck import export_onnx, fifo_memory, model_bottleneck, to_folding_config, verify_with_sim  # noqa: E402
+from bottleneck import export_onnx, fifo_memory, model_bottleneck, split_fifo_depth, to_folding_config, verify_with_sim  # noqa: E402
 
 REF = dict(cin=32, v=4, z=4, T=72, bits=4, height=32, width=32, k=3, dilation=8, stride=1)
 
@@ -169,17 +169,41 @@ class TestVerifyAndExport(unittest.TestCase):
 
 class TestFifoMemory(unittest.TestCase):
     def test_narrow_deep_skip_fifo_goes_to_bram_with_pow2_depth(self):
-        c = fifo_memory(4, 8736)
-        self.assertEqual((c["mem"], c["depth_alloc"], c["bram18"], c["uram"]), ("bram", 16384, 4, 0))
+        c = fifo_memory(4, 8736)          # split like the real build: 8192 + 544 (-> 1024 allocated): 2 + 1 BRAM18, NOT one 16384-deep FIFO (4 BRAM18)
+        self.assertEqual((c["mem"], c["depth_alloc"], c["bram18"], c["uram"]), ("bram", 9216, 3, 0))
+        self.assertEqual([p["depth"] for p in c["pieces"]], [8192, 544])
         self.assertLess(c["options"]["uram"]["efficiency"], 0.05)       # 4 of 72 URAM bits used: never URAM
+
+    def test_split_rule_matches_real_bilinear_256_build(self):
+        # model skip depths -> pieces seen in the real post-route FIFO list (S12_dense_256_u4_bilinear_analytical_v1)
+        for depth, pieces in ((17280, [16384, 896]), (8640, [8192, 448]), (4352, [4096, 256]), (2208, [2048, 160]), (1120, [1024, 96]),
+                              (564, [512, 52]), (260, [256, 4]), (256, [256]), (134, [134]), (1024, [1024])):
+            self.assertEqual(split_fifo_depth(depth), pieces, depth)
+
+    def test_srl_up_to_256_then_vivado_pieces(self):
+        self.assertEqual(fifo_memory(6, 256)["mem"], "srl")
+        c = fifo_memory(6, 17280)
+        self.assertEqual(c["bram18"], 6 + 1)                 # 16384 deep x 6 bit = 6 BRAM18, the 896 remainder rounds to 1024 = 1 BRAM18 (real: 6.0 + 1.0)
+        self.assertEqual(sorted(p["mem"] for p in c["pieces"]), ["bram", "bram"])
+        self.assertAlmostEqual(c["lut"], 2 * 9.4 + 6.4 * (14 + 10))   # control LUT of the two vivado IPs, log2(16384) + log2(1024)
+
+    def test_srl_lut_fit_reproduces_real_examples(self):
+        self.assertAlmostEqual(fifo_memory(6, 256)["lut"], 35.66 + 1.238 * 6 * 8)   # real 88-92
+        self.assertAlmostEqual(fifo_memory(6, 2)["lut"], 6.255 + 1.003 * 6)         # real mean 11.9 at width 6
 
     def test_tiny_fifo_is_srl(self):
         c = fifo_memory(32, 2)
         self.assertEqual((c["mem"], c["bram18"], c["uram"]), ("srl", 0, 0))
         self.assertLess(c["lut"], 64)
 
-    def test_wide_deep_fifo_goes_to_uram(self):
-        c = fifo_memory(72, 8192)
+    def test_wide_deep_fifo_goes_to_uram_only_when_enabled(self):
+        self.assertEqual(fifo_memory(72, 8192)["mem"], "bram")           # default build: URAM is opt-in (--allocate-uram)
+        import bottleneck
+        bottleneck.FIFO_AUTO_URAM = True
+        try:
+            c = fifo_memory(72, 8192)
+        finally:
+            bottleneck.FIFO_AUTO_URAM = False
         self.assertEqual((c["mem"], c["uram"], c["bram18"]), ("uram", 2, 0))
         self.assertAlmostEqual(c["efficiency"], 1.0)
 

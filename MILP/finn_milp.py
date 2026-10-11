@@ -798,7 +798,7 @@ def solve_joint_perlayer(
         fifo_out = fifo_model.describe(pulp, chosen_all)
         fifo_out["inter_block_fifos"] = fifo_model.inter_block_fifos(chosen_all)
         ft = fifo_out["totals"]
-        total_lut += ft["lut"] + ft["dwc_lut"] + sum(f["lut"] for f in fifo_out["inter_block_fifos"])
+        total_lut += ft["lut"] + ft["dwc_lut"] + ft["edge_fifo_lut"]        # edge_fifo_lut = every depth-2 edge FIFO, inter-block ones included (priced in the solve)
         total_bram += ft["bram18"] + sum(f["bram18"] for f in fifo_out["inter_block_fifos"])
         total_uram += ft["uram18"]
     node_cycles = {**{n: v["cycles"] for n, v in per_layer.items()}, **{n: v["cycles"] for n, v in extra_out.items()}}
@@ -813,8 +813,8 @@ def solve_joint_perlayer(
         **({"intra_block_fifos": fifo_out["fifos"], "inter_block_fifos": fifo_out["inter_block_fifos"], "dwcs": fifo_out["dwcs"]} if fifo_out else {}),
         "_diagnostics": {
             **({"fifo_model": {"totals": fifo_out["totals"], "n_dwcs": len(fifo_out["dwcs"]), "skip_nodes": fifo_model.skip_nodes,
-                               "note": "skip / prefetch FIFOs + DWCs priced in the solve (fifo_model.py); total_* below include them. Simulation-only FIFOs (down feed, up / init FIFO main) "
-                                       "are not priced; inter-block FIFOs are fixed at depth 2."}} if fifo_out else {}),
+                               "note": "skip / prefetch FIFOs, DWCs and the depth-2 FIFO of every other dataflow edge priced in the solve (fifo_model.py); total_* below include them. "
+                                       "Simulation-only FIFOs (down feed, up / init FIFO main) are not priced; inter-block FIFOs are fixed at depth 2."}} if fifo_out else {}),
             "candidate_bits": list(CANDIDATE_BITS), "n_layers": n_layers,
             "n_binary_vars": n_binary_vars, "n_constraints": n_constraints,
             "dsr": {"pct": dsr_pct if max_node_cycles is not None else None, "floor": dsr_floor, "n_constraints": n_dsr_constraints},

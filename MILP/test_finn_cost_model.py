@@ -204,13 +204,19 @@ class ThresholdingPlacementTest(unittest.TestCase):
         lut, bram18, uram = _thresholding_rtl_cost(1, 8, 32, "block", in_bits=10)
         self.assertEqual(bram18, 1 + 2 + 4)  # 18x1024 primitives for depth 1024/2048/4096
         self.assertEqual(uram, 0)
-        # logic fit + LUTRAM for stages 32..512: ceil(d*10/64) = 5+10+20+40+80
-        self.assertAlmostEqual(lut, 68.1953 + 0.1095 * 255 + 155)
+        # 2026-10-11 refit: LUT = 9.0428 * PE * in_bits; shallow stages of a "block" node add no LUTRAM (real ~0)
+        self.assertAlmostEqual(lut, 9.0428 * 10)
 
     def test_distributed_is_all_lutram(self):
         lut, bram18, _ = _thresholding_rtl_cost(1, 8, 32, "distributed", in_bits=10)
         self.assertEqual(bram18, 0)
-        self.assertAlmostEqual(lut, 68.1953 + 0.1095 * 255 + 1275)  # 8160 thresholds * 10 bits / 64
+        self.assertAlmostEqual(lut, 9.0428 * 10 + 1275)  # forced LUTRAM: 8160 thresholds * 10 bits / 64 (no real data for this style)
+
+    def test_lut_scales_with_pe_and_input_width_not_channels(self):
+        base, _, _ = _thresholding_rtl_cost(1, 6, 32, "block", in_bits=7)
+        self.assertAlmostEqual(_thresholding_rtl_cost(4, 6, 32, "block", in_bits=7)[0], 4 * base)
+        self.assertAlmostEqual(_thresholding_rtl_cost(1, 6, 8, "block", in_bits=7)[0], base)
+        self.assertGreater(_thresholding_rtl_cost(1, 6, 32, "block", in_bits=15)[0], base)
 
     def test_four_bit_output_never_reaches_bram(self):
         _, bram18, _ = _thresholding_rtl_cost(1, 4, 32, "block", in_bits=12)

@@ -177,8 +177,14 @@ IMPL_STYLE_HLS: ImplStyle = "hls"
 IMPL_STYLE_RTL: ImplStyle = "rtl"
 
 # ---- Standalone Thresholding_rtl empirical cost (see finn_cost_model.md) ----
-_THR_RTL_LUT_BASE_PER_PE = 68.1953
-_THR_RTL_LUT_PER_NUMSTEP_PE = 0.1095
+_THR_RTL_LUT_BASE_PER_PE = 68.1953     # LEGACY (2026-09-28 auto-placement 8-bit fit, no longer used by _thresholding_rtl_cost): real LUT ~= PE*(b1 + b2*numSteps)
+_THR_RTL_LUT_PER_NUMSTEP_PE = 0.1095   # LEGACY, see above
+# 2026-10-11 refit (S12_dense_256_u4_bilinear_analytical_v1, INT6 / numSteps=63 / pinned BRAM placement, n=141 real Thresholding nodes, all PE=1):
+# real LUT ~= 9.0428 * PE * in_bits, uncentered R^2 0.979, median abs error 8.5%, sum(model)/sum(real) 0.99. The input width is the driver the legacy fit lacked; the old
+# formula + 1 LUT per 64 bits of LUTRAM overestimated Thresholding LUT by +83% / +144% / +96% on this and the two nn-up builds (real LUTRAM of these nodes is ~0).
+# Only identified at output_bits = 6 (numSteps is 63 in every row): the older auto-placement builds fit ~5.9 LUT per input bit (+0.047/step) and sit 10-30% below this
+# at the same width, so other output widths are NOT calibrated. See MILP/calibration.csv.
+_THR_RTL_LUT_PER_INBIT_PE = 9.0428
 # Memory placement is PINNED, not left to Vivado: the bridge writes `depth_trigger_bram` on every
 # Thresholding_rtl node (thresholding.sv: a stage whose depth >= trigger goes to BRAM, a shallower one
 # to LUTRAM; trigger 0 = "auto", Vivado's own undocumented choice, which the MILP cannot predict).
@@ -382,15 +388,16 @@ def _thresholding_rtl_cost(
         trigger = THR_DEPTH_TRIGGER_DISTRIBUTED
     else:
         raise ValueError(f"unsupported thresholding ram_style {ram_style!r}")
-    num_steps = 2 ** output_bits - 1
-    lut = pe * (_THR_RTL_LUT_BASE_PER_PE + _THR_RTL_LUT_PER_NUMSTEP_PE * num_steps)
+    lut = pe * _THR_RTL_LUT_PER_INBIT_PE * in_bits
     bram18 = 0
     cf = channels // pe
     for stage in range(output_bits):
         depth = cf * 2 ** stage
         if depth >= trigger:
             bram18 += pe * _bram18_count(in_bits, depth)
-        else:
+        elif ram_style == "distributed":
+            # forced LUTRAM: physical 1 LUT per 64 bits, NO real data for this style. With "block" the shallow stages
+            # add nothing here: the real nodes show ~0 LUTRAM (they synthesise as logic ROMs), already inside the fit above.
             lut += pe * math.ceil(depth * in_bits / _LUTRAM_BITS_PER_LUT)
     return lut, float(bram18), 0.0
 
@@ -416,11 +423,13 @@ def threshold_node_cost(
 
 
 # ---- Stream nodes (AddStreams, DuplicateStreams, StreamingConcat, UpsampleNearestNeighbour) ----
-# FINN v0.10.1 prices all four at 0 (no estimator overrides). LUT/PE below is
-# Vitis HLS csynth at PE=1, 8-bit (estimate_layer_resources_hls.json, dense RTL
-# build), assumed linear in PE -- PROVISIONAL, see finn_cost_model.md.
-_ADDSTREAMS_LUT_PER_PE = 131
-_DUPSTREAMS_LUT_PER_PE = 115
+# FINN v0.10.1 prices all four at 0 (no estimator overrides). 2026-10-11: replaced the HLS-csynth estimates (131 / 115 per PE, which were +80..+100% vs real) by the
+# mean REAL post-route LUT of the three S12-dense 256 OOC builds (v2, w8_16_v4, bilinear): Add 66.9 (n=81, 64.6-68.7 per build, 6- and 8-bit), Dup 62.5 (n=84, 60.5-63.6),
+# Concat 107 (n=3, 84-128), Upsample 184 (n=6, 134-246). EVERY real Add/Dup node is PE=1, so the per-PE scaling is still the unverified linear assumption.
+_ADDSTREAMS_LUT_PER_PE = 66.9
+_DUPSTREAMS_LUT_PER_PE = 62.5
+_CONCAT_LUT = 107
+_UPSAMPLE_LUT = 184
 # LabelSelect (the network's final argmax over the output channels, one label per pixel): FINN reads PE channel values per cycle and keeps a running
 # (max value, index) pair, so a pixel takes ceil(labels / PE) cycles. NO real or HLS-estimate data exists yet: the LUT per PE lane below is a placeholder
 # (one accumulator-wide comparator + max register + index mux, ~20-bit logits) and is to be replaced by a FINN probe (see FINN_AGENT_HANDOFF.md).
@@ -436,7 +445,7 @@ def stream_node_cost(kind: str, layer: LayerGeometry, pe: int = 1) -> dict:
         cycles = layer.hout * layer.wout * math.ceil(layer.cout / pe)
         lut = pe * {"add": _ADDSTREAMS_LUT_PER_PE, "dup": _DUPSTREAMS_LUT_PER_PE, "argmax": _LABELSELECT_LUT_PER_PE}[kind]
     elif kind in ("concat", "upsample"):
-        cycles, lut = layer.hout * layer.wout, 0
+        cycles, lut = layer.hout * layer.wout, {"concat": _CONCAT_LUT, "upsample": _UPSAMPLE_LUT}[kind]
     else:
         raise ValueError(f"unknown stream node kind {kind!r}")
     return {
@@ -641,6 +650,10 @@ def conv_transpose_cost(
     return conv_cost(equivalent, weight_bits, act_bits, folding, force_dsp=force_dsp)
 
 
+_MAXPOOL_FIXED_LUT = 157.2
+_MAXPOOL_LUT_PER_CHANNEL = 26.66
+
+
 def maxpool_cost(layer: LayerGeometry, act_bits: int) -> dict:
     """MaxPool2d: SWU + comparator array, no MVAU/weights. cycles are
     input-pixel-driven (FINN's StreamingMaxPool.get_exp_cycles()), not hout*wout."""
@@ -648,8 +661,10 @@ def maxpool_cost(layer: LayerGeometry, act_bits: int) -> dict:
     M = 1
     k_eff = _k_eff(layer.kh, layer.dh)
     swu_bram18 = M * (math.ceil(k_eff / layer.sh) + 1) * math.ceil(layer.sh * layer.win / 512) * math.ceil(layer.cin * A / 36)
-    swu_lut = M * 426
-    mp_lut = M * A * layer.cin
+    # 2026-10-11: real StreamingMaxPool_hls LUT ~= 157 + 26.7 * channels (n=9 nodes over 3 builds, median abs error 8%); the old 426 + A*C was +42..+52% over.
+    # act_bits no longer enters (the 6- and 8-bit builds are not separable in 9 points). The 157 is treated as the node's fixed part (kept in swu_lut for the cost-dict layout).
+    swu_lut = M * _MAXPOOL_FIXED_LUT
+    mp_lut = M * _MAXPOOL_LUT_PER_CHANNEL * layer.cin
     total_lut = swu_lut + mp_lut
     cycles = math.ceil(M * layer.hin * layer.win * (1 + 1 / (layer.kh * layer.kw)))
     return {

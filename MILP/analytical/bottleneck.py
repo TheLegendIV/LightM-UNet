@@ -460,8 +460,17 @@ def model_bottleneck(
 # ---------------------------------------------------------------- FIFO memory mapping (LUT/SRL, BRAM, URAM)
 
 URAM_BITS = 72 * 4096          # one URAM288: 4096 deep x 72 wide
-FIFO_SRL_MAX_DEPTH = 64        # up to here the auto policy keeps a FIFO in SRL / LUT shift registers
+FIFO_SRL_MAX_DEPTH = 256       # FINN max_qsrl_depth: up to here a FIFO stays StreamingFIFO_rtl (SRL shift registers / LUT); deeper ones are split and the pieces > 256 become Vivado FIFO IP (BRAM / URAM).
+                               # Real S12-dense bilinear 256 build: every rtl FIFO is <= 256 deep, every vivado one >= 512 (was 64 here: that sent ~57 FIFOs to BRAM that the real build kept in LUT).
+FIFO_VIVADO_MAX_PIECE = 32768  # Vivado axis_data_fifo depth cap (hardware/finn_s12_build.py)
 FIFO_URAM_MIN_EFF = 0.2        # auto: use URAM only if at least this fraction of the allocated URAM bits is used (BRAM-bound: relieve BRAM18 where URAM is not wasteful)
+FIFO_AUTO_URAM = False         # URAM FIFOs are opt-in in the real build (finn_s12_build.py --allocate-uram; no URAM in the default bilinear-256 build): auto picks BRAM unless this is set
+
+# LUT fits from the real post-route FIFOs of S12_dense_256_u4_bilinear_analytical_v1 (n=553: 440 depth<=2, 74 rtl deeper, 39 vivado), OLS through the origin, 2026-10-11, MILP/calibration.csv.
+# width = PE words x element bits of the stream (folded_shape[-1] * bits), NOT the CSV's `bits` column.
+_SRL_TINY_LUT = (6.255, 1.003)      # depth <= 2:  a + b*width            (mean 19.5 LUT, sum ratio 1.00; the ~35 per-FIFO outliers up to 326 LUT are not reproducible)
+_SRL_LUT = (35.66, 1.238)           # depth > 2:   a + b*width*ceil(depth/32)   (median error 6.9%; the real SRL count is exactly width*ceil(depth/32))
+_VIVADO_FIFO_LUT = (9.4, 6.4)       # vivado IP:   a + b*log2(depth_alloc)  (66-100 LUT for 512..16384 deep, independent of width: 6 and 24 bit give the same)
 
 
 def _pow2_at_least(n: int, lo: int = 16) -> int:
@@ -471,30 +480,75 @@ def _pow2_at_least(n: int, lo: int = 16) -> int:
     return p
 
 
-def fifo_memory(width_bits: int, depth: int, mem: str = "auto") -> dict:
-    """Cost of one FIFO of `width_bits` x `depth` words in each memory type and the pick for `mem` in {auto, srl, bram, uram}.
-    srl : FINN StreamingFIFO impl_style=rtl (SRL32 shift registers): ~width * ceil(depth/32) LUT, any depth; the only style rtlsim supports.
-    bram: Vivado FIFO IP (impl_style=vivado, ram_style=block): depth rounded UP to a power of two >= 16, BRAM18 over the SDP aspect table.
-    uram: same IP with ram_style=ultra: ceil(width/72) * ceil(depth_alloc/4096) URAM288 (4096 x 72 each).
-    auto: srl for depth <= FIFO_SRL_MAX_DEPTH; otherwise URAM if its bit utilisation >= FIFO_URAM_MIN_EFF (wide FIFOs), else BRAM
-    (a narrow and deep FIFO such as the 4-bit skip FIFO is far denser in BRAM18's 16K x 1 mode than in URAM: width 4 would use 4 of 72 bits)."""
+def _srl_fifo_lut(width_bits: int, depth: int) -> float:
+    if depth <= 2:
+        return _SRL_TINY_LUT[0] + _SRL_TINY_LUT[1] * width_bits
+    return _SRL_LUT[0] + _SRL_LUT[1] * width_bits * math.ceil(depth / 32)
+
+
+def _vivado_fifo_lut(depth_alloc: int) -> float:
+    return _VIVADO_FIFO_LUT[0] + _VIVADO_FIFO_LUT[1] * math.log2(depth_alloc)
+
+
+def split_fifo_depth(depth: int) -> list:
+    """Depths of the FIFOs FINN's SplitLargeFIFOs leaves for one requested `depth`. Empirical rule read off the real bilinear-256 build (the model skip depths 17280 / 8640 / 4352 /
+    2208 / 1120 / 564 / 260 appear as 16384+896, 8192+448, 4096+256, 2048+160, 1024+96, 512+52, 256+4): a FIFO deeper than FIFO_SRL_MAX_DEPTH becomes its largest power-of-two piece
+    (capped at FIFO_VIVADO_MAX_PIECE) plus ONE remainder FIFO (not split again: 96 stays 96, 896 stays 896)."""
+    if depth <= FIFO_SRL_MAX_DEPTH:
+        return [depth]
+    out = []
+    while depth > FIFO_VIVADO_MAX_PIECE:
+        out.append(FIFO_VIVADO_MAX_PIECE)
+        depth -= FIFO_VIVADO_MAX_PIECE
+    if depth > FIFO_SRL_MAX_DEPTH:
+        piece = 1 << (depth.bit_length() - 1)
+        out.append(piece)
+        depth -= piece
+    if depth > 0:
+        out.append(depth)
+    return out
+
+
+def _fifo_options(width_bits: int, depth: int) -> dict:
     bits = width_bits * depth
     alloc = _pow2_at_least(depth)
     opts = {
-        "srl": dict(mem="srl", depth_alloc=depth, lut=width_bits * math.ceil(depth / 32) + 8, bram18=0, uram=0),
-        "bram": dict(mem="bram", depth_alloc=alloc, lut=0, bram18=_fifo_bram18(width_bits, alloc), uram=0),
-        "uram": dict(mem="uram", depth_alloc=alloc, lut=0, bram18=0, uram=math.ceil(width_bits / 72) * math.ceil(alloc / 4096)),
+        "srl": dict(mem="srl", depth_alloc=depth, lut=_srl_fifo_lut(width_bits, depth), bram18=0, uram=0),
+        "bram": dict(mem="bram", depth_alloc=alloc, lut=_vivado_fifo_lut(alloc), bram18=_fifo_bram18(width_bits, alloc), uram=0),
+        "uram": dict(mem="uram", depth_alloc=alloc, lut=_vivado_fifo_lut(alloc), bram18=0, uram=math.ceil(width_bits / 72) * math.ceil(alloc / 4096)),
     }
     for o in opts.values():
         cap = (o["bram18"] * 18432 + o["uram"] * URAM_BITS) or max(1, o["lut"] * 32)
         o["bits_used"], o["efficiency"] = bits, bits / cap
+    return opts
+
+
+def fifo_memory(width_bits: int, depth: int, mem: str = "auto") -> dict:
+    """Cost of one requested FIFO of `width_bits` x `depth` words in each memory type and the pick for `mem` in {auto, srl, bram, uram}.
+    srl : FINN StreamingFIFO impl_style=rtl (SRL32 shift registers), any depth; the only style rtlsim supports. LUT: see _srl_fifo_lut.
+    bram: Vivado FIFO IP (impl_style=vivado, ram_style=block): depth rounded UP to a power of two >= 16, BRAM18 over the SDP aspect table, ~9+6.4*log2(depth) control LUT.
+    uram: same IP with ram_style=ultra: ceil(width/72) * ceil(depth_alloc/4096) URAM288 (4096 x 72 each).
+    auto: what the real build does: a FIFO deeper than FIFO_SRL_MAX_DEPTH is SPLIT (split_fifo_depth) and every piece is priced on its own: <= 256 deep -> SRL, deeper -> BRAM (URAM only when FIFO_AUTO_URAM is set and its bit
+    utilisation >= FIFO_URAM_MIN_EFF, i.e. wide FIFOs) (a narrow and deep FIFO such as the 4-bit skip FIFO is far denser in BRAM18's 16K x 1 mode than in URAM). The returned
+    mem / depth_alloc / lut / bram18 / uram are the sums over the pieces (mem = the memory of the deepest piece); `pieces` lists them. An explicit `mem` prices ONE unsplit FIFO."""
+    opts = _fifo_options(width_bits, depth)
     if mem != "auto":
-        pick = opts[mem]
-    elif depth <= FIFO_SRL_MAX_DEPTH:
-        pick = opts["srl"]
-    else:
-        pick = opts["uram"] if opts["uram"]["efficiency"] >= FIFO_URAM_MIN_EFF else opts["bram"]
-    return dict(pick, options=opts)
+        return dict(opts[mem], options=opts, pieces=[dict(opts[mem], depth=depth)])
+    pieces = []
+    for d in split_fifo_depth(depth):
+        o = _fifo_options(width_bits, d)
+        pick = o["srl"] if d <= FIFO_SRL_MAX_DEPTH else (o["uram"] if FIFO_AUTO_URAM and o["uram"]["efficiency"] >= FIFO_URAM_MIN_EFF else o["bram"])
+        pieces.append(dict(pick, depth=d))
+    if len(pieces) == 1:
+        return dict(pieces[0], options=opts, pieces=pieces)
+    deepest = max(pieces, key=lambda q: q["depth"])
+    total = dict(
+        mem=deepest["mem"], depth_alloc=sum(q["depth_alloc"] for q in pieces), lut=sum(q["lut"] for q in pieces), bram18=sum(q["bram18"] for q in pieces),
+        uram=sum(q["uram"] for q in pieces),
+    )
+    cap = (total["bram18"] * 18432 + total["uram"] * URAM_BITS) or max(1, total["lut"] * 32)
+    total["bits_used"], total["efficiency"] = width_bits * depth, width_bits * depth / cap
+    return dict(total, options=opts, pieces=pieces)
 
 
 def finalize_fifo_costs(r: "BottleneckResult", mem: str = "auto") -> None:

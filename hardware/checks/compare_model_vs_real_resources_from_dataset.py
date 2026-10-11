@@ -77,14 +77,15 @@ Usage:
 """
 import argparse
 import csv
+import math
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "MILP"))
 from finn_cost_model import (  # noqa: E402
     LayerGeometry, calibrated_bram18k, calibrated_lut, conv_cost_pe_simd, stream_node_cost,
-    _finn_swu, _THR_RTL_LUT_BASE_PER_PE, _THR_RTL_LUT_PER_NUMSTEP_PE, _THR_RTL_BRAM18_PER_PE_NUMSTEP,
-    _THR_RTL_BRAM_MIN_CHANNELS_NUMSTEP,
+    _finn_swu, _thresholding_rtl_cost, THR_DEPTH_TRIGGER_DISTRIBUTED, _MAXPOOL_FIXED_LUT, _MAXPOOL_LUT_PER_CHANNEL,
 )
 
 MODELLED_KINDS = {
@@ -147,24 +148,19 @@ def predict_row(r):
         return lut, bram, 0.0
 
     if kind == "Thresholding":
-        # Use the CSV's own real `numSteps` (FINN's actual node attribute) directly,
-        # NOT re-derived from act_bits -- act_bits here is dtype_bits(inputDataType),
-        # which for a noActivation=1 threshold is the WIDE pre-threshold accumulator
-        # type (e.g. INT19), not the threshold's own output precision; re-deriving
-        # num_steps=2**act_bits-1 from that blows up by orders of magnitude. numSteps
-        # is the real, ground-truth driver variable (see MILP/calibration.csv's own
-        # threshold_lut refit, fit against this exact column).
+        # Priced by the live `_thresholding_rtl_cost` (logic fit + pinned memory placement), from the
+        # row's OWN real attributes: PE, NumChannels, numSteps (-> output bits = log2(numSteps+1)),
+        # input width = act_bits, and `depth_trigger_bram` (the placement the bridge pinned:
+        # 999999 = every stage LUTRAM, anything else = "block"; 0 = Vivado auto, priced as "block").
+        # act_bits is dtype_bits(inputDataType) = the WIDE pre-threshold accumulator for a
+        # noActivation=1 threshold, so it is the memory word width (in_bits), not the output precision.
         pe = int(num(r["PE"], 1)) or 1
         channels = int(num(r["NumChannels"], 1)) or 1
-        num_steps = num(r["numSteps"], 255)
+        output_bits = max(1, round(math.log2(num(r["numSteps"], 63) + 1)))
+        ram_style = "distributed" if num(r.get("depth_trigger_bram")) >= THR_DEPTH_TRIGGER_DISTRIBUTED else "block"
+        in_bits = int(num(r["act_bits"], 10)) or 10
+        raw_lut, raw_bram, _ = _thresholding_rtl_cost(pe, output_bits, channels, ram_style=ram_style, in_bits=in_bits)
         abits_for_calib = 8  # only feeds calibrated_lut/bram's avg_bits table; force_dsp=True makes it a no-op anyway
-        raw_lut = pe * (_THR_RTL_LUT_BASE_PER_PE + _THR_RTL_LUT_PER_NUMSTEP_PE * num_steps)
-        # Below _THR_RTL_BRAM_MIN_CHANNELS_NUMSTEP, real Vivado infers no dedicated
-        # BRAM at all -- see that constant's comment in finn_cost_model.py.
-        raw_bram = (
-            _THR_RTL_BRAM18_PER_PE_NUMSTEP * pe * num_steps
-            if channels * num_steps >= _THR_RTL_BRAM_MIN_CHANNELS_NUMSTEP else 0.0
-        )  # ram_style="block" default assumption -- see module docstring
         lut = calibrated_lut(raw_lut, abits_for_calib, abits_for_calib, force_dsp=True)
         bram = calibrated_bram18k(raw_bram, abits_for_calib, abits_for_calib, force_dsp=True)
         return lut, bram, 0.0
@@ -180,41 +176,61 @@ def predict_row(r):
         return cost["total_lut"], 0.0, 0.0
 
     if kind in ("Concat", "Upsample"):
-        return 0.0, 0.0, 0.0  # FINN v0.10.1 prices both at 0 (PROVISIONAL, see finn_cost_model.py)
+        return float(stream_node_cost("concat" if kind == "Concat" else "upsample", LayerGeometry(op_type="Conv2d", name=r["node_name"], stage="", cin=1, hin=1, win=1, cout=1, hout=1, wout=1, kh=1, kw=1, sh=1, sw=1))["total_lut"]), 0.0, 0.0
 
     if kind == "MaxPool":
         cin = int(num(r["NumChannels"], 1)) or 1
         abits = num(r["act_bits"], 8)
-        return 426 + abits * cin, 0.0, 0.0
+        return _MAXPOOL_FIXED_LUT + _MAXPOOL_LUT_PER_CHANNEL * cin, 0.0, 0.0
 
     raise ValueError(f"unhandled modelled kind {kind!r}")
 
 
-def analyze(csv_path):
+def real_row(r):
+    return {"lut": num(r["real_LUT"]), "bram18_equiv": num(r["real_BRAM18"]) + 2 * num(r["real_BRAM36"]), "dsp": num(r["real_DSP"])}
+
+
+def analyze(csv_path, row_sink=None):
+    """row_sink: optional list; one dict per modelled row (model vs real) is appended for --rows-out."""
     with open(csv_path, newline="") as f:
         rows = list(csv.DictReader(f))
-    pred = {"lut": 0.0, "bram18_equiv": 0.0, "dsp": 0.0}
-    real = {"lut": 0.0, "bram18_equiv": 0.0, "dsp": 0.0}
+    zero = lambda: {"lut": 0.0, "bram18_equiv": 0.0, "dsp": 0.0, "n": 0}
+    pred, real = zero(), zero()
+    by_kind = defaultdict(lambda: {"pred": zero(), "real": zero()})
     n_modelled, n_excluded, unrecognized = 0, 0, {}
     for r in rows:
         kind = r["node_kind"]
+        rr = real_row(r)
         if kind in EXCLUDED_KINDS:
             n_excluded += 1
+            for f_ in rr:
+                by_kind[kind]["real"][f_] += rr[f_]
+            by_kind[kind]["real"]["n"] += 1
             continue
         if kind not in MODELLED_KINDS:
             unrecognized[kind] = unrecognized.get(kind, 0) + 1
             continue
         lut, bram, dsp = predict_row(r)
-        pred["lut"] += lut
-        pred["bram18_equiv"] += bram
-        pred["dsp"] += dsp
-        real["lut"] += num(r["real_LUT"])
-        real["bram18_equiv"] += num(r["real_BRAM18"]) + 2 * num(r["real_BRAM36"])
-        real["dsp"] += num(r["real_DSP"])
+        pr = {"lut": lut, "bram18_equiv": bram, "dsp": dsp}
+        for f_ in pr:
+            pred[f_] += pr[f_]
+            real[f_] += rr[f_]
+            by_kind[kind]["pred"][f_] += pr[f_]
+            by_kind[kind]["real"][f_] += rr[f_]
+        by_kind[kind]["pred"]["n"] += 1
+        by_kind[kind]["real"]["n"] += 1
         n_modelled += 1
+        if row_sink is not None:
+            row_sink.append({
+                "csv": Path(csv_path).name, "partition": r.get("partition", ""), "node_name": r["node_name"], "node_kind": kind,
+                "PE": r.get("PE", ""), "SIMD": r.get("SIMD", ""), "NumChannels": r.get("NumChannels", ""), "numSteps": r.get("numSteps", ""),
+                "act_bits": r.get("act_bits", ""), "weight_bits": r.get("weight_bits", ""),
+                "model_LUT": round(lut, 2), "real_LUT": rr["lut"], "model_BRAM18eq": round(bram, 2), "real_BRAM18eq": rr["bram18_equiv"],
+                "model_DSP": dsp, "real_DSP": rr["dsp"],
+            })
     return {
         "n_rows": len(rows), "n_modelled": n_modelled, "n_excluded": n_excluded, "unrecognized": unrecognized,
-        "pred": pred, "real": real,
+        "pred": pred, "real": real, "by_kind": by_kind,
     }
 
 
@@ -234,17 +250,33 @@ def print_result(label, res):
     print(f"  BRAM: predicted={p['bram18_equiv']:10.1f}  real={r['bram18_equiv']:10.1f}  "
           f"err={pct_err(p['bram18_equiv'], r['bram18_equiv']):+6.1f}%")
     print(f"  DSP:  predicted={p['dsp']:10.0f}  real={r['dsp']:10.0f}  err={pct_err(p['dsp'], r['dsp']):+6.1f}%")
+    if res.get("by_kind"):
+        print(f"  {'kind':17s}{'n':>5s} {'LUT mdl':>9s} {'LUT real':>9s} {'err%':>7s}  {'BRAM mdl':>8s} {'BRAM real':>9s}  {'DSP mdl':>7s} {'DSP real':>8s}")
+        for kind, d in sorted(res["by_kind"].items()):
+            pk, rk = d["pred"], d["real"]
+            tag = "" if pk["n"] else "  (real only, unmodelled)"
+            print(f"  {kind:17s}{rk['n']:5d} {pk['lut']:9.0f} {rk['lut']:9.0f} {pct_err(pk['lut'], rk['lut']):+6.1f}%  "
+                  f"{pk['bram18_equiv']:8.1f} {rk['bram18_equiv']:9.1f}  {pk['dsp']:7.0f} {rk['dsp']:8.0f}{tag}")
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("csv_paths", nargs="+", help="build_node_resource_calibration_csv.py per-node CSV(s).")
+    ap.add_argument("--rows-out", help="write one model-vs-real row per modelled CSV row here (input for refits).")
     args = ap.parse_args()
 
-    results = {p: analyze(p) for p in args.csv_paths}
+    sink = [] if args.rows_out else None
+    results = {p: analyze(p, sink) for p in args.csv_paths}
     for p, res in results.items():
         print_result(p, res)
         print()
+
+    if sink is not None:
+        with open(args.rows_out, "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=list(sink[0].keys()))
+            w.writeheader()
+            w.writerows(sink)
+        print(f"wrote {len(sink)} rows -> {args.rows_out}\n")
 
     combined = {"pred": {"lut": 0.0, "bram18_equiv": 0.0, "dsp": 0.0}, "real": {"lut": 0.0, "bram18_equiv": 0.0, "dsp": 0.0},
                 "n_rows": 0, "n_modelled": 0, "n_excluded": 0, "unrecognized": {}}
