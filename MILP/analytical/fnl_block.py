@@ -27,14 +27,16 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bottleneck as reg  # noqa: E402
 from bottleneck import (  # noqa: E402
-    BottleneckResult, NodeResult, _SIZING_SCHEDULE, _dwc, _fifo_attrs, _geom, _min_pe, _search_mvau, finalize_fifo_costs,
+    BottleneckResult, NodeResult, RoleBits, _SIZING_SCHEDULE, _dwc, _fifo_attrs, _geom, _min_pe, _search_mvau, finalize_fifo_costs,
 )
 
 fcm = reg.fcm
 
+FNL_ROLES = ("in", "w_f")      # in = the block input stream (FMPadPix / SWG_u / MVAU_f input); w_f = MVAU_f weight bits. Everything behind the MVAU is accumulator-wide (bias INT acc+1, argmax UINT8).
+
 
 def model_fnl_block(
-    cin: int, cout: int, bits: int, height: int, width: int, F: int | None = None, T_out: float | None = None, bias: bool = True, argmax: bool = True,
+    cin: int, cout: int, bits: int, height: int, width: int, F: int | None = None, T_out: float | None = None, bias: bool = True, argmax: bool = True, bits_map: dict | None = None,
 ) -> BottleneckResult:
     """cin -> cout final transposed conv (K = S = 2), INPUT map height x width, output 2*height x 2*width, uniform INT `bits`.
     Budget: F frame cycles, or T_out cycles per OUTPUT pixel (F = T_out * 4*height*width).
@@ -48,17 +50,21 @@ def model_fnl_block(
     H, W, Ho, Wo = height, width, 2 * height, 2 * width
     px_in, px_out = H * W, Ho * Wo
     F = int(F if F is not None else math.floor(T_out * px_out))
-    T, T_in, A = F / px_out, F / px_in, bits
+    T, T_in = F / px_out, F / px_in
+    rb = RoleBits(bits, bits_map, FNL_ROLES)
+    A, W_f = rb.a("in"), rb.w("f")
     res = BottleneckResult(params=dict(
         cin=cin, cmid=cin, cout=cout, v=1, z=1, T=T, F=F, T_in=T_in, bits=bits, k=2, dilation=1, stride=2, height=H, width=W, hout=Ho, wout=Wo, pad=0,
         block="final", skip_pad="n/a", skip_order="n/a", pad_group=None, bias=bias, argmax=argmax,
     ))
+    if bits_map:
+        res.params["bits_map"] = dict(rb.map)
     if px_out > F:
         raise ValueError(f"F={F} is below the final layer's floor of {px_out} cycles/frame (one output pixel per cycle)")
 
     g_f = _geom("final", cin, cout, Ho + 1, Wo + 1, Ho, Wo, k=2, s=1, d=1, p=0)       # lowered ConvTranspose (K=S=2) on the (2H+1)^2 image
     g_b = _geom("bias", cout, cout, Ho, Wo, Ho, Wo, op="Thresholding")
-    pe_f, simd_f, c_f = _search_mvau(g_f, bits, F, extra_ok=lambda c: (Ho + 1) * (Wo + 1) * math.ceil(cin / c["simd_swu"]) <= F)
+    pe_f, simd_f, c_f = _search_mvau(g_f, A, F, weight_bits=W_f, extra_ok=lambda c: (Ho + 1) * (Wo + 1) * math.ceil(cin / c["simd_swu"]) <= F)
     # conv_cost_pe_simd prices a following standalone Thresholding (noActivation); the final layer has none
     c_f = dict(c_f, total_lut=c_f["total_lut"] - c_f["thr_lut"], thr_lut=0.0, thr_bram18=0.0, thr_uram18=0.0)
     pe_b = _min_pe(cout, px_out, F, "Bias") if bias else None

@@ -129,20 +129,21 @@ def block_kind(stage: str) -> str:
     return "reg"
 
 
-def run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool = False, prev_output: str | None = None, explicit: dict | None = None):
+def run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool = False, prev_output: str | None = None, explicit: dict | None = None, bits_map: dict | None = None):
     """Analytical model of one block at budget F_k cycles per frame -> (BlockResult, layer folds, extra folds,
     slowest, intra-block FIFOs, FIFO-verification warning). compute_fifos runs verify_with_sim + to_folding_config
     on top of the same chosen BottleneckResult (same PE/SIMD/bits as lf/xf) to also get this block's OWN FIFO depths
     (skip FIFO, FMPad prefetch, ...) -- off by default since it is only needed once per final config, not on every
     bisection trial in main()'s latency-cap search.
     explicit: given folds instead of the budget search (bottleneck.explicit_folds; net_explicit.py simulates a MILP folding this way); F_k is then only the
-    block's rate target for the simulation check."""
+    block's rate target for the simulation check.
+    bits_map: per-role precision of the block ({role: bits}, bottleneck.RoleBits; net_explicit.bits_map_for_block derives it from a MILP folding's per-site bits); None = the uniform `bits`."""
     from bottleneck import explicit_folds
     with explicit_folds(explicit or {}):
-        return _run_block(stage, geom, bits, F_k, compute_fifos, prev_output)
+        return _run_block(stage, geom, bits, F_k, compute_fifos, prev_output, bits_map)
 
 
-def _run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool, prev_output: str | None):
+def _run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool, prev_output: str | None, bits_map: dict | None = None):
     kind = block_kind(stage)
     lf: dict[str, tuple] = {}     # MILP layer name -> (pe, simd, thr_pe or None, analytical frame cycles of the MVAU)
     xf: dict[str, tuple] = {}     # MILP extra node name -> (pe, simd, ram_style or None)
@@ -155,7 +156,7 @@ def _run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool,
         cin, cmid = r0.cin, r0.cout
         d = geom[f"{stage}.conv"].dh
         px = r0.hin * r0.win
-        r = model_bottleneck(cin, cin // cmid, cin // cmid, max(1, F_k // px), bits, r0.hin, r0.win, k=3, dilation=d)
+        r = model_bottleneck(cin, cin // cmid, cin // cmid, max(1, F_k // px), bits, r0.hin, r0.win, k=3, dilation=d, bits_map=bits_map)
         n = {x.name: x for x in r.nodes}
         put(f"{stage}.reduce.0", n["MVAU_r"], n["Thr_r"]); put(f"{stage}.conv", n["MVAU_m"], n["Thr_m"]); put(f"{stage}.expand.0", n["MVAU_e"], n["Thr_e"])
         xf[f"{stage}.add"] = (n["Add"].pe, 1, None)
@@ -166,7 +167,7 @@ def _run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool,
         pool = geom[f"{stage}.pool"]
         cin, cout = pool.cin, geom[f"{stage}.expand.0"].cout
         cmid = geom[f"{stage}.reduce.0"].cout
-        r = model_dn_bottleneck(cin, cout, cout // cmid, bits, pool.hin, pool.win, T_out=F_k / (pool.hout * pool.wout), skip_order="pad_thr", skip_pad="mvau")
+        r = model_dn_bottleneck(cin, cout, cout // cmid, bits, pool.hin, pool.win, T_out=F_k / (pool.hout * pool.wout), skip_order="pad_thr", skip_pad="mvau", bits_map=bits_map)
         n = {x.name: x for x in r.nodes}
         put(f"{stage}.reduce.0", n["MVAU_r"], n["Thr_r"]); put(f"{stage}.conv.0", n["MVAU_m"], n["Thr_m"]); put(f"{stage}.expand.0", n["MVAU_e"], n["Thr_e"])
         xf[f"{stage}.skip_pad"] = (n["MVAU_s"].pe, n["MVAU_s"].simd, "auto")
@@ -177,7 +178,7 @@ def _run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool,
     elif kind == "up":
         mp = geom[f"{stage}.main_proj.0"]
         cin, cout, cmid = mp.cin, mp.cout, geom[f"{stage}.reduce.0"].cout
-        r = model_up_bottleneck(cin, cout, cin // cmid, bits, mp.hin, mp.win, T_out=F_k / (4 * mp.hin * mp.win), skip_conv=BILINEAR_UP, skip_dw=BILINEAR_UP)
+        r = model_up_bottleneck(cin, cout, cin // cmid, bits, mp.hin, mp.win, T_out=F_k / (4 * mp.hin * mp.win), skip_conv=BILINEAR_UP, skip_dw=BILINEAR_UP, bits_map=bits_map)
         n = {x.name: x for x in r.nodes}
         put(f"{stage}.main_proj.0", n["MVAU_p"], n["Thr_p"]); put(f"{stage}.reduce.0", n["MVAU_r"], n["Thr_r"])
         put(f"{stage}.up.0", n["MVAU_u"], n["Thr_u"]); put(f"{stage}.expand.0", n["MVAU_e"], n["Thr_e"])
@@ -191,7 +192,7 @@ def _run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool,
         xf[f"{stage}.out_act"] = (n["Thr_out"].pe, 1, THR_RAM_STYLE)
     elif kind == "init":
         c = geom["initial.conv"]
-        r = model_int_bottleneck(c.cin, c.cin + c.cout, bits, c.hin, c.win, F=F_k)
+        r = model_int_bottleneck(c.cin, c.cin + c.cout, bits, c.hin, c.win, F=F_k, bits_map=bits_map)
         n = {x.name: x for x in r.nodes}
         put("initial.conv", n["MVAU_c"], n["Thr_c"])
         xf["initial.input_quant"] = (n["Thr_in"].pe, 1, THR_RAM_STYLE)
@@ -200,7 +201,7 @@ def _run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool,
     else:   # final: the real build (partition 7) has the bias ChannelwiseOp (INT16 -> INT17) and a LabelSelect argmax behind the MVAU; MILP entries: final.bias (kind bias, when the
         # output conv has a bias) and final.argmax (kind argmax); the intra-block DWC / FIFO nodes are not MILP entries
         f = geom["final"]
-        r = model_fnl_block(f.cin, f.cout, bits, f.hin, f.win, F=F_k, bias=True, argmax=True)
+        r = model_fnl_block(f.cin, f.cout, bits, f.hin, f.win, F=F_k, bias=True, argmax=True, bits_map=bits_map)
         n = {x.name: x for x in r.nodes}
         lf["final"] = (n["MVAU_f"].pe, n["MVAU_f"].simd, None, n["MVAU_f"].frame_cycles)
         xf["final.bias"] = (n["Bias"].pe, 1, None)
@@ -321,6 +322,15 @@ def bram_fifo(width_bits: int) -> dict:
             return {"depth": d, "bram18": 1, "aspect": [w, d]}
     w, d = _BRAM18_ASPECTS[-1]
     return {"depth": d, "bram18": math.ceil(width_bits / w), "aspect": [w, d]}
+
+
+def sites_for(config: str, folding_json: Path) -> dict:
+    """The per-SITE bits of a MILP folding json ({'layer_weight_bits': {...}, 'layer_act_bits': {...}}), computed in-process (write_sites into a temp file)."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "sites.json"
+        write_sites(config, folding_json, out)
+        return json.loads(out.read_text())
 
 
 def write_sites(config: str, folding_json: Path, sites_json: Path) -> None:

@@ -27,11 +27,12 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bottleneck as reg  # noqa: E402
 from bottleneck import (  # noqa: E402
-    BottleneckResult, DwcResult, NodeResult, SkipFifo, _dwc, _fifo_attrs, _fifo_bram18, _geom, _min_pe, _retarget_threshold,
+    BottleneckResult, DwcResult, NodeResult, RoleBits, SkipFifo, _dwc, _fifo_attrs, _fifo_bram18, _geom, _min_pe, _retarget_threshold,
     _search_mvau, finalize_fifo_costs, search_swg_pool,
 )
 
 fcm = reg.fcm
+DN_ROLES = ("in", "r", "m", "e", "s", "add", "out", "w_r", "w_m", "w_e")     # as bottleneck.REG_ROLES; s = Thr_s output (the skip FIFO / FMPad_c stream), in = Dup / MaxPool / SWG_r input
 SKIP_ORDERS = ("thr_pad", "pad_thr")
 SKIP_PADS = ("fmpad", "mvau")
 
@@ -42,7 +43,7 @@ def pad_group_candidates(cin: int, cout: int) -> list[int]:
 
 def model_dn_bottleneck(
     cin: int, cout: int, v: int, bits: int, height: int, width: int, F: int | None = None, T_out: float | None = None,
-    pad_group: int | None = None, skip_order: str = "thr_pad", skip_pad: str = "fmpad", pool_impl: str = "streaming",
+    pad_group: int | None = None, skip_order: str = "thr_pad", skip_pad: str = "fmpad", pool_impl: str = "streaming", bits_map: dict | None = None,
 ) -> BottleneckResult:
     """cin -> cout (cout > cin) downsampling block, Cmid = cout/v, input map height x width (even), uniform INT `bits`.
     Budget: F frame cycles, or T_out cycles per output pixel (F = T_out * (height/2 * width/2))."""
@@ -64,6 +65,9 @@ def model_dn_bottleneck(
     T = F / px_out
     cmid = cout // v
     A = bits
+    rb = RoleBits(bits, bits_map, DN_ROLES)
+    A_in, A_r, A_m, A_e, A_s, A_add, A_out = (rb.a(x) for x in ("in", "r", "m", "e", "s", "add", "out"))
+    W_r, W_m, W_e = rb.w("r"), rb.w("m"), rb.w("e")
     s = None
     if skip_pad == "fmpad":
         cands = pad_group_candidates(cin, cout)
@@ -76,6 +80,8 @@ def model_dn_bottleneck(
         cin=cin, cmid=cmid, cout=cout, v=v, z=v, T=T, F=F, bits=bits, k=3, dilation=1, stride=2, height=height, width=width,
         hout=ho, wout=wo, pad=1, pad_group=s, skip_order=skip_order, skip_pad=skip_pad, T_in=F / px_in, block="down", pool_impl=pool_impl,
     ))
+    if bits_map:
+        res.params["bits_map"] = dict(rb.map)
 
     # ---- geometries
     g_r = _geom("reduce", cin, cmid, height, width, ho, wo, k=2, s=2, d=1, p=0)
@@ -87,24 +93,24 @@ def model_dn_bottleneck(
     g_tsc = _geom("ts_cin", cin, cin, ho, wo, ho, wo, op="Thresholding")
 
     # ---- main MVAUs: largest cycles <= F
-    pe_r, simd_r, c_r = _search_mvau(g_r, bits, F)
-    pe_m, simd_m, c_m = _search_mvau(g_m, bits, F)
-    pe_e, simd_e, c_e = _search_mvau(g_e, bits, F)
+    pe_r, simd_r, c_r = _search_mvau(g_r, A_in, F, weight_bits=W_r)
+    pe_m, simd_m, c_m = _search_mvau(g_m, A_r, F, weight_bits=W_m)
+    pe_e, simd_e, c_e = _search_mvau(g_e, A_m, F, weight_bits=W_e)
     tpe_r = _min_pe(cmid, px_out, F, "Thr_r")
     tpe_m = _min_pe(cmid, px_out, F, "Thr_m")
     tpe_e = _min_pe(cout, px_out, F, "Thr_e")
-    c_r = _retarget_threshold(c_r, g_r, A, tpe_r)
-    c_m = _retarget_threshold(c_m, g_m, A, tpe_m)
-    c_e = _retarget_threshold(c_e, g_e, A, tpe_e)
+    c_r = _retarget_threshold(c_r, g_r, A_r, tpe_r)
+    c_m = _retarget_threshold(c_m, g_m, A_m, tpe_m)
+    c_e = _retarget_threshold(c_e, g_e, A_e, tpe_e)
 
     # ---- maxpool (not foldable): floor on F
     if pool_impl == "streaming":
-        c_mp = fcm.maxpool_cost(g_mp, A)
+        c_mp = fcm.maxpool_cost(g_mp, A_in)
         if c_mp["cycles"] > F:
             raise ValueError(f"F={F} is below the maxpool floor of {c_mp['cycles']} cycles/frame (not foldable)")
         pe_mp_in, pool_first, pool_last = cin, "MaxPool", "MaxPool"      # StreamingMaxPool takes all channels per cycle
     else:
-        sp = search_swg_pool(g_mp, A, F)
+        sp = search_swg_pool(g_mp, A_in, F)
         pe_mp_in, pool_first, pool_last = sp["pe"], "SWG_p", "Pool"      # Pool folded over channels: narrowest PE that fits F
 
     # ---- stream nodes
@@ -113,24 +119,24 @@ def model_dn_bottleneck(
     pe_to = _min_pe(cout, px_out, F, "Thr_out")
     c_dup = fcm.stream_node_cost("dup", g_dup, pe_d)
     c_add = fcm.stream_node_cost("add", g_join, pe_a)
-    c_to = fcm.threshold_node_cost(g_join, A, pe_to)
+    c_to = fcm.threshold_node_cost(g_join, A_out, pe_to)
 
     # ---- skip branch
     mvau_s = None
     if skip_pad == "mvau":
         g_s = _geom("skip_mvau", cin, cout, ho, wo, ho, wo)
-        pe_s, simd_s, c_s = _search_mvau(g_s, bits, F, weight_bits=8)
+        pe_s, simd_s, c_s = _search_mvau(g_s, A_in, F, weight_bits=8)
         tpe_s = _min_pe(cout, px_out, F, "Thr_s")
-        c_s = _retarget_threshold(c_s, g_s, A, tpe_s)
+        c_s = _retarget_threshold(c_s, g_s, A_s, tpe_s)
         pe_ts, c_ts, ts_ch = tpe_s, None, cout
         mvau_s = (pe_s, simd_s, c_s)
     else:
         ts_ch = cin if skip_order == "thr_pad" else cout
         pe_ts = _min_pe(ts_ch, px_out, F, "Thr_s")
-        c_ts = fcm.threshold_node_cost(g_tsc if ts_ch == cin else g_join, A, pe_ts)
+        c_ts = fcm.threshold_node_cost(g_tsc if ts_ch == cin else g_join, A_s, pe_ts)
 
     acc_r, acc_m, acc_e = c_r["acc_bits"], c_m["acc_bits"], c_e["acc_bits"]
-    add_bits = A + 1
+    add_bits = A_add + 1
     simd_swu_r, simd_swu_m = c_r["simd_swu"], c_m["simd_swu"]
 
     def row(name, op, pe, simd, frame_cycles, lut=0.0, bram=0.0, uram=0.0, dsp=0.0, in_w=0, out_w=0):
@@ -138,68 +144,69 @@ def model_dn_bottleneck(
                           lut=lut, bram18=bram, uram=uram, dsp=dsp, in_width_bits=in_w, out_width_bits=out_w)
 
     nodes = res.nodes
-    nodes.append(row("Dup", "DuplicateStreams", pe_d, 0, c_dup["cycles"], c_dup["total_lut"], in_w=pe_d * A, out_w=pe_d * A))
+    nodes.append(row("Dup", "DuplicateStreams", pe_d, 0, c_dup["cycles"], c_dup["total_lut"], in_w=pe_d * A_in, out_w=pe_d * A_in))
     nodes.append(row("SWG_r", "ConvolutionInputGenerator_rtl 2x2 s2", 0, simd_swu_r, c_r["swu_cycles"], c_r["swu_lut"],
-                     c_r["swu_bram18"], c_r["swu_uram18"], in_w=simd_swu_r * A, out_w=simd_swu_r * A))
+                     c_r["swu_bram18"], c_r["swu_uram18"], in_w=simd_swu_r * A_in, out_w=simd_swu_r * A_in))
     nodes.append(row("MVAU_r", "MVAU rtl 2x2 s2", pe_r, simd_r, c_r["mvu_cycles"], c_r["mvu_lut"], c_r["wm_bram18"], c_r["wm_uram18"],
-                     c_r["mvu_dsp"], in_w=simd_r * A, out_w=pe_r * acc_r))
+                     c_r["mvu_dsp"], in_w=simd_r * A_in, out_w=pe_r * acc_r))
     nodes.append(row("Thr_r", "Thresholding_rtl", tpe_r, 0, px_out * (cmid // tpe_r), c_r["thr_lut"], c_r["thr_bram18"],
-                     in_w=tpe_r * acc_r, out_w=tpe_r * A))
-    nodes.append(row("FMPad", "FMPadding 3x3", 0, simd_swu_m, c_m["fmpad_cycles"], in_w=simd_swu_m * A, out_w=simd_swu_m * A))
+                     in_w=tpe_r * acc_r, out_w=tpe_r * A_r))
+    nodes.append(row("FMPad", "FMPadding 3x3", 0, simd_swu_m, c_m["fmpad_cycles"], in_w=simd_swu_m * A_r, out_w=simd_swu_m * A_r))
     nodes.append(row("SWG_m", "ConvolutionInputGenerator_rtl", 0, simd_swu_m, c_m["swu_cycles"], c_m["swu_lut"], c_m["swu_bram18"],
-                     c_m["swu_uram18"], in_w=simd_swu_m * A, out_w=simd_swu_m * A))
+                     c_m["swu_uram18"], in_w=simd_swu_m * A_r, out_w=simd_swu_m * A_r))
     nodes.append(row("MVAU_m", "MVAU rtl 3x3", pe_m, simd_m, c_m["mvu_cycles"], c_m["mvu_lut"], c_m["wm_bram18"], c_m["wm_uram18"],
-                     c_m["mvu_dsp"], in_w=simd_m * A, out_w=pe_m * acc_m))
+                     c_m["mvu_dsp"], in_w=simd_m * A_r, out_w=pe_m * acc_m))
     nodes.append(row("Thr_m", "Thresholding_rtl", tpe_m, 0, px_out * (cmid // tpe_m), c_m["thr_lut"], c_m["thr_bram18"],
-                     in_w=tpe_m * acc_m, out_w=tpe_m * A))
+                     in_w=tpe_m * acc_m, out_w=tpe_m * A_m))
     nodes.append(row("MVAU_e", "MVAU rtl 1x1", pe_e, simd_e, c_e["mvu_cycles"], c_e["mvu_lut"], c_e["wm_bram18"], c_e["wm_uram18"],
-                     c_e["mvu_dsp"], in_w=simd_e * A, out_w=pe_e * acc_e))
+                     c_e["mvu_dsp"], in_w=simd_e * A_m, out_w=pe_e * acc_e))
     nodes.append(row("Thr_e", "Thresholding_rtl", tpe_e, 0, px_out * (cout // tpe_e), c_e["thr_lut"], c_e["thr_bram18"],
-                     in_w=tpe_e * acc_e, out_w=tpe_e * A))
+                     in_w=tpe_e * acc_e, out_w=tpe_e * A_e))
     if pool_impl == "streaming":
         nodes.append(row("MaxPool", "StreamingMaxPool_hls", 0, 0, c_mp["cycles"], c_mp["total_lut"], c_mp["swu_bram18"],
-                         in_w=cin * A, out_w=cin * A))
+                         in_w=cin * A_in, out_w=cin * A_in))
     else:
         nodes.append(row("SWG_p", "ConvolutionInputGenerator depthwise 2x2 s2", 0, sp["pe"], sp["swg_cycles"], sp["swg_lut"], sp["swg_bram18"],
-                         sp["swg_uram18"], in_w=sp["pe"] * A, out_w=sp["pe"] * A))
-        nodes.append(row("Pool", "Pool_hls", sp["pe"], 0, sp["pool_cycles"], sp["pool_lut"], in_w=sp["pe"] * A, out_w=sp["pe"] * A))
+                         sp["swg_uram18"], in_w=sp["pe"] * A_in, out_w=sp["pe"] * A_in))
+        nodes.append(row("Pool", "Pool_hls", sp["pe"], 0, sp["pool_cycles"], sp["pool_lut"], in_w=sp["pe"] * A_in, out_w=sp["pe"] * A_in))
     if skip_pad == "mvau":
         pe_s, simd_s, c_s = mvau_s
         acc_s = c_s["acc_bits"]
         nodes.append(row("MVAU_s", "MVAU rtl 1x1 identity (INT8 w)", pe_s, simd_s, c_s["mvu_cycles"], c_s["mvu_lut"], c_s["wm_bram18"],
-                         c_s["wm_uram18"], c_s["mvu_dsp"], in_w=simd_s * A, out_w=pe_s * acc_s))
+                         c_s["wm_uram18"], c_s["mvu_dsp"], in_w=simd_s * A_in, out_w=pe_s * acc_s))
         nodes.append(row("Thr_s", "Thresholding_rtl (skip)", pe_ts, 0, px_out * (cout // pe_ts), c_s["thr_lut"], c_s["thr_bram18"],
-                         in_w=pe_ts * acc_s, out_w=pe_ts * A))
+                         in_w=pe_ts * acc_s, out_w=pe_ts * A_s))
     else:
         nodes.append(row("Thr_s", "Thresholding_rtl (skip)", pe_ts, 0, c_ts["cycles"], c_ts["total_lut"], c_ts["thr_bram18"],
-                         in_w=pe_ts * A, out_w=pe_ts * A))
-        nodes.append(row("FMPad_c", "FMPadding channel pad", 0, s, px_out * (cout // s), in_w=s * A, out_w=s * A))
-    nodes.append(row("Add", "AddStreams", pe_a, 0, c_add["cycles"], c_add["total_lut"], in_w=pe_a * A, out_w=pe_a * add_bits))
+                         in_w=pe_ts * A_in, out_w=pe_ts * A_s))
+        a_pad = A_s if skip_order == "thr_pad" else A_in      # the channel pad sits behind Thr_s (thr_pad) or in front of it (pad_thr)
+        nodes.append(row("FMPad_c", "FMPadding channel pad", 0, s, px_out * (cout // s), in_w=s * a_pad, out_w=s * a_pad))
+    nodes.append(row("Add", "AddStreams", pe_a, 0, c_add["cycles"], c_add["total_lut"], in_w=pe_a * A_add, out_w=pe_a * add_bits))
     nodes.append(row("Thr_out", "Thresholding_rtl (join)", pe_to, 0, c_to["cycles"], c_to["total_lut"], c_to["thr_bram18"],
-                     in_w=pe_to * add_bits, out_w=pe_to * A))
+                     in_w=pe_to * add_bits, out_w=pe_to * A_out))
 
     # ---- DWCs (every edge with a width mismatch)
     dw = res.dwcs
-    _dwc("Dup->SWG_r", pe_d * A, simd_swu_r * A, cin, pe_d, simd_swu_r, px_in, px_out, dw)
+    _dwc("Dup->SWG_r", pe_d * A_in, simd_swu_r * A_in, cin, pe_d, simd_swu_r, px_in, px_out, dw)
     _dwc("MVAU_r->Thr_r", pe_r * acc_r, tpe_r * acc_r, cmid, pe_r, tpe_r, px_out, px_out, dw)
-    _dwc("Thr_r->FMPad", tpe_r * A, simd_swu_m * A, cmid, tpe_r, simd_swu_m, px_out, px_out, dw)
+    _dwc("Thr_r->FMPad", tpe_r * A_r, simd_swu_m * A_r, cmid, tpe_r, simd_swu_m, px_out, px_out, dw)
     _dwc("MVAU_m->Thr_m", pe_m * acc_m, tpe_m * acc_m, cmid, pe_m, tpe_m, px_out, px_out, dw)
-    _dwc("Thr_m->MVAU_e", tpe_m * A, simd_e * A, cmid, tpe_m, simd_e, px_out, px_out, dw)
+    _dwc("Thr_m->MVAU_e", tpe_m * A_m, simd_e * A_m, cmid, tpe_m, simd_e, px_out, px_out, dw)
     _dwc("MVAU_e->Thr_e", pe_e * acc_e, tpe_e * acc_e, cout, pe_e, tpe_e, px_out, px_out, dw)
-    _dwc("Thr_e->Add", tpe_e * A, pe_a * A, cout, tpe_e, pe_a, px_out, px_out, dw)
-    _dwc(f"Dup->{pool_first}", pe_d * A, pe_mp_in * A, cin, pe_d, pe_mp_in, px_in, px_out, dw)
+    _dwc("Thr_e->Add", tpe_e * A_e, pe_a * A_add, cout, tpe_e, pe_a, px_out, px_out, dw)
+    _dwc(f"Dup->{pool_first}", pe_d * A_in, pe_mp_in * A_in, cin, pe_d, pe_mp_in, px_in, px_out, dw)
     if skip_pad == "mvau":
-        _dwc(f"{pool_last}->MVAU_s", pe_mp_in * A, simd_s * A, cin, pe_mp_in, simd_s, px_out, px_out, dw)
+        _dwc(f"{pool_last}->MVAU_s", pe_mp_in * A_in, simd_s * A_in, cin, pe_mp_in, simd_s, px_out, px_out, dw)
         _dwc("MVAU_s->Thr_s", pe_s * acc_s, pe_ts * acc_s, cout, pe_s, pe_ts, px_out, px_out, dw)
-        _dwc("FIFO->Add (skip)", pe_ts * A, pe_a * A, cout, pe_ts, pe_a, px_out, px_out, dw)
+        _dwc("FIFO->Add (skip)", pe_ts * A_s, pe_a * A_add, cout, pe_ts, pe_a, px_out, px_out, dw)
     elif skip_order == "thr_pad":
-        _dwc(f"{pool_last}->Thr_s", pe_mp_in * A, pe_ts * A, cin, pe_mp_in, pe_ts, px_out, px_out, dw)
-        _dwc("FIFO->FMPad_c", pe_ts * A, s * A, cin, pe_ts, s, px_out, px_out, dw)   # widen AFTER the (narrow) FIFO
-        _dwc("FMPad_c->Add", s * A, pe_a * A, cout, s, pe_a, px_out, px_out, dw)
+        _dwc(f"{pool_last}->Thr_s", pe_mp_in * A_in, pe_ts * A_in, cin, pe_mp_in, pe_ts, px_out, px_out, dw)
+        _dwc("FIFO->FMPad_c", pe_ts * A_s, s * A_s, cin, pe_ts, s, px_out, px_out, dw)   # widen AFTER the (narrow) FIFO
+        _dwc("FMPad_c->Add", s * A_s, pe_a * A_add, cout, s, pe_a, px_out, px_out, dw)
     else:
-        _dwc(f"{pool_last}->FMPad_c", pe_mp_in * A, s * A, cin, pe_mp_in, s, px_out, px_out, dw)
-        _dwc("FMPad_c->Thr_s", s * A, pe_ts * A, cout, s, pe_ts, px_out, px_out, dw)
-        _dwc("FIFO->Add (skip)", pe_ts * A, pe_a * A, cout, pe_ts, pe_a, px_out, px_out, dw)
+        _dwc(f"{pool_last}->FMPad_c", pe_mp_in * A_in, s * A_in, cin, pe_mp_in, s, px_out, px_out, dw)
+        _dwc("FMPad_c->Thr_s", s * A_in, pe_ts * A_in, cout, s, pe_ts, px_out, px_out, dw)
+        _dwc("FIFO->Add (skip)", pe_ts * A_s, pe_a * A_add, cout, pe_ts, pe_a, px_out, px_out, dw)
     _dwc("Add->Thr_out", pe_a * add_bits, pe_to * add_bits, cout, pe_a, pe_to, px_out, px_out, dw)
     for d in dw:
         if d.cyc_px > T + 1e-9:
@@ -225,7 +232,7 @@ def model_dn_bottleneck(
     words_px = skip_ch // pe_ts
     skip_px = max(1, math.ceil((l_main - t_skip) / T)) + 1
     depth = skip_px * words_px
-    fifo_w = pe_ts * A
+    fifo_w = pe_ts * A_s
     res.skip_fifo = SkipFifo(
         width_bits=fifo_w, depth_words=depth, bits=fifo_w * depth, bram18_if_block=_fifo_bram18(fifo_w, depth),
         lutram_luts_if_distributed=math.ceil(fifo_w * depth / 64), pixels_buffered=skip_px, pe=pe_ts,

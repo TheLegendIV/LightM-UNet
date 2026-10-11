@@ -297,12 +297,35 @@ def _dwc(edge: str, in_w: int, out_w: int, channels: int, pe_in: int, pe_out: in
 
 # ---------------------------------------------------------------- model
 
+class RoleBits:
+    """Per-role precision of one block model. `bits` is the uniform default (INT `bits` weights AND activations); `bits_map` ({role: int}, e.g. derived from a MILP folding json by
+    net_explicit.bits_map_for_block) overrides it per role: ACTIVATION roles name the stream a node emits / a layer consumes (the precision that sets stream widths, threshold steps and the
+    MVAU input width), `w_<layer>` roles the weight precision of an MVAU. Roles are block specific (`allowed`); an unknown role raises. bits_map None/{} = the uniform model, bit for bit."""
+
+    def __init__(self, bits: int, bits_map: dict | None, allowed: tuple):
+        bad = sorted(set(bits_map or {}) - set(allowed))
+        if bad:
+            raise ValueError(f"bits_map: unknown role(s) {bad}; this block knows {sorted(allowed)}")
+        self.bits, self.map = bits, {k: int(v) for k, v in (bits_map or {}).items()}
+
+    def a(self, role: str) -> int:
+        return self.map.get(role, self.bits)
+
+    def w(self, role: str) -> int:
+        return self.map.get("w_" + role, self.bits)
+
+
+REG_ROLES = ("in", "r", "m", "e", "s", "add", "out", "w_r", "w_m", "w_e")
+# in = the block input stream (Dup, MVAU_r input, skip branch input); r / m = Thr_r / Thr_m outputs (the mid conv's / expand conv's input streams); e = Thr_e output (Add operand);
+# s = Thr_s output (the other Add operand, via the skip FIFO); add = AddStreams input dtype (output add+1); out = Thr_out output (the next block's input); w_* = weight bits of MVAU_r / _m / _e.
+
+
 def model_bottleneck(
     cin: int, v: int, z: int, T: int, bits: int, height: int, width: int,
-    k: int = 3, dilation: int = 1, stride: int = 1,
+    k: int = 3, dilation: int = 1, stride: int = 1, bits_map: dict | None = None,
 ) -> BottleneckResult:
     """cin: input channels; Cmid = cin/v; Cout = Cmid*z. T: target cyc/px (per bottleneck output pixel).
-    bits: uniform weight and activation bits. height/width: feature map size at the bottleneck input."""
+    bits: uniform weight and activation bits (or the default of every role not in bits_map, see RoleBits / REG_ROLES). height/width: feature map size at the bottleneck input."""
     if stride != 1:
         raise ValueError("stride != 1: the identity skip then needs a subsampling path with a different pixel count; not modeled.")
     if cin % v:
@@ -318,28 +341,33 @@ def model_bottleneck(
     px = hout * wout
     budget = T * px
     A = bits
+    rb = RoleBits(bits, bits_map, REG_ROLES)
+    A_in, A_r, A_m, A_e, A_s, A_add, A_out = (rb.a(x) for x in ("in", "r", "m", "e", "s", "add", "out"))
+    W_r, W_m, W_e = rb.w("r"), rb.w("m"), rb.w("e")
 
     res = BottleneckResult(params=dict(
         cin=cin, cmid=cmid, cout=cout, v=v, z=z, T=T, bits=bits, k=k, dilation=dilation, stride=stride,
         height=height, width=width, hout=hout, wout=wout, pad=pad,
     ))
+    if bits_map:
+        res.params["bits_map"] = dict(rb.map)
 
     g_r = _geom("reduce", cin, cmid, height, width, height, width)
     g_m = _geom("mid", cmid, cmid, height, width, hout, wout, k=k, s=stride, d=dilation, p=pad)
     g_e = _geom("expand", cmid, cout, hout, wout, hout, wout)
 
     # --- MVAUs: largest cycles <= budget
-    pe_r, simd_r, c_r = _search_mvau(g_r, bits, budget)
-    pe_m, simd_m, c_m = _search_mvau(g_m, bits, budget)
-    pe_e, simd_e, c_e = _search_mvau(g_e, bits, budget)
+    pe_r, simd_r, c_r = _search_mvau(g_r, A_in, budget, weight_bits=W_r)
+    pe_m, simd_m, c_m = _search_mvau(g_m, A_r, budget, weight_bits=W_m)
+    pe_e, simd_e, c_e = _search_mvau(g_e, A_m, budget, weight_bits=W_e)
 
     # --- thresholds inside the convs: narrowest PE_t that fits the budget (rule 2, DWC allowed)
     tpe_r = _min_pe(cmid, px, budget, "Thr_r")
     tpe_m = _min_pe(cmid, px, budget, "Thr_m")
     tpe_e = _min_pe(cout, px, budget, "Thr_e")
-    c_r = _retarget_threshold(c_r, g_r, A, tpe_r)
-    c_m = _retarget_threshold(c_m, g_m, A, tpe_m)
-    c_e = _retarget_threshold(c_e, g_e, A, tpe_e)
+    c_r = _retarget_threshold(c_r, g_r, A_r, tpe_r)
+    c_m = _retarget_threshold(c_m, g_m, A_m, tpe_m)
+    c_e = _retarget_threshold(c_e, g_e, A_e, tpe_e)
 
     # --- stream nodes and join thresholds
     g_dup = _geom("dup", cin, cin, height, width, height, width, op="Dup")
@@ -350,11 +378,11 @@ def model_bottleneck(
     pe_to = _min_pe(cout, px, budget, "Thr_out")
     c_dup = fcm.stream_node_cost("dup", g_dup, pe_d)
     c_add = fcm.stream_node_cost("add", g_join, pe_a)
-    c_ts = fcm.threshold_node_cost(g_join, A, pe_ts)
-    c_to = fcm.threshold_node_cost(g_join, A, pe_to)
+    c_ts = fcm.threshold_node_cost(g_join, A_s, pe_ts)
+    c_to = fcm.threshold_node_cost(g_join, A_out, pe_to)
 
     acc_r, acc_m, acc_e = c_r["acc_bits"], c_m["acc_bits"], c_e["acc_bits"]
-    add_bits = A + 1
+    add_bits = A_add + 1
 
     def node(name, op, pe, simd, cyc_frame, cost, in_w, out_w, lut=None):
         return NodeResult(
@@ -366,46 +394,46 @@ def model_bottleneck(
         )
 
     nodes = res.nodes
-    nodes.append(node("Dup", "DuplicateStreams", pe_d, 0, c_dup["cycles"], c_dup, pe_d * A, pe_d * A))
+    nodes.append(node("Dup", "DuplicateStreams", pe_d, 0, c_dup["cycles"], c_dup, pe_d * A_in, pe_d * A_in))
     # reduce: MVAU row (without its threshold) + Thr_r row
     nodes.append(NodeResult("MVAU_r", "MVAU rtl 1x1", pe_r, simd_r, c_r["mvu_cycles"] / px, c_r["mvu_cycles"],
                             lut=c_r["mvu_lut"], bram18=c_r["wm_bram18"], uram=c_r["wm_uram18"], dsp=c_r["mvu_dsp"],
-                            in_width_bits=simd_r * A, out_width_bits=pe_r * acc_r))
+                            in_width_bits=simd_r * A_in, out_width_bits=pe_r * acc_r))
     thr_cyc = lambda c, pe_t: px * (c // pe_t)
     nodes.append(NodeResult("Thr_r", "Thresholding_rtl", tpe_r, 0, thr_cyc(cmid, tpe_r) / px, thr_cyc(cmid, tpe_r),
-                            lut=c_r["thr_lut"], bram18=c_r["thr_bram18"], in_width_bits=tpe_r * acc_r, out_width_bits=tpe_r * A))
+                            lut=c_r["thr_lut"], bram18=c_r["thr_bram18"], in_width_bits=tpe_r * acc_r, out_width_bits=tpe_r * A_r))
     simd_swu = c_m["simd_swu"]
     if c_m["fmpad_cycles"]:
         nodes.append(NodeResult("FMPad", "FMPadding", 0, simd_swu, c_m["fmpad_cycles"] / px, c_m["fmpad_cycles"],
-                                in_width_bits=simd_swu * A, out_width_bits=simd_swu * A))
+                                in_width_bits=simd_swu * A_r, out_width_bits=simd_swu * A_r))
     nodes.append(NodeResult("SWG_m", "ConvolutionInputGenerator_rtl", 0, simd_swu, c_m["swu_cycles"] / px, c_m["swu_cycles"],
                             lut=c_m["swu_lut"], bram18=c_m["swu_bram18"], uram=c_m["swu_uram18"],
-                            in_width_bits=simd_swu * A, out_width_bits=simd_swu * A))
+                            in_width_bits=simd_swu * A_r, out_width_bits=simd_swu * A_r))
     nodes.append(NodeResult("MVAU_m", f"MVAU rtl {k}x{k} d={dilation}", pe_m, simd_m, c_m["mvu_cycles"] / px, c_m["mvu_cycles"],
                             lut=c_m["mvu_lut"], bram18=c_m["wm_bram18"], uram=c_m["wm_uram18"], dsp=c_m["mvu_dsp"],
-                            in_width_bits=simd_m * A, out_width_bits=pe_m * acc_m))
+                            in_width_bits=simd_m * A_r, out_width_bits=pe_m * acc_m))
     nodes.append(NodeResult("Thr_m", "Thresholding_rtl", tpe_m, 0, thr_cyc(cmid, tpe_m) / px, thr_cyc(cmid, tpe_m),
-                            lut=c_m["thr_lut"], bram18=c_m["thr_bram18"], in_width_bits=tpe_m * acc_m, out_width_bits=tpe_m * A))
+                            lut=c_m["thr_lut"], bram18=c_m["thr_bram18"], in_width_bits=tpe_m * acc_m, out_width_bits=tpe_m * A_m))
     nodes.append(NodeResult("MVAU_e", "MVAU rtl 1x1", pe_e, simd_e, c_e["mvu_cycles"] / px, c_e["mvu_cycles"],
                             lut=c_e["mvu_lut"], bram18=c_e["wm_bram18"], uram=c_e["wm_uram18"], dsp=c_e["mvu_dsp"],
-                            in_width_bits=simd_e * A, out_width_bits=pe_e * acc_e))
+                            in_width_bits=simd_e * A_m, out_width_bits=pe_e * acc_e))
     nodes.append(NodeResult("Thr_e", "Thresholding_rtl", tpe_e, 0, thr_cyc(cout, tpe_e) / px, thr_cyc(cout, tpe_e),
-                            lut=c_e["thr_lut"], bram18=c_e["thr_bram18"], in_width_bits=tpe_e * acc_e, out_width_bits=tpe_e * A))
-    nodes.append(node("Thr_s", "Thresholding_rtl (skip)", pe_ts, 0, c_ts["cycles"], c_ts, pe_ts * A, pe_ts * A))
-    nodes.append(node("Add", "AddStreams", pe_a, 0, c_add["cycles"], c_add, pe_a * A, pe_a * add_bits))
-    nodes.append(node("Thr_out", "Thresholding_rtl (join)", pe_to, 0, c_to["cycles"], c_to, pe_to * add_bits, pe_to * A))
+                            lut=c_e["thr_lut"], bram18=c_e["thr_bram18"], in_width_bits=tpe_e * acc_e, out_width_bits=tpe_e * A_e))
+    nodes.append(node("Thr_s", "Thresholding_rtl (skip)", pe_ts, 0, c_ts["cycles"], c_ts, pe_ts * A_in, pe_ts * A_s))
+    nodes.append(node("Add", "AddStreams", pe_a, 0, c_add["cycles"], c_add, pe_a * A_add, pe_a * add_bits))
+    nodes.append(node("Thr_out", "Thresholding_rtl (join)", pe_to, 0, c_to["cycles"], c_to, pe_to * add_bits, pe_to * A_out))
 
     # --- DWCs on every edge with a width mismatch
     dw = res.dwcs
-    _dwc("Dup->MVAU_r", pe_d * A, simd_r * A, cin, pe_d, simd_r, px, px, dw)
+    _dwc("Dup->MVAU_r", pe_d * A_in, simd_r * A_in, cin, pe_d, simd_r, px, px, dw)
     _dwc("MVAU_r->Thr_r", pe_r * acc_r, tpe_r * acc_r, cmid, pe_r, tpe_r, px, px, dw)
-    _dwc("Thr_r->SWG_m", tpe_r * A, simd_swu * A, cmid, tpe_r, simd_swu, px, px, dw)
+    _dwc("Thr_r->SWG_m", tpe_r * A_r, simd_swu * A_r, cmid, tpe_r, simd_swu, px, px, dw)
     _dwc("MVAU_m->Thr_m", pe_m * acc_m, tpe_m * acc_m, cmid, pe_m, tpe_m, px, px, dw)
-    _dwc("Thr_m->MVAU_e", tpe_m * A, simd_e * A, cmid, tpe_m, simd_e, px, px, dw)
+    _dwc("Thr_m->MVAU_e", tpe_m * A_m, simd_e * A_m, cmid, tpe_m, simd_e, px, px, dw)
     _dwc("MVAU_e->Thr_e", pe_e * acc_e, tpe_e * acc_e, cout, pe_e, tpe_e, px, px, dw)
-    _dwc("Thr_e->Add", tpe_e * A, pe_a * A, cout, tpe_e, pe_a, px, px, dw)
-    _dwc("Dup->Thr_s", pe_d * A, pe_ts * A, cout, pe_d, pe_ts, px, px, dw)
-    _dwc("FIFO->Add (skip)", pe_ts * A, pe_a * A, cout, pe_ts, pe_a, px, px, dw)  # widen AFTER the FIFO
+    _dwc("Thr_e->Add", tpe_e * A_e, pe_a * A_add, cout, tpe_e, pe_a, px, px, dw)
+    _dwc("Dup->Thr_s", pe_d * A_in, pe_ts * A_in, cout, pe_d, pe_ts, px, px, dw)
+    _dwc("FIFO->Add (skip)", pe_ts * A_s, pe_a * A_add, cout, pe_ts, pe_a, px, px, dw)  # widen AFTER the FIFO
     _dwc("Add->Thr_out", pe_a * add_bits, pe_to * add_bits, cout, pe_a, pe_to, px, px, dw)
     for d in dw:
         if d.cyc_px > T:
@@ -424,7 +452,7 @@ def model_bottleneck(
     skip_px = math.ceil((l_main - cout / pe_ts) / T) + 1
     words_px = cout // pe_ts
     depth = skip_px * words_px
-    fifo_w = pe_ts * A
+    fifo_w = pe_ts * A_s
     res.skip_fifo = SkipFifo(
         width_bits=fifo_w, depth_words=depth, bits=fifo_w * depth, bram18_if_block=_fifo_bram18(fifo_w, depth),
         lutram_luts_if_distributed=math.ceil(fifo_w * depth / 64), pixels_buffered=skip_px, pe=pe_ts,

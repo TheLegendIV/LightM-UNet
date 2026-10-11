@@ -82,6 +82,28 @@ def explicit_for_block(stage: str, kind: str, per_layer: dict, extra: dict, prev
     return f, int(F), warn
 
 
+def bits_map_for_block(stage: str, kind: str, sites: dict, prev_out: str | None) -> dict:
+    """The per-role precision of a block (bottleneck.RoleBits roles) from the PER-SITE bits of the network (layer_bits_SITES: what the network is built and QAT-trained with, so what FINN gets):
+    activation roles are the quantizer sites on the block's wires (reduce.2 -> Thr_r, conv_bn_act.2 / conv.2 / up.2 -> Thr_m / Thr_u, residual_add = the add's shared quantizer: both operands and the Add
+    input, out_act -> Thr_out), `in` is the previous block's output stream (prev_out: its out_act / initial.act site), weights are the layers' weight sites."""
+    wb, ab = sites["layer_weight_bits"], sites["layer_act_bits"]
+    S = stage
+    if kind == "reg":
+        return {"in": ab[prev_out], "r": ab[f"{S}.reduce.2"], "m": ab[f"{S}.conv_bn_act.2"], "e": ab[f"{S}.residual_add"], "s": ab[f"{S}.residual_add"], "add": ab[f"{S}.residual_add"],
+                "out": ab[f"{S}.out_act"], "w_r": wb[f"{S}.reduce.0"], "w_m": wb[f"{S}.conv"], "w_e": wb[f"{S}.expand.0"]}
+    if kind == "dn":
+        return {"in": ab[prev_out], "r": ab[f"{S}.reduce.2"], "m": ab[f"{S}.conv.2"], "e": ab[f"{S}.residual_add"], "s": ab[f"{S}.residual_add"], "add": ab[f"{S}.residual_add"],
+                "out": ab[f"{S}.out_act"], "w_r": wb[f"{S}.reduce.0"], "w_m": wb[f"{S}.conv.0"], "w_e": wb[f"{S}.expand.0"]}
+    if kind == "up":
+        ra = ab[f"{S}.residual_add"]
+        return {"in": ab[prev_out], "p": ra, "k": ra, "r": ab[f"{S}.reduce.2"], "u": ab[f"{S}.up.2"], "e": ra, "add": ra, "out": ab[f"{S}.out_act"],
+                "w_p": wb[f"{S}.main_proj.0"], "w_r": wb[f"{S}.reduce.0"], "w_u": wb[f"{S}.up.0"], "w_e": wb[f"{S}.expand.0"]}
+    if kind == "init":
+        act = ab["initial.act"]
+        return {"in": ab["initial.input_quant"], "c": act, "m": act, "cat": act, "act": act, "w_c": wb["initial.conv"]}
+    return {"in": ab[prev_out], "w_f": wb["final"]}                      # final: the layer after the last out_act
+
+
 def build_blocks(d: dict, a, ctx) -> tuple[list, list[str]]:
     """[(stage, kind, BottleneckResult built from the MILP folds)], warnings. Asserts that the model landed on exactly the MILP's pe / simd / thr_pe."""
     geoms, extras, geom, xnode, dmap, kinds = ctx
@@ -94,7 +116,8 @@ def build_blocks(d: dict, a, ctx) -> tuple[list, list[str]]:
         if kind == "reg":                                   # model_bottleneck takes an integer cycles-per-pixel target
             px = geom[f"{stage}.reduce.0"].hin * geom[f"{stage}.reduce.0"].win
             F = -(-F // px) * px
-        r, lf, xf, _slowest, _fifos, _fw = net_fold.run_block(stage, geom, a.bits, F, prev_output=prev, explicit=folds)
+        bm = bits_map_for_block(stage, kind, a.sites, prev) if getattr(a, "sites", None) else None
+        r, lf, xf, _slowest, _fifos, _fw = net_fold.run_block(stage, geom, a.bits, F, prev_output=prev, explicit=folds, bits_map=bm)
         for name, (pe, simd, thr_pe, _cyc) in lf.items():
             m = per_layer[name]
             assert (pe, simd) == (m["pe"], m["simd"]) and (thr_pe is None or thr_pe == m.get("thr_pe")), (name, (pe, simd, thr_pe), (m["pe"], m["simd"], m.get("thr_pe")))
@@ -234,7 +257,8 @@ def main() -> int:
     ap.add_argument("--out-dir", type=Path, required=True)
     ap.add_argument("--tag", required=True, help="output file tag: layer_bits_folding_<tag>.json")
     ap.add_argument("--config", default="config_12_dense_relu_nearest_upsample_256")
-    ap.add_argument("--bits", type=int, default=6)
+    ap.add_argument("--bits", type=int, default=6, help="uniform fallback precision; with the default (per-site bits) it only fills the roles a block has no site for")
+    ap.add_argument("--uniform-bits", action="store_true", help="ignore the folding's per-site bits and model every stream and weight at --bits (the pre-2026-10-11 behaviour)")
     ap.add_argument("--workers", type=int, default=min(6, os.cpu_count() or 1))
     ap.add_argument("--slack", type=float, default=0.03, help="accepted last-frame period overshoot of the whole-net run over the slowest MILP node")
     ap.add_argument("--max-rounds", type=int, default=6)
@@ -249,6 +273,7 @@ def run(a) -> int:
     d = json.loads(a.folding_json.read_text())
     assert d["status"] == "Optimal", d["status"]
     finn_milp.load_config(a.config)
+    a.sites = None if a.uniform_bits else net_fold.sites_for(a.config, a.folding_json)           # per-site bits of the network -> per-block bits_map (bottleneck.RoleBits)
     finn_milp.CANDIDATE_BITS = tuple(sorted(set(finn_milp.CANDIDATE_BITS) | {a.bits}))
     model, geoms, extras, _pred, dmap, kinds = finn_milp.build_model_and_graph()
     ctx = (geoms, extras, {g.name: g for g in geoms}, {n.geom.name: n for n in extras}, dmap, kinds)
@@ -322,7 +347,7 @@ def assemble_output(d: dict, blocks: list, chain: dict | None, errors: dict, war
     it = g["intra_block_fifo_totals"]
     g["total_lut_with_all_fifos"] = g["total_lut_calibrated"] + it["fifo_lut"] + it["dwc_lut"] + g["inter_block_fifo_lut"]
     out["fifo_sim"] = dict(
-        source=str(a.folding_json.name), tag=a.tag, bits=a.bits, seconds=round(seconds), net_target_cycles=F_net, slack=a.slack, workers=a.workers,
+        source=str(a.folding_json.name), tag=a.tag, bits=a.bits, bits_source=("per-site bits of the folding (bits_map per block, bottleneck.RoleBits)" if getattr(a, "sites", None) else "uniform --bits"), seconds=round(seconds), net_target_cycles=F_net, slack=a.slack, workers=a.workers,
         blocks={stage: dict(kind=kind, ok=(stage not in errors), error=errors.get(stage), tries=r.verification.get("tries"), deadlock=r.verification.get("deadlock"), T=r.params.get("T"),
                             steady_cyc_px=r.verification.get("steady_cyc_px"), rate_miss=r.verification.get("rate_miss"), uniform_depth=r.verification.get("uniform_depth"), elastic_depth=r.verification.get("elastic_depth"),
                             full_fifos=(r.verification.get("full_fifos") or []) if stage in errors else [], warnings=list(r.warnings))

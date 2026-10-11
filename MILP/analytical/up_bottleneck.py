@@ -30,7 +30,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bottleneck as reg  # noqa: E402
 from bottleneck import (  # noqa: E402
-    BottleneckResult, NodeResult, SkipFifo, _SIZING_SCHEDULE, _dwc, _fifo_attrs, _fifo_bram18, _geom, _min_pe, _retarget_threshold,
+    BottleneckResult, NodeResult, RoleBits, SkipFifo, _SIZING_SCHEDULE, _dwc, _fifo_attrs, _fifo_bram18, _geom, _min_pe, _retarget_threshold,
     _search_mvau, _search_vvau, finalize_fifo_costs,
 )
 
@@ -53,9 +53,15 @@ def _join_pe_for_upnn(cout: int, t_in: float, c_p_in: float, res) -> int:
     return cout
 
 
+UP_ROLES = ("in", "p", "k", "r", "u", "e", "add", "out", "w_p", "w_k", "w_r", "w_u", "w_e")
+# in = block input stream (Dup, MVAU_p / MVAU_r input); p = Thr_p output (the main branch stream: UpNN, FMPad_k / SWG_k, Thr_s of the noconv decoder); k = Thr_k (conv decoder) / Thr_s (noconv decoder)
+# output = the block's skip_quant stream (FIFO main -> Add); r = Thr_r output (FMPadPix, SWG_u, MVAU_u input); u = Thr_u output (MVAU_e input); e = Thr_e output (skip FIFO -> Add);
+# add = AddStreams input dtype; out = Thr_out output; w_* = MVAU weight bits (w_k: the 3x3 skip conv, ignored for skip_dw whose tent-kernel weights are frozen INT8).
+
+
 def model_up_bottleneck(
     cin: int, cout: int, v: int, bits: int, height: int, width: int, F: int | None = None, T_out: float | None = None,
-    skip_conv: bool = True, join_pe: int | None = None, skip_dw: bool = False,
+    skip_conv: bool = True, join_pe: int | None = None, skip_dw: bool = False, bits_map: dict | None = None,
 ) -> BottleneckResult:
     """cin -> cout upsampling block, Cmid = cin/v, INPUT map height x width, output 2*height x 2*width, uniform INT `bits`.
     Budget: F frame cycles, or T_out cycles per OUTPUT pixel (F = T_out * 4*height*width).
@@ -83,10 +89,15 @@ def model_up_bottleneck(
     F = int(F if F is not None else math.floor(T_out * px_out))
     T, T_in = F / px_out, F / px_in
     cmid, A = cin // v, bits
+    rb = RoleBits(bits, bits_map, UP_ROLES)
+    A_in, A_p, A_k, A_r, A_u, A_e, A_add, A_out = (rb.a(x) for x in ("in", "p", "k", "r", "u", "e", "add", "out"))
+    W_p, W_k, W_r, W_u, W_e = (rb.w(x) for x in ("p", "k", "r", "u", "e"))
     res = BottleneckResult(params=dict(
         cin=cin, cmid=cmid, cout=cout, v=v, z=v, T=T, F=F, T_in=T_in, bits=bits, k=3, dilation=1, stride=1, height=H, width=W,
         hout=Ho, wout=Wo, pad=1, block="up", skip_conv=skip_conv, skip_dw=skip_dw, skip_pad="n/a", skip_order="n/a", pad_group=None,
     ))
+    if bits_map:
+        res.params["bits_map"] = dict(rb.map)
     if px_out > F:
         raise ValueError(f"F={F} is below the UpsampleNearestNeighbour floor of {px_out} cycles/frame (one output pixel per cycle, not foldable)")
 
@@ -101,25 +112,25 @@ def model_up_bottleneck(
     g_upnn = _geom("upnn", cout, cout, H, W, Ho, Wo, op="Upsample")
     g_join = _geom("join", cout, cout, Ho, Wo, Ho, Wo, op="Thresholding")
 
-    pe_p, simd_p, c_p = _search_mvau(g_p, bits, F)
+    pe_p, simd_p, c_p = _search_mvau(g_p, A_in, F, weight_bits=W_p)
     if join_pe is None:
         join_pe = 1 if (skip_conv or reg._EXPLICIT) else _join_pe_for_upnn(cout, T_in, c_p["mvu_cycles"] / px_in, res)   # explicit folds: the given PEs are the join PEs
     res.params["join_pe"] = join_pe
-    pe_r, simd_r, c_r = _search_mvau(g_r, bits, F)
+    pe_r, simd_r, c_r = _search_mvau(g_r, A_in, F, weight_bits=W_r)
     # FMPadding_Pixel over the (2H+1) x (2W+1) zero-inserted image emits cf words per pixel: it must also fit F
-    pe_u, simd_u, c_u = _search_mvau(g_u, bits, F, extra_ok=lambda c: (Ho + 1) * (Wo + 1) * math.ceil(cmid / c["simd_swu"]) <= F)
-    pe_e, simd_e, c_e = _search_mvau(g_e, bits, F)
+    pe_u, simd_u, c_u = _search_mvau(g_u, A_r, F, weight_bits=W_u, extra_ok=lambda c: (Ho + 1) * (Wo + 1) * math.ceil(cmid / c["simd_swu"]) <= F)
+    pe_e, simd_e, c_e = _search_mvau(g_e, A_u, F, weight_bits=W_e)
     tpe_p, tpe_r = _min_pe(cout, px_in, F, "Thr_p"), _min_pe(cmid, px_in, F, "Thr_r")
     tpe_u, tpe_e = _min_pe(cmid, px_out, F, "Thr_u"), _min_pe(cout, px_out, F, "Thr_e")
-    c_p, c_r = _retarget_threshold(c_p, g_p, A, tpe_p), _retarget_threshold(c_r, g_r, A, tpe_r)
-    c_u, c_e = _retarget_threshold(c_u, g_u, A, tpe_u), _retarget_threshold(c_e, g_e, A, tpe_e)
+    c_p, c_r = _retarget_threshold(c_p, g_p, A_p, tpe_p), _retarget_threshold(c_r, g_r, A_r, tpe_r)
+    c_u, c_e = _retarget_threshold(c_u, g_u, A_u, tpe_u), _retarget_threshold(c_e, g_e, A_e, tpe_e)
     if skip_conv:
-        pe_k, simd_k, c_k = _search_vvau(g_k, bits, F, weight_bits=8) if skip_dw else _search_mvau(g_k, bits, F)      # tent-kernel weights are frozen INT8
+        pe_k, simd_k, c_k = _search_vvau(g_k, A_p, F, weight_bits=8) if skip_dw else _search_mvau(g_k, A_p, F, weight_bits=W_k)      # tent-kernel weights are frozen INT8
         tpe_k = _min_pe(cout, px_out, F, "Thr_k")
-        c_k = _retarget_threshold(c_k, g_k, A, tpe_k)
+        c_k = _retarget_threshold(c_k, g_k, A_k, tpe_k)
     else:
         pe_ts = _pe_at_least(cout, _min_pe(cout, px_out, F, "Thr_s"), join_pe)
-        c_ts = fcm.threshold_node_cost(g_join, A, pe_ts)
+        c_ts = fcm.threshold_node_cost(g_join, A_k, pe_ts)
 
     pe_d = _min_pe(cin, px_in, F, "Dup")
     pe_a = _pe_at_least(cout, _min_pe(cout, px_out, F, "Add"), join_pe)
@@ -127,8 +138,8 @@ def model_up_bottleneck(
     c_dup = fcm.stream_node_cost("dup", g_dup, pe_d)
     c_up = fcm.stream_node_cost("upsample", g_upnn)
     c_add = fcm.stream_node_cost("add", g_join, pe_a)
-    c_to = fcm.threshold_node_cost(g_join, A, pe_to)
-    add_bits = A + 1
+    c_to = fcm.threshold_node_cost(g_join, A_out, pe_to)
+    add_bits = A_add + 1
     acc = {k: c["acc_bits"] for k, c in (("p", c_p), ("r", c_r), ("u", c_u), ("e", c_e))}
     swu_u, cf_u = c_u["simd_swu"], math.ceil(cmid / c_u["simd_swu"])
     par_u = simd_u > cmid                                 # parallel_window: one 2x2 window per SWG word, a DWC narrows it to the MVAU's SIMD
@@ -140,66 +151,66 @@ def model_up_bottleneck(
                           lut=lut, bram18=bram, uram=uram, dsp=dsp, in_width_bits=in_w, out_width_bits=out_w)
 
     nd = res.nodes
-    nd.append(row("Dup", "DuplicateStreams", pe_d, 0, c_dup["cycles"], c_dup["total_lut"], in_w=pe_d * A, out_w=pe_d * A))
+    nd.append(row("Dup", "DuplicateStreams", pe_d, 0, c_dup["cycles"], c_dup["total_lut"], in_w=pe_d * A_in, out_w=pe_d * A_in))
     nd.append(row("MVAU_p", "MVAU rtl 1x1 proj", pe_p, simd_p, c_p["mvu_cycles"], c_p["mvu_lut"], c_p["wm_bram18"], c_p["wm_uram18"],
-                  c_p["mvu_dsp"], in_w=simd_p * A, out_w=pe_p * acc["p"]))
-    nd.append(row("Thr_p", "Thresholding_rtl", tpe_p, 0, px_in * (cout // tpe_p), c_p["thr_lut"], c_p["thr_bram18"], in_w=tpe_p * acc["p"], out_w=tpe_p * A))
-    nd.append(row("UpNN", "UpsampleNearestNeighbour_hls", 0, 0, c_up["cycles"], c_up["total_lut"], in_w=cout * A, out_w=cout * A))
+                  c_p["mvu_dsp"], in_w=simd_p * A_in, out_w=pe_p * acc["p"]))
+    nd.append(row("Thr_p", "Thresholding_rtl", tpe_p, 0, px_in * (cout // tpe_p), c_p["thr_lut"], c_p["thr_bram18"], in_w=tpe_p * acc["p"], out_w=tpe_p * A_p))
+    nd.append(row("UpNN", "UpsampleNearestNeighbour_hls", 0, 0, c_up["cycles"], c_up["total_lut"], in_w=cout * A_p, out_w=cout * A_p))
     if skip_conv:
         simd_swu_k = c_k["simd_swu"]
-        nd.append(row("FMPad_k", "FMPadding 3x3", 0, simd_swu_k, c_k["fmpad_cycles"], in_w=simd_swu_k * A, out_w=simd_swu_k * A))
+        nd.append(row("FMPad_k", "FMPadding 3x3", 0, simd_swu_k, c_k["fmpad_cycles"], in_w=simd_swu_k * A_p, out_w=simd_swu_k * A_p))
         par_k = skip_dw and simd_k > 1                      # depthwise parallel_window: one 3x3 window (9 elements per channel) per SWG word, a DWC narrows it to the VVAU's SIMD
         nd.append(row("SWG_k", "ConvolutionInputGenerator_rtl" + (" depthwise" + (" parallel_window" if par_k else "") if skip_dw else ""), 0, simd_swu_k, c_k["swu_cycles"], c_k["swu_lut"],
-                      c_k["swu_bram18"], c_k["swu_uram18"], in_w=simd_swu_k * A, out_w=simd_swu_k * A * (9 if par_k else 1)))
+                      c_k["swu_bram18"], c_k["swu_uram18"], in_w=simd_swu_k * A_p, out_w=simd_swu_k * A_p * (9 if par_k else 1)))
         if skip_dw:
             nd.append(row("MVAU_k", "VVAU_hls 3x3 depthwise bilinear (tent)", pe_k, simd_k, c_k["mvu_cycles"], c_k["mvu_lut"], c_k["wm_bram18"], c_k["wm_uram18"],
-                          c_k["mvu_dsp"], in_w=pe_k * simd_k * A, out_w=pe_k * c_k["acc_bits"]))
+                          c_k["mvu_dsp"], in_w=pe_k * simd_k * A_p, out_w=pe_k * c_k["acc_bits"]))
         else:
             nd.append(row("MVAU_k", "MVAU rtl 3x3 skip conv", pe_k, simd_k, c_k["mvu_cycles"], c_k["mvu_lut"], c_k["wm_bram18"], c_k["wm_uram18"],
-                          c_k["mvu_dsp"], in_w=simd_k * A, out_w=pe_k * c_k["acc_bits"]))
+                          c_k["mvu_dsp"], in_w=simd_k * A_p, out_w=pe_k * c_k["acc_bits"]))
         nd.append(row("Thr_k", "Thresholding_rtl", tpe_k, 0, px_out * (cout // tpe_k), c_k["thr_lut"], c_k["thr_bram18"],
-                      in_w=tpe_k * c_k["acc_bits"], out_w=tpe_k * A))
+                      in_w=tpe_k * c_k["acc_bits"], out_w=tpe_k * A_k))
         main_out_pe = tpe_k
     else:
-        nd.append(row("Thr_s", "Thresholding_rtl (main)", pe_ts, 0, c_ts["cycles"], c_ts["total_lut"], c_ts["thr_bram18"], in_w=pe_ts * A, out_w=pe_ts * A))
+        nd.append(row("Thr_s", "Thresholding_rtl (main)", pe_ts, 0, c_ts["cycles"], c_ts["total_lut"], c_ts["thr_bram18"], in_w=pe_ts * A_p, out_w=pe_ts * A_k))
         main_out_pe = pe_ts
     nd.append(row("MVAU_r", "MVAU rtl 1x1 reduce", pe_r, simd_r, c_r["mvu_cycles"], c_r["mvu_lut"], c_r["wm_bram18"], c_r["wm_uram18"],
-                  c_r["mvu_dsp"], in_w=simd_r * A, out_w=pe_r * acc["r"]))
-    nd.append(row("Thr_r", "Thresholding_rtl", tpe_r, 0, px_in * (cmid // tpe_r), c_r["thr_lut"], c_r["thr_bram18"], in_w=tpe_r * acc["r"], out_w=tpe_r * A))
-    nd.append(row("FMPadPix", "FMPadding_Pixel_hls", 0, swu_u, pad_pix_cycles, in_w=swu_u * A, out_w=swu_u * A))
-    nd.append(row("FMPad_u", "FMPadding_rtl (pad 1)", 0, swu_u, pad_edge_cycles, in_w=swu_u * A, out_w=swu_u * A))
+                  c_r["mvu_dsp"], in_w=simd_r * A_in, out_w=pe_r * acc["r"]))
+    nd.append(row("Thr_r", "Thresholding_rtl", tpe_r, 0, px_in * (cmid // tpe_r), c_r["thr_lut"], c_r["thr_bram18"], in_w=tpe_r * acc["r"], out_w=tpe_r * A_r))
+    nd.append(row("FMPadPix", "FMPadding_Pixel_hls", 0, swu_u, pad_pix_cycles, in_w=swu_u * A_r, out_w=swu_u * A_r))
+    nd.append(row("FMPad_u", "FMPadding_rtl (pad 1)", 0, swu_u, pad_edge_cycles, in_w=swu_u * A_r, out_w=swu_u * A_r))
     nd.append(row("SWG_u", "ConvolutionInputGenerator_rtl 2x2" + (" parallel_window" if par_u else ""), 0, swu_u, c_u["swu_cycles"], c_u["swu_lut"],
-                  c_u["swu_bram18"], c_u["swu_uram18"], in_w=swu_u * A, out_w=swu_u * A * (4 if par_u else 1)))
+                  c_u["swu_bram18"], c_u["swu_uram18"], in_w=swu_u * A_r, out_w=swu_u * A_r * (4 if par_u else 1)))
     nd.append(row("MVAU_u", "MVAU rtl 2x2 (lowered ConvTranspose)", pe_u, simd_u, c_u["mvu_cycles"], c_u["mvu_lut"], c_u["wm_bram18"], c_u["wm_uram18"],
-                  c_u["mvu_dsp"], in_w=simd_u * A, out_w=pe_u * acc["u"]))
-    nd.append(row("Thr_u", "Thresholding_rtl", tpe_u, 0, px_out * (cmid // tpe_u), c_u["thr_lut"], c_u["thr_bram18"], in_w=tpe_u * acc["u"], out_w=tpe_u * A))
+                  c_u["mvu_dsp"], in_w=simd_u * A_r, out_w=pe_u * acc["u"]))
+    nd.append(row("Thr_u", "Thresholding_rtl", tpe_u, 0, px_out * (cmid // tpe_u), c_u["thr_lut"], c_u["thr_bram18"], in_w=tpe_u * acc["u"], out_w=tpe_u * A_u))
     nd.append(row("MVAU_e", "MVAU rtl 1x1 expand", pe_e, simd_e, c_e["mvu_cycles"], c_e["mvu_lut"], c_e["wm_bram18"], c_e["wm_uram18"],
-                  c_e["mvu_dsp"], in_w=simd_e * A, out_w=pe_e * acc["e"]))
-    nd.append(row("Thr_e", "Thresholding_rtl", tpe_e, 0, px_out * (cout // tpe_e), c_e["thr_lut"], c_e["thr_bram18"], in_w=tpe_e * acc["e"], out_w=tpe_e * A))
-    nd.append(row("Add", "AddStreams", pe_a, 0, c_add["cycles"], c_add["total_lut"], in_w=pe_a * A, out_w=pe_a * add_bits))
-    nd.append(row("Thr_out", "Thresholding_rtl (join)", pe_to, 0, c_to["cycles"], c_to["total_lut"], c_to["thr_bram18"], in_w=pe_to * add_bits, out_w=pe_to * A))
+                  c_e["mvu_dsp"], in_w=simd_e * A_u, out_w=pe_e * acc["e"]))
+    nd.append(row("Thr_e", "Thresholding_rtl", tpe_e, 0, px_out * (cout // tpe_e), c_e["thr_lut"], c_e["thr_bram18"], in_w=tpe_e * acc["e"], out_w=tpe_e * A_e))
+    nd.append(row("Add", "AddStreams", pe_a, 0, c_add["cycles"], c_add["total_lut"], in_w=pe_a * A_add, out_w=pe_a * add_bits))
+    nd.append(row("Thr_out", "Thresholding_rtl (join)", pe_to, 0, c_to["cycles"], c_to["total_lut"], c_to["thr_bram18"], in_w=pe_to * add_bits, out_w=pe_to * A_out))
 
     dw = res.dwcs
-    _dwc("Dup->MVAU_p", pe_d * A, simd_p * A, cin, pe_d, simd_p, px_in, px_out, dw)
+    _dwc("Dup->MVAU_p", pe_d * A_in, simd_p * A_in, cin, pe_d, simd_p, px_in, px_out, dw)
     _dwc("MVAU_p->Thr_p", pe_p * acc["p"], tpe_p * acc["p"], cout, pe_p, tpe_p, px_in, px_out, dw)
-    _dwc("Thr_p->UpNN", tpe_p * A, cout * A, cout, tpe_p, cout, px_in, px_out, dw)
+    _dwc("Thr_p->UpNN", tpe_p * A_p, cout * A_p, cout, tpe_p, cout, px_in, px_out, dw)
     if skip_conv:
-        _dwc("UpNN->FMPad_k", cout * A, simd_swu_k * A, cout, cout, simd_swu_k, px_out, px_out, dw)
+        _dwc("UpNN->FMPad_k", cout * A_p, simd_swu_k * A_p, cout, cout, simd_swu_k, px_out, px_out, dw)
         if par_k:
-            _dwc("SWG_k->MVAU_k", 9 * pe_k * A, pe_k * simd_k * A, 9 * cout, 9 * pe_k, pe_k * simd_k, px_out, px_out, dw)
+            _dwc("SWG_k->MVAU_k", 9 * pe_k * A_p, pe_k * simd_k * A_p, 9 * cout, 9 * pe_k, pe_k * simd_k, px_out, px_out, dw)
         _dwc("MVAU_k->Thr_k", pe_k * c_k["acc_bits"], tpe_k * c_k["acc_bits"], cout, pe_k, tpe_k, px_out, px_out, dw)
     else:
-        _dwc("UpNN->Thr_s", cout * A, pe_ts * A, cout, cout, pe_ts, px_out, px_out, dw)
-    _dwc("FIFOmain->Add", main_out_pe * A, pe_a * A, cout, main_out_pe, pe_a, px_out, px_out, dw)
-    _dwc("Dup->MVAU_r", pe_d * A, simd_r * A, cin, pe_d, simd_r, px_in, px_out, dw)
+        _dwc("UpNN->Thr_s", cout * A_p, pe_ts * A_p, cout, cout, pe_ts, px_out, px_out, dw)
+    _dwc("FIFOmain->Add", main_out_pe * A_k, pe_a * A_add, cout, main_out_pe, pe_a, px_out, px_out, dw)
+    _dwc("Dup->MVAU_r", pe_d * A_in, simd_r * A_in, cin, pe_d, simd_r, px_in, px_out, dw)
     _dwc("MVAU_r->Thr_r", pe_r * acc["r"], tpe_r * acc["r"], cmid, pe_r, tpe_r, px_in, px_out, dw)
-    _dwc("Thr_r->FMPadPix", tpe_r * A, swu_u * A, cmid, tpe_r, swu_u, px_in, px_out, dw)
+    _dwc("Thr_r->FMPadPix", tpe_r * A_r, swu_u * A_r, cmid, tpe_r, swu_u, px_in, px_out, dw)
     if par_u:
-        _dwc("SWG_u->MVAU_u", 4 * swu_u * A, simd_u * A, 4 * cmid, 4 * swu_u, simd_u, px_out, px_out, dw)
+        _dwc("SWG_u->MVAU_u", 4 * swu_u * A_r, simd_u * A_r, 4 * cmid, 4 * swu_u, simd_u, px_out, px_out, dw)
     _dwc("MVAU_u->Thr_u", pe_u * acc["u"], tpe_u * acc["u"], cmid, pe_u, tpe_u, px_out, px_out, dw)
-    _dwc("Thr_u->MVAU_e", tpe_u * A, simd_e * A, cmid, tpe_u, simd_e, px_out, px_out, dw)
+    _dwc("Thr_u->MVAU_e", tpe_u * A_u, simd_e * A_u, cmid, tpe_u, simd_e, px_out, px_out, dw)
     _dwc("MVAU_e->Thr_e", pe_e * acc["e"], tpe_e * acc["e"], cout, pe_e, tpe_e, px_out, px_out, dw)
-    _dwc("skipFIFO->Add", tpe_e * A, pe_a * A, cout, tpe_e, pe_a, px_out, px_out, dw)
+    _dwc("skipFIFO->Add", tpe_e * A_e, pe_a * A_add, cout, tpe_e, pe_a, px_out, px_out, dw)
     _dwc("Add->Thr_out", pe_a * add_bits, pe_to * add_bits, cout, pe_a, pe_to, px_out, px_out, dw)
     for d in dw:
         if d.cyc_px > T + 1e-9:
@@ -225,7 +236,7 @@ def model_up_bottleneck(
         # the simulation (fifo_model.UP_SKIP_ROWS / UP_MAIN_ROWS, MILP/finn_milp.md): skip = ONE input row (paced need W-1 px at every fold swept), FIFO main <= 3 input rows. verify_with_sim still measures both.
         skip_px, main_px = W, 3 * W
     depth = skip_px * ext_w
-    fw = tpe_e * A
+    fw = tpe_e * A_e
     res.skip_fifo = SkipFifo(width_bits=fw, depth_words=depth, bits=fw * depth, bram18_if_block=_fifo_bram18(fw, depth),
                              lutram_luts_if_distributed=math.ceil(fw * depth / 64), pixels_buffered=skip_px, pe=tpe_e)
     res.params["main_fifo_words"] = max(2, main_px * main_w)
