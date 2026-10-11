@@ -14,7 +14,7 @@ every row is scored against itself, independent of solver/build bridging.
 
 Modelled node kinds (cost formula exists in finn_cost_model.py): MVAU, VVAU,
 SWU, Thresholding, AddStreams, DuplicateStreams, Concat, Upsample, MaxPool.
-Excluded (genuinely unmodelled for LUT/BRAM/DSP -- see finn_cost_model.py):
+Excluded here (FIFO and DWC are priced in analytical/bottleneck.fifo_memory and fifo_model.py, not in this per-row check):
 FIFO, DWC (StreamingDataWidthConverter; the module DOES carry a `dwc_cost()`
 formula, deliberately not used here since the user asked to exclude it), and
 FMPadding (finn_cost_model.py only prices FMPadding's CYCLES via

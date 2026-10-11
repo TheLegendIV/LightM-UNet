@@ -1250,3 +1250,32 @@ which no FINN rule describes (every earlier build used it; the 1020 cutoff miscl
   `act_bits["residual_add"]` (Brevitas ignores `bit_width=` on `QuantEltwiseAdd`, verified on 0.12.1, so the legacy network was
   silently Int8). Join thresholds are LUTRAM-only. Sensitivity of the skip operand itself is NOT in the objective (only
   `expand.0`'s).
+
+## 2026-10-11 derate from the real bilinear-256 OOC utilization
+
+Source: `hardware/builds/S12_dense_256_u4_bilinear_analytical_v1/results/node_resource_calibration_..._dwfix.csv` (1016 post-route nodes, 8 partitions; INT6, 250 fps, analytical folding,
+all Thresholding / Add / Dup nodes at PE=1). Scored per row with `hardware/checks/compare_model_vs_real_resources_from_dataset.py` (each row priced from its OWN real attributes; `--rows-out`
+writes the per-row model-vs-real CSV). Every constant below has a `MILP/calibration.csv` row dated 2026-10-11.
+
+Per-kind LUT error of the model against real (bilinear / nn-up v2 / w8_16 v4), before -> after:
+
+| kind | before | after |
+|---|---|---|
+| Thresholding | +83% / +144% / +96% | -1% / +26% / +3% |
+| AddStreams | +103% / +91% / +94% | +4% / -3% / -1% |
+| DuplicateStreams | +81% / +90% / +82% | -2% / +3% / -1% |
+| MaxPool | +42% / +51% / +52% | +2% / +8% / -10% |
+| MVAU | +37% / +11% / +40% | unchanged (see below) |
+| SWU | +17% / -2% / +17% | unchanged |
+| node total (modelled kinds) | +44% / +34% / +58% | +15% / +10% / +16% |
+
+* **Thresholding**: `_thresholding_rtl_cost` LUT is now `9.0428 * PE * in_bits` (INT6 / numSteps 63 regime). The input width is the driver the old `PE*(68.2 + 0.11*numSteps)` fit lacked, and the
+  1 LUT / 64 bits LUTRAM term for shallow stages is gone for `ram_style="block"` (real LUTRAM of these nodes is 0). Consequence for the solver: `--min-resources` no longer prefers LUTRAM thresholds for
+  their LUT cost. BRAM placement is unchanged and exact on this build (51 vs 51).
+* **Stream nodes / MaxPool**: replaced the HLS-csynth estimates by means of the real post-route nodes. Add/Dup per-PE scaling is unverified (no real node has PE > 1).
+* **FIFOs** (`analytical/bottleneck.py::fifo_memory`, `fifo_model.py`): see the `fifo_*` rows in `calibration.csv`. rtl up to 256 deep, `split_fifo_depth` (largest pow2 piece + one remainder) above,
+  BRAM unless `FIFO_AUTO_URAM`, SRL / vivado LUT refits, and one depth-2 FIFO on every dataflow edge and after every DWC and conv-internal node (the real build never runs RemoveShallowFIFOs).
+  Real FIFOs of this build: 553, 18.8k LUT, 75 BRAM18eq.
+* **Not done**: MVAU (the fixed 300-LUT constant times the derate dominates the many tiny P=1,Q=1..2 nodes: real 26-65 LUT vs model ~150; a `57*P + 15.7*P*Q` form fits this build to 11%, but the older
+  builds are fine with the current formula, so it needs a regime decision), VVAU (n = 1-3 per build), SWU (+17% on the two INT6-ish builds), FMPadding (no LUT formula: real 2.5k LUT per build), DWC
+  (this CSV has no `inWidth` / `outWidth`, so `_DWC_LUT_FACTOR` can only be refit from the older v1/v2/v4 datasets or after re-dumping the ONNX attrs).
