@@ -40,6 +40,9 @@ INTRA_GROWTH = 4                  # a full intra-block FIFO of a deadlocked chai
 
 
 # ---------------------------------------------------------------------------------------------- MILP entry -> explicit folds
+LEGACY_FINAL_BIAS_PE = 1   # PE of the final block's bias add (ChannelwiseOp) for folding jsons from BEFORE the MILP had a `final.bias` node (2026-10-11): the real build's value; newer jsons carry the PE
+
+
 def explicit_for_block(stage: str, kind: str, per_layer: dict, extra: dict, prev_output: str | None) -> tuple[dict, int, list[str]]:
     """({fold key: (pe, simd) or pe}, F = slowest MILP entry of the block in cycles per frame, warnings). Keys are bottleneck.explicit_folds'."""
     warn: list[str] = []
@@ -60,7 +63,11 @@ def explicit_for_block(stage: str, kind: str, per_layer: dict, extra: dict, prev
         f[key], f[thr] = mv, tp
     if kind == "final":
         f["final"] = lyr("final")[0]
-        f["Bias"] = 1                                       # no MILP node; the real build (partition 7) uses PE 1
+        if "final.bias" in extra:
+            f["Bias"] = xpe("final.bias")
+        else:                                               # folding json from before the structural bias node: PE 1 (5 cyc/px; 1,310,720 cycles/frame at 512x512 -> fails there by itself)
+            f["Bias"] = LEGACY_FINAL_BIAS_PE
+            warn.append(f"{stage}: no final.bias node in the folding json, simulated at the legacy PE {LEGACY_FINAL_BIAS_PE}")
         f["LabelSelect"] = xpe("final.argmax")
     elif kind == "init":
         f.update({"Thr_in": xpe("initial.input_quant"), "Dup": xpe("initial.input_quant.dup"), "Thr_m": xpe("initial.pool_quant"), "Thr_act": xpe("initial.act")})

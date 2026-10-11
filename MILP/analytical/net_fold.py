@@ -23,9 +23,9 @@ Rate policy:
   * every node's cycles per frame <= F = clock / fps (250 fps at 100 MHz = 400,000 cycles); the analytical search takes the largest cycle count that
     fits, so each stage is matched to the target;
   * optional latency cap --max-latency-ms (latency = cycles to the FIRST OUTPUT PIXEL, summed over the blocks' first-in -> first-out latencies / clock): the per-node budget is bisected down until it holds;
-  * "downstream faster than upstream": block k gets budget min(F, max(floor * F, R * slowest_{k-1})), R = 1 + --dsr-pct/100 (the MILP's --dsr-pct, the same rule edge by edge on the dataflow graph; default
-    1.04), floor = --dsr-floor. A node that cannot be slowed (the lattice of legal (PE, SIMD) pairs) keeps the chain from relaxing past the floor,
-    and the achieved element-rate ratio (cycles per output element, downstream vs. upstream) is reported in _diagnostics.chain_rate_imbalance.
+  * optional "downstream faster than upstream" (--dsr-pct P, OFF by default; there is no floor): block k gets budget min(F, R * slowest_{k-1}), R = 1 + P/100 (the MILP's --dsr-pct, the same rule edge by
+    edge on the dataflow graph). A node that cannot be slowed (the lattice of legal (PE, SIMD) pairs) drags the chain down with it, which can make a small P unrealisable;
+    the achieved element-rate ratio (cycles per output element, downstream vs. upstream) is reported in _diagnostics.chain_rate_imbalance.
 """
 from __future__ import annotations
 
@@ -197,12 +197,13 @@ def _run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool,
         xf["initial.input_quant"] = (n["Thr_in"].pe, 1, THR_RAM_STYLE)
         xf["initial.act"] = (n["Thr_act"].pe, 1, THR_RAM_STYLE)
         xf["initial.pool_quant"] = (n["Thr_m"].pe, 1, THR_RAM_STYLE)       # the branch-quant threshold UPSTREAM of the maxpool (MILP kind pool_quant)
-    else:   # final: the real build (partition 7) has the bias ChannelwiseOp (INT16 -> INT17, PE 1) and a LabelSelect argmax behind the MVAU; neither the bias
-        # (no MILP node yet) nor the intra-block DWC / FIFO nodes are MILP entries, only final.argmax is (kind argmax)
+    else:   # final: the real build (partition 7) has the bias ChannelwiseOp (INT16 -> INT17) and a LabelSelect argmax behind the MVAU; MILP entries: final.bias (kind bias, when the
+        # output conv has a bias) and final.argmax (kind argmax); the intra-block DWC / FIFO nodes are not MILP entries
         f = geom["final"]
         r = model_fnl_block(f.cin, f.cout, bits, f.hin, f.win, F=F_k, bias=True, argmax=True)
         n = {x.name: x for x in r.nodes}
         lf["final"] = (n["MVAU_f"].pe, n["MVAU_f"].simd, None, n["MVAU_f"].frame_cycles)
+        xf["final.bias"] = (n["Bias"].pe, 1, None)
         xf["final.argmax"] = (n["LabelSelect"].pe, 1, None)
     slowest = max(x.frame_cycles for x in r.nodes if x.name.startswith(FOLDABLE))
     fifos, fifo_warning = (_intra_block_fifos(kind, r, stage, prev_output) if compute_fifos else ([], None))
@@ -367,7 +368,7 @@ def assemble(a, ctx, F_top: int, compute_intra_fifos: bool = False, keep_blocks:
     prev_output = None
     for stage in block_order(geoms):
         kind = block_kind(stage)
-        F_k = F_top if (a.no_dsr or slowest_prev is None) else int(min(F_top, max(a.dsr_floor * F_top, (1 + a.dsr_pct / 100) * slowest_prev)))
+        F_k = F_top if (a.no_dsr or a.dsr_pct is None or slowest_prev is None) else int(min(F_top, (1 + a.dsr_pct / 100) * slowest_prev))
         r, lf, xf, slowest, fifos, fifo_warning = run_block(stage, geom, a.bits, F_k, compute_fifos=compute_intra_fifos, prev_output=prev_output)
         intra_fifos.extend(fifos)
         if fifo_warning:
@@ -455,7 +456,7 @@ def assemble(a, ctx, F_top: int, compute_intra_fifos: bool = False, keep_blocks:
             "bottleneck_node": bott, "bottleneck_cycles": node_cycles[bott],
             "max_node_cycles": int(a.clock_mhz * 1e6 / a.fps), "per_node_budget_used": F_top, "target_fps": a.fps, "clock_mhz": a.clock_mhz,
             "max_latency_ms": a.max_latency_ms, "fps": a.clock_mhz * 1e6 / node_cycles[bott],
-            "analytical": {"source": "MILP/analytical/net_fold.py", "bilinear_up": BILINEAR_UP, "dsr_pct": a.dsr_pct, "dsr_floor": a.dsr_floor, "mvau_wwidth_max": a.mvau_wwidth_max, "dsr": not a.no_dsr,
+            "analytical": {"source": "MILP/analytical/net_fold.py", "bilinear_up": BILINEAR_UP, "dsr_pct": a.dsr_pct, "mvau_wwidth_max": a.mvau_wwidth_max, "dsr": not a.no_dsr and a.dsr_pct is not None,
                            "sum_of_block_first_out_latencies_cycles": rough_latency, "block_profile": profile,
                            "mvau_cycle_mismatches_vs_milp_cost_model": mismatches},
             "note": "Folding assembled from the analytical per-block models (U4 widths), costed with the MILP's own layer_cost_pe_simd / extra_node_options. Not an ILP solve. "
@@ -605,8 +606,7 @@ def main() -> int:
     ap.add_argument("--clock-mhz", type=float, default=100.0)
     ap.add_argument("--max-latency-ms", type=float, default=None,
                     help="latency cap = time to the first output pixel (sum of the blocks' first-in -> first-out latencies / clock): the per-node budget is lowered (bisection) until it holds")
-    ap.add_argument("--dsr-pct", type=float, default=4.0, help="allowance of the downstream-rate (DSR) rule in PERCENT (the MILP's --dsr-pct default); a block may be at most this much slower than the one before")
-    ap.add_argument("--dsr-floor", type=float, default=0.6, help="the DSR rule never tightens a block below this fraction of the per-node budget")
+    ap.add_argument("--dsr-pct", type=float, default=None, help="allowance of the downstream-rate (DSR) rule in PERCENT (the MILP's --dsr-pct); a block may be at most this much slower than the one before. Default: off (no floor, so a small pct can be unrealisable)")
     ap.add_argument("--mvau-wwidth-max", type=int, default=None,
                     help="cap on weight_bits * SIMD of every MVAU (FINN's mvau_wwidth_max; the MILP's flag of the same name). Use the same value as the MILP arms and the FINN auto-fold control")
     ap.add_argument("--no-dsr", action="store_true", help="every block gets the full per-node budget (stages matched to it, no downstream-faster rule)")

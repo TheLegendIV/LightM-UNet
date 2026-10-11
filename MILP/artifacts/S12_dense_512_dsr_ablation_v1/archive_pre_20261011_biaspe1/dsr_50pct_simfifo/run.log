@@ -1,0 +1,14 @@
+dsr_50pct_simfifo: 29 blocks built from the MILP folding (0 warnings)
+simulating 29 blocks (12 distinct shapes), 2 workers
+  BLOCK FAILS ALONE: stage2.3: simulation does not reach T=96: steady 101.93 cyc/px, deadlock=False, elastic depth tried up to 66640 words; and its achieved period 417496 cycles/frame exceeds the network-wide budget 400000
+  BLOCK FAILS ALONE: stage2.7: simulation does not reach T=96: steady 101.93 cyc/px, deadlock=False, elastic depth tried up to 66640 words; and its achieved period 417496 cycles/frame exceeds the network-wide budget 400000
+  BLOCK FAILS ALONE: stage3.3: simulation does not reach T=96: steady 101.93 cyc/px, deadlock=False, elastic depth tried up to 66640 words; and its achieved period 417496 cycles/frame exceeds the network-wide budget 400000
+  BLOCK FAILS ALONE: stage3.7: simulation does not reach T=96: steady 101.93 cyc/px, deadlock=False, elastic depth tried up to 66640 words; and its achieved period 417496 cycles/frame exceeds the network-wide budget 400000
+  BLOCK FAILS ALONE: final: simulation does not reach T_out=1.00: steady 5.00 cyc/px, deadlock=False; and its achieved period 1310720 cycles/frame exceeds the network-wide budget 400000
+whole-net chain: pass = no deadlock and period <= 400000 cycles/frame (network budget); slowest MILP node / block 1310720, inter-block depth 2, up to 4 rounds
+  chain round 1: deadlock=False period=1311207 (limit 400000) first_out=787707 full=0 [2442 s]
+  chain round 2: deadlock=False period=1311207 (limit 400000) first_out=787707 full=0 [2523 s]
+  chain round 3: deadlock=False period=1311207 (limit 400000) first_out=787707 full=0 [2489 s]
+  chain round 4: deadlock=False period=1311207 (limit 400000) first_out=787707 full=0 [2414 s]
+dsr_50pct_simfifo: wrote MILP/artifacts/S12_dense_512_dsr_ablation_v1/dsr_50pct_simfifo/layer_bits_folding_dsr_50pct_simfifo.json
+  blocks failing alone: 5, chain ok: False, intra FIFO BRAM18 150.0 (MILP) -> 326 (sim)

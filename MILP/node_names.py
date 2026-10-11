@@ -36,7 +36,7 @@ _TABLE = {
     "init": {"Thr_in": ("input_quant", "thr"), "Dup": (None, "dup"), "FMPad": ("conv", "fmpad"), "SWG": ("conv", "swg"), "MVAU_c": ("conv", "mvau"),
              "Thr_c": ("conv", "thr"), "Thr_m": ("pool_quant", "thr"), "MaxPool": ("pool", "pool"), "SWG_p": ("pool", "swg"), "Pool": ("pool", "pool"),
              "Concat": ("concat", "concat"), "Thr_act": ("act", "thr")},
-    "final": {"FMPadPix": (None, "fmpadpix"), "FMPad_u": (None, "fmpad"), "SWG_u": (None, "swg"), "MVAU_f": (None, "mvau"), "Bias": (None, "bias"),
+    "final": {"FMPadPix": (None, "fmpadpix"), "FMPad_u": (None, "fmpad"), "SWG_u": (None, "swg"), "MVAU_f": (None, "mvau"), "Bias": ("bias", "bias"),
               "LabelSelect": ("argmax", "argmax")},
 }
 
@@ -63,7 +63,7 @@ def milp_node(stage: str, kind: str, node: str, prev_output: str | None = None) 
             return f"{stage}.input_quant.dup", part
         return f"{prev_output}.dup" if prev_output else f"{stage}.dup", part
     if kind == "final" and leaf is None:
-        return "final", part                                  # the final layer's MILP entry is `final`; argmax is its own extra node
+        return "final", part                                  # the final layer's MILP entry is `final`; bias (final.bias) and argmax (final.argmax) are their own extra nodes
     return f"{stage}.{leaf}", part
 
 

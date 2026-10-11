@@ -133,8 +133,7 @@ def trace_layer_geometry(model: torch.nn.Module, input_hw: tuple[int, int], in_c
     return geometries, list(blocks.keys())
 
 
-DEFAULT_DSR_PCT = 4.0         # --dsr-pct default: the analytical net_fold.py uses the same numbers (--dsr-pct 4 --dsr-floor 0.6)
-DEFAULT_DSR_FLOOR = 0.6
+# The DSR is OFF unless --dsr-pct is given. There is no floor: a pct the chain cannot hold is infeasible (finn_milp.md "Rate rules").
 
 # ---- Extra hardware nodes with no conv/pool module (see finn_milp.md "Dataflow graph") ----
 
@@ -155,7 +154,7 @@ PAD_MVAU_BITS = (2, 8)  # (weight, act) for the downsampling zero-pad MVAU -- PR
 EXTRA_OP_LABEL = {
     **{kind: "Thresholding_rtl" for kind in THRESHOLD_KINDS},
     "add": "AddStreams_hls", "dup": "DuplicateStreams_hls", "concat": "StreamingConcat_hls",
-    "upsample": "UpsampleNearestNeighbour_hls", "pad_mvau": "MVAU_rtl", "argmax": "LabelSelect_hls",
+    "upsample": "UpsampleNearestNeighbour_hls", "pad_mvau": "MVAU_rtl", "bias": "ChannelwiseOp_hls", "argmax": "LabelSelect_hls",
 }
 
 
@@ -228,8 +227,11 @@ def _node_shape(
             if name in preds and consumer in geom:
                 g = geom[consumer]
                 return g.cin, g.hin, g.win
-    if kind == "argmax":          # geometry carries the INPUT channels (the labels) and the pixel grid; the output stream is one label per pixel
-        g = geom[dataflow_map[name][0]]
+    if kind in ("bias", "argmax"):   # geometry carries the INPUT channels (the labels) and the pixel grid; the argmax output stream is one label per pixel. The bias node sits between the conv and the argmax.
+        src = dataflow_map[name][0]
+        if kinds.get(src) == "bias":
+            src = dataflow_map[src][0]
+        g = geom[src]
         return g.cout, g.hout, g.wout
     block = name.rsplit(".", 1)[0]
     return act_shapes[block + OUT_ACT_SUFFIX]
@@ -369,7 +371,8 @@ def solve_joint_perlayer(
     feasibility_only: bool = False,
     model_fifos: bool = False,
     dsr_pct: float | None = None,
-    dsr_floor: float = DEFAULT_DSR_FLOOR,
+    min_dsr: bool = False,
+    min_dsr_eps: float = 0.001,
 ) -> dict:
     """Build and solve the MILP. Formulation: finn_milp.md "Formulation".
     feasibility_only: zero objective (any feasible point is Optimal)."""
@@ -534,7 +537,7 @@ def solve_joint_perlayer(
             n_extra_constraints += len(sources_at_least) + 1
 
     # Rate coherence: --pbi-ratio (join balance, deprecated) is a constraint family on the dataflow graph gated on its own flag.
-    # The frame-rate rule --dsr-pct / --dsr-floor is below. (The older ELEMENT-rate chain constraint that used to be called --dsr-pct was removed 2026-10-08;
+    # The frame-rate rule --dsr-pct is below. (The older ELEMENT-rate chain constraint that used to be called --dsr-pct was removed 2026-10-08;
     # the chain_rate_imbalance diagnostic still reports it as `elemrate_*`.)
     topology = dataflow_map if dataflow_map is not None else predecessor_map
     fixed_cycle_names = {name for name, terms in layer_cycle_terms.items() if len({c for _, c in terms}) == 1}
@@ -576,21 +579,24 @@ def solve_joint_perlayer(
             prob += sum_b <= pbi_ratio * sum_a, f"pbi_ratio_{d['join']}_b_le_a"
             n_join_constraints += 2
 
-    # ---- DSR = downstream-rate rule (--dsr-pct / --dsr-floor): "downstream no slower than upstream" in cycles PER FRAME (comparable across resolutions), edge by edge on the
-    # dataflow graph: cycles[C] <= max(floor * F, (1 + pct/100) * cycles[P]) for every COMPUTE node C (conv / MVAU layers and the argmax) and each of its nearest compute ancestors P;
+    # ---- DSR = downstream-rate rule (--dsr-pct; no floor): "downstream no slower than upstream" in cycles PER FRAME (comparable across resolutions), edge by edge on the
+    # dataflow graph: cycles[C] <= (1 + pct/100) * cycles[P] for every COMPUTE node C (conv / MVAU layers and the argmax) and each of its nearest compute ancestors P;
     # everything else (thresholds, dup, add, pools, concat, upsample, the input quantizer) is relayed through. Thresholds / dup / add must NOT be DSR nodes: their slowest fold
     # is tiny (a 4-channel threshold at PE 1 = 65,536 cycles) while the conv behind them cannot be faster than ~131,072 under the width cap, so an edge rule on them is infeasible
     # at any small pct. Nodes pick from a few distinct cycle values, so the disjunction becomes pair exclusions on cycle-class indicators (no big-M, no slack variable).
     n_dsr_constraints = 0
-    if dsr_pct is not None and max_node_cycles is not None:
-        if dataflow_map is None:
-            raise ValueError("--dsr-pct needs the dataflow graph (dataflow_map).")
+    dsr_edges: list[tuple[str, str]] = []          # (P, C): compute node C and each of its nearest compute ancestors P (for the hard rule, the --min-dsr stall and the dsr_balance diagnostics)
+    stall_vars: list = []
+    if min_dsr and (max_node_cycles is None or dataflow_map is None):
+        raise ValueError("--min-dsr needs --target-fps and the dataflow graph.")
+    if dsr_pct is not None and max_node_cycles is not None and dataflow_map is None:
+        raise ValueError("--dsr-pct needs the dataflow graph (dataflow_map).")
+    if max_node_cycles is not None and dataflow_map is not None:
         node_opts: dict[str, list] = {}
         for key, var in z.items():
             node_opts.setdefault(key[0], []).append((raw_cycles[key], var))
         dsr_nodes = {g.name for g in geometries if g.op_type != "MaxPool2d" and len({c for _, c in layer_cycle_terms[g.name]}) > 1}
         dsr_nodes |= {n.geom.name for n in extra_nodes if n.kind in ("argmax", "pad_mvau") and len({c for _, c in layer_cycle_terms[n.geom.name]}) > 1}
-        floor_cycles = dsr_floor * max_node_cycles
         classes_of: dict[str, dict] = {}
 
         def classes(n):
@@ -614,17 +620,24 @@ def solve_joint_perlayer(
                 anc_memo[n] = out
             return anc_memo[n]
 
-        for c_name in sorted(dsr_nodes):
-            for p_name in sorted(foldable_ancestors(c_name)):
+        dsr_edges = [(p_name, c_name) for c_name in sorted(dsr_nodes) for p_name in sorted(foldable_ancestors(c_name))]
+        if dsr_pct is not None:
+            for p_name, c_name in dsr_edges:
                 cc = classes(c_name)
                 for c1, zs1 in classes(p_name).items():
-                    limit = max(floor_cycles, (1 + dsr_pct / 100) * c1) * (1 + 1e-9)
+                    limit = (1 + dsr_pct / 100) * c1 * (1 + 1e-9)
                     bad = [v for c2, zs2 in cc.items() if c2 > limit for v in zs2]
                     if bad:
                         prob += pulp.lpSum(zs1) + pulp.lpSum(bad) <= 1, f"dsr_{n_dsr_constraints}"
                         n_dsr_constraints += 1
+        if min_dsr:
+            # --min-dsr: per DSR edge a stall variable s_e >= cycles[C] - cycles[P], s_e >= 0 (linear: the cycles of a node are linear in its fold variables); pass 1 minimises sum(s_e).
+            for i, (p_name, c_name) in enumerate(dsr_edges):
+                sv = pulp.LpVariable(f"stall_{i}", lowBound=0)
+                prob += sv >= layer_cycles_expr[c_name] - layer_cycles_expr[p_name], f"stall_def_{i}"
+                stall_vars.append(sv)
     elif dsr_pct is not None:
-        print("NOTE: --dsr-pct needs --target-fps (the floor is a fraction of the per-node budget); DSR not applied.")
+        print("NOTE: --dsr-pct needs --target-fps ; DSR not applied.")
 
     # ---- --model-fifos: skip / prefetch FIFOs and DWCs as extra LUT / BRAM / URAM terms (fifo_model.py); zero when the flag is off ----
     fifo_model = None
@@ -662,8 +675,16 @@ def solve_joint_perlayer(
     sensitivity_term = (1.0 / n_layers) * pulp.lpSum(
         y[(name, w, a)] * sens_norm[(name, w, a)] for name in layer_names for w, a in candidate_pairs
     )
+    resources_obj = (1.0 / 3.0) * (
+        (pulp.lpSum(z[k] * raw_lut[k] for k in z) + fifo_lut) / XCZU7EV["LUT"]
+        + (pulp.lpSum(z[k] * raw_bram[k] for k in z) + fifo_bram) / XCZU7EV["BRAM_18K"]
+        + pulp.lpSum(z[k] * raw_dsp[k] for k in z) / XCZU7EV["DSP"]
+    )
+    stall_total = pulp.lpSum(stall_vars)
     if feasibility_only:
         prob += pulp.LpAffineExpression([(next(iter(y.values())), 0)])
+    elif min_dsr:
+        prob += stall_total / max_node_cycles                 # pass 1: total stall in units of the per-node budget F; pass 2 (below) minimises resources under this stall
     elif min_resources:
         # --min-resources: replace the accuracy objective by the equal-weight mean of the
         # LUT / BRAM_18K / DSP fractions of the board (same raw_* the hard caps use). Meant for FIXED
@@ -682,6 +703,16 @@ def solve_joint_perlayer(
     status_name = pulp.LpStatus[status]
     if status_name not in ("Optimal", "Infeasible"):
         raise RuntimeError(f"per-layer ILP hit an unexpected solver status: {status_name!r}.")
+    min_dsr_info = None
+    if min_dsr and status_name == "Optimal":
+        stall1 = pulp.value(stall_total) or 0.0
+        prob += stall_total <= stall1 * (1 + min_dsr_eps) + 1e-6, "min_dsr_roof"
+        prob.setObjective(resources_obj)                      # pass 2: cheapest fold among those within (1 + eps) of the optimal total stall
+        status = prob.solve(pulp.PULP_CBC_CMD(msg=0, timeLimit=time_limit, gapRel=gap_rel))
+        status_name = pulp.LpStatus[status]
+        if status_name != "Optimal":
+            raise RuntimeError(f"--min-dsr pass 2 is {status_name!r} although pass 1 was Optimal.")
+        min_dsr_info = {"pass1_total_stall_cycles": stall1, "pass1_total_stall_over_F": stall1 / max_node_cycles, "eps": min_dsr_eps}
 
     n_binary_vars = len(y) + len(z)
     n_constraints = (
@@ -713,7 +744,7 @@ def solve_joint_perlayer(
                         + (f" and max_cycles={max_cycles:.0f}" if max_cycles is not None else "")
                         + (f" and max_node_cycles={max_node_cycles:.0f} (nodes that cannot reach it even fully "
                            f"folded: {throughput_floor_violations or 'none'})" if max_node_cycles is not None else "")
-                        + (f" and dsr_pct={dsr_pct} (floor {dsr_floor})" if dsr_pct is not None else "")
+                        + (f" and dsr_pct={dsr_pct}" if dsr_pct is not None else "")
                         + (f" and pbi_ratio={pbi_ratio}" if pbi_ratio is not None else "")
                         + " at all.",
             },
@@ -803,6 +834,22 @@ def solve_joint_perlayer(
         total_uram += ft["uram18"]
     node_cycles = {**{n: v["cycles"] for n, v in per_layer.items()}, **{n: v["cycles"] for n, v in extra_out.items()}}
     bottleneck_node = max(node_cycles, key=node_cycles.get)
+    dsr_balance = None
+    if dsr_edges:
+        period = max(node_cycles.values())
+        edge_stall = sorted(((max(0.0, node_cycles[c] - node_cycles[p]), p, c) for p, c in dsr_edges), reverse=True)
+        ratios = [(node_cycles[c] / node_cycles[p], p, c) for p, c in dsr_edges if node_cycles[p] > 0]
+        worst = max(ratios) if ratios else (1.0, None, None)
+        lut_n = {**{n: v["lut_calibrated"] for n, v in per_layer.items()}, **{n: v["lut_calibrated"] for n, v in extra_out.items()}}
+        dsp_n = {**{n: v["total_dsp"] for n, v in per_layer.items()}, **{n: v["dsp"] for n, v in extra_out.items()}}
+        util = lambda w: (sum(w[n] * node_cycles[n] / period for n in node_cycles) / sum(w.values())) if sum(w.values()) else None
+        total_stall = sum(x[0] for x in edge_stall)
+        dsr_balance = {
+            "n_edges": len(dsr_edges), "n_stalling_edges": sum(1 for x in edge_stall if x[0] > 0), "total_stall_cycles": total_stall, "total_stall_over_F": total_stall / max_node_cycles,
+            "achieved_dsr_pct": 100.0 * max(0.0, worst[0] - 1.0), "worst_edge": [worst[1], worst[2]], "period_cycles": period,
+            "idle_cycles_total": sum(period - c for c in node_cycles.values()), "utilization_lut_weighted": util(lut_n), "utilization_dsp_weighted": util(dsp_n),
+            "top_stalls": [{"producer": p, "consumer": c, "stall_cycles": st, "producer_cycles": node_cycles[p], "consumer_cycles": node_cycles[c]} for st, p, c in edge_stall[:12] if st > 0],
+        }
 
     return {
         "status": status_name,
@@ -817,7 +864,8 @@ def solve_joint_perlayer(
                                        "Simulation-only FIFOs (down feed, up / init FIFO main) are not priced; inter-block FIFOs are fixed at depth 2."}} if fifo_out else {}),
             "candidate_bits": list(CANDIDATE_BITS), "n_layers": n_layers,
             "n_binary_vars": n_binary_vars, "n_constraints": n_constraints,
-            "dsr": {"pct": dsr_pct if max_node_cycles is not None else None, "floor": dsr_floor, "n_constraints": n_dsr_constraints},
+            "dsr": {"pct": dsr_pct if max_node_cycles is not None else None, "n_constraints": n_dsr_constraints},
+            **({"dsr_balance": dsr_balance} if dsr_balance else {}), **({"min_dsr": min_dsr_info} if min_dsr_info else {}),
             "min_resources": min_resources, "mvau_wwidth_max": mvau_wwidth_max,
             "n_wwidth_blocked_folds": n_wwidth_blocked,
             # one cycle value whatever the fold; used for the foldable-only element-rate stats
@@ -866,7 +914,10 @@ _SUMMARY_FIELDS = [
     "total_dsp", "total_cycles", "clock_mhz", "latency_ms", "target_fps", "fps", "bottleneck_node",
     "n_binary_vars", "n_layers", "n_zero_sensitivity_layers", "zero_sensitivity_layers",
     "branch_imbalance_n_diamonds", "branch_imbalance_median_ratio", "branch_imbalance_max_ratio",
-    "dsr_pct_setting", "dsr_floor_setting", "pbi_ratio_setting",
+    "dsr_pct_setting", "pbi_ratio_setting",
+    "min_dsr", "min_dsr_pass1_stall_cycles",
+    "dsr_n_edges", "dsr_n_stalling_edges", "dsr_total_stall_cycles", "dsr_total_stall_over_F", "dsr_achieved_pct", "dsr_worst_edge",
+    "dsr_period_cycles", "dsr_idle_cycles_total", "dsr_util_lut_weighted", "dsr_util_dsp_weighted",
     "elemrate_n_nodes", "elemrate_median", "elemrate_mean", "elemrate_max", "elemrate_worst_node",
     "elemrate_foldable_n_nodes", "elemrate_foldable_median", "elemrate_foldable_max", "elemrate_foldable_worst_node",
     "sensitivity_raw_sum", "sensitivity_norm_mean", "lexicographic",
@@ -901,7 +952,16 @@ def _write_run_summary(
         "branch_imbalance_median_ratio": diag.get("branch_imbalance", {}).get("median_ratio"),
         "branch_imbalance_max_ratio": diag.get("branch_imbalance", {}).get("max_ratio"),
         # element-rate ratio (cycles per OUTPUT element, downstream vs upstream; the chain_rate_imbalance diagnostic): measured only, no constraint uses it any more.
-        "dsr_pct_setting": args.dsr_pct, "dsr_floor_setting": args.dsr_floor, "pbi_ratio_setting": args.pbi_ratio,
+        "dsr_pct_setting": args.dsr_pct, "pbi_ratio_setting": args.pbi_ratio,
+        # rate balance of the SOLVED folding (frame cycles, per DSR edge P -> C): stall = max(0, cycles[C] - cycles[P]); achieved DSR = the worst edge's cycles[C] / cycles[P] - 1;
+        # idle = period - cycles per node (period = the slowest node); utilisation = resource-weighted cycles / period. Written for EVERY run that has --target-fps (not only --min-dsr).
+        "min_dsr": bool(args.min_dsr), "min_dsr_pass1_stall_cycles": diag.get("min_dsr", {}).get("pass1_total_stall_cycles"),
+        "dsr_n_edges": diag.get("dsr_balance", {}).get("n_edges"), "dsr_n_stalling_edges": diag.get("dsr_balance", {}).get("n_stalling_edges"),
+        "dsr_total_stall_cycles": diag.get("dsr_balance", {}).get("total_stall_cycles"), "dsr_total_stall_over_F": diag.get("dsr_balance", {}).get("total_stall_over_F"),
+        "dsr_achieved_pct": diag.get("dsr_balance", {}).get("achieved_dsr_pct"),
+        "dsr_worst_edge": "->".join(str(x) for x in diag.get("dsr_balance", {}).get("worst_edge") or []),
+        "dsr_period_cycles": diag.get("dsr_balance", {}).get("period_cycles"), "dsr_idle_cycles_total": diag.get("dsr_balance", {}).get("idle_cycles_total"),
+        "dsr_util_lut_weighted": diag.get("dsr_balance", {}).get("utilization_lut_weighted"), "dsr_util_dsp_weighted": diag.get("dsr_balance", {}).get("utilization_dsp_weighted"),
         "elemrate_n_nodes": elem.get("n_nodes"), "elemrate_median": elem.get("median_ratio"),
         "elemrate_mean": elem.get("mean_ratio"), "elemrate_max": elem.get("max_ratio"),
         "elemrate_worst_node": (elem.get("worst_nodes") or [{}])[0].get("node"),
@@ -931,7 +991,7 @@ def _write_run_summary(
         "max-lut-fraction": args.max_lut_fraction, "max-bram-fraction": args.max_bram_fraction,
         "max-dsp-fraction": args.max_dsp_fraction, "max-uram-fraction": args.max_uram_fraction, "force-dsp": args.force_dsp,
         "max-latency-ms": args.max_latency_ms, "clock-mhz": args.clock_mhz, "target-fps": args.target_fps,
-        "dsr-pct": args.dsr_pct, "dsr-floor": args.dsr_floor, "model-fifos": args.model_fifos, "target-fps-pass2": args.target_fps_pass2,
+        "dsr-pct": args.dsr_pct, "min-dsr": args.min_dsr, "min-dsr-eps": args.min_dsr_eps, "model-fifos": args.model_fifos, "target-fps-pass2": args.target_fps_pass2,
         "pbi-ratio": args.pbi_ratio,
         "mvau-wwidth-max": args.mvau_wwidth_max, "min-resources": args.min_resources,
         "lexicographic": args.lexicographic,
@@ -1040,13 +1100,17 @@ def main() -> None:
     parser.add_argument("--max-latency-ms", type=float, default=None,
                          help="Hard cap on the sum of cycles, as ms at --clock-mhz.")
     parser.add_argument("--clock-mhz", type=float, default=100.0, help="Clock for --max-latency-ms (default 100).")
-    parser.add_argument("--dsr-pct", type=_dsr_arg, default=DEFAULT_DSR_PCT,
-                         help=f"Downstream-rate (DSR) allowance in PERCENT (default {DEFAULT_DSR_PCT:g}; 'none' = off): a node's cycles per FRAME may exceed those of its nearest compute "
-                              f"ancestor by at most this much, but never below --dsr-floor x the per-node budget (needs --target-fps). Compute nodes = conv/MVAU layers, the pad-MVAU, the argmax; "
+    parser.add_argument("--dsr-pct", type=_dsr_arg, default=DSR_OFF,
+                         help=f"Downstream-rate (DSR) allowance in PERCENT (default: off; 'none' = off): a node's cycles per FRAME may exceed those of its nearest compute "
+                              f"ancestor by at most this much (needs --target-fps; there is no floor: a pct the chain cannot hold is infeasible). Compute nodes = conv/MVAU layers, the pad-MVAU, the argmax; "
                               f"thresholds, dup, add, pools, concat and upsample are relayed through. (Until 2026-10-08 this flag was an element-rate rule; that was removed and the frame-rate rule, "
                               f"formerly --ratchet-pct, took the name.)")
-    parser.add_argument("--dsr-floor", type=float, default=DEFAULT_DSR_FLOOR,
-                         help=f"Fraction of the per-node cycle budget (clock/target-fps) a node may always use whatever the upstream node does (default {DEFAULT_DSR_FLOOR}).")
+    parser.add_argument("--min-dsr", action="store_true",
+                         help="Lexicographic rate balancing (needs --target-fps and ONE --candidate-bits value). Pass 1 minimises the TOTAL STALL: the sum over DSR edges (P -> C, nearest compute ancestors, "
+                              "relayed through thresholds / dup / add) of max(0, cycles[C] - cycles[P]), in units of the per-node budget; pass 2 minimises resources (the --min-resources objective) with the "
+                              "total stall capped at (1 + --min-dsr-eps) x pass 1's optimum. Always feasible (the stall is soft); combine with the default (no hard DSR) or a hard --dsr-pct. "
+                              "_diagnostics.dsr_balance (written whenever the dataflow graph and --target-fps are given) reports total stall, stalling edges, achieved DSR pct and idle / utilisation.")
+    parser.add_argument("--min-dsr-eps", type=float, default=0.001, help="--min-dsr: relative slack of pass 1's optimal total stall that pass 2 may spend on resources.")
     parser.add_argument("--pbi-ratio", type=float, default=None,
                          help="DEPRECATED (kept so old runs reproduce): parallel-branch-imbalance join-balance "
                               "constraint. Never engaged by default; PBI is only reported in summary.csv.")
@@ -1182,8 +1246,10 @@ def main() -> None:
         pbi_ratio=args.pbi_ratio, max_node_cycles=max_node_cycles,
         min_resources=args.min_resources, mvau_wwidth_max=args.mvau_wwidth_max,
         extra_nodes=extra_nodes, dataflow_map=dataflow_map, model_fifos=args.model_fifos,
-        dsr_pct=args.dsr_pct, dsr_floor=args.dsr_floor,
+        dsr_pct=args.dsr_pct, min_dsr=args.min_dsr, min_dsr_eps=args.min_dsr_eps,
     )
+    if args.min_dsr and (args.lexicographic or args.pin_bits_file):
+        raise SystemExit("--min-dsr is its own two-pass mode (stall, then resources): drop --lexicographic / --pin-bits-file.")
     if args.lexicographic:
         if args.min_resources or args.pin_bits_file is not None:
             raise SystemExit("--lexicographic already does its own pinning and min-resources; drop --min-resources/--pin-bits-file.")
@@ -1210,7 +1276,7 @@ def main() -> None:
                 pbi_ratio=args.pbi_ratio, max_node_cycles=max_node_cycles2,
                 min_resources=True, mvau_wwidth_max=args.mvau_wwidth_max,
                 extra_nodes=extra_nodes, dataflow_map=dataflow_map, model_fifos=args.model_fifos,
-                dsr_pct=args.dsr_pct, dsr_floor=args.dsr_floor,
+                dsr_pct=args.dsr_pct, min_dsr=args.min_dsr, min_dsr_eps=args.min_dsr_eps,
             )
             if result["status"] == "Optimal":
                 result["_diagnostics"]["lexicographic"] = {

@@ -128,8 +128,11 @@ class FifoModel:
             return dict(in_w=g.cout * A, out_w=g.cout * A, internal=[])
         if kind == "pad_mvau":
             return dict(in_w=simd * A, out_w=pe * self.cost[key]["acc_bits"], internal=[])
+        if kind == "bias":                                                                  # ChannelwiseOp: INT16 -> INT17 in the real build
+            return dict(in_w=pe * self._final_acc(), out_w=pe * (self._final_acc() + 1), internal=[])
         if kind == "argmax":
-            return dict(in_w=pe * self._final_acc(), out_w=8, internal=[])
+            acc = self._final_acc() + (1 if any(k == "bias" for k in self.kinds.values()) else 0)     # behind the bias add the logits are one bit wider
+            return dict(in_w=pe * acc, out_w=8, internal=[])
         raise ValueError(f"fifo_model: no port widths for extra node kind {kind!r}")
 
     def _acc_of_pad(self, pred: str | None) -> int:

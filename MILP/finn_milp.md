@@ -56,7 +56,7 @@ ever needed again, reintroduce the dial rather than repurposing this one.
   at the chosen bits.
 - Extra nodes: exactly one option each; threshold bits with sources tied to
   `max(sources)` (below).
-- Rate rules: the downstream-rate rule `--dsr-pct` / `--dsr-floor` (default on) and the deprecated `--pbi-ratio` (below).
+- Rate rules: the downstream-rate rule `--dsr-pct` (default off; no floor) and the deprecated `--pbi-ratio` (below).
 - Hard budgets, always enforced (not soft penalties):
   `Σ z·LUT ≤ f_lut·230,400`, `Σ z·BRAM18 ≤ f_bram·624`,
   `Σ z·DSP ≤ f_dsp·1,728`, `Σ z·URAM ≤ f_uram·96` (xczu7ev-ffvc1156-2-e).
@@ -204,17 +204,25 @@ Inter-block FIFOs are fixed at depth 2 (priced like the analytical artifact). NO
 initial-block `FIFO main`. Needs one `--candidate-bits` value. Extra output: top-level `intra_block_fifos` (priced FIFOs), `inter_block_fifos`, `dwcs`, `_diagnostics.fifo_model`.
 On S12-256 INT6 (force-dsp, min-resources, 250 fps) it finds 25 skip + 26 prefetch FIFOs = 146 BRAM18 (the analytical design: 143) and 175 DWCs (4.7k LUT; the analytical folding has 99).
 
-## Rate rules: `--dsr-pct` / `--dsr-floor` (downstream rate, frame cycles) and `--pbi-ratio RATIO` (join balance, deprecated)
+## Rate rules: `--dsr-pct` (downstream rate, frame cycles; no floor since 2026-10-11) and `--pbi-ratio RATIO` (join balance, deprecated)
 
-**Downstream-rate rule (DSR): `--dsr-pct 4 --dsr-floor 0.6` (ON by default, needs `--target-fps`; renamed 2026-10-08 from `--ratchet-pct` / `--ratchet-floor`, see the note below).** "Downstream no slower than upstream" in cycles PER FRAME (comparable across resolutions,
-unlike per element): for every dataflow edge P -> C between COMPUTE nodes (conv / MVAU layers, the downsampling pad-MVAU, the argmax) `cycles[C] <= max(floor * F, (1 + pct/100) * cycles[P])`, F = clock / target-fps (400,000 at 250 fps, so the floor is 240,000 cycles).
+**Downstream-rate rule (DSR): `--dsr-pct P` (OFF by default, needs `--target-fps`; no floor since 2026-10-11; renamed 2026-10-08 from `--ratchet-pct` / `--ratchet-floor`).** "Downstream no slower than upstream" in cycles PER FRAME (comparable across resolutions,
+unlike per element): for every dataflow edge P -> C between COMPUTE nodes (conv / MVAU layers, the downsampling pad-MVAU, the argmax) `cycles[C] <= (1 + pct/100) * cycles[P]`; F = clock / target-fps (400,000 at 250 fps) stays the only absolute cap.
 Everything else (thresholds, dup, add, pools, upsample, concat, the 1-channel input quantizer) is relayed through (C is compared with its nearest compute ancestors); forks and joins need no special case. Thresholds / dup / add
 are NOT DSR nodes: their slowest fold is tiny (a 4-channel threshold at PE 1 = 65,536 cycles) while the conv behind them cannot be faster than ~131,072 cycles under a 72-bit width cap, so an edge rule on them is
-infeasible at any small pct (found on the S12-256 ablation, where floor 0 is infeasible below +100% and the smallest feasible round floor is 0.33). Because each node picks
-from a few distinct cycle values, the disjunction is written as pair exclusions on cycle-class indicators: `u_P[c1] + sum(u_C[c2] for c2 > max(floor F, (1+pct) c1)) <= 1` (no big-M, no slack variable).
-It is the analytical build's block rule (`MILP/analytical/net_fold.py --dsr-pct --dsr-floor`) applied edge by edge instead of block by block. The floor is what usually binds: with it a node may always
-use up to 0.6 F, so the rule only bites when an upstream node is slower than 0.6 F / 1.04. `--dsr-pct none` turns it off (old sweeps that passed `--target-fps` without the flag now get it: add `--dsr-pct none`
-to reproduce them).
+infeasible at any small pct. Because each node picks from a few distinct cycle values, the disjunction is written as pair exclusions on cycle-class indicators: `u_P[c1] + sum(u_C[c2] for c2 > (1+pct) c1) <= 1` (no big-M, no slack variable).
+It is the analytical build's block rule (`MILP/analytical/net_fold.py --dsr-pct`) applied edge by edge instead of block by block. A pct is only usable above the net's tightest feasible chain (about 34 % for the 512 nearest net, see below).
+The earlier floor (`--dsr-floor`, default 0.6, 0.33 in the 256 ablation: "a node may always use up to floor * F") is removed: it acted as a hidden throughput target of `fps / floor` and made the rule inert at the default. The DSR is now OFF unless asked for;
+old sweeps that relied on the 4 % / 0.6 default must pass `--dsr-pct 4` explicitly (and will usually be infeasible), or `--min-dsr`, which finds the least-stall folding without a pct.
+
+**`--min-dsr` (2026-10-11).** Lexicographic rate balancing, always feasible: pass 1 minimises the total stall `sum over DSR edges of max(0, cycles[C] - cycles[P])` (linear: one slack variable per edge), pass 2 minimises resources with the stall capped at
+(1 + `--min-dsr-eps`, 0.001) x pass 1's optimum. Every run with `--target-fps` reports `_diagnostics.dsr_balance` (total stall in frame cycles and over F, stalling edges, achieved DSR pct = worst edge's ratio - 1, idle cycles against the period,
+LUT / DSP-weighted utilisation) and the same figures in `summary.csv` (`dsr_*` columns). 512 nearest net: stall 68,617 cycles (4 of 289 edges), achieved DSR 33.3 %, against 2,428,172 / 50.0 % for the unconstrained folding.
+
+**Infeasibility without a floor (2026-10-11).** There is deliberately NO exemption for nodes that cannot satisfy the rule: if the rule can only hold by exempting a node, the allowance is infeasible and the run says so. On the 512 nearest net
+(INT6, 250 fps, width cap 96) the end of the net is the obstacle: `regular5.0.conv` (1 -> 1, 3x3) can only run at 66,566 or 196,608 cycles (its next fold, 590,339, exceeds F), and `final` cannot go below ~263,171 cycles (1 cycle per
+512x512 output pixel, SIMD 16 / PE 5 already used), so the chain `conv -> expand.0 -> final` needs `1 + pct >= 263,171 / 196,608`, i.e. pct >= ~34 %. The rule is infeasible below that; see `MILP/artifacts/S12_dense_512_dsr_ablation_v1/` and
+`MILP/test_dsr_pct.py`. (A `--dsr-exempt-stuck` option that relayed such nodes through was written and removed the same day: an exempted constraint is not a constraint.)
 
 **What `--dsr-pct` used to mean (removed 2026-10-08).** Until then `--dsr-pct` (with `--dsr-pct-pass2` and `--min-dsr`) was an ELEMENT-rate chain constraint (cycles per OUTPUT element of a node vs the slowest rate anywhere
 downstream; off by default). It was removed and the frame-rate rule above took the name, because equal element rate forces every node with a small output tensor to be proportionally faster than the frame period needs:
@@ -389,7 +397,7 @@ Every run so far passed `--force-dsp`, which masked this.
 | `--force-dsp` | forced-DSP calibration factors (`finn_cost_model.md`; currently identity) instead of the auto-resType avg_bits table. |
 | `--target-fps` | throughput target: every node ≤ `clock_mhz·1e6/target_fps` cycles (the physically meaningful rate constraint for a dataflow pipeline). |
 | `--max-latency-ms` / `--clock-mhz` | hard cap on the sum of cycles — a sequential-execution proxy, not the pipeline's real latency (see "Formulation"). The builds run at 100 MHz. |
-| `--dsr-pct` / `--dsr-floor` | downstream-rate rule on cycles per frame (default 4 % / 0.6, `--dsr-pct none` = off); see Rate rules. `--pbi-ratio` is the deprecated join-balance constraint. |
+| `--dsr-pct` | downstream-rate rule on cycles per frame (default OFF, no floor; a pct the chain cannot hold is infeasible); see Rate rules. `--pbi-ratio` is the deprecated join-balance constraint. |
 | ~~`--min-dsr`~~ | removed 2026-10-08 together with the element-rate rule it searched (and `--dsr-pct-pass2`). |
 | `--max-lut-fraction` / `--max-bram-fraction` / `--max-dsp-fraction` / `--max-uram-fraction` | maximum fraction of the device (renamed from `--hard-*-fraction`, 2026-10-02). |
 | `--force-serial` | PE=SIMD=1 everywhere, thresholds included. |

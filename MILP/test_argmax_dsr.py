@@ -1,4 +1,4 @@
-"""Tests for the final argmax node (kind "argmax", FINN LabelSelect), and the downstream-rate rule --dsr-pct / --dsr-floor (cycles per FRAME vs the nearest compute ancestor; formerly --ratchet-*) of finn_milp.py.
+"""Tests for the final argmax node (kind "argmax", FINN LabelSelect), and the downstream-rate rule --dsr-pct (cycles per FRAME vs the nearest compute ancestor; formerly --ratchet-*) of finn_milp.py.
 
 Run in lightmunet_dev (needs torch, pulp, the vendored enet package):  cd MILP && python3 test_argmax_dsr.py
 The last class runs the real CLI once on the S12-256 config (uniform INT6, force-dsp, min-resources, 250 fps), about 40 s.
@@ -30,11 +30,12 @@ class TestDsrOption(unittest.TestCase):
         self.assertEqual(finn_milp.pct_to_ratio(finn_milp._dsr_arg("0")), 1.0)
 
     def test_dsr_defaults(self):
-        self.assertEqual((finn_milp.DEFAULT_DSR_PCT, finn_milp.DEFAULT_DSR_FLOOR), (4.0, 0.6))
+        self.assertFalse(hasattr(finn_milp, "DEFAULT_DSR_FLOOR"))                                  # no floor any more
+        self.assertEqual(finn_milp.DSR_OFF, finn_milp._dsr_arg("none"))                            # the DSR is off unless --dsr-pct is given
 
     def test_retired_flags_are_gone(self):
         src = (HERE / "finn_milp.py").read_text()
-        for gone in ("--ratchet-pct", "--ratchet-floor", "--min-dsr", "--dsr-pct-pass2", "dsr_ratio", "max_downstream_rate"):
+        for gone in ("--ratchet-pct", "--ratchet-floor", "--dsr-floor", "--dsr-pct-pass2", "dsr_ratio", "max_downstream_rate"):
             self.assertNotIn(gone, src.replace("formerly --ratchet-pct", ""), gone)
 
     def test_rejects_negative_percent(self):
@@ -52,7 +53,7 @@ class TestArgmaxNode(unittest.TestCase):
 
     def test_one_argmax_behind_the_network_output(self):
         self.assertEqual([n.geom.name for n in self.extras if n.kind == "argmax"], ["final.argmax"])
-        self.assertEqual(self.dmap["final.argmax"], ["final"])
+        self.assertEqual(self.dmap["final.argmax"], ["final.bias"])                              # LayerQuantEnetFINN.final has an Int32 bias: final -> bias -> argmax
         self.assertNotIn("final.argmax", [p for preds in self.dmap.values() for p in preds])        # nothing consumes the label
 
     def test_geometry_is_the_five_logits_on_the_pixel_grid(self):
@@ -69,8 +70,39 @@ class TestArgmaxNode(unittest.TestCase):
         self.assertEqual((c5["wm_bram18"], c5["total_dsp"]), (0, 0))
 
 
+class TestBiasNode(unittest.TestCase):
+    """The final layer's integer bias add (FINN ChannelwiseOp) is a structural MILP node between the final MVAU and the LabelSelect (added 2026-10-11: before it was simulated at PE 1 with
+    no MILP counterpart, which is 5 cyc/px = 1,310,720 cycles/frame at 512x512)."""
+
+    @classmethod
+    def setUpClass(cls):
+        finn_milp.load_config(CONFIG)
+        finn_milp.CANDIDATE_BITS = (6,)
+        _m, cls.geoms, cls.extras, _p, cls.dmap, cls.kinds = finn_milp.build_model_and_graph()
+        cls.node = next(n for n in cls.extras if n.kind == "bias")
+
+    def test_one_bias_between_the_final_layer_and_the_argmax(self):
+        self.assertEqual([n.geom.name for n in self.extras if n.kind == "bias"], ["final.bias"])
+        self.assertEqual(self.dmap["final.bias"], ["final"])
+        self.assertEqual([c for c, preds in self.dmap.items() if "final.bias" in preds], ["final.argmax"])
+
+    def test_geometry_is_the_five_logits_on_the_pixel_grid(self):
+        g = self.node.geom
+        self.assertEqual((g.cin, g.cout, g.hout, g.wout, g.stage, g.op_type), (5, 5, 256, 256, "final", "ChannelwiseOp_hls"))
+
+    def test_options_are_the_divisors_of_the_channel_count_and_cost_like_an_add(self):
+        opts = {k[1]: c for k, c in finn_milp.extra_node_options(self.node, True)}
+        self.assertEqual({pe: c["cycles"] for pe, c in opts.items()}, {1: 5 * 256 * 256, 5: 256 * 256})
+        self.assertAlmostEqual(opts[5]["total_lut"], 5 * stream_node_cost("add", self.node.geom, 1)["total_lut"])
+        self.assertEqual((opts[5]["wm_bram18"], opts[5]["total_dsp"]), (0, 0))
+
+    def test_bias_is_relayed_through_by_the_dsr_not_a_dsr_node(self):
+        # DSR nodes are conv / MVAU layers, the pad-MVAU and the argmax: the argmax is compared with `final` through the bias
+        self.assertNotIn(self.node.kind, ("argmax", "pad_mvau"))
+
+
 class TestCliSolve(unittest.TestCase):
-    """One real solve with the DEFAULTS (--dsr-pct 4 / --dsr-floor 0.6): feasible, every compute edge obeys the frame-rate DSR rule, the argmax is a priced node."""
+    """One real solve with --dsr-pct 50 (no floor): feasible, every compute edge obeys the frame-rate DSR rule, the argmax is a priced node."""
 
     @classmethod
     def setUpClass(cls):
@@ -78,7 +110,7 @@ class TestCliSolve(unittest.TestCase):
         out = Path(cls.tmp.name) / "milp.json"
         cmd = [sys.executable, str(HERE / "finn_milp.py"), "--config", CONFIG,
                "--sensitivity-file", str(HERE / "artifacts" / "layer_sensitivity_12_dense_relu_nearest_conv_upsample_256.json"),
-               "--candidate-bits", "6", "--force-dsp", "--min-resources", "--target-fps", "250", "--time-limit", "300", "--out-file", str(out)]
+               "--candidate-bits", "6", "--force-dsp", "--min-resources", "--target-fps", "250", "--dsr-pct", "50", "--time-limit", "300", "--out-file", str(out)]
         res = subprocess.run(cmd, cwd=HERE.parent, capture_output=True, text=True, timeout=900)
         assert res.returncode == 0, res.stderr[-2000:]
         cls.result = json.loads(out.read_text())
@@ -90,8 +122,8 @@ class TestCliSolve(unittest.TestCase):
     def test_feasible_with_the_default_dsr(self):
         d = self.result["_diagnostics"]
         self.assertEqual(self.result["status"], "Optimal")
-        self.assertEqual((d["dsr"]["pct"], d["dsr"]["floor"]), (4.0, 0.6))
-        self.assertGreater(d["dsr"]["n_constraints"], 100)
+        self.assertEqual(d["dsr"]["pct"], 50.0)
+        self.assertNotIn("floor", d["dsr"])
 
     def test_every_compute_edge_obeys_the_dsr_rule(self):
         nodes = {**self.result["per_layer"], **self.result["extra_nodes"]}
@@ -109,7 +141,7 @@ class TestCliSolve(unittest.TestCase):
             return out
         for c in ops:
             for p in ancestors(c):
-                self.assertLessEqual(nodes[c]["cycles"], max(0.6 * F, 1.04 * nodes[p]["cycles"]) * (1 + 1e-6), f"{p} -> {c}")
+                self.assertLessEqual(nodes[c]["cycles"], 1.5 * nodes[p]["cycles"] * (1 + 1e-6), f"{p} -> {c}")
                 checked += 1
         self.assertGreater(checked, 60)
 

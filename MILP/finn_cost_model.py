@@ -434,8 +434,10 @@ _UPSAMPLE_LUT = 184
 # (max value, index) pair, so a pixel takes ceil(labels / PE) cycles. NO real or HLS-estimate data exists yet: the LUT per PE lane below is a placeholder
 # (one accumulator-wide comparator + max register + index mux, ~20-bit logits) and is to be replaced by a FINN probe (see FINN_AGENT_HANDOFF.md).
 _LABELSELECT_LUT_PER_PE = 64
-STREAM_NODE_KINDS = ("add", "dup", "concat", "upsample", "argmax")
-FOLDABLE_STREAM_KINDS = ("add", "dup", "argmax")  # PE | channels (argmax: PE | labels); concat/upsample: all channels per cycle, not foldable
+# bias: the final layer's integer bias add, a FINN ChannelwiseOp (INT16 -> INT17 in the real build), one element-wise add per channel and pixel. NO real or HLS-estimate data (the node is not in the calibration CSVs):
+# priced like AddStreams, as analytical/fnl_block.py does -- PROVISIONAL.
+STREAM_NODE_KINDS = ("add", "dup", "concat", "upsample", "bias", "argmax")
+FOLDABLE_STREAM_KINDS = ("add", "dup", "bias", "argmax")  # PE | channels (argmax: PE | labels); concat/upsample: all channels per cycle, not foldable
 
 
 def stream_node_cost(kind: str, layer: LayerGeometry, pe: int = 1) -> dict:
@@ -443,7 +445,7 @@ def stream_node_cost(kind: str, layer: LayerGeometry, pe: int = 1) -> dict:
     carries the node's output shape; for "argmax" (LabelSelect) it carries the INPUT channel count (= the number of labels) in `cout` and the pixel grid."""
     if kind in FOLDABLE_STREAM_KINDS:
         cycles = layer.hout * layer.wout * math.ceil(layer.cout / pe)
-        lut = pe * {"add": _ADDSTREAMS_LUT_PER_PE, "dup": _DUPSTREAMS_LUT_PER_PE, "argmax": _LABELSELECT_LUT_PER_PE}[kind]
+        lut = pe * {"add": _ADDSTREAMS_LUT_PER_PE, "dup": _DUPSTREAMS_LUT_PER_PE, "bias": _ADDSTREAMS_LUT_PER_PE, "argmax": _LABELSELECT_LUT_PER_PE}[kind]
     elif kind in ("concat", "upsample"):
         cycles, lut = layer.hout * layer.wout, {"concat": _CONCAT_LUT, "upsample": _UPSAMPLE_LUT}[kind]
     else:

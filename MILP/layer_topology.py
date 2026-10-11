@@ -187,6 +187,7 @@ ADD_SUFFIX = ".add"
 DUP_SUFFIX = ".dup"
 CONCAT_SUFFIX = ".concat"
 UPSAMPLE_SUFFIX = ".upsample"
+BIAS_SUFFIX = ".bias"            # <network output>.bias: the final layer's integer bias add (FINN ChannelwiseOp), only when the output conv has a bias (LayerQuantEnetFINN.final: Int32Bias)
 ARGMAX_SUFFIX = ".argmax"        # <network output>.argmax: the final LabelSelect over the output channels (one label per pixel)
 POOL_QUANT_SUFFIX = "_quant"     # <pool>_quant: the branch-quant threshold UPSTREAM of a maxpool that feeds a concat (initial.pool_quant)
 _ADD_TARGETS = (operator.add, torch.add)
@@ -358,8 +359,15 @@ def compute_dataflow_graph(model: nn.Module) -> tuple[dict[str, list[str]], dict
 
     # The deployed network ends in an argmax over its output channels (FINN LabelSelect): one virtual node behind every network output (a node nothing consumes).
     consumed = {p for preds in dataflow.values() for p in preds}
+    # The final layer's Int32 bias is an exact integer constant: FINN lowers the Add behind the MVAU to a ChannelwiseOp (no threshold), a streaming node of its own, foldable PE | channels,
+    # sitting between the final MVAU and the LabelSelect. One virtual `bias` node per network output whose conv has a bias.
     for out in [n for n in dataflow if n not in consumed and n in conv_names]:
-        dataflow[out + ARGMAX_SUFFIX] = [out]
+        tail = out
+        if getattr(named_modules.get(out), "bias", None) is not None:
+            dataflow[out + BIAS_SUFFIX] = [out]
+            kinds[out + BIAS_SUFFIX] = "bias"
+            tail = out + BIAS_SUFFIX
+        dataflow[out + ARGMAX_SUFFIX] = [tail]
         kinds[out + ARGMAX_SUFFIX] = "argmax"
 
     consumers: dict[str, list[str]] = {}

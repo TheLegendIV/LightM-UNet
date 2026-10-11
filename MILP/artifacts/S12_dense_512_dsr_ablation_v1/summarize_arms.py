@@ -1,0 +1,215 @@
+"""Summarise the DSR ablation arms (folder / arm names keep the old word "ratchet") (run run_ablation.sh first).
+
+    python3 MILP/artifacts/S12_dense_512_dsr_ablation_v1/summarize_arms.py
+
+Writes next to this file: arms_summary.csv (one row per arm), arms_to_build.txt (one representative arm per DISTINCT folding, in arm order: arms with an identical folding share one hardware build)
+and arm_groups.json (fingerprint -> arms). Also checks, per arm: the DSR rule holds on every compute edge, mvau-wwidth-max 72 holds, every layer is INT6.
+"""
+import csv
+import hashlib
+import json
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+MILP_ARMS = ["dsr_1pct", "dsr_5pct", "dsr_10pct", "dsr_25pct", "dsr_50pct", "dsr_100pct", "dsr_200pct", "dsr_off"]
+# arms with an identical folding share ONE simulated-FIFO variant and ONE hardware build: sim_reps() = the first arm of every distinct folding (only those get a <arm>_simfifo folder)
+# <arm>_simfifo (net_explicit.py / run_simfifo.sh): the MILP arm's folding simulated in the analytical block models, FIFO lists replaced by the simulated ones. Same folding, own build.
+# the hardware builds to run (arms_to_build.txt): the eight simulated-FIFO variants and dsr_off_finnfifo (dsr_off folding, FINN autosizes the FIFOs). The FINN auto-fold control is added by run_arms.sh.
+# hardware-only variants: same folding as their base arm, but the folding json is written WITHOUT the FIFO lists, so the FINN bridge forces nothing and FINN's own rtlsim autosizer sets every FIFO depth
+VARIANTS = {"dsr_off_finnfifo": "dsr_off"}
+WWIDTH_MAX, BITS = 96, 6
+
+
+def sim_reps():
+    """First MILP arm of every distinct folding (arm order), e.g. [dsr_1pct, dsr_25pct, dsr_off]."""
+    seen, reps = {}, []
+    for a in MILP_ARMS:
+        d = load(a)
+        if d is None or d["status"] != "Optimal":
+            continue
+        fp = fingerprint(d)
+        if fp not in seen:
+            seen[fp] = a
+            reps.append(a)
+    return reps
+
+
+def expected_target():
+    """arms_config.sh is the one definition of the target every arm must carry: {fps, floor, wwidth, bits}."""
+    import re
+    txt = (HERE / "arms_config.sh").read_text()
+    get = lambda k: float(re.search(rf"^{k}=([0-9.]+)", txt, re.M).group(1))
+    return dict(fps=get("FPS"), wwidth=int(get("WWIDTH")), bits=int(get("BITS")))
+
+
+def target_of(d):
+    """What a result file was actually run with: {fps, floor (None when the DSR rule is off), wwidth, bits}. MILP and analytical files keep these in different places."""
+    g = d["_diagnostics"]
+    a = g.get("analytical")
+    cfg = _dsr_cfg(d)
+    wwidth = a.get("mvau_wwidth_max") if a else g.get("mvau_wwidth_max")
+    bits = sorted(set(d["layer_weight_bits"].values()) | set(d["layer_act_bits"].values()))
+    return dict(fps=round(1e8 / g["max_node_cycles"], 6), wwidth=wwidth, bits=bits[0] if len(bits) == 1 else bits)
+
+
+def load(arm):
+    if arm in VARIANTS:                                   # generate the variant's folding json from its base arm (same folding, FIFO lists stripped)
+        base = load(VARIANTS[arm])
+        if base is None:
+            return None
+        d = {k: v for k, v in base.items() if k not in ("intra_block_fifos", "inter_block_fifos")}
+        d["_variant"] = dict(of=VARIANTS[arm], note="FIFO lists removed: FINN's rtlsim autosizer (largefifo_rtlsim) sets every FIFO depth; the folding is identical to the base arm")
+        out = HERE / arm / f"layer_bits_folding_{arm}.json"
+        out.parent.mkdir(exist_ok=True)
+        out.write_text(json.dumps(d, indent=1))
+        return d
+    p = HERE / arm / f"layer_bits_folding_{arm}.json"
+    return json.loads(p.read_text()) if p.exists() else None
+
+
+def fingerprint(d):
+    items = sorted((n, v["pe"], v["simd"], v.get("thr_pe")) for n, v in d["per_layer"].items())
+    items += sorted((n, v["pe"]) for n, v in d["extra_nodes"].items())
+    return hashlib.sha1(json.dumps(items).encode()).hexdigest()[:10]
+
+
+def _dsr_cfg(d):
+    """MILP arm: _diagnostics.dsr (before 2026-10-08: .ratchet); analytical arm (net_fold.py): _diagnostics.analytical.{dsr_pct, dsr_floor} (before: dsr_pct, dsr_floor) (its native rule is block to block; the edge check below is the MILP's node rule)."""
+    g = d["_diagnostics"]
+    for key in ("dsr", "ratchet"):
+        if key in g:
+            return g[key]
+    a = g["analytical"]
+    return dict(pct=a.get("dsr_pct"), n_constraints=None)
+
+
+def dsr_violations(d):
+    """Edges (nearest compute ancestor -> compute node) that break cycles[C] <= max(floor * F, (1 + pct/100) * cycles[P]); same node set as finn_milp.py."""
+    r = _dsr_cfg(d)
+    if r["pct"] is None:
+        return None
+    F = d["_diagnostics"]["max_node_cycles"]
+    nodes = {**d["per_layer"], **d["extra_nodes"]}
+    ops = {n for n in d["per_layer"] if not n.endswith(".pool")} | {n for n, v in d["extra_nodes"].items() if v["kind"] in ("argmax", "pad_mvau")}
+    edges = d["dataflow_graph"]["edges"]
+    memo = {}
+
+    def anc(n):
+        if n not in memo:
+            out = set()
+            for p in edges.get(n, []):
+                if p in ops:
+                    out.add(p)
+                elif p in nodes or p in edges:
+                    out |= anc(p)
+            memo[n] = out
+        return memo[n]
+    bad = []
+    for c in ops:
+        for p in anc(c):
+            if nodes[c]["cycles"] > (1 + r["pct"] / 100) * nodes[p]["cycles"] * (1 + 1e-6):
+                bad.append((p, c))
+    return bad
+
+
+def main():
+    reps = sim_reps()
+    SIMFIFO = {f"{a}_simfifo": a for a in reps}
+    ARMS = [*MILP_ARMS, "dsr_off_finnfifo", *SIMFIFO]
+    BUILD_ONLY = [*SIMFIFO, "dsr_off_finnfifo"]
+    rows, prints, groups = [], [], {}
+    target_errors = []
+    off = load("dsr_off")
+    for arm in ARMS:
+        d = load(arm)
+        if d is None:
+            rows.append(dict(arm=arm, status="missing"))
+            continue
+        row = dict(arm=arm, status=d["status"])
+        if d["status"] != "Optimal":
+            rows.append(row)
+            continue
+        g = d["_diagnostics"]
+        fm = g.get("fifo_model", {}).get("totals", {})
+        inter = d.get("inter_block_fifos", [])
+        if "fifo_model" in g:                                   # MILP arm: total_* already include the priced FIFOs and DWCs
+            fifo_lut = fm.get("lut", 0) + fm.get("dwc_lut", 0) + sum(f["lut"] for f in inter)
+            lut_total, bram_total, fifo_bram = g["total_lut_calibrated"], g["total_bram18k_calibrated"], fm.get("bram18", 0)
+            n_dwcs, n_fifos = len(d.get("dwcs", [])), len(d.get("intra_block_fifos", []))
+        else:                                                   # analytical arm: nodes only in total_*, simulated FIFOs / DWCs on top
+            it = g["intra_block_fifo_totals"]
+            fifo_lut = it["fifo_lut"] + it["dwc_lut"] + g["inter_block_fifo_lut"]
+            lut_total, bram_total, fifo_bram = g["total_lut_calibrated"] + fifo_lut, g["total_bram18k_with_all_fifos"], it["fifo_bram18"]
+            n_dwcs = sum(len(b["dwcs"]) for b in d["block_verification"].values())
+            n_fifos = sum(1 for f in d.get("intra_block_fifos", []) if f["depth"] > 2)
+        fp = fingerprint(d)
+        groups.setdefault(fp if (arm not in VARIANTS and arm not in SIMFIFO) else f"{fp}:{arm}", []).append(arm)         # a variant (FIFO-stripped / simulated FIFOs) always gets its own build
+        bad = dsr_violations(d)
+        weights = {n: v["simd"] * v["weight_bits"] for n, v in d["per_layer"].items() if not n.endswith(".pool")}   # the analytical pad-MVAU (INT8 weights) is capped in its search too
+        rc = _dsr_cfg(d)
+        bal = g.get("dsr_balance") or {}
+        row.update(
+            stall_cycles=bal.get("total_stall_cycles"), stall_over_F=(round(bal["total_stall_over_F"], 4) if bal else None), stalling_edges=bal.get("n_stalling_edges"),
+            achieved_dsr_pct=(round(bal["achieved_dsr_pct"], 2) if bal else None), util_lut=(round(bal["utilization_lut_weighted"], 3) if bal else None),
+            util_dsp=(round(bal["utilization_dsp_weighted"], 3) if bal else None),
+            dsr_pct=rc["pct"], dsr_constraints=rc["n_constraints"],
+            lut_total=round(lut_total), lut_nodes=round(lut_total - fifo_lut), lut_fifo_dwc=round(fifo_lut),
+            bram18=bram_total, bram18_fifos=fifo_bram, dsp=g["total_dsp"],
+            slowest_node=g["bottleneck_node"], slowest_cycles=g["bottleneck_cycles"], fps=round(1e8 / g["bottleneck_cycles"], 1),
+            sum_node_cycles_ms=round(g["total_cycles"] / 1e5, 1), n_dwcs=n_dwcs, n_fifos_gt2=n_fifos,
+            layers_diff_vs_off=(sum((v["pe"], v["simd"]) != (off["per_layer"][n]["pe"], off["per_layer"][n]["simd"]) for n, v in d["per_layer"].items())
+                                if off and off["status"] == "Optimal" else None),
+            fingerprint=fp, dsr_violations=(None if bad is None else len(bad)), wwidth_max_seen=max(weights.values()),
+            all_int6=all(v == BITS for v in d["layer_weight_bits"].values()) and all(v == BITS for v in d["layer_act_bits"].values()),
+        )
+        assert row["wwidth_max_seen"] <= WWIDTH_MAX, (arm, row["wwidth_max_seen"])
+        got, want = target_of(d), expected_target()
+        bad_t = {k: (got[k], want[k]) for k in want if got[k] != want[k]}
+        if bad_t:
+            target_errors.append((arm, bad_t))
+        if arm in VARIANTS:
+            for k in ("lut_total", "lut_fifo_dwc", "bram18", "bram18_fifos", "n_dwcs", "n_fifos_gt2"):
+                row[k] = None                                                                  # FINN autosizes the FIFOs: no model number
+        rows.append(row)
+    cols = ["arm", "status", "dsr_pct", "dsr_constraints", "lut_total", "lut_nodes", "lut_fifo_dwc", "bram18", "bram18_fifos", "dsp", "slowest_node",
+            "slowest_cycles", "fps", "stall_cycles", "stall_over_F", "stalling_edges", "achieved_dsr_pct", "util_lut", "util_dsp", "sum_node_cycles_ms", "n_dwcs", "n_fifos_gt2", "layers_diff_vs_off", "fingerprint", "dsr_violations", "wwidth_max_seen", "all_int6"]
+    with open(HERE / "arms_summary.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=cols, extrasaction="ignore")
+        w.writeheader()
+        w.writerows(rows)
+    (HERE / "arm_groups.json").write_text(json.dumps(groups, indent=1))
+    build = [arms[0] for arms in sorted(groups.values(), key=lambda a: ARMS.index(a[0])) if arms[0] in BUILD_ONLY]
+    (HERE / "arms_to_build.txt").write_text("\n".join(build) + "\n")
+    rep_of = {}                                                          # every MILP arm -> the first arm with the same folding
+    for arms in groups.values():
+        for arm in arms:
+            if arm in MILP_ARMS:
+                rep_of[arm] = next(a for a in arms if a in MILP_ARMS)
+    with open(HERE / "arm_build_map.csv", "w", newline="") as fh:         # arm -> the hardware build that represents it (identical foldings share one build: the <rep>_simfifo variant)
+        w = csv.writer(fh)
+        w.writerow(["arm", "build_arm"])
+        for arm in MILP_ARMS:
+            if arm in rep_of:
+                w.writerow([arm, f"{rep_of[arm]}_simfifo"])
+        w.writerow(["dsr_off_finnfifo", "dsr_off_finnfifo"])
+        for a in reps:
+            w.writerow([f"{a}_simfifo", f"{a}_simfifo"])
+    print(f"{'arm':14s}{'status':11s}{'LUT':>8s}{'(nodes)':>9s}{'BRAM18':>8s}{'DSP':>6s}{'slowest':>9s}{'fps':>7s}{'dLayers':>8s}  fingerprint  violations")
+    for r in rows:
+        if r["status"] != "Optimal":
+            print(f"{r['arm']:14s}{r['status']}")
+            continue
+        if r["arm"] in VARIANTS:
+            print(f"{r['arm']:14s}{r['status']:11s}{'-':>8s}{r['lut_nodes']:9d}{'-':>8s}{r['dsp']:6.0f}{r['slowest_cycles']:9d}{r['fps']:7.1f}{str(r['layers_diff_vs_off']):>8s}  {r['fingerprint']}  (same folding as {VARIANTS[r['arm']]}, FINN FIFO autosize)")
+            continue
+        print(f"{r['arm']:14s}{r['status']:11s}{r['lut_total']:8d}{r['lut_nodes']:9d}{r['bram18']:8.0f}{r['dsp']:6.0f}{r['slowest_cycles']:9d}{r['fps']:7.1f}"
+              f"{str(r['layers_diff_vs_off']):>8s}  {r['fingerprint']}  {r['dsr_violations']}")
+    if target_errors:
+        raise SystemExit("arms NOT run on the unified target of arms_config.sh (got, want): " + "; ".join(f"{a}: {e}" for a, e in target_errors))
+    print(f"\nunified target OK for every arm: {expected_target()}")
+    print("\nidentical foldings:", {fp: arms for fp, arms in groups.items()})
+    print("arms to build (one per distinct folding):", build)
+
+
+if __name__ == "__main__":
+    main()
