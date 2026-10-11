@@ -1114,19 +1114,6 @@ def build_partition_folding_config(partition_model_fn, sdp_node_name, logical_na
             folding_config[swu_node.name] = {"SIMD": safe_pe}
             if fmpad_node is not None:
                 folding_config[fmpad_node.name] = {"SIMD": safe_pe}
-        elif node.op_type.startswith("VVAU"):
-            # Depthwise: SWG SIMD must equal VVAU PE; VVAU SIMD > 1 needs the SWG in parallel_window mode.
-            fmpad_node, swu_node = _find_dense_swu_fmpad(kernel_model, node)
-            if swu_node is not None:
-                swu_cfg = {"SIMD": safe_pe}
-                if swu_node.op_type == "ConvolutionInputGenerator_rtl":
-                    swu_cfg["parallel_window"] = int(safe_simd > 1)
-                elif safe_simd > 1:
-                    raise RuntimeError(f"{log} {node.name}: VVAU SIMD={safe_simd} needs an rtl SWG, got {swu_node.op_type}")
-                folding_config[swu_node.name] = swu_cfg
-                print(f"{log} {swu_node.name:30s} {swu_node.op_type:12s} (dw SWU) {swu_cfg}")
-                if fmpad_node is not None:
-                    folding_config[fmpad_node.name] = {"SIMD": safe_pe}
         elif compute_entry.get("simd_swu") is not None and node.op_type.startswith("MVAU"):
             # FINN leaves dense-conv SWU SIMD=1 otherwise, making the SWU the bottleneck.
             _, up0_leaf = _stage_leaf(json_key)

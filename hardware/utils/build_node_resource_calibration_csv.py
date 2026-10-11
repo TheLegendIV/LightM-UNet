@@ -300,6 +300,9 @@ def main():
         n_before = len(rows)
         n_missing = 0
         for node in attrs:
+            # already-prefixed onnx names (GiveUniqueNodeNames(prefix) builds) must join on the bare name too
+            if node["node_name"].startswith(prefix):
+                node["node_name"] = node["node_name"][len(prefix):]
             row = build_row(partition, node, hier)
             if row is None:
                 n_missing += 1
