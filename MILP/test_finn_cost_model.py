@@ -210,7 +210,7 @@ class ThresholdingPlacementTest(unittest.TestCase):
     def test_distributed_is_all_lutram(self):
         lut, bram18, _ = _thresholding_rtl_cost(1, 8, 32, "distributed", in_bits=10)
         self.assertEqual(bram18, 0)
-        self.assertAlmostEqual(lut, 9.0428 * 10 + 1275)  # forced LUTRAM: 8160 thresholds * 10 bits / 64 (no real data for this style)
+        self.assertAlmostEqual(lut, 4.6881 * 10 + 0.5926 * 255)  # forced out of BRAM: refit on the 48 pinned v4 nodes, no separate LUTRAM term
 
     def test_lut_scales_with_pe_and_input_width_not_channels(self):
         base, _, _ = _thresholding_rtl_cost(1, 6, 32, "block", in_bits=7)

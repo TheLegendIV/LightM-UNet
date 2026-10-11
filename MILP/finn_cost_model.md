@@ -1279,3 +1279,10 @@ Per-kind LUT error of the model against real (bilinear / nn-up v2 / w8_16 v4), b
 * **Not done**: MVAU (the fixed 300-LUT constant times the derate dominates the many tiny P=1,Q=1..2 nodes: real 26-65 LUT vs model ~150; a `57*P + 15.7*P*Q` form fits this build to 11%, but the older
   builds are fine with the current formula, so it needs a regime decision), VVAU (n = 1-3 per build), SWU (+17% on the two INT6-ish builds), FMPadding (no LUT formula: real 2.5k LUT per build), DWC
   (this CSV has no `inWidth` / `outWidth`, so `_DWC_LUT_FACTOR` can only be refit from the older v1/v2/v4 datasets or after re-dumping the ONNX attrs).
+
+### Thresholding placed out of BRAM (`ram_style="distributed"`), 2026-10-11 (later)
+
+The 1 LUT per 64 bits of every stage ("LUTRAM", `_LUTRAM_BITS_PER_LUT`) is removed. A LUTRAM is a LUT, so the budget never distinguished them; the problem was the count. In the real v4 build 48 conv thresholds were pinned to
+`depth_trigger_bram = 999999` (joined to the pinned folding config by partition + node name): they used 8,009 LUT and 5 BRAM18eq in total, `real_LUTRAM` = 0 (the constant ROM is synthesised as logic), while the removed term predicted 18,912
+(2.36x, median error 84 %). Now `PE * (4.6881 * in_bits + 0.5926 * numSteps)` (OLS through the origin on those 48 nodes, median error 10.0 %, leave-one-out 10.4 %); BRAM placement is unchanged. Caveats: all PE=1, in_bits 12-19 (the residual-join
+thresholds, 7-10 bits, were never built pinned: extrapolation). Effect on the 512 nearest net at 250 fps, no DSR: see MILP/artifacts/S12_dense_512_dsr_ablation_v1/ (INT8 LUT 230.3k = 100 % before).

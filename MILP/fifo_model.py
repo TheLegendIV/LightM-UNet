@@ -13,7 +13,7 @@ Both are expressed here as terms LINEAR in the solver's one-hot fold variables z
     m[w, w'] >= u_P[w] + u_C[w'] - 1 (continuous, minimised by the budget), priced with fcm.dwc_cost.
 The up blocks' two join FIFOs (`skip FIFO` at the ext end = one input row, `FIFO main` = 3 input rows of the main stream; closed forms fitted to the simulation with the real upsampler kernel, see
 UP_SKIP_ROWS / UP_MAIN_ROWS) are priced like the regular skip FIFO. Simulation-only FIFOs without a closed form (down feed into SWG_r, init `FIFO main`, dup outputs) are NOT priced in the solve:
-MILP/analytical's verify_with_sim sizes them after the fact (net_fold.py). Single candidate bit width only (every stream is `bits` wide), like the uniform S12 runs.
+MILP/analytical's verify_with_sim sizes them after the fact (net_fold.py). Mixed precision works since 2026-10-11: every width uses the bits of the option that owns the FIFO (FifoModel._bits); neighbours with different bits then see a width mismatch (a small spurious DWC term, the real stream carries one dtype), and bit-less nodes use the largest candidate.
 """
 from __future__ import annotations
 
@@ -74,10 +74,13 @@ def _stage(name: str, geom: dict, extras: dict) -> str:
 
 
 class FifoModel:
-    def __init__(self, geometries, extra_nodes, dataflow_map, z, layer_costs, bits: int):
+    def __init__(self, geometries, extra_nodes, dataflow_map, z, layer_costs, bits):
         self.geom = {g.name: g for g in geometries}
         self.extras = {n.geom.name: n for n in extra_nodes}
-        self.dmap, self.A = dataflow_map, bits
+        # bits: ONE int (uniform run) or the candidate bit widths (mixed precision). Every FIFO / DWC width uses the bits of the option that owns it (self._bits(key) = the option's
+        # activation bits); nodes without bits of their own (dup / concat / upsample / argmax: key bits 0) and concat's input widths use self.A = the LARGEST candidate (conservative).
+        self.dmap = dataflow_map
+        self.A = max([bits] if isinstance(bits, int) else list(bits))
         self.kinds = {n.geom.name: n.kind for n in extra_nodes}
         self.zvar = z
         self.options: dict[str, list[tuple]] = {}
@@ -97,9 +100,13 @@ class FifoModel:
     def _is_layer(self, name: str) -> bool:
         return name in self.geom
 
+    def _bits(self, key: tuple) -> int:
+        """Stream precision of an option: its own activation bits (key[6]), or the conservative maximum candidate for nodes that carry none."""
+        return int(key[6]) if key[6] else self.A
+
     def ports(self, key: tuple, pred: str | None = None) -> dict:
         """in_w / out_w of the node's streams (bits) for option `key`, plus `internal` DWCs [(label, w_in, w_out)] inside the node's own FINN subgraph."""
-        name, A = key[0], self.A
+        name, A = key[0], self._bits(key)
         pe, simd = key[1], key[2]
         if self._is_layer(name):
             g, c = self.geom[name], self.cost[key]
@@ -170,7 +177,6 @@ class FifoModel:
             role_kind=role_kind, conv=conv))
 
     def _build_constants(self) -> None:
-        A = self.A
         # internal DWCs of every option
         for name, opts in self.options.items():
             for key, _ in opts:
@@ -186,7 +192,7 @@ class FifoModel:
             self.replaced_edges.update((p, name) for p in self.dmap.get(name, []))
             for key, _ in self.options[name]:
                 c = self.cost[key]
-                self._fifo_item(key, f"{name}.prefetch", c["simd_swu"] * A, prefetch_depth_words(g, c["simd_swu"]), g.stage, producer=f"{name}", consumer=f"{name}.fmpad",
+                self._fifo_item(key, f"{name}.prefetch", c["simd_swu"] * self._bits(key), prefetch_depth_words(g, c["simd_swu"]), g.stage, producer=f"{name}", consumer=f"{name}.fmpad",
                                  role_kind="prefetch", conv=name)
         # skip FIFO of every residual diamond (join kind add)
         for d in find_fork_join_diamonds(self.dmap):
@@ -210,7 +216,7 @@ class FifoModel:
             self.replaced_edges.add((node, d["join"]))
             for key, _ in self.options[node]:
                 pe = key[1]
-                self._fifo_item(key, f"{d['join']}.skip", pe * A, skip_depth_words(conv, cout, pe, dn), self.extras[d["join"]].geom.stage, is_skip=True,
+                self._fifo_item(key, f"{d['join']}.skip", pe * self._bits(key), skip_depth_words(conv, cout, pe, dn), self.extras[d["join"]].geom.stage, is_skip=True,
                                 producer=node, consumer=d["join"], role_kind="skip")
 
     def _build_edge_fifos(self) -> None:
@@ -231,7 +237,7 @@ class FifoModel:
                 continue
             for key, _ in self.options[name]:
                 c = self.cost[key]
-                A = self.A
+                A = self._bits(key)
                 if g.kh * g.kw > 1:
                     if g.ph or g.pw:
                         self._edge_fifo(key, f"{name}.fmpad->swg", c["simd_swu"] * A)
@@ -248,7 +254,7 @@ class FifoModel:
 
     def _up_block_fifos(self, d: dict) -> None:
         """Both join FIFOs of an up block: ext end (`skip FIFO`) and main end (`FIFO main`). The main branch is the one holding the upsample node. Per-option constants like the regular skip FIFO."""
-        stage, A = self.extras[d["join"]].geom.stage, self.A
+        stage = self.extras[d["join"]].geom.stage
         a, b = d["branch_a"], d["branch_b"]
         main = a if any(self.kinds.get(n) == "upsample" for n in a) else b
         ext = b if main is a else a
@@ -260,7 +266,7 @@ class FifoModel:
                 continue
             for key, _ in self.options[node]:
                 pe = (self.cost[key].get("thr_pe") or key[1]) if node in self.geom else key[1]          # a conv's own threshold PE sets its output stream
-                self._fifo_item(key, f"{d['join']}.{'skip' if is_skip else 'main'}", pe * A, fn(w_in, cout, pe), stage, is_skip=is_skip, producer=node, consumer=d["join"], role_kind=role)
+                self._fifo_item(key, f"{d['join']}.{'skip' if is_skip else 'main'}", pe * self._bits(key), fn(w_in, cout, pe), stage, is_skip=is_skip, producer=node, consumer=d["join"], role_kind=role)
             self.skip_nodes[node] = dict(join=d["join"], n_fill_px=w_in, conv=None, kind=role)
             self.replaced_edges.add((node, d["join"]))
 

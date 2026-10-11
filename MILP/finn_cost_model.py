@@ -185,6 +185,13 @@ _THR_RTL_LUT_PER_NUMSTEP_PE = 0.1095   # LEGACY, see above
 # Only identified at output_bits = 6 (numSteps is 63 in every row): the older auto-placement builds fit ~5.9 LUT per input bit (+0.047/step) and sit 10-30% below this
 # at the same width, so other output widths are NOT calibrated. See MILP/calibration.csv.
 _THR_RTL_LUT_PER_INBIT_PE = 9.0428
+# 2026-10-11 refit of the OTHER placement, ram_style "distributed" (depth_trigger_bram 999999: no stage may use BRAM): the 48 conv thresholds the MILP pinned to it in the real v4 build
+# (12_dense_relu_nearest_conv_upsample_256_w8_16_v4: all PE=1, numSteps 15 / 63 / 255, in_bits 12-19, joined by (partition, node name) to the pinned folding config), real LUT sum 8,009,
+# BRAM18 5 (3 nodes), real LUTRAM 0: forced out of BRAM the threshold ROM is synthesised as plain logic LUTs, so there is no separate "LUTRAM" resource to price. OLS through the origin:
+#   real_LUT ~= PE * (4.6881 * in_bits + 0.5926 * numSteps)       medAPE 10.0 %, leave-one-out 10.4 %, sum ratio 0.99   (the removed 1 LUT / 64 bits term: 2.36x over, medAPE 84 %)
+# Identified only at PE=1 and in_bits >= 12 (the residual-join thresholds are 7-10 bits wide: an extrapolation); see MILP/calibration.csv.
+_THR_DIST_LUT_PER_INBIT_PE = 4.6881
+_THR_DIST_LUT_PER_STEP_PE = 0.5926
 # Memory placement is PINNED, not left to Vivado: the bridge writes `depth_trigger_bram` on every
 # Thresholding_rtl node (thresholding.sv: a stage whose depth >= trigger goes to BRAM, a shallower one
 # to LUTRAM; trigger 0 = "auto", Vivado's own undocumented choice, which the MILP cannot predict).
@@ -197,7 +204,6 @@ THR_DEPTH_TRIGGER_BRAM = 1024
 THR_DEPTH_TRIGGER_DISTRIBUTED = 999_999
 THR_DEFAULT_IN_BITS = 10  # threshold width of the residual-join nodes (real INT10; conv thresholds use acc_bits)
 _BRAM18_PRIMITIVES = ((36, 512), (18, 1024), (9, 2048))  # (width, depth)
-_LUTRAM_BITS_PER_LUT = 64  # one LUT6 as RAM64X1
 
 
 def _bram18_count(width: int, depth: int) -> int:
@@ -379,26 +385,23 @@ def _thresholding_rtl_cost(
     """(lut, bram18, uram18) of the standalone Thresholding_rtl node that follows
     this layer's MVAU/VVAU under noActivation=1. Stage s (0..output_bits-1) is a
     (in_bits x channels/pe * 2**s) memory per PE; placement by the pinned depth trigger
-    (see THR_DEPTH_TRIGGER_BRAM). lut = the empirical logic fit (PE*(68.2+0.11*numSteps),
-    from auto-placement builds) + one LUT per 64 bits of every LUTRAM stage. URAM is never
-    used (URAM288 cannot be a ROM -- real synthesis fails)."""
+    (see THR_DEPTH_TRIGGER_BRAM). BRAM = the stages at or above the trigger. lut = an empirical logic fit that already contains the shallow stages' ROM (they synthesise as logic LUTs;
+    there is no separate LUTRAM term): "block" PE*9.04*in_bits (INT6 / numSteps 63 regime), "distributed" PE*(4.69*in_bits + 0.593*numSteps). URAM is never used (URAM288 cannot be a ROM --
+    real synthesis fails)."""
     if ram_style == "block":
         trigger = THR_DEPTH_TRIGGER_BRAM
     elif ram_style == "distributed":
         trigger = THR_DEPTH_TRIGGER_DISTRIBUTED
     else:
         raise ValueError(f"unsupported thresholding ram_style {ram_style!r}")
-    lut = pe * _THR_RTL_LUT_PER_INBIT_PE * in_bits
+    num_steps = 2 ** output_bits - 1
+    lut = pe * (_THR_DIST_LUT_PER_INBIT_PE * in_bits + _THR_DIST_LUT_PER_STEP_PE * num_steps) if ram_style == "distributed" else pe * _THR_RTL_LUT_PER_INBIT_PE * in_bits
     bram18 = 0
     cf = channels // pe
     for stage in range(output_bits):
         depth = cf * 2 ** stage
         if depth >= trigger:
             bram18 += pe * _bram18_count(in_bits, depth)
-        elif ram_style == "distributed":
-            # forced LUTRAM: physical 1 LUT per 64 bits, NO real data for this style. With "block" the shallow stages
-            # add nothing here: the real nodes show ~0 LUTRAM (they synthesise as logic ROMs), already inside the fit above.
-            lut += pe * math.ceil(depth * in_bits / _LUTRAM_BITS_PER_LUT)
     return lut, float(bram18), 0.0
 
 

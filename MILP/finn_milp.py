@@ -643,12 +643,10 @@ def solve_joint_perlayer(
     fifo_model = None
     fifo_lut = fifo_bram = fifo_uram = 0
     if model_fifos:
-        if len(CANDIDATE_BITS) != 1:
-            raise ValueError("--model-fifos prices streams at one bit width: pass a single --candidate-bits value (mixed precision changes the stream widths per edge).")
         if dataflow_map is None:
             raise ValueError("--model-fifos needs the dataflow graph (dataflow_map).")
         from fifo_model import FifoModel
-        fifo_model = FifoModel(geometries, extra_nodes, dataflow_map, z, layer_costs, CANDIDATE_BITS[0])
+        fifo_model = FifoModel(geometries, extra_nodes, dataflow_map, z, layer_costs, CANDIDATE_BITS)
         fifo_lut, fifo_bram, fifo_uram = fifo_model.add_terms(pulp, prob)
         n_extra_constraints += fifo_model.n_pair_vars
 
@@ -1134,8 +1132,8 @@ def main() -> None:
     parser.add_argument("--no-model-fifos", dest="model_fifos", action="store_false", default=True,
                          help="FIFO / DWC modelling is ON by default (since 2026-10-08): the skip FIFO of every residual diamond, the prefetch FIFO in front of every padded conv and every "
                               "data-width converter (inter-node and internal) are priced in the LUT / BRAM / URAM budgets and the --min-resources objective (fifo_model.py, estimates from "
-                              "MILP/analytical), and the lists are written as intra_block_fifos / inter_block_fifos / dwcs. Inter-block FIFOs are fixed at depth 2. The model prices streams at "
-                              "ONE bit width, so with several --candidate-bits values it switches itself off (with a note); this flag switches it off explicitly.")
+                              "MILP/analytical), and the lists are written as intra_block_fifos / inter_block_fifos / dwcs. Inter-block FIFOs are fixed at depth 2. Every FIFO / DWC width uses the "
+                              "bits of the option that owns it, so it works with mixed --candidate-bits too (nodes without bits of their own are priced at the largest candidate); this flag switches it off.")
     parser.add_argument("--model-fifos", dest="_model_fifos_noop", action="store_true", help=argparse.SUPPRESS)      # old name: now the default, kept so earlier scripts still run
     parser.add_argument("--time-limit", type=int, default=1800, help="CBC time limit in seconds.")
     parser.add_argument("--gap-rel", type=float, default=0.02, help="CBC relative optimality gap.")
@@ -1154,10 +1152,6 @@ def main() -> None:
         global CANDIDATE_BITS
         CANDIDATE_BITS = tuple(sorted(int(b) for b in args.candidate_bits.split(",")))
         print(f"Overriding CANDIDATE_BITS to {CANDIDATE_BITS} (from --candidate-bits).")
-
-    if args.model_fifos and len(CANDIDATE_BITS) != 1:
-        print(f"NOTE: FIFO / DWC modelling is off for this run: it prices streams at one bit width and CANDIDATE_BITS = {CANDIDATE_BITS} (pass a single --candidate-bits value to get it).")
-        args.model_fifos = False
 
     if args.force_serial:
         global FORCE_SERIAL
