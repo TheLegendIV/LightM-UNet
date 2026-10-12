@@ -83,6 +83,9 @@ def explicit_for_block(stage: str, kind: str, per_layer: dict, extra: dict, prev
             warn.append(f"{stage}: residual_add PE {extra[f'{stage}.residual_add']['pe']} != out_act PE {extra[f'{stage}.out_act']['pe']} (the analytical Thr_out merges them; out_act used)")
         if kind == "dn":
             f["skip_mvau"] = (extra[f"{stage}.skip_pad"]["pe"], extra[f"{stage}.skip_pad"]["simd"])
+        if kind == "up" and f"{stage}{net_fold.DW_SUFFIX}" in per_layer:       # the frozen depthwise 3x3 conv (add_frozen_dw_fold.py): its fold, and skip_quant is the depthwise path's threshold Thr_k
+            f[f"{stage}{net_fold.DW_SUFFIX}"] = lyr(f"{stage}{net_fold.DW_SUFFIX}")[0]
+            f["Thr_k"] = xpe(f"{stage}.skip_quant")
     F = max([v["cycles"] for v in per_layer.values() if v["stage"] == stage] + [v["cycles"] for v in extra.values() if v["stage"] == stage])
     return f, int(F), warn
 
@@ -100,6 +103,9 @@ def seeds_for_block(d: dict, stage: str) -> dict:
             out["main"] = int(f["depth"])
         elif f["consumer"].endswith(".fmpad") or f["name"].endswith(".prefetch"):
             out.setdefault("prefetch", int(f["depth"]))
+    dw = d.get("per_layer", {}).get(f"{stage}{net_fold.DW_SUFFIX}")
+    if dw and "prefetch_words" in dw:
+        out.setdefault("prefetch", int(dw["prefetch_words"]))              # the frozen depthwise conv's prefetch FIFO: not a MILP layer, add_frozen_dw_fold.py's estimate
     return out
 
 
@@ -301,6 +307,7 @@ def main() -> int:
     ap.add_argument("--max-iterations", type=int, default=3, help="per-block sizing iterations (default 3): each = grow the FIFOs at capacity until the block's MILP cycles are reached within 5 %% and nothing deadlocks, then shrink every FIFO to its observed occupancy and check cycles + deadlock again (bottleneck.iterate_sizing)")
     ap.add_argument("--max-rounds", type=int, default=1, help="whole-net chain rounds (default 1: one pure check). More rounds grow the full FIFOs of a deadlocked chain (x4 intra, x2 interfaces) and re-run")
     ap.add_argument("--reuse-blocks", action="store_true", help="reuse <out-dir>/blocks.pkl (the simulated blocks of an earlier run) instead of re-simulating every block")
+    ap.add_argument("--only", default="", help="with --reuse-blocks: comma-separated stages to re-simulate (e.g. up4,up5); every other block is taken from the cache")
     ap.add_argument("--no-chain", action="store_true", help="per-block simulation only (skip the whole-net runs)")
     a = ap.parse_args()
     raise SystemExit(run(a))
@@ -314,6 +321,10 @@ def run(a) -> int:
     a.sites = None if a.uniform_bits else net_fold.sites_for(a.config, a.folding_json)           # per-site bits of the network -> per-block bits_map (bottleneck.RoleBits)
     finn_milp.CANDIDATE_BITS = tuple(sorted(set(finn_milp.CANDIDATE_BITS) | {a.bits}))
     model, geoms, extras, _pred, dmap, kinds = finn_milp.build_model_and_graph()
+    if any(n.endswith(net_fold.DW_SUFFIX) for n in d["per_layer"]):          # a folding json from add_frozen_dw_fold.py: the up blocks carry the bilinear decoder's frozen depthwise 3x3 conv
+        net_fold.BILINEAR_UP = True
+        added = net_fold.add_bilinear_dw(geoms, dmap)
+        print(f"{a.tag}: up blocks built WITH the frozen depthwise conv ({', '.join(added)})", flush=True)
     ctx = (geoms, extras, {g.name: g for g in geoms}, {n.geom.name: n for n in extras}, dmap, kinds)
     t0 = time.time()
     blocks, warns = build_blocks(d, a, ctx)
@@ -323,8 +334,18 @@ def run(a) -> int:
     milp_cap = int(d["_diagnostics"]["max_node_cycles"])
     cache = a.out_dir / "blocks.pkl"
     if a.reuse_blocks and cache.exists():
-        blocks, errors = pickle.loads(cache.read_bytes())
-        print(f"reusing the simulated blocks of {cache}", flush=True)
+        cached, cerrors = pickle.loads(cache.read_bytes())
+        if a.only:                                       # re-simulate just these blocks, take the others from the cache (their folding is unchanged)
+            only = set(a.only.split(","))
+            fresh, ferrors = verify_blocks_keep([b for b in blocks if b[0] in only], a.workers, tol, a.max_iterations)
+            fm = {b[0]: b for b in fresh}
+            blocks = [fm.get(b[0], b) for b in cached]
+            errors = {**{k: v for k, v in cerrors.items() if k not in only}, **ferrors}
+            cache.write_bytes(pickle.dumps((blocks, errors)))
+            print(f"re-simulated {sorted(only)}, reusing the other {len(blocks) - len(fm)} blocks of {cache}", flush=True)
+        else:
+            blocks, errors = cached, cerrors
+            print(f"reusing the simulated blocks of {cache}", flush=True)
     else:
         blocks, errors = verify_blocks_keep(blocks, a.workers, tol, a.max_iterations)
         a.out_dir.mkdir(parents=True, exist_ok=True)
