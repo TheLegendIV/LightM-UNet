@@ -67,8 +67,9 @@ deployment/FINN_interface/*
 *.pdf
 
 
-# Exception to the raw-dataset rule above: the Dataset509 test images (imagesTs) stay tracked. Forward slashes (a backslash is an escape in .gitignore), and
-# the parent directory has to be re-included first -- git never looks inside an ignored directory -- then everything else in it ignored again.
+# Exception to the raw-dataset rule above: the Dataset509 (512, 4c) test images (imagesTs) and test masks (labelsTs) stay tracked. Forward slashes (a backslash is an
+# escape in .gitignore), and the parent directory has to be re-included first -- git never looks inside an ignored directory -- then everything else in it ignored again.
 !data/nnUNet_raw/Dataset509_ARCADE_1x1_4c/
 data/nnUNet_raw/Dataset509_ARCADE_1x1_4c/*
 !data/nnUNet_raw/Dataset509_ARCADE_1x1_4c/imagesTs/
+!data/nnUNet_raw/Dataset509_ARCADE_1x1_4c/labelsTs/
