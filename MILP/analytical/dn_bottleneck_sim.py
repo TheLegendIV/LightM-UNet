@@ -22,6 +22,7 @@ from bottleneck_sim import (  # noqa: E402
     BLOCKED, BUSY, IDLE, STARVED, UNBOUNDED, FmPadNode, Fifo, MvauNode, Sink, Source, SimResult, StreamNode, SwgNode,
     run_network,
 )
+from bottleneck import BLOCK_FIFO_DEPTH  # noqa: E402
 
 
 class MaxPoolNode:
@@ -140,6 +141,7 @@ def simulate_dn(
     swg_slack_px: int = 1, frames: int = 1, elastic_map: dict | None = None,
 ) -> SimResult:
     """inject_interval: cycles between INPUT pixels (0 = saturated, r.params['T_in'] = upstream block at the budget)."""
+    fifo_depth = max(fifo_depth, BLOCK_FIFO_DEPTH)              # every intra-block FIFO of a down block is at least BLOCK_FIFO_DEPTH words (bottleneck.py)
     p = r.params
     H, W, Ho, Wo = p["height"], p["width"], p["height"] // 2, p["width"] // 2
     cin, cmid, cout = p["cin"], p["cmid"], p["cout"]

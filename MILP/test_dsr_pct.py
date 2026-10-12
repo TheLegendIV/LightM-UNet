@@ -44,12 +44,12 @@ class TestDsrPct(unittest.TestCase):
     def test_50_percent_is_feasible_and_differs_from_off_only_in_the_dilated_convs(self):
         self.assertEqual(self.r["50"]["status"], "Optimal")
         self.assertEqual(self.off["status"], "Optimal")
-        fold = lambda d: {n: (v["pe"], v["simd"]) for n, v in d["per_layer"].items()}
+        fold = lambda d: {n: v["cycles"] for n, v in d["per_layer"].items()}            # cycles, not (pe, simd): equal-cost (pe, simd) alternatives (e.g. up4.reduce.0 (4,1) vs (2,2), 6 LUT apart) are ties
         a, b = fold(self.r["50"]), fold(self.off)
         # Before the sliding window's fill gap entered the conv cycles (2026-10-12) 50 % equalled OFF. The gap adds ~2 % to the dilated 3x3 convs' cycles, which pushes the slow
         # fold (2,3) over 1.5 x its ancestor's cycles, so those convs (and only those) take the faster fold under the 50 % rule.
         self.assertEqual({n for n in a if a[n] != b[n]}, {n for n in a if a[n] != b[n] and n.endswith(".conv")})
-        self.assertLessEqual(sum(self.r["50"]["per_layer"][n]["cycles"] for n in a if a[n] != b[n]), sum(self.off["per_layer"][n]["cycles"] for n in a if a[n] != b[n]))
+        self.assertLessEqual(sum(a[n] for n in a if a[n] != b[n]), sum(b[n] for n in a if a[n] != b[n]))
 
     def test_final_layer_cannot_beat_one_cycle_per_output_pixel(self):
         self.assertGreaterEqual(self.off["per_layer"]["final"]["cycles"], 512 * 512)

@@ -6,13 +6,13 @@ Traced 88 layers (per-layer granularity, no block grouping). candidate_bits=(6,)
 --target-fps 250.0 @ 100.0MHz -> every node <= 400000 cycles (hard constraint).
 Wrote MILP/artifacts/S12_dense_512_warmstart_mixed_v1/uniform_int6/layer_bits_folding_uniform_int6.json
 ILP status: Optimal
-LUT used (calibrated): 98951 (42.9% of 230400 budget) -- GUARANTEED (hard constraint).
+LUT used (calibrated): 103232 (44.8% of 230400 budget) -- GUARANTEED (hard constraint).
 BRAM_18K used (calibrated): 162 (26.0% of 624 budget) -- GUARANTEED (hard constraint).
-DSP used: 275 (15.9% of 1728 budget) -- GUARANTEED (hard constraint).
-Bottleneck: stage2.0.conv at 393216 cycles/frame -> 254.3 FPS @ 100.0MHz
-Total cycles (sum over nodes): 50846988
-Branch imbalance (diagnostic, 28 fork/join diamonds): median=7.00x max=14.00x
-Chain-rate imbalance (diagnostic, 233 nodes with a descendant): median=12.00x max=72.00x
+DSP used: 283 (16.4% of 1728 budget) -- GUARANTEED (hard constraint).
+Bottleneck: stage2.1.conv at 397896 cycles/frame -> 251.3 FPS @ 100.0MHz
+Total cycles (sum over nodes): 50152640
+Branch imbalance (diagnostic, 28 fork/join diamonds): median=6.27x max=14.03x
+Chain-rate imbalance (diagnostic, 233 nodes with a descendant): median=9.38x max=72.06x
   input_quant   x  1: LUT       84  BRAM_18K    0.0  DSP    0  cycles     262144
   concat        x  1: LUT      107  BRAM_18K    0.0  DSP    0  cycles      65536
   act           x  1: LUT       84  BRAM_18K    0.0  DSP    0  cycles     262144
@@ -30,3 +30,4 @@ Wrote MILP/artifacts/S12_dense_512_warmstart_mixed_v1/uniform_int6/pruning_layer
 Wrote MILP/artifacts/S12_dense_512_warmstart_mixed_v1/uniform_int6/final_output.onnx
 Wrote MILP/artifacts/S12_dense_512_warmstart_mixed_v1/uniform_int6/summary.csv.
 Wrote MILP/artifacts/S12_dense_512_warmstart_mixed_v1/uniform_int6/run_args.json.
+SOLVED

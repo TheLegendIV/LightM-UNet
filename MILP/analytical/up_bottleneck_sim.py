@@ -30,6 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from bottleneck_sim import (  # noqa: E402
     BLOCKED, BUSY, IDLE, STARVED, UNBOUNDED, FmPadNode, Fifo, MvauNode, Sink, Source, SimResult, StreamNode, SwgNode, run_network,
 )
+from bottleneck import BLOCK_FIFO_DEPTH  # noqa: E402
 
 
 class UpNNNode:
@@ -144,6 +145,7 @@ def simulate_up(
     """skip_depth: the 'skip FIFO' on the EXT branch end, main_depth: 'FIFO main' on the main branch end (words; None = r's value,
     UNBOUNDED = measure). inject_interval: cycles between INPUT pixels.
     pix_simd: SIMD of the FMPadding_Pixel node (None = the SWG's SIMD, what the bridge sets; 1 = FINN's default when nothing sets it: cmid folds per pixel, a DWC widens it to the SWG's SIMD)."""
+    fifo_depth = max(fifo_depth, BLOCK_FIFO_DEPTH)              # every intra-block FIFO of an up block is at least BLOCK_FIFO_DEPTH words (bottleneck.py)
     p = r.params
     H, W, Ho, Wo = p["height"], p["width"], 2 * p["height"], 2 * p["width"]
     cin, cmid, cout = p["cin"], p["cmid"], p["cout"]

@@ -16,7 +16,7 @@ pids=()
 for arm in "${ARMS[@]}"; do
   mkdir -p "$HERE/${arm}_simfifo"
   python3 MILP/analytical/net_explicit.py "$HERE/$arm/layer_bits_folding_$arm.json" --out-dir "$HERE/${arm}_simfifo" --tag "${arm}_simfifo" \
-    --config config_12_dense_relu_warmstart150ep --workers 2 $NE_ARGS > "$HERE/${arm}_simfifo/run.log" 2>&1 &
+    --config config_12_dense_relu_warmstart150ep --workers 2 ${NE_ARGS:-} > "$HERE/${arm}_simfifo/run.log" 2>&1 &
   pids+=($!)
 done
 rc=0

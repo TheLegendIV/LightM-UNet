@@ -117,6 +117,7 @@ def build_blocks(d: dict, a, ctx) -> tuple[list, list[str]]:
         kind = net_fold.block_kind(stage)
         folds, F, w = explicit_for_block(stage, kind, per_layer, extra, prev)
         warns += w
+        F_milp = F                                           # the MILP's own frame cycles of the block's slowest node: the rate target (the integer T below is only the model's input)
         if kind == "reg":                                   # model_bottleneck takes an integer cycles-per-pixel target
             px = geom[f"{stage}.reduce.0"].hin * geom[f"{stage}.reduce.0"].win
             F = -(-F // px) * px
@@ -128,6 +129,7 @@ def build_blocks(d: dict, a, ctx) -> tuple[list, list[str]]:
         for name, (pe, simd, _rs) in xf.items():
             if name in extra and name != f"{stage}.residual_add":
                 assert pe == extra[name]["pe"], (name, pe, extra[name]["pe"])
+        r.params["F_milp"] = F_milp
         blocks.append((stage, kind, r))
         prev = block_output_name(stage, kind)
     return blocks, warns
@@ -148,12 +150,14 @@ def _verify_keep(args):
     return r, None
 
 
-def annotate_rate(blocks: list, tol: float) -> None:
-    """r.verification['rate'] for EVERY block (also cached ones): the target T (cycles/pixel of the block's slowest MILP node), the achieved steady rate, the block's frame period and whether
-    it is beyond the tolerance. `rate_miss` (the pre-2026-10-12 key, read by summarize_simfifo.py) is kept for the blocks beyond it. Idempotent."""
-    for _, _, r in blocks:
+def annotate_rate(blocks: list, tol: float, f_milp: dict | None = None) -> None:
+    """r.verification['rate'] for EVERY block (also cached ones): the target (the MILP's own cycles per frame of the block's slowest node, f_milp[stage] or r.params['F_milp'], as cycles per output
+    pixel; r.params['T'] -- the integer the regular model is built with, rounded UP -- only when neither is known), the achieved steady rate, the block's frame period and whether it is beyond the
+    tolerance. `rate_miss` (the pre-2026-10-12 key, read by summarize_simfifo.py) is kept for the blocks beyond it. Idempotent."""
+    for stage, _, r in blocks:
         v = r.verification
-        T, ach = r.params["T"], v["steady_cyc_px"]
+        F = (f_milp or {}).get(stage) or r.params.get("F_milp")
+        T, ach = (F / (r.params["hout"] * r.params["wout"]) if F else r.params["T"]), v["steady_cyc_px"]
         over = ach / T - 1
         v["rate"] = dict(target_cyc_px=T, achieved_cyc_px=ach, over_pct=round(100 * over, 2), period_cycles=int(ach * r.params["hout"] * r.params["wout"]), tolerance_pct=round(100 * tol, 2),
                          exceeds_tolerance=bool(over > tol + 1e-9))
@@ -294,6 +298,7 @@ def run(a) -> int:
     ctx = (geoms, extras, {g.name: g for g in geoms}, {n.geom.name: n for n in extras}, dmap, kinds)
     t0 = time.time()
     blocks, warns = build_blocks(d, a, ctx)
+    f_milp = {stage: r.params["F_milp"] for stage, _, r in blocks}
     print(f"{a.tag}: {len(blocks)} blocks built from the MILP folding ({len(warns)} warnings)", flush=True)
     tol = WARN_TOLERANCE
     milp_cap = int(d["_diagnostics"]["max_node_cycles"])
@@ -306,13 +311,13 @@ def run(a) -> int:
         a.out_dir.mkdir(parents=True, exist_ok=True)
         cache.write_bytes(pickle.dumps((blocks, errors)))
     errors = deadlock_errors(blocks, errors)
-    annotate_rate(blocks, tol)
+    annotate_rate(blocks, tol, f_milp)
     for stage, err in errors.items():
         print(f"  BLOCK DEADLOCKS ALONE: {stage}: {err}", flush=True)
     for stage, _, r in blocks:
         if r.verification["rate"]["exceeds_tolerance"]:
             rt = r.verification["rate"]
-            msg = f"{stage} reaches {rt['achieved_cyc_px']:.2f} vs its target {rt['target_cyc_px']:.2f} cyc/px ({rt['over_pct']:+.2f}% > the {rt['tolerance_pct']:g}% tolerance), frame period {rt['period_cycles']}; FIFOs sized to within {rt['tolerance_pct']:g}% of the best rate it reaches"
+            msg = f"{stage} reaches {rt['achieved_cyc_px']:.2f} vs its target {rt['target_cyc_px']:.2f} cyc/px ({rt['over_pct']:+.2f}% > the {rt['tolerance_pct']:g}% tolerance), frame period {rt['period_cycles']}; FIFOs sized deadlock-free only"
             print(f"  WARNING (rate, not a failure): {msg}", flush=True)
             warns.append(f"rate: {msg}")
     nodes = {**d["per_layer"], **d["extra_nodes"]}
@@ -342,7 +347,8 @@ def assemble_output(d: dict, blocks: list, chain: dict | None, errors: dict, war
     fm = g.pop("fifo_model", None)
     fm_tot = (fm or {}).get("totals", {})
     inter_old = d.get("inter_block_fifos", [])
-    est_lut = fm_tot.get("lut", 0) + fm_tot.get("dwc_lut", 0) + sum(f.get("lut", 0) for f in inter_old)
+    # edge_fifo_lut = every depth-2 edge FIFO of the MILP, inter-block ones included (finn_milp adds it to total_lut_calibrated); older jsons have no such key and list the inter-block LUT separately
+    est_lut = fm_tot.get("lut", 0) + fm_tot.get("dwc_lut", 0) + (fm_tot["edge_fifo_lut"] if "edge_fifo_lut" in fm_tot else sum(f.get("lut", 0) for f in inter_old))
     est_bram = fm_tot.get("bram18", 0) + sum(f.get("bram18", 0) for f in inter_old)
     # node-only totals (analytical convention: FIFOs and DWCs on top)
     g["total_lut_calibrated"] -= est_lut
@@ -376,7 +382,7 @@ def assemble_output(d: dict, blocks: list, chain: dict | None, errors: dict, war
     it = g["intra_block_fifo_totals"]
     g["total_lut_with_all_fifos"] = g["total_lut_calibrated"] + it["fifo_lut"] + it["dwc_lut"] + g["inter_block_fifo_lut"]
     out["fifo_sim"] = dict(
-        source=str(a.folding_json.name), tag=a.tag, tolerance_pct=round(100 * tol, 2), bits=a.bits, bits_source=("per-site bits of the folding (bits_map per block, bottleneck.RoleBits)" if getattr(a, "sites", None) else "uniform --bits"), seconds=round(seconds), net_target_cycles=F_net, workers=a.workers,
+        source=str(a.folding_json.name), tag=a.tag, tolerance_pct=round(100 * WARN_TOLERANCE, 2), bits=a.bits, bits_source=("per-site bits of the folding (bits_map per block, bottleneck.RoleBits)" if getattr(a, "sites", None) else "uniform --bits"), seconds=round(seconds), net_target_cycles=F_net, workers=a.workers,
         blocks={stage: dict(kind=kind, ok=(stage not in errors), error=errors.get(stage), tries=r.verification.get("tries"), deadlock=r.verification.get("deadlock"), T=r.params.get("T"),
                             steady_cyc_px=r.verification.get("steady_cyc_px"), rate=r.verification.get("rate"), rate_miss=r.verification.get("rate_miss"), uniform_depth=r.verification.get("uniform_depth"), elastic_depth=r.verification.get("elastic_depth"),
                             full_fifos=(r.verification.get("full_fifos") or []) if stage in errors else [], warnings=list(r.warnings))

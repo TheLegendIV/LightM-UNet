@@ -1,0 +1,32 @@
+Overriding CANDIDATE_BITS to (4, 6, 8) (from --candidate-bits).
+Predecessor map: 86/88 layers have a real, traced predecessor (the rest are the network's own first layer(s), with no real predecessor to fall back to anything but self-sensitivity).
+Extra dataflow nodes: 146 {'input_quant': 1, 'concat': 1, 'act': 1, 'upsample': 2, 'out_act': 27, 'residual_add': 27, 'skip_quant': 27, 'add': 27, 'pool_quant': 1, 'bias': 1, 'argmax': 1, 'dup': 28, 'pad_mvau': 2}.
+Note: ['down1.pool', 'down2.pool', 'initial.pool'] have no sensitivity entry (MaxPool2d, no weight, never HAWQ-measured) -- given a fixed raw sensitivity of 0.0 for every (w,a), see module docstring.
+Traced 88 layers (per-layer granularity, no block grouping). candidate_bits=(4, 6, 8) -> 9 (w,a) pairs. y: 792 binaries, z: 39843 binaries (40635 total). Solving (time_limit=900s, gap_rel=0.001)...
+--target-fps 250.0 @ 100.0MHz -> every node <= 400000 cycles (hard constraint).
+Wrote MILP/artifacts/S12_dense_512_warmstart_mixed_v1/mixed_468_cap1_then_half/step1_cap1_accuracy.json
+ILP status: Optimal
+LUT used (calibrated): 229485 (99.6% of 230400 budget) -- GUARANTEED (hard constraint).
+BRAM_18K used (calibrated): 194 (31.1% of 624 budget) -- GUARANTEED (hard constraint).
+DSP used: 950 (55.0% of 1728 budget) -- GUARANTEED (hard constraint).
+Bottleneck: regular4.0.conv at 393479 cycles/frame -> 254.1 FPS @ 100.0MHz
+Total cycles (sum over nodes): 20394043
+Branch imbalance (diagnostic, 28 fork/join diamonds): median=7.26x max=45.52x
+Chain-rate imbalance (diagnostic, 233 nodes with a descendant): median=19.52x max=312.26x
+  input_quant   x  1: LUT       90  BRAM_18K    0.0  DSP    0  cycles     262144
+  concat        x  1: LUT      107  BRAM_18K    0.0  DSP    0  cycles      65536
+  act           x  1: LUT      362  BRAM_18K    0.0  DSP    0  cycles      65536
+  upsample      x  2: LUT      368  BRAM_18K    0.0  DSP    0  cycles      81920
+  out_act       x 27: LUT    24378  BRAM_18K    0.0  DSP    0  cycles    1146880
+  residual_add  x 27: LUT    20934  BRAM_18K    0.0  DSP    0  cycles    1245184
+  skip_quant    x 27: LUT    23373  BRAM_18K    0.0  DSP    0  cycles    1548288
+  add           x 27: LUT     7091  BRAM_18K    0.0  DSP    0  cycles    1974272
+  pool_quant    x  1: LUT      198  BRAM_18K    0.0  DSP    0  cycles     262144
+  bias          x  1: LUT      334  BRAM_18K    0.0  DSP    0  cycles     262144
+  argmax        x  1: LUT      320  BRAM_18K    0.0  DSP    0  cycles     262144
+  dup           x 28: LUT    11188  BRAM_18K    0.0  DSP    0  cycles    1744896
+  pad_mvau      x  2: LUT      938  BRAM_18K    0.0  DSP   24  cycles     163840
+Wrote MILP/artifacts/S12_dense_512_warmstart_mixed_v1/mixed_468_cap1_then_half/pruning_step1_cap1_accuracy.json
+Wrote MILP/artifacts/S12_dense_512_warmstart_mixed_v1/mixed_468_cap1_then_half/final_output.onnx
+Wrote MILP/artifacts/S12_dense_512_warmstart_mixed_v1/mixed_468_cap1_then_half/summary.csv.
+Wrote MILP/artifacts/S12_dense_512_warmstart_mixed_v1/mixed_468_cap1_then_half/run_args.json.

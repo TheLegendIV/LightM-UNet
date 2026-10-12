@@ -488,6 +488,11 @@ def model_bottleneck(
 # ---------------------------------------------------------------- FIFO memory mapping (LUT/SRL, BRAM, URAM)
 
 URAM_BITS = 72 * 4096          # one URAM288: 4096 deep x 72 wide
+# Intra-block FIFOs of the DOWNSAMPLING and UPSAMPLING blocks are BLOCK_FIFO_DEPTH words deep, not FINN's 2 (2026-10-12). Their nodes are balanced to within a few percent of the budget and the zero insertion /
+# strided window / upsampler emit and consume whole rows in bursts, so 2-word FIFOs couple the phases: at 512x512 the INT6 blocks run 26 % (down2), 29 % (down1), 48 % (up5) and 81 % (up4) over the
+# MILP's cycles with depth 2, 12 % / 12 % / 9 % / 34 % over with 16, and on target (-0.1 .. 0.0 %) with 32 (down2 at 16). 32 words is also where an SRL FIFO stops getting more expensive
+# (fifo_memory: one SRL32 per bit up to depth 32), so the MILP prices them for free of a depth-dependent term. Regular blocks do not need it (+/- 1.5 % at depth 2).
+BLOCK_FIFO_DEPTH = 32
 FIFO_SRL_MAX_DEPTH = 256       # FINN max_qsrl_depth: up to here a FIFO stays StreamingFIFO_rtl (SRL shift registers / LUT); deeper ones are split and the pieces > 256 become Vivado FIFO IP (BRAM / URAM).
                                # Real S12-dense bilinear 256 build: every rtl FIFO is <= 256 deep, every vivado one >= 512 (was 64 here: that sent ~57 FIFOs to BRAM that the real build kept in LUT).
 FIFO_VIVADO_MAX_PIECE = 32768  # Vivado axis_data_fifo depth cap (hardware/finn_s12_build.py)
@@ -643,7 +648,8 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
        frame's top padding rows; then a uniform depth doubles until the period is within tol of T.
     The verified FIFO depths are stored in r.fifo_graph for export_onnx. Raises RuntimeError if no depth reaches T.
     deadlock_only: the FIFOs only have to remove deadlocks, at the cheapest depths: the FIRST schedule entry that does not deadlock is taken (no escalation for
-    rate: extra depth does not change the steady rate, see rate_vs_depth in analytical.md), shrunk to the observed occupancy, and a rate above tol is a warning, not an error
+    rate: past the window's own prefetch FIFOs extra depth does not change the steady rate of a regular block, see rate_vs_depth in analytical.md; the one place where small FIFOs do set the rate,
+    down / up blocks, have STRUCTURAL depths from the start, BLOCK_FIFO_DEPTH), shrunk to the observed occupancy, and a rate above tol is a warning, not an error
     (only a deadlock raises). The rate is the MILP's to set."""
     from bottleneck_sim import UNBOUNDED, simulate
 

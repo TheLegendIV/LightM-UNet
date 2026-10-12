@@ -1,0 +1,20 @@
+Wrote /tmp/tmpetlwxmx_/sites.json (85 weight sites, 110 act sites).
+uniform_int6_simfifo: 29 blocks built from the MILP folding (0 warnings)
+simulating 29 blocks (12 distinct shapes), 2 workers
+  WARNING (rate, not a failure): down1 reaches 23.24 vs its target 18.02 cyc/px (+29.01% > the 5% tolerance), frame period 380800; FIFOs sized to within 5% of the best rate it reaches
+  WARNING (rate, not a failure): down2 reaches 90.61 vs its target 72.07 cyc/px (+25.73% > the 5% tolerance), frame period 371136; FIFOs sized to within 5% of the best rate it reaches
+  WARNING (rate, not a failure): up4 reaches 28.97 vs its target 16.02 cyc/px (+80.87% > the 5% tolerance), frame period 474624; FIFOs sized to within 5% of the best rate it reaches
+  WARNING (rate, not a failure): up5 reaches 5.93 vs its target 4.00 cyc/px (+48.05% > the 5% tolerance), frame period 388482; FIFOs sized to within 5% of the best rate it reaches
+whole-net chain: pass = no deadlock; period reported against the slowest block 474624 (+5%) and the MILP cap 400000; inter-block depth 2, up to 1 round(s)
+  chain round 1: deadlock=False period=540135 (slowest block 474624, tolerance limit 498355, within=False) first_out=794268 full=0 [1021 s]
+  WARNING (rate, not a failure): whole-net period 540135 is +13.80% over the slowest block's own 474624 (tolerance 5%), +35.03% over the MILP cap 400000; deadlock-free
+Traceback (most recent call last):
+  File "/workspace/LightM-UNet/MILP/analytical/net_explicit.py", line 396, in <module>
+    main()
+  File "/workspace/LightM-UNet/MILP/analytical/net_explicit.py", line 283, in main
+    raise SystemExit(run(a))
+  File "/workspace/LightM-UNet/MILP/analytical/net_explicit.py", line 329, in run
+    out = assemble_output(d, blocks, chain, errors, warns, a, F_net, time.time() - t0)
+  File "/workspace/LightM-UNet/MILP/analytical/net_explicit.py", line 379, in assemble_output
+    source=str(a.folding_json.name), tag=a.tag, tolerance_pct=round(100 * tol, 2), bits=a.bits, bits_source=("per-site bits of the folding (bits_map per block, bottleneck.RoleBits)" if getattr(a, "sites", None) else "uniform --bits"), seconds=round(seconds), net_target_cycles=F_net, workers=a.workers,
+NameError: name 'tol' is not defined. Did you mean: 'ol'?

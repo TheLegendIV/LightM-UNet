@@ -142,6 +142,15 @@ class TestModelFifosSolve(unittest.TestCase):
             self.on["_diagnostics"]["total_lut_calibrated"],
             sum(v["lut_calibrated"] for v in [*self.on["per_layer"].values(), *self.on["extra_nodes"].values()]) + ft["lut"] + ft["dwc_lut"] + ft["edge_fifo_lut"], places=3)
 
+    def test_down_and_up_block_edges_are_block_fifo_depth(self):
+        # every FIFO between two nodes of the same down1 / down2 / up4 / up5 block (edges, the FIFOs inside each conv, the lowered transposed conv's FMPadding_Pixel -> FMPadding -> SWG chain) is
+        # BLOCK_FIFO_DEPTH words, inter-block edges and the regular blocks stay at 2
+        from bottleneck import BLOCK_FIFO_DEPTH
+        self.assertEqual(BLOCK_FIFO_DEPTH, 32)
+        ft = self.on["_diagnostics"]["fifo_model"]["totals"]
+        self.assertGreaterEqual(ft["n_deeper_edge_fifos"], 4 * 12)             # >= 12 per down / up block
+        self.assertLess(ft["n_deeper_edge_fifos"], 4 * 60)                     # ... and nothing in the 25 regular blocks
+
     def test_inter_block_fifos_are_fixed_at_depth_2(self):
         self.assertEqual(len(self.on["inter_block_fifos"]), 28)
         self.assertEqual({f["depth"] for f in self.on["inter_block_fifos"]}, {2})

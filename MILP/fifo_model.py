@@ -12,7 +12,10 @@ Both are expressed here as terms LINEAR in the solver's one-hot fold variables z
   * an inter-node DWC depends on two neighbours: width-class indicators u_P[w] (sum of z over P's options with output width w) and u_C[w'], pair variables
     m[w, w'] >= u_P[w] + u_C[w'] - 1 (continuous, minimised by the budget), priced with fcm.dwc_cost.
 The up blocks' two join FIFOs (`skip FIFO` at the ext end = one input row, `FIFO main` = 3 input rows of the main stream; closed forms fitted to the simulation with the real upsampler kernel, see
-UP_SKIP_ROWS / UP_MAIN_ROWS) are priced like the regular skip FIFO. Simulation-only FIFOs without a closed form (down feed into SWG_r, init `FIFO main`, dup outputs) are NOT priced in the solve:
+UP_SKIP_ROWS / UP_MAIN_ROWS) are priced like the regular skip FIFO. Every intra-block FIFO of a DOWN or UP block (both ends in the same block; inter-block edges stay at 2) is BLOCK_FIFO_DEPTH = 32 words deep, not FINN's 2: those blocks' nodes are balanced within a few % of the
+budget and the zero insertion / strided window / upsampler move whole rows in bursts, so 2-word FIFOs couple the phases (512x512 INT6: down1 +29 %, down2 +26 %, up4 +81 %, up5 +48 % over the MILP cycles,
+on target at 32; bottleneck.BLOCK_FIFO_DEPTH). 32 words is the last depth at which fifo_memory's SRL FIFO costs the same, so the term is a per-width constant. The cycles stay the nodes'; the FIFOs that make them
+true are priced. Simulation-only FIFOs without a closed form (down feed into SWG_r, init `FIFO main`, dup outputs) are NOT priced in the solve:
 MILP/analytical's verify_with_sim sizes them after the fact (net_fold.py). Mixed precision works since 2026-10-11: every width uses the bits of the option that owns the FIFO (FifoModel._bits); neighbours with different bits then see a width mismatch (a small spurious DWC term, the real stream carries one dtype), and bit-less nodes use the largest candidate.
 """
 from __future__ import annotations
@@ -25,6 +28,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "analytical"))
 import finn_cost_model as fcm  # noqa: E402
 from bottleneck import fifo_memory  # noqa: E402
+from bottleneck import BLOCK_FIFO_DEPTH  # noqa: E402
 from layer_topology import find_fork_join_diamonds  # noqa: E402
 
 SKIP_DELTA_MIN_PX = 4         # delta = verified skip depth - n_fill, in pixels: 2..11 px in the 25 verified residual blocks (2-3% of n_fill, 8.5% at 128 px wide, 6% at 64 px / d=1);
@@ -230,7 +234,7 @@ class FifoModel:
                 if pred not in self.options or (pred, consumer) in self.replaced_edges:
                     continue
                 for key, _ in self.options[pred]:
-                    self._edge_fifo(key, f"{pred}->{consumer}", self.ports(key)["out_w"])
+                    self._edge_fifo(key, f"{pred}->{consumer}", self.ports(key)["out_w"], self._edge_depth(pred, consumer))
         # FIFOs INSIDE a conv's FINN subgraph (FMPadding -> SWG -> MVAU -> Thresholding: one per node output; the Thr output is the dataflow edge above), and one after every DWC
         for name, g in self.geom.items():
             if g.op_type == "MaxPool2d":
@@ -238,19 +242,32 @@ class FifoModel:
             for key, _ in self.options[name]:
                 c = self.cost[key]
                 A = self._bits(key)
+                d_int = BLOCK_FIFO_DEPTH if self._deep_stage(_stage(name, self.geom, self.extras)) else 2      # inside a down / up block every FIFO is BLOCK_FIFO_DEPTH deep
                 if g.kh * g.kw > 1:
                     if g.ph or g.pw:
-                        self._edge_fifo(key, f"{name}.fmpad->swg", c["simd_swu"] * A)
+                        self._edge_fifo(key, f"{name}.fmpad->swg", c["simd_swu"] * A, d_int)
+                    elif g.op_type == "ConvTranspose2d":                                    # lowered: FMPadding_Pixel -> FMPadding -> SWG (the sim's FMPadPix->out / FMPad_u->out)
+                        self._edge_fifo(key, f"{name}.fmpadpix->fmpad", c["simd_swu"] * A, d_int)
+                        self._edge_fifo(key, f"{name}.fmpad->swg", c["simd_swu"] * A, d_int)
                     parallel = key[2] > g.cin                                                # parallel_window: the SWG emits a whole KxK window per word
-                    self._edge_fifo(key, f"{name}.swg->mvau", (g.kh * g.kw if parallel else 1) * c["simd_swu"] * A)
-                self._edge_fifo(key, f"{name}.mvau->thr", key[1] * c["acc_bits"])
+                    self._edge_fifo(key, f"{name}.swg->mvau", (g.kh * g.kw if parallel else 1) * c["simd_swu"] * A, d_int)
+                self._edge_fifo(key, f"{name}.mvau->thr", key[1] * c["acc_bits"], d_int)
                 for label, w1, w2 in self.ports(key)["internal"]:
                     if w1 != w2:
-                        self._edge_fifo(key, f"{name}.{label}.dwc_out", w2)
+                        self._edge_fifo(key, f"{name}.{label}.dwc_out", w2, d_int)
 
-    def _edge_fifo(self, key, label, width) -> None:
-        lut = fifo_memory(int(width), 2)["lut"]
-        self._add_const(key, lut=lut, item=dict(kind="edge_fifo", name=label, width_bits=int(width), lut=float(lut)))
+    @staticmethod
+    def _deep_stage(stage: str) -> bool:
+        return stage.startswith(("down", "up"))
+
+    def _edge_depth(self, pred: str, consumer: str) -> int:
+        """Depth of the FIFO on the dataflow edge pred -> consumer: FINN's 2, BLOCK_FIFO_DEPTH when both nodes are in the SAME down / up block (the inter-block edges stay at 2)."""
+        sp, sc = _stage(pred, self.geom, self.extras), _stage(consumer, self.geom, self.extras)
+        return BLOCK_FIFO_DEPTH if sp == sc and self._deep_stage(sc) else 2
+
+    def _edge_fifo(self, key, label, width, depth: int = 2) -> None:
+        lut = fifo_memory(int(width), depth)["lut"]
+        self._add_const(key, lut=lut, item=dict(kind="edge_fifo", name=label, width_bits=int(width), depth=int(depth), lut=float(lut)))
 
     def _up_block_fifos(self, d: dict) -> None:
         """Both join FIFOs of an up block: ext end (`skip FIFO`) and main end (`FIFO main`). The main branch is the one holding the upsample node. Per-option constants like the regular skip FIFO."""
@@ -289,7 +306,7 @@ class FifoModel:
                     for w2, zs2 in in_cls.items():
                         if w1 == w2:
                             continue
-                        cost = fcm.dwc_cost(w1, w2)["total_lut"] + fifo_memory(int(w2), 2)["lut"]      # the DWC node and the depth-2 FIFO behind it
+                        cost = fcm.dwc_cost(w1, w2)["total_lut"] + fifo_memory(int(w2), self._edge_depth(pred, consumer))["lut"]      # the DWC node and the FIFO behind it (depth 2; BLOCK_FIFO_DEPTH inside a down / up block)
                         if len(out_cls) == 1 and len(in_cls) == 1:
                             lut.append(cost)
                             self.edge_terms.append((pred, consumer, w1, w2, None))
@@ -312,12 +329,13 @@ class FifoModel:
     def describe(self, pulp, chosen: dict) -> dict:
         """After the solve. chosen: node name -> chosen z key. Returns the FIFO / DWC lists and the totals."""
         fifos, dwcs = [], []
-        tot = dict(lut=0.0, bram18=0.0, uram18=0.0, dwc_lut=0.0, edge_fifo_lut=0.0, n_edge_fifos=0)
+        tot = dict(lut=0.0, bram18=0.0, uram18=0.0, dwc_lut=0.0, edge_fifo_lut=0.0, n_edge_fifos=0, n_deeper_edge_fifos=0)      # n_deeper: edge FIFOs deeper than 2 (up-block ext branch)
         for name, key in chosen.items():
             for it in self.items.get(key, []):
                 if it["kind"] == "edge_fifo":
                     tot["edge_fifo_lut"] += it["lut"]
                     tot["n_edge_fifos"] += 1
+                    tot["n_deeper_edge_fifos"] += it["depth"] > 2
                 elif it["kind"] == "fifo":
                     fifos.append(self._bridge_entry(it, chosen))
                     tot["lut"] += it["lut"]
@@ -332,8 +350,9 @@ class FifoModel:
             lut = fcm.dwc_cost(w1, w2)["total_lut"]
             dwcs.append(dict(name=f"{pred}->{consumer}", stage=_stage(consumer, self.geom, self.extras), in_width=int(w1), out_width=int(w2), lut=float(lut)))
             tot["dwc_lut"] += lut
-            tot["edge_fifo_lut"] += fifo_memory(int(w2), 2)["lut"]
+            tot["edge_fifo_lut"] += fifo_memory(int(w2), self._edge_depth(pred, consumer))["lut"]
             tot["n_edge_fifos"] += 1
+            tot["n_deeper_edge_fifos"] += self._edge_depth(pred, consumer) > 2
         return dict(fifos=fifos, dwcs=dwcs, totals=tot)
 
     def _bridge_entry(self, it: dict, chosen: dict) -> dict:

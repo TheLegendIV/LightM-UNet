@@ -117,10 +117,12 @@ class TestUpSim(unittest.TestCase):
         self.assertGreaterEqual(g["skip FIFO"]["depth"], self.v["skip_needed_words"])
 
     def test_undersized_join_fifo_deadlocks(self):
-        res = simulate_up(self.r, inject_interval=self.r.params["T_in"], skip_depth=16, main_depth=16, fifo_depth=2)
+        # the block's other FIFOs are BLOCK_FIFO_DEPTH deep and hold part of the data (tiny join FIFOs then still run), so they are forced back to FINN's depth 2 here
+        T_in = self.r.params["T_in"]
+        shallow = {n: 2 for n in simulate_up(self.r, inject_interval=T_in).graph["fifos"] if n not in ("skip FIFO", "FIFO main")}
+        res = simulate_up(self.r, inject_interval=T_in, skip_depth=16, main_depth=16, fifo_depth=2, fifo_depths=shallow)
         self.assertTrue(res.deadlock)
-        ok = simulate_up(self.r, inject_interval=self.r.params["T_in"], skip_depth=self.r.skip_fifo.depth_words,
-                         main_depth=self.r.params["main_fifo_words"], fifo_depth=2)
+        ok = simulate_up(self.r, inject_interval=T_in, skip_depth=self.r.skip_fifo.depth_words, main_depth=self.r.params["main_fifo_words"], fifo_depth=2, fifo_depths=shallow)
         self.assertFalse(ok.deadlock)
 
     def test_noconv_variant_verifies(self):
@@ -220,6 +222,26 @@ class TestUpBilinearDepthwise(unittest.TestCase):
         import tempfile
         with tempfile.TemporaryDirectory() as d:
             export_onnx(r, os.path.join(d, "up_dw.onnx"))
+
+
+class TestBlockFifoDepth(unittest.TestCase):
+    """Down / up blocks start from BLOCK_FIFO_DEPTH-word intra-block FIFOs (2026-10-12): with FINN's depth 2 their rate is far above the MILP's cycles (512x512 INT6: up4 +81 %)."""
+
+    def test_every_intra_block_fifo_starts_at_the_block_depth(self):
+        from bottleneck import BLOCK_FIFO_DEPTH
+        r = model_up_bottleneck(**REF, skip_conv=False)
+        g = simulate_up(r, inject_interval=0, frames=2).graph["fifos"]           # unsized: what every sizing starts from (verify_with_sim later shrinks to the observed occupancy)
+        self.assertEqual(BLOCK_FIFO_DEPTH, 32)
+        for name, f in g.items():
+            if name not in ("skip FIFO", "FIFO main"):
+                self.assertGreaterEqual(f["depth"], BLOCK_FIFO_DEPTH, name)
+
+    def test_first_deadlock_free_sizing_meets_the_budget_without_escalation(self):
+        for kw in (dict(skip_conv=False), dict(skip_conv=True)):
+            r = model_up_bottleneck(**REF, **kw)
+            v = verify_with_sim(r, deadlock_only=True)
+            self.assertEqual(v["tries"], 1, kw)
+            self.assertLessEqual(v["steady_cyc_px"], 18 * 1.05, kw)             # depth-2 FIFOs gave 21.1 cyc/px (+17 %)
 
 
 if __name__ == "__main__":

@@ -138,6 +138,18 @@ class TestSingleTolerance(unittest.TestCase):
         self.assertFalse(any(r.verification["rate"]["exceeds_tolerance"] for _, _, r in blocks))
         self.assertNotIn("rate_miss", blocks[1][2].verification)
 
+    def test_target_is_the_milp_frame_cycles_not_the_rounded_up_integer_t(self):
+        # regular blocks are built with an integer cycles/pixel T rounded UP (18.016 -> 19); the rate is judged against the MILP's own cycles (F_milp)
+        b = _FakeBlock(19, 18.02)
+        b.params.update(hout=128, wout=128, F_milp=295175)
+        blocks = [("regular1.0", "reg", b)]
+        net_explicit.annotate_rate(blocks, 0.05)
+        rt = b.verification["rate"]
+        self.assertAlmostEqual(rt["target_cyc_px"], 295175 / 16384)
+        self.assertLess(abs(rt["over_pct"]), 0.1)                           # 18.02 vs 18.016, not -5.2 % against 19
+        net_explicit.annotate_rate(blocks, 0.05, {"regular1.0": 280000})      # an explicit map (cached blocks) wins
+        self.assertAlmostEqual(b.verification["rate"]["target_cyc_px"], 280000 / 16384)
+
     def test_only_deadlocks_remain_errors(self):
         blocks = [("a", "reg", _FakeBlock(96, 99.0)), ("b", "reg", _FakeBlock(96, 200.0, deadlock=True))]
         errors = {"a": "simulation does not reach T=96 (rate only)", "b": "deadlock"}

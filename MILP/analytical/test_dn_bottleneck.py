@@ -10,6 +10,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dn_bottleneck import export_onnx, model_dn_bottleneck, rate_report, to_folding_config, verify_with_sim  # noqa: E402
 from dn_bottleneck_sim import simulate_dn  # noqa: E402
+from bottleneck import BLOCK_FIFO_DEPTH  # noqa: E402
 
 REF = dict(cin=16, cout=32, v=4, bits=4, height=64, width=64, T_out=72)
 F_REF = 72 * 32 * 32
@@ -91,11 +92,11 @@ class TestDnSim(unittest.TestCase):
 
     def test_deep_fifos_are_the_skip_fifo_and_the_next_frame_prefetch_feeds(self):
         fifos = self.r.fifo_graph["fifos"]
-        deep = {n for n, f in fifos.items() if f["depth"] > 8}
+        deep = {n for n, f in fifos.items() if f["depth"] > BLOCK_FIFO_DEPTH}                  # everything else sits at the block floor
         self.assertIn("skip FIFO", deep)
         # the others hold the next frame's first window in front of the two sliding windows (SWG_r: W+2 input pixels,
         # FMPad: Wo+2 pixels) -- sizes from the multi-frame simulation
-        feeds = {n for n, f in fifos.items() if f["consumer"] in ("SWG_r", "FMPad", "SWG_m") and f["depth"] > 8}
+        feeds = {n for n, f in fifos.items() if f["consumer"] in ("SWG_r", "FMPad", "SWG_m") and f["depth"] > BLOCK_FIFO_DEPTH}
         self.assertEqual(deep - {"skip FIFO"}, feeds)
         self.assertEqual(max(deep, key=lambda n: fifos[n]["depth"]), "skip FIFO")
         self.assertEqual(len(self.v["frame_periods"]), 2)
@@ -105,10 +106,12 @@ class TestDnSim(unittest.TestCase):
         self.assertAlmostEqual(self.v["latency_first_out"], a, delta=0.1 * a)
 
     def test_undersized_skip_fifo_deadlocks(self):
-        # (ordinary FIFOs at depth 2: a deep FIFO after the maxpool would otherwise hold the skip data, one wide word per pixel)
-        res = simulate_dn(self.r, inject_interval=self.r.params["T_in"], skip_depth=16, fifo_depth=2)
+        # the block's other FIFOs are BLOCK_FIFO_DEPTH deep and hold part of the skip data (a 1-word skip FIFO then still runs), so they are forced back to FINN's depth 2 here
+        T_in = self.r.params["T_in"]
+        shallow = {n: 2 for n in simulate_dn(self.r, inject_interval=T_in).graph["fifos"] if n != "skip FIFO"}
+        res = simulate_dn(self.r, inject_interval=T_in, skip_depth=16, fifo_depth=2, fifo_depths=shallow)
         self.assertTrue(res.deadlock)
-        ok = simulate_dn(self.r, inject_interval=self.r.params["T_in"], skip_depth=self.r.skip_fifo.depth_words, fifo_depth=2)
+        ok = simulate_dn(self.r, inject_interval=T_in, skip_depth=self.r.skip_fifo.depth_words, fifo_depth=2, fifo_depths=shallow)
         self.assertFalse(ok.deadlock)
 
     def test_downsample_pixel_domains(self):
@@ -201,6 +204,16 @@ class TestDnSim(unittest.TestCase):
         self.assertNotIn("fmpad_c", f)
         self.assertEqual(16 % f["mvau_s"]["SIMD"], 0)
         self.assertEqual(32 % f["mvau_s"]["PE"], 0)
+
+
+class TestDnBlockFifoDepth(unittest.TestCase):
+    def test_every_intra_block_fifo_starts_at_the_block_depth(self):
+        from bottleneck import BLOCK_FIFO_DEPTH
+        r = model_dn_bottleneck(**REF)
+        g = simulate_dn(r, inject_interval=0, frames=2).graph["fifos"]
+        for name, f in g.items():
+            if name != "skip FIFO":
+                self.assertGreaterEqual(f["depth"], BLOCK_FIFO_DEPTH, name)
 
 
 if __name__ == "__main__":
