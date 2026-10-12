@@ -108,6 +108,10 @@ def run(folding_json: Path, config: str, simfifo: Path | None, out: Path | None)
     for name, layer in frozen_dw_geometries(geoms, dmap).items():
         a_bits = int(sites["layer_act_bits"][f"{layer.stage}.residual_add"])        # the main branch's stream is quantized by the add's shared quantizer
         entries[name] = fold_frozen_dw(layer, a_bits, budget, force_dsp)
+        # the threshold behind the depthwise VVAU IS the block's skip_quant node. The FINN bridge applies an entry's thr_pe / thr_ram_style to the threshold that follows its VVAU and (the VVAU being a claimed
+        # layer) no longer treats that threshold as a join skip_quant, so the entry must carry skip_quant's own PE and memory style
+        sq = d["extra_nodes"][f"{layer.stage}.skip_quant"]
+        entries[name].update(thr_pe=int(sq["pe"]), thr_ram_style=sq["ram_style"], mvau_noAct=True)
     add = dict(lut=sum(e["lut_calibrated"] + e["fifo_lut"] for e in entries.values()), bram18=sum(e["bram18k_calibrated"] + e["fifo_bram18"] for e in entries.values()),
                dsp=sum(e["total_dsp"] for e in entries.values()))
     pct = lambda v, key: 100 * v / XCZU7EV[key]

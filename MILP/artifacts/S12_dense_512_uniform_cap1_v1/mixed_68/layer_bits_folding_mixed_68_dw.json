@@ -3443,7 +3443,8 @@
       "swg_simd": 1,
       "fmpad_simd": 1,
       "parallel_window": true,
-      "invariant": "fmpadding.simd == swg.simd == vvau.pe"
+      "invariant": "fmpadding.simd == swg.simd == vvau.pe",
+      "mvau_noAct": true
     },
     "up5.main_up.1": {
       "total_pe": 1,
@@ -3473,7 +3474,7 @@
       "stage": "up5",
       "pe": 1,
       "simd": 9,
-      "thr_ram_style": "block",
+      "thr_ram_style": "distributed",
       "variant": "rtl_dsp_noact1",
       "force_dsp": true,
       "weight_bits": 8,
@@ -3487,7 +3488,8 @@
       "swg_simd": 1,
       "fmpad_simd": 1,
       "parallel_window": true,
-      "invariant": "fmpadding.simd == swg.simd == vvau.pe"
+      "invariant": "fmpadding.simd == swg.simd == vvau.pe",
+      "mvau_noAct": true
     }
   },
   "extra_nodes": {

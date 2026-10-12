@@ -704,6 +704,8 @@ def _role_name_of(node, role_of_node: dict):
 _LEAF_ROLES = {
     "reduce.0": ("mvau_r", "thr_r"), "conv": ("mvau_m", "thr_m"), "conv.0": ("mvau_m", "thr_m"),
     "expand.0": ("mvau_e", "thr_e"), "main_proj.0": ("mvau_p", "thr_p"), "up.0": ("mvau_u", "thr_u"),
+    # bilinear decoder's frozen depthwise 3x3 conv of the up blocks (VVAU; its threshold is the block's skip_quant, role 'thr_k' in up_bottleneck's skip_dw variant)
+    "main_up.1": ("mvau_k", "thr_k"),
 }
 # the leaf whose MVAU is fed directly by the block's own Dup/DuplicateStreams, per block kind
 _ENTRY_LEAF_BY_KIND = {"reg": "reduce.0", "dn": "reduce.0", "up": "main_proj.0", "init": "conv"}
@@ -847,6 +849,17 @@ def build_partition_role_nodes(kernel_model, logical_names, per_layer):
             _, swu_node = _find_dense_swu_fmpad(kernel_model, node)
             if swu_node is not None:
                 by_name[f"{stage}.swg_r"] = swu_node.name
+        elif leaf == "main_up.1":
+            # frozen depthwise 3x3 conv (VVAU): FMPadding -> depthwise SWG -> VVAU, roles 'fmpad_k' / 'swg_k' (up_bottleneck.py skip_dw). It is a claimed layer, so _find_join_thresholds skips the
+            # Thresholding behind it (the block's skip_quant): register it under every name the MILP / analytical FIFO lists use for it (thr_k above, thr_s / skip_quant here).
+            fmpad_node, swu_node = _find_dense_swu_fmpad(kernel_model, node)
+            if swu_node is not None:
+                by_name[f"{stage}.swg_k"] = swu_node.name
+            if fmpad_node is not None:
+                by_name[f"{stage}.fmpad_k"] = fmpad_node.name
+            if thr is not None:
+                by_name[f"{stage}.thr_s"] = thr.name
+                by_name[f"{stage}.skip_quant"] = thr.name
         elif leaf == "up.0":
             # up_bottleneck.py's 2x2-lowered transposed conv: FMPadPix -> FMPad_u -> SWG_u -> MVAU_u -- TWO
             # chained FMPadding nodes (roles 'fmpadpix'/'fmpad_u'), unlike every other conv's single
@@ -902,6 +915,7 @@ def _find_block_join_nodes(kernel_model, logical_names, prev_block=None, claimed
         by_name[f"{block}.{kind}"] = node_name
         if kind == "skip_quant":
             by_name[f"{block}.thr_s"] = node_name
+            by_name[f"{block}.thr_k"] = node_name      # the depthwise-decoder variant's name for the same node
         if kind == "out_act":
             by_name[f"{block}.thr_out"] = node_name
             by_name[f"{block}.out_act"] = node_name  # net_fold.py's intra/inter_block_fifos role name for this node
