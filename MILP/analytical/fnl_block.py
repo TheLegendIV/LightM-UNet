@@ -27,7 +27,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bottleneck as reg  # noqa: E402
 from bottleneck import (  # noqa: E402
-    BottleneckResult, NodeResult, RoleBits, _SIZING_SCHEDULE, _accepted, _shrink_accepted, _dwc, _fifo_attrs, _geom, _min_pe, _search_mvau, finalize_fifo_costs,
+    BottleneckResult, NodeResult, RoleBits, _SIZING_SCHEDULE, _accepted, _shrink_accepted, BLOCK_FIFO_DEPTH, iterate_sizing as _iterate, seed_clip as _seed_clip, set_skip_depth as _set_skip, _dwc, _fifo_attrs, _geom, _min_pe, _search_mvau, finalize_fifo_costs,
 )
 
 fcm = reg.fcm
@@ -119,9 +119,13 @@ def model_fnl_block(
 
 
 def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02, max_tries: int = 6, shrink: bool = True,
-                    tol_soft: float = 0.03, fifo_mem: str = "auto", deadlock_only: bool = False) -> dict:
+                    tol_soft: float = 0.03, fifo_mem: str = "auto", deadlock_only: bool = False, seeds: dict | None = None, reach_tol: float = 0.01, max_iterations: int = 3) -> dict:
     """Saturated 3-frame run; escalates the prefetch FIFO in front of FMPadPix and a uniform depth until the last frame's period per OUTPUT pixel is
-    within tol of T_out, then shrinks every FIFO to its observed occupancy."""
+    within tol of T_out, then shrinks every FIFO to its observed occupancy.
+    seeds (net_explicit.py): {'skip': words, 'main': words, 'prefetch': words} = the MILP's own depths of this block's FIFOs (a key it does not list falls back to the analytic estimate). The sizing STARTS there
+    and may raise or lower any FIFO: skip / join FIFOs go to the paced run's measured need (+ one pixel); every other FIFO is sized by bottleneck.iterate_sizing, at most max_iterations rounds of
+    (grow the FIFOs that hit their capacity until T is reached within reach_tol and nothing deadlocks -> shrink every FIFO to its observed occupancy and check cycles, deadlock and the paced run again);
+    no FIFO grows past SEED_MAX_MULT (6, i.e. +500 %) times its start. Only a deadlock raises."""
     from fnl_block_sim import simulate_fnl
 
     p = r.params
@@ -129,7 +133,15 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
     cf = p["cin"] // next(x for x in r.nodes if x.name == "SWG_u").simd
     emap0 = {"FMPadPix": 2 * cf + 2, "FMPad_u": 2 * cf + 2}
     sat, tries, emap = None, 0, dict(emap0)
-    for tries, (es, _, um) in enumerate(_SIZING_SCHEDULE[:max_tries], 1):
+    if seeds is not None:
+        deadlock_only = True
+
+        def run(D):
+            return simulate_fnl(r, inject_interval=0, fifo_depth=fifo_depth, elastic_map=emap0, fifo_depths=D, frames=3)
+        sat, _sized, tries = _iterate(run, None, T, reach_tol, max_iterations)
+        depth, emap, shrink = fifo_depth, dict(emap0), False
+    else:
+      for tries, (es, _, um) in enumerate(_SIZING_SCHEDULE[:max_tries], 1):
         depth = fifo_depth * um
         emap = {k: max(v * es, depth) for k, v in emap0.items()}
         sat = simulate_fnl(r, inject_interval=0, fifo_depth=depth, elastic_map=emap, frames=3)

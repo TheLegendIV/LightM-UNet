@@ -236,5 +236,67 @@ class TestWwidthCap(unittest.TestCase):
         self.assertIsNone(bn.WWIDTH_MAX)
 
 
+class _FakeSim:
+    def __init__(self, depths, need, deadlock_below=None, T=72.0):
+        occ = {n: min(d, need.get(n, 0)) for n, d in depths.items()}
+        self.fifo_max = occ
+        self.graph = {"fifos": {n: {"depth": d} for n, d in depths.items()}}
+        short = [n for n, d in depths.items() if d < need.get(n, 0)]
+        self.deadlock = bool(deadlock_below and any(depths[n] < v for n, v in deadlock_below.items()))
+        self.full_fifos = [n for n, d in depths.items() if d <= occ[n] and d <= need.get(n, 0)] if self.deadlock else []
+        self.steady_cyc_px = T * (1.0 + 0.5 * len(short) / max(1, len(depths))) if short else T
+
+
+class TestIterateSizing(unittest.TestCase):
+    """bottleneck.iterate_sizing: grow the FIFOs at capacity -> check -> shrink to occupancy -> check -> repeat, +500 % cap."""
+    START = {"a": 2, "b": 32, "c": 2}
+
+    def _run(self, need, deadlock_below=None, T=72.0):
+        calls = []
+
+        def run(D):
+            depths = dict(self.START)
+            depths.update(D)
+            calls.append(dict(depths))
+            return _FakeSim(depths, need, deadlock_below, T)
+        return run, calls
+
+    def test_grows_only_the_limiting_fifo_then_shrinks_the_oversized_one(self):
+        from bottleneck import iterate_sizing
+        run, _ = self._run({"a": 8, "b": 4, "c": 1})
+        sat, D, it = iterate_sizing(run, None, 72.0, 0.01, 3)
+        self.assertEqual(D["a"], 8)                              # 2 -> 4 -> 8: grown until the rate is reached
+        self.assertEqual(D["b"], 4)                              # 32 -> shrunk to its occupancy
+        self.assertEqual(D["c"], 2)                              # never at capacity -> untouched
+        self.assertLessEqual(sat.steady_cyc_px, 72.0 * 1.01)
+        self.assertFalse(sat.deadlock)
+
+    def test_growth_stops_at_six_times_the_start(self):
+        from bottleneck import iterate_sizing
+        run, _ = self._run({"a": 100, "b": 4, "c": 1})
+        sat, D, it = iterate_sizing(run, None, 72.0, 0.01, 3)
+        self.assertEqual(D["a"], 12)                             # 6 x 2: the +500 % limit
+        self.assertGreater(sat.steady_cyc_px, 72.0 * 1.01)       # target not reachable within the limit: the closest state is returned
+
+    def test_a_shrink_that_deadlocks_is_rejected(self):
+        from bottleneck import iterate_sizing
+        run, calls = self._run({"a": 2, "b": 4, "c": 1}, deadlock_below={"b": 16})     # b needs >= 16 words to avoid a deadlock although it only ever holds 4
+        sat, D, it = iterate_sizing(run, None, 72.0, 0.01, 3)
+        self.assertEqual(D["b"], 32)                             # the shrink to 4 deadlocks -> the previous sizes stay
+        self.assertFalse(sat.deadlock)
+
+    def test_paced_deadlock_rejects_the_shrink(self):
+        from bottleneck import iterate_sizing
+        run, _ = self._run({"a": 2, "b": 4, "c": 1})
+        sat, D, it = iterate_sizing(run, lambda S: _FakeSim(S, {"b": 4}, deadlock_below={"b": 16}), 72.0, 0.01, 3)
+        self.assertEqual(D["b"], 32)
+
+    def test_max_iterations_is_respected(self):
+        from bottleneck import iterate_sizing
+        run, calls = self._run({"a": 8, "b": 4, "c": 1})
+        iterate_sizing(run, None, 72.0, 0.01, 1)
+        self.assertLessEqual(len(calls), 1 + 3 + 1)              # start + at most 3 growth runs + 1 shrink check
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

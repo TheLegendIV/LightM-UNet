@@ -635,8 +635,72 @@ def _shrink_accepted(small, sat, T: float, tol: float, deadlock_only: bool) -> b
     return small.steady_cyc_px <= sat.steady_cyc_px * 1.001 if deadlock_only else small.steady_cyc_px <= T * (1 + tol)
 
 
+SEED_MAX_MULT = 6          # a FIFO may grow to at most 6x (+500 %) the depth it STARTS from (the MILP's, or the analytic estimate where the MILP lists none)
+
+
+def set_skip_depth(r: BottleneckResult, d: int, words_px: int) -> None:
+    f = r.skip_fifo
+    f.depth_words, f.bits, f.pixels_buffered = d, f.width_bits * d, math.ceil(d / words_px)
+    f.bram18_if_block, f.lutram_luts_if_distributed = _fifo_bram18(f.width_bits, d), math.ceil(f.width_bits * d / 64)
+
+
+def seed_clip(r: BottleneckResult, label: str, d: int, seed: int) -> int:
+    """d (a measured need) limited to SEED_MAX_MULT x the starting depth; says so when it bites."""
+    cap = SEED_MAX_MULT * max(1, seed)
+    if d > cap:
+        r.warnings.append(f"{label}: the measured need {d} words exceeds {SEED_MAX_MULT}x its starting depth {seed}; limited to {cap}")
+        return cap
+    return d
+
+
+def iterate_sizing(run, paced_run, T: float, reach_tol: float = 0.01, max_iterations: int = 3, grow_rounds: int = 4, keep=("skip FIFO", "FIFO main")):
+    """Iterative FIFO sizing of one block. run(D) -> SimResult of the saturated multi-frame run with the per-FIFO depths D (name -> words; {} = the block's starting depths); paced_run(D) -> the same
+    at the real (paced) input rate, or None. The skip / join FIFOs (`keep`) are sized elsewhere (paced need). Per iteration:
+      1. INCREASE: while the run deadlocks or is slower than T by more than reach_tol (at most grow_rounds times): double the FIFOs that hit their capacity (max occupancy == depth; at a deadlock also the
+         FIFOs at capacity when it stalled), none beyond SEED_MAX_MULT x its starting depth; re-run;
+      2. SHRINK every FIFO to its observed occupancy (min 2 words) and CHECK cycles + deadlock + the paced run again; accepted when it does not deadlock and still reaches T within reach_tol or is no slower than
+         the run it shrinks (0.1 %); a rejected shrink keeps the previous sizes and ends the loop; sizes that do not change end it too.
+    Returns (SimResult, D, iterations used) of the best state seen: the cheapest (fewest words) that reaches T within reach_tol, else the closest to T."""
+    sat = run({})
+    start = {n: int(f["depth"]) for n, f in sat.graph["fifos"].items() if n not in keep}
+    cap = {n: SEED_MAX_MULT * d for n, d in start.items()}
+    D = dict(start)
+    states, done = [], 0
+    for it in range(1, max_iterations + 1):
+        done = it
+        for _ in range(grow_rounds):
+            if not sat.deadlock and sat.steady_cyc_px <= T * (1 + reach_tol):
+                break
+            lim = {n for n in D if D[n] < cap[n] and sat.fifo_max.get(n, 0) >= D[n]}
+            if sat.deadlock:
+                lim |= {n for n in sat.full_fifos if n in D and D[n] < cap[n]}
+            if not lim:
+                break
+            for n in lim:
+                D[n] = min(cap[n], 2 * D[n])
+            sat = run(D)
+        if not sat.deadlock:
+            states.append((sat, dict(D)))
+        S = {n: max(2, min(D[n], sat.fifo_max.get(n, D[n]))) for n in D}
+        if S == D or sat.deadlock:
+            break
+        small = run(S)
+        ok = (not small.deadlock) and (small.steady_cyc_px <= T * (1 + reach_tol) or small.steady_cyc_px <= sat.steady_cyc_px * 1.001)
+        if ok and paced_run is not None and paced_run(S).deadlock:
+            ok = False
+        if not ok:
+            break
+        D, sat = S, small
+        states.append((sat, dict(D)))
+    if not states:
+        return sat, D, done                                   # every state deadlocked: the last one, flagged by the caller
+    hit = [x for x in states if x[0].steady_cyc_px <= T * (1 + reach_tol)]
+    best = min(hit, key=lambda x: sum(x[1].values())) if hit else min(states, key=lambda x: x[0].steady_cyc_px)
+    return best[0], best[1], done
+
+
 def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02, max_tries: int = 10, shrink: bool = True,
-                    tol_soft: float = 0.03, fifo_mem: str = "auto", deadlock_only: bool = False) -> dict:
+                    tol_soft: float = 0.03, fifo_mem: str = "auto", deadlock_only: bool = False, seeds: dict | None = None, reach_tol: float = 0.01, max_iterations: int = 3) -> dict:
     """Run bottleneck_sim on the chosen foldings and size the FIFOs until the simulated throughput meets T.
 
     1. Input paced at T with an unbounded skip FIFO: measures the skip FIFO the design really needs and the latency;
@@ -650,7 +714,11 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
     deadlock_only: the FIFOs only have to remove deadlocks, at the cheapest depths: the FIRST schedule entry that does not deadlock is taken (no escalation for
     rate: past the window's own prefetch FIFOs extra depth does not change the steady rate of a regular block, see rate_vs_depth in analytical.md; the one place where small FIFOs do set the rate,
     down / up blocks, have STRUCTURAL depths from the start, BLOCK_FIFO_DEPTH), shrunk to the observed occupancy, and a rate above tol is a warning, not an error
-    (only a deadlock raises). The rate is the MILP's to set."""
+    (only a deadlock raises). The rate is the MILP's to set.
+    seeds (net_explicit.py): {'skip': words, 'main': words, 'prefetch': words} = the MILP's own depths of this block's FIFOs (a key it does not list falls back to the analytic estimate). The sizing STARTS there
+    and may raise or lower any FIFO: skip / join FIFOs go to the paced run's measured need (+ one pixel); every other FIFO is sized by bottleneck.iterate_sizing, at most max_iterations rounds of
+    (grow the FIFOs that hit their capacity until T is reached within reach_tol and nothing deadlocks -> shrink every FIFO to its observed occupancy and check cycles, deadlock and the paced run again);
+    no FIFO grows past SEED_MAX_MULT (6, i.e. +500 %) times its start. Only a deadlock raises."""
     from bottleneck_sim import UNBOUNDED, simulate
 
     T, pad = r.params["T"], r.params["pad"]
@@ -660,21 +728,40 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
     W = r.params["width"]
     elastic = (pad * W + pad + 1) * cf + 2
     pad_out = pad * (W + 2 * pad) * cf + 2                  # padded top rows of the next frame
+    seeded = seeds is not None
+    if seeded:
+        deadlock_only = True
+        if seeds.get("prefetch"):
+            elastic = int(seeds["prefetch"])
+        s_skip = int(seeds.get("skip") or r.skip_fifo.depth_words)
+        set_skip_depth(r, s_skip, words_px)
     paced = simulate(r, inject_interval=T, skip_depth=UNBOUNDED, fifo_depth=fifo_depth, elastic_depth=elastic, frames=2)
     need = paced.fifo_max["skip FIFO"]
-    if need > r.skip_fifo.depth_words:
+    if seeded:
+        d = seed_clip(r, "skip FIFO", need + words_px, s_skip) if seeds.get("skip") else need + words_px      # the +500 % limit is on depths the MILP gave; an unlisted FIFO takes its measured need
+        if d != s_skip:
+            r.warnings.append(f"skip FIFO set from the start {s_skip} to {d} words by simulation")
+            set_skip_depth(r, d, words_px)
+    elif need > r.skip_fifo.depth_words:
         d = need + words_px
         r.warnings.append(f"skip FIFO raised from {r.skip_fifo.depth_words} to {d} words by simulation")
-        f = r.skip_fifo
-        f.depth_words, f.bits, f.pixels_buffered = d, f.width_bits * d, math.ceil(d / words_px)
-        f.bram18_if_block, f.lutram_luts_if_distributed = _fifo_bram18(f.width_bits, d), math.ceil(f.width_bits * d / 64)
+        set_skip_depth(r, d, words_px)
 
     # ordinary FIFOs: the upstream chain runs only ~11% faster than T, so it needs a little elasticity everywhere;
     # double one uniform depth until the saturated run reaches T, then shrink every FIFO to its observed occupancy.
     sat = None
     tries = 0
     elastic0 = elastic
-    for tries, (es, with_pad, um) in enumerate(_SIZING_SCHEDULE[:max_tries], 1):
+    if seeded:
+        def run(D):
+            return simulate(r, inject_interval=0, skip_depth=r.skip_fifo.depth_words, fifo_depth=fifo_depth, elastic_depth=elastic0, fifo_depths=D, frames=3)
+
+        def prun(D):
+            return simulate(r, inject_interval=T, skip_depth=r.skip_fifo.depth_words, fifo_depth=fifo_depth, elastic_depth=elastic0, fifo_depths=D, frames=2)
+        sat, _sized, tries = iterate_sizing(run, prun, T, reach_tol, max_iterations)
+        depth, elastic, shrink = fifo_depth, elastic0, False
+    else:
+      for tries, (es, with_pad, um) in enumerate(_SIZING_SCHEDULE[:max_tries], 1):
         depth = fifo_depth * um
         elastic = max(elastic0 * es, depth)
         extra = {"FMPad->out": pad_out * es} if with_pad else {}

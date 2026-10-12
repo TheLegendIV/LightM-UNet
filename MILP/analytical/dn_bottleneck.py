@@ -263,13 +263,18 @@ def model_dn_bottleneck(
 # escalation schedule: (elastic scale, FIFO after FMPad holds the next frame's padding, uniform depth multiplier)
 _SIZING_SCHEDULE = reg._SIZING_SCHEDULE
 _accepted, _shrink_accepted = reg._accepted, reg._shrink_accepted
+_set_skip, _seed_clip, _iterate, BLOCK_FIFO_DEPTH = reg.set_skip_depth, reg.seed_clip, reg.iterate_sizing, reg.BLOCK_FIFO_DEPTH
 
 
 def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02, max_tries: int = 10, shrink: bool = True,
-                    tol_soft: float = 0.03, fifo_mem: str = "auto", deadlock_only: bool = False) -> dict:
+                    tol_soft: float = 0.03, fifo_mem: str = "auto", deadlock_only: bool = False, seeds: dict | None = None, reach_tol: float = 0.01, max_iterations: int = 3) -> dict:
     """Same recipe as bottleneck.verify_with_sim, on the downsampling network: (1) paced input at T_in with an unbounded skip
     FIFO measures the skip depth really needed, (2) a saturated run doubles one uniform depth (and the elastic FIFOs in front of
-    SWG_r / FMPad) until the steady cyc/px per OUTPUT pixel reaches T_out, then every FIFO shrinks to its observed occupancy."""
+    SWG_r / FMPad) until the steady cyc/px per OUTPUT pixel reaches T_out, then every FIFO shrinks to its observed occupancy.
+    seeds (net_explicit.py): {'skip': words, 'main': words, 'prefetch': words} = the MILP's own depths of this block's FIFOs (a key it does not list falls back to the analytic estimate). The sizing STARTS there
+    and may raise or lower any FIFO: skip / join FIFOs go to the paced run's measured need (+ one pixel); every other FIFO is sized by bottleneck.iterate_sizing, at most max_iterations rounds of
+    (grow the FIFOs that hit their capacity until T is reached within reach_tol and nothing deadlocks -> shrink every FIFO to its observed occupancy and check cycles, deadlock and the paced run again);
+    no FIFO grows past SEED_MAX_MULT (6, i.e. +500 %) times its start. Only a deadlock raises."""
     from dn_bottleneck_sim import UNBOUNDED, simulate_dn
 
     p = r.params
@@ -282,18 +287,39 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
     emap = {"FMPad": (p["wout"] + 2) * cf_m + 2, "SWG_r": (p["width"] + 2) * cf_r + 2}
     elastic = emap["FMPad"]
     pad_out = (p["wout"] + 2) * cf_m + 2
+    seeded = seeds is not None
+    if seeded:
+        deadlock_only = True
+        if seeds.get("prefetch"):
+            emap["FMPad"] = int(seeds["prefetch"])
+            elastic = emap["FMPad"]
+        s_skip = int(seeds.get("skip") or r.skip_fifo.depth_words)
+        _set_skip(r, s_skip, words_px)
     paced = simulate_dn(r, inject_interval=p["T_in"], skip_depth=UNBOUNDED, fifo_depth=fifo_depth, elastic_map=emap, frames=2)
     need = paced.fifo_max["skip FIFO"]
-    if need > r.skip_fifo.depth_words:
+    if seeded:
+        d = _seed_clip(r, "skip FIFO", need + words_px, s_skip) if seeds.get("skip") else need + words_px      # the +500 % limit is on depths the MILP gave; an unlisted FIFO takes its measured need
+        if d != s_skip:
+            r.warnings.append(f"skip FIFO set from the start {s_skip} to {d} words by simulation")
+            _set_skip(r, d, words_px)
+    elif need > r.skip_fifo.depth_words:
         d = need + words_px
         r.warnings.append(f"skip FIFO raised from {r.skip_fifo.depth_words} to {d} words by simulation")
-        f = r.skip_fifo
-        f.depth_words, f.bits, f.pixels_buffered = d, f.width_bits * d, math.ceil(d / words_px)
-        f.bram18_if_block, f.lutram_luts_if_distributed = _fifo_bram18(f.width_bits, d), math.ceil(f.width_bits * d / 64)
+        _set_skip(r, d, words_px)
     sat = None
     tries = 0
     emap0 = dict(emap)
-    for tries, (es, with_pad, um) in enumerate(_SIZING_SCHEDULE[:max_tries], 1):
+    if seeded:
+        def run(D):
+            return simulate_dn(r, inject_interval=0, skip_depth=r.skip_fifo.depth_words, fifo_depth=fifo_depth, elastic_map=emap0, fifo_depths=D, frames=3)
+
+        def prun(D):
+            return simulate_dn(r, inject_interval=p["T_in"], skip_depth=r.skip_fifo.depth_words, fifo_depth=fifo_depth, elastic_map=emap0, fifo_depths=D, frames=2)
+        sat, _sized, tries = _iterate(run, prun, T, reach_tol, max_iterations)
+        depth, emap, shrink = max(fifo_depth, BLOCK_FIFO_DEPTH), dict(emap0), False
+        elastic = emap["FMPad"]
+    else:
+      for tries, (es, with_pad, um) in enumerate(_SIZING_SCHEDULE[:max_tries], 1):
         depth = fifo_depth * um
         emap = {k: max(v * es, depth) for k, v in emap0.items()}
         elastic = emap["FMPad"]
