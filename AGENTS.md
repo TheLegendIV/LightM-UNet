@@ -14,7 +14,7 @@ multi-day builds and cross-reference prior results before starting new ones.
 | `enet/` | nnU-Net v2 fork + `ENet`/`QuantENet` model code, trainer classes | `enet/nnunetv2/**/readme.md` |
 | `compression/` | Pruning/quantization sweep orchestration (Slurm), results tracking | [compression/README.md](compression/README.md), `compression/foundation_log.md` |
 | `hardware/` | FINN export → HAWQ → build → OOC-synth pipeline for the active architecture | [hardware/README.md](hardware/README.md) |
-| `deployment/` | Bitstreams (.bit/.xsa), drivers, PC↔FPGA image transfer interface | [deployment/image_transfer_interface/README.md](deployment/image_transfer_interface/README.md) |
+| `deployment/` | Bitstreams (.bit/.xsa), drivers, PC↔FPGA image transfer interface (`img_intf/`), board test-set `collect_results.py` → `deployment/results.csv` | [deployment/img_intf/README.md](deployment/img_intf/README.md) |
 | `analysis/501_ARCADE/` | Topology/quality metrics beyond Dice | [analysis/501_ARCADE/README.md](analysis/501_ARCADE/README.md) |
 | `archive/` (any depth, e.g. `hardware/archive/`) | Retired code/docs kept for history | — |
 

@@ -33,7 +33,10 @@ data/nnUNet_preprocessed/*
 # clone/pull was never worth it once that regeneration path existed.
 data/nnUNet_raw/*
 
-deployment/baremetal
+# Board I/O of deployment/img_intf: generated per run (preprocessed inputs, class-map outputs, PNGs). Results are
+# tracked in deployment/results.csv instead.
+deployment/img_intf/input/
+deployment/img_intf/output/
 
 logs/*
 
