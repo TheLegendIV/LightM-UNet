@@ -17832,7 +17832,7 @@
     "cycles": 524288
    }
   },
-  "total_lut_calibrated": 90057.79704666648,
+  "total_lut_calibrated": 74747.41904666665,
   "xczu7ev_lut_budget": 230400,
   "lut_pct_of_budget": 44.80574199074066,
   "total_bram18k_calibrated": 12.0,
@@ -18361,7 +18361,7 @@
     },
     "note": "skip / prefetch FIFOs, DWCs and the depth-2 FIFO of every other dataflow edge priced in the solve (fifo_model.py); total_* below include them. Simulation-only FIFOs (down feed, up / init FIFO main) are not priced; inter-block FIFOs are fixed at depth 2."
    },
-   "lut": 13174.632499999998,
+   "lut": 28485.010499999837,
    "bram18": 150.0,
    "note": "the MILP's closed-form FIFO / DWC estimate that was removed from total_lut_calibrated / total_bram18k_calibrated (now nodes only)"
   },
@@ -18377,7 +18377,7 @@
   "intra_block_fifo_bram18": 155,
   "intra_block_fifo_warnings": [],
   "total_bram18k_with_all_fifos": 167.0,
-  "total_lut_with_all_fifos": 115850.89454666647
+  "total_lut_with_all_fifos": 100540.51654666664
  },
  "dataflow_graph": {
   "input": [
@@ -23546,7 +23546,7 @@
   "tolerance_pct": 5.0,
   "bits": 6,
   "bits_source": "per-site bits of the folding (bits_map per block, bottleneck.RoleBits)",
-  "seconds": 1567,
+  "seconds": 1601,
   "net_target_cycles": 397896,
   "workers": 2,
   "blocks": {
@@ -24359,7 +24359,7 @@
       2
      ],
      "full": [],
-     "seconds": 1070
+     "seconds": 1601
     }
    ],
    "interface_depths": [
@@ -24432,7 +24432,7 @@
      2
     ],
     "full": [],
-    "seconds": 1070
+    "seconds": 1601
    },
    "target": 397896,
    "limit": 417790.80000000005,

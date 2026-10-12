@@ -146,6 +146,8 @@ def simulate_up(
     UNBOUNDED = measure). inject_interval: cycles between INPUT pixels.
     pix_simd: SIMD of the FMPadding_Pixel node (None = the SWG's SIMD, what the bridge sets; 1 = FINN's default when nothing sets it: cmid folds per pixel, a DWC widens it to the SWG's SIMD)."""
     fifo_depth = max(fifo_depth, BLOCK_FIFO_DEPTH)              # every intra-block FIFO of an up block is at least BLOCK_FIFO_DEPTH words (bottleneck.py)
+    if elastic_map:                                             # ... also the FIFOs the elastic map sizes (in front of FMPadPix / FMPad_u: 2*cf+2 words would undercut the floor and cost up4 INT8 +8 %)
+        elastic_map = {k: max(v, BLOCK_FIFO_DEPTH) for k, v in elastic_map.items()}
     p = r.params
     H, W, Ho, Wo = p["height"], p["width"], 2 * p["height"], 2 * p["width"]
     cin, cmid, cout = p["cin"], p["cmid"], p["cout"]

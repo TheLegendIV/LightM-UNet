@@ -236,6 +236,15 @@ class TestBlockFifoDepth(unittest.TestCase):
             if name not in ("skip FIFO", "FIFO main"):
                 self.assertGreaterEqual(f["depth"], BLOCK_FIFO_DEPTH, name)
 
+    def test_elastic_fifos_do_not_undercut_the_block_depth(self):
+        from bottleneck import BLOCK_FIFO_DEPTH
+        r = model_up_bottleneck(**REF, skip_conv=False)
+        cf_u = r.params["cmid"] // next(x for x in r.nodes if x.name == "SWG_u").simd
+        g = simulate_up(r, inject_interval=0, frames=2, elastic_map={"FMPadPix": 2 * cf_u + 2, "FMPad_u": 2 * cf_u + 2}).graph["fifos"]
+        for name in ("Thr_r->DWC->FMPadPix", "FMPadPix->out", "FMPad_u->out"):
+            if name in g:
+                self.assertGreaterEqual(g[name]["depth"], BLOCK_FIFO_DEPTH, name)
+
     def test_first_deadlock_free_sizing_meets_the_budget_without_escalation(self):
         for kw in (dict(skip_conv=False), dict(skip_conv=True)):
             r = model_up_bottleneck(**REF, **kw)

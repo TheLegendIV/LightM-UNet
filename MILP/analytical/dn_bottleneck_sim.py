@@ -142,6 +142,8 @@ def simulate_dn(
 ) -> SimResult:
     """inject_interval: cycles between INPUT pixels (0 = saturated, r.params['T_in'] = upstream block at the budget)."""
     fifo_depth = max(fifo_depth, BLOCK_FIFO_DEPTH)              # every intra-block FIFO of a down block is at least BLOCK_FIFO_DEPTH words (bottleneck.py)
+    if elastic_map:                                             # ... also the FIFOs the elastic map sizes (in front of FMPadPix / FMPad_u: 2*cf+2 words would undercut the floor and cost up4 INT8 +8 %)
+        elastic_map = {k: max(v, BLOCK_FIFO_DEPTH) for k, v in elastic_map.items()}
     p = r.params
     H, W, Ho, Wo = p["height"], p["width"], p["height"] // 2, p["width"] // 2
     cin, cmid, cout = p["cin"], p["cmid"], p["cout"]
