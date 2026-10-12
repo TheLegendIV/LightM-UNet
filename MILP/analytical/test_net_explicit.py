@@ -104,5 +104,45 @@ class TestChainEscalation(unittest.TestCase):
         self.assertEqual(rep["grown"], [])
 
 
+    def test_one_round_is_a_pure_check_nothing_is_grown(self):
+        T = 72
+        blocks = []
+        for i in range(2):
+            r = model_bottleneck(32, 4, 4, T, 4, 16, 16)
+            verify_with_sim(r)
+            blocks.append((f"b{i}", "reg", r))
+        net_explicit.grow_intra(blocks[0][2], "skip FIFO", 2)
+        rep = net_explicit.run_chain_rounds(blocks, T * 256, 0.05, 1, log=lambda *a, **k: None)      # the default --max-rounds 1
+        self.assertFalse(rep["ok"])
+        self.assertTrue(rep["rounds"][0]["deadlock"])
+        self.assertEqual(rep["grown"], [])                                   # growing after the last round would be unverified
+        self.assertEqual(blocks[0][2].fifo_graph["fifos"]["skip FIFO"]["depth"], 2)
+
+
+class _FakeBlock:
+    def __init__(self, T, achieved, deadlock=False):
+        self.params = dict(T=T, hout=8, wout=8)
+        self.verification = dict(steady_cyc_px=achieved, deadlock=deadlock)
+
+
+class TestSingleTolerance(unittest.TestCase):
+    def test_rate_misses_are_flagged_by_one_tolerance_not_failed(self):
+        blocks = [("a", "reg", _FakeBlock(96, 98.4)), ("b", "reg", _FakeBlock(96, 102.0)), ("c", "reg", _FakeBlock(96, 96.0))]
+        net_explicit.annotate_rate(blocks, 0.05)
+        flags = {s: r.verification["rate"]["exceeds_tolerance"] for s, _, r in blocks}
+        self.assertEqual(flags, {"a": False, "b": True, "c": False})            # +2.5 % and +0 % are inside 5 %, +6.25 % is flagged
+        self.assertIn("rate_miss", blocks[1][2].verification)
+        self.assertNotIn("rate_miss", blocks[0][2].verification)
+        self.assertEqual(blocks[1][2].verification["rate"]["period_cycles"], int(102.0 * 64))
+        net_explicit.annotate_rate(blocks, 0.10)                                  # idempotent, and re-judgeable at another tolerance (cached blocks)
+        self.assertFalse(any(r.verification["rate"]["exceeds_tolerance"] for _, _, r in blocks))
+        self.assertNotIn("rate_miss", blocks[1][2].verification)
+
+    def test_only_deadlocks_remain_errors(self):
+        blocks = [("a", "reg", _FakeBlock(96, 99.0)), ("b", "reg", _FakeBlock(96, 200.0, deadlock=True))]
+        errors = {"a": "simulation does not reach T=96 (rate only)", "b": "deadlock"}
+        self.assertEqual(net_explicit.deadlock_errors(blocks, errors), {"b": "deadlock"})
+
+
 if __name__ == "__main__":
     unittest.main()
