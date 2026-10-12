@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import unittest
 
-from finn_cost_model import LayerGeometry, _thresholding_rtl_cost, conv_cost_pe_simd
+from finn_cost_model import LayerGeometry, _thresholding_rtl_cost, conv_cost_pe_simd, layer_cost_pe_simd
 
 W, A = 6, 6  # every real node in the probe is W6A6, force_dsp=True
 
@@ -221,6 +221,46 @@ class ThresholdingPlacementTest(unittest.TestCase):
     def test_four_bit_output_never_reaches_bram(self):
         _, bram18, _ = _thresholding_rtl_cost(1, 4, 32, "block", in_bits=12)
         self.assertEqual(bram18, 0)  # deepest stage = 32*8 = 256 < 1024
+
+
+class TestWindowFill(unittest.TestCase):
+    """The sliding window's per-frame fill gap (analytical simulation, 2026-10-12): cycles = max(swu, fmpad, mvu + fill)."""
+
+    @staticmethod
+    def conv(kh, d, cin=32, w=64, pad=None):
+        pad = (d * (kh - 1)) // 2 if pad is None else pad
+        return LayerGeometry(op_type="Conv2d", name="c", stage="s", cin=cin, hin=w, win=w, cout=cin, hout=w, wout=w, kh=kh, kw=kh, sh=1, sw=1, dh=d, dw=d, ph=pad, pw=pad)
+
+    def test_fill_is_the_first_window_read_time(self):
+        for d in (1, 8, 16):
+            c = conv_cost_pe_simd(self.conv(3, d), W, A, pe=4, simd=16, force_dsp=True)
+            pad, cf = d, 32 // 16
+            self.assertEqual(c["window_fill_cycles"], (2 * pad * (64 + 2 * pad) + 2 * pad + 1) * cf)
+            self.assertEqual(c["cycles"], max(c["mvu_cycles"] + c["window_fill_cycles"], c["swu_cycles"], c["fmpad_cycles"]))
+
+    def test_matches_the_simulated_gap_at_dilation_8(self):
+        # bottleneck_sim, 128 ch / v=4 / 64x64 / T=72 / cf=2: 2538 simulated cycles per frame above the MVAU's 72 cyc/px
+        c = conv_cost_pe_simd(self.conv(3, 8, cin=32, w=64), W, A, pe=4, simd=16, force_dsp=True)
+        self.assertAlmostEqual(c["window_fill_cycles"], 2594)
+        self.assertLess(abs(c["window_fill_cycles"] / 2538 - 1), 0.03)
+
+    def test_pointwise_has_no_window(self):
+        c = conv_cost_pe_simd(self.conv(1, 1, pad=0), W, A, pe=4, simd=16, force_dsp=True)
+        self.assertEqual((c["window_fill_cycles"], c["cycles"]), (0, max(c["mvu_cycles"], c["swu_cycles"], c["fmpad_cycles"])))
+
+    def test_transposed_conv_equivalent_has_the_fill(self):
+        # 2x2 stride-2 ConvTranspose on a 32x32 input -> zero-inserted + padded 65x65 image, 2x2 window: ((2-1)*65 + 2) * cf words (= the up block's SWG_u)
+        for simd, cf in ((32, 1), (16, 2), (8, 4)):
+            ct = LayerGeometry(op_type="ConvTranspose2d", name="up", stage="s", cin=32, hin=32, win=32, cout=16, hout=64, wout=64, kh=2, kw=2, sh=2, sw=2)
+            c = layer_cost_pe_simd(ct, W, A, pe=4, simd=simd, force_dsp=True)
+            self.assertEqual(c["window_fill_cycles"], 67 * cf)
+            self.assertGreaterEqual(c["cycles"], c["mvu_cycles"] + 67 * cf)
+            self.assertEqual(c["cycles"], max(c["mvu_cycles"] + c["window_fill_cycles"], c["swu_cycles"], c["fmpad_cycles"]))
+
+    def test_fill_shrinks_with_simd(self):
+        a = conv_cost_pe_simd(self.conv(3, 8), W, A, pe=4, simd=8, force_dsp=True)["window_fill_cycles"]
+        b = conv_cost_pe_simd(self.conv(3, 8), W, A, pe=4, simd=32, force_dsp=True)["window_fill_cycles"]
+        self.assertEqual(a, 4 * b)                                         # cf = cin / simd_swu
 
 
 if __name__ == "__main__":

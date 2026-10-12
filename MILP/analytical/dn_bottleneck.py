@@ -262,10 +262,11 @@ def model_dn_bottleneck(
 
 # escalation schedule: (elastic scale, FIFO after FMPad holds the next frame's padding, uniform depth multiplier)
 _SIZING_SCHEDULE = reg._SIZING_SCHEDULE
+_accepted, _shrink_accepted = reg._accepted, reg._shrink_accepted
 
 
 def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02, max_tries: int = 10, shrink: bool = True,
-                    tol_soft: float = 0.03, fifo_mem: str = "auto") -> dict:
+                    tol_soft: float = 0.03, fifo_mem: str = "auto", deadlock_only: bool = False) -> dict:
     """Same recipe as bottleneck.verify_with_sim, on the downsampling network: (1) paced input at T_in with an unbounded skip
     FIFO measures the skip depth really needed, (2) a saturated run doubles one uniform depth (and the elastic FIFOs in front of
     SWG_r / FMPad) until the steady cyc/px per OUTPUT pixel reaches T_out, then every FIFO shrinks to its observed occupancy."""
@@ -299,9 +300,9 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
         extra = {"FMPad->out": pad_out * es} if with_pad else {}
         sat = simulate_dn(r, inject_interval=0, skip_depth=r.skip_fifo.depth_words, fifo_depth=depth, elastic_map=emap,
                           fifo_depths=extra, frames=3)
-        if not sat.deadlock and sat.steady_cyc_px <= T * (1 + tol):
+        if _accepted(sat, T, tol, deadlock_only):
             break
-    ok = (not sat.deadlock) and sat.steady_cyc_px <= T * (1 + tol)
+    ok = _accepted(sat, T, tol, deadlock_only)
     if not ok and not sat.deadlock and sat.steady_cyc_px <= T * (1 + tol_soft):
         # inherent per-frame gap: the sliding window needs the next frame's first window (padding rows are read at one word
         # per cycle) before it can emit, which no FIFO hides completely; accept up to tol_soft but say so
@@ -312,8 +313,10 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
         sized = {n: max(fifo_depth, occ) for n, occ in sat.fifo_max.items() if n != "skip FIFO"}
         small = simulate_dn(r, inject_interval=0, skip_depth=r.skip_fifo.depth_words, fifo_depth=depth, elastic_map=emap,
                             fifo_depths=sized, frames=3)
-        if not small.deadlock and small.steady_cyc_px <= T * (1 + tol):
+        if _shrink_accepted(small, sat, T, tol, deadlock_only):
             sat = small
+    if deadlock_only and not sat.deadlock and sat.steady_cyc_px > T * (1 + tol):
+        r.warnings.append(f"steady {sat.steady_cyc_px:.2f} cyc/px is {sat.steady_cyc_px / T - 1:.1%} above T (tolerance {tol:.1%}): rate is the MILP's to fix, FIFOs sized deadlock-free only")
     graph = sat.graph
     for name, occ in sat.fifo_max.items():
         graph["fifos"][name]["max_occ"] = occ

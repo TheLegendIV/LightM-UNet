@@ -5,7 +5,7 @@
 # Precision: net_explicit derives every block's per-role bits (bottleneck.RoleBits) from the folding's PER-SITE bits (net_fold.sites_for = expand_layer_bits), so stream widths, DWCs and FIFO widths follow the
 # allocation (the mixed folding no longer needs a conservative uniform --bits 8). Cycles, stalls and FIFO depths do not depend on bits; widths set the BRAM aspect / LUT of the written-back FIFO list.
 # The MILP graph has no bilinear depthwise node, so these simulate the nearest-style up blocks.
-# NE_ARGS="..." passes extra net_explicit.py flags, e.g. NE_ARGS="--reuse-blocks" or "--tolerance-pct 8 --max-rounds 2" (defaults: --tolerance-pct 2, --max-rounds 1). The pass criterion is "no deadlock"; rate misses beyond the tolerance print a WARNING and are flagged in fifo_sim, never failed.
+# NE_ARGS="..." passes extra net_explicit.py flags, e.g. NE_ARGS="--reuse-blocks" or "--max-rounds 2" (defaults: --max-rounds 1). The pass criterion is "no deadlock"; rate misses beyond the tolerance print a WARNING and are flagged in fifo_sim, never failed.
 # Run in lightmunet_dev from anywhere:   bash MILP/artifacts/S12_dense_512_warmstart_mixed_v1/run_simfifo.sh [arm ...]     (default: the three arms, in parallel, --workers 2 each; ~1-3 h)
 set -u
 cd /workspace/LightM-UNet

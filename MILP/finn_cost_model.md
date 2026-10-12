@@ -897,6 +897,20 @@ be exact divisors keeps this usable for arbitrary values, though every
 caller in this codebase only ever passes divisors (see `divisors()`), where
 ceil reduces to exact division anyway.
 
+### Window-fill gap (`window_fill_cycles`, 2026-10-12)
+
+`cycles = max(mvu_cycles + window_fill_cycles, swu_cycles, fmpad_cycles)`, with `window_fill_cycles = ((kh_eff - 1) * (W + 2*pw) + kw_eff) * ceil(cin / simd_swu)` for every
+Conv2d with a window (kh or kw > 1; `kh_eff = (kh - 1) * dh + 1`), 0 for 1x1. The sliding window serves ONE frame at a time: after the last window of a frame it has to read the next frame's
+first window -- `kh_eff - 1` padded rows plus `kw_eff` pixels, `cf` words each, one word per cycle -- before the MVAU gets its first input, and no FIFO hides that (FIFOs only hold the data,
+the read is serial). The frame period is therefore the MVAU's cycles PLUS the fill. It depends on the option (through `simd_swu`, `cf = cin / simd_swu`) so the MILP prices it per option and the
+throughput row `cycles <= clock / fps` of a dilated conv includes it; reported cycles / FPS / `total_cycles` include it too.
+Derived, not fitted. Check against `bottleneck_sim` (128 ch, v = 4, T = 72): simulated gap / formula = 0.98 (dilation 8, 64x64, cf 2; 2538 vs 2594 cycles), 0.98 (dilation 16, cf 1), 0.89 / 0.77-0.81
+(pad 4 / 2: the formula is an upper bound, the last windows of the previous frame overlap a little), ~0 at dilation 1; 0.95 at T = 144; but 1.28 at T = 36 (not captured). It is 0.4-1 % of the frame
+for the dilated convs of S12 at 512. Applies to every windowed layer, also the ConvTranspose equivalent conv (zero-inserted, padded image of width `n_eff_w = (W-1)*sw + 1 + 2*(kw-1)`, 2x2 window: `(n_eff_w + 2) * cf` cycles, the up block's `SWG_u`; 67 cycles per frame for a 32-wide input)
+and the strided 2x2 down convs. Not validated against the simulator for those two: in the up block the rate is dominated by the UpNN row phases and the join chain (21.1 cyc/px with 2-word FIFOs, 16.5 with 4-word ones, target 18, MVAU 16.0),
+which hides a fill of 67-2,160 cycles per frame; the formula is the same read-time argument as the regular block's.
+Since this enters `cycles`, `net_explicit.py` (F = slowest MILP entry of a block) gets a block target that already contains the gap, so a block warns only if the model is wrong.
+
 ### `ram_style` (weight tile)
 
 Mirrors real FINN's mutually-exclusive `bram_estimation()`/

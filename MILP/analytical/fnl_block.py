@@ -27,7 +27,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bottleneck as reg  # noqa: E402
 from bottleneck import (  # noqa: E402
-    BottleneckResult, NodeResult, RoleBits, _SIZING_SCHEDULE, _dwc, _fifo_attrs, _geom, _min_pe, _search_mvau, finalize_fifo_costs,
+    BottleneckResult, NodeResult, RoleBits, _SIZING_SCHEDULE, _accepted, _shrink_accepted, _dwc, _fifo_attrs, _geom, _min_pe, _search_mvau, finalize_fifo_costs,
 )
 
 fcm = reg.fcm
@@ -119,7 +119,7 @@ def model_fnl_block(
 
 
 def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02, max_tries: int = 6, shrink: bool = True,
-                    tol_soft: float = 0.03, fifo_mem: str = "auto") -> dict:
+                    tol_soft: float = 0.03, fifo_mem: str = "auto", deadlock_only: bool = False) -> dict:
     """Saturated 3-frame run; escalates the prefetch FIFO in front of FMPadPix and a uniform depth until the last frame's period per OUTPUT pixel is
     within tol of T_out, then shrinks every FIFO to its observed occupancy."""
     from fnl_block_sim import simulate_fnl
@@ -133,18 +133,20 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
         depth = fifo_depth * um
         emap = {k: max(v * es, depth) for k, v in emap0.items()}
         sat = simulate_fnl(r, inject_interval=0, fifo_depth=depth, elastic_map=emap, frames=3)
-        if not sat.deadlock and sat.steady_cyc_px <= T * (1 + tol):
+        if _accepted(sat, T, tol, deadlock_only):
             break
-    ok = (not sat.deadlock) and sat.steady_cyc_px <= T * (1 + tol)
+    ok = _accepted(sat, T, tol, deadlock_only)
     if ok and shrink:
         small = simulate_fnl(r, inject_interval=0, fifo_depth=depth, elastic_map=emap,
                              fifo_depths={k: max(fifo_depth, occ) for k, occ in sat.fifo_max.items()}, frames=3)
-        if not small.deadlock and small.steady_cyc_px <= T * (1 + tol):
+        if _shrink_accepted(small, sat, T, tol, deadlock_only):
             sat = small
     if not ok and not sat.deadlock and sat.steady_cyc_px <= T * (1 + tol_soft):
         r.warnings.append(f"steady {sat.steady_cyc_px:.2f} cyc/px is {sat.steady_cyc_px / T - 1:.1%} above T: residual per-frame window-fill gap")
         ok = True
     paced = simulate_fnl(r, inject_interval=p["T_in"], fifo_depth=depth, elastic_map=emap, fifo_depths=None, frames=2)
+    if deadlock_only and not sat.deadlock and sat.steady_cyc_px > T * (1 + tol):
+        r.warnings.append(f"steady {sat.steady_cyc_px:.2f} cyc/px is {sat.steady_cyc_px / T - 1:.1%} above T (tolerance {tol:.1%}): rate is the MILP's to fix, FIFOs sized deadlock-free only")
     graph = sat.graph
     for name, occ in sat.fifo_max.items():
         graph["fifos"][name]["max_occ"] = occ

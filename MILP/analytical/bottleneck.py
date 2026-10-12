@@ -617,8 +617,21 @@ _SIZING_SCHEDULE = ((1, False, 1), (1, True, 1), (2, True, 1), (2, True, 2), (4,
                     (8, True, 32), (8, True, 64))   # last four: only reached by a block that fails at x4 (the 512x512 down1 block needs uniform depth 64: its nodes are balanced at ~T / 1.04)
 
 
+def _accepted(sat, T: float, tol: float, deadlock_only: bool) -> bool:
+    """A saturated run is accepted when it did not deadlock and (unless deadlock_only) its steady rate is within tol of T."""
+    return (not sat.deadlock) and (deadlock_only or sat.steady_cyc_px <= T * (1 + tol))
+
+
+def _shrink_accepted(small, sat, T: float, tol: float, deadlock_only: bool) -> bool:
+    """The replay with every FIFO cut to its observed occupancy replaces the sized run if it still does not deadlock and keeps the rate:
+    within tol of T (default) or, deadlock_only, no slower than the run it shrinks (0.1%)."""
+    if small.deadlock:
+        return False
+    return small.steady_cyc_px <= sat.steady_cyc_px * 1.001 if deadlock_only else small.steady_cyc_px <= T * (1 + tol)
+
+
 def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02, max_tries: int = 10, shrink: bool = True,
-                    tol_soft: float = 0.03, fifo_mem: str = "auto") -> dict:
+                    tol_soft: float = 0.03, fifo_mem: str = "auto", deadlock_only: bool = False) -> dict:
     """Run bottleneck_sim on the chosen foldings and size the FIFOs until the simulated throughput meets T.
 
     1. Input paced at T with an unbounded skip FIFO: measures the skip FIFO the design really needs and the latency;
@@ -628,7 +641,10 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
        time, so without it every frame pays n_fill pixel times of the upstream period as a gap (hardware: 73.7 / 75.8 /
        87.9 cyc/px at d = 1 / 2 / 8 instead of 72). If a residual gap remains, the FIFO after FMPad also holds the next
        frame's top padding rows; then a uniform depth doubles until the period is within tol of T.
-    The verified FIFO depths are stored in r.fifo_graph for export_onnx. Raises RuntimeError if no depth reaches T."""
+    The verified FIFO depths are stored in r.fifo_graph for export_onnx. Raises RuntimeError if no depth reaches T.
+    deadlock_only: the FIFOs only have to remove deadlocks, at the cheapest depths: the FIRST schedule entry that does not deadlock is taken (no escalation for
+    rate: extra depth does not change the steady rate, see rate_vs_depth in analytical.md), shrunk to the observed occupancy, and a rate above tol is a warning, not an error
+    (only a deadlock raises). The rate is the MILP's to set."""
     from bottleneck_sim import UNBOUNDED, simulate
 
     T, pad = r.params["T"], r.params["pad"]
@@ -658,21 +674,23 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
         extra = {"FMPad->out": pad_out * es} if with_pad else {}
         sat = simulate(r, inject_interval=0, skip_depth=r.skip_fifo.depth_words, fifo_depth=depth, elastic_depth=elastic,
                        fifo_depths=extra, frames=3)
-        if not sat.deadlock and sat.steady_cyc_px <= T * (1 + tol):
+        if _accepted(sat, T, tol, deadlock_only):
             break
-    if not sat.deadlock and sat.steady_cyc_px <= T * (1 + tol) and shrink:
+    if _accepted(sat, T, tol, deadlock_only) and shrink:
         sized = {n: max(fifo_depth, occ) for n, occ in sat.fifo_max.items() if n != "skip FIFO"}
         small = simulate(r, inject_interval=0, skip_depth=r.skip_fifo.depth_words, fifo_depth=depth, elastic_depth=elastic,
                          fifo_depths=sized, frames=3)
-        if not small.deadlock and small.steady_cyc_px <= T * (1 + tol):
+        if _shrink_accepted(small, sat, T, tol, deadlock_only):
             sat = small
-    ok = (not sat.deadlock) and sat.steady_cyc_px <= T * (1 + tol)
+    ok = _accepted(sat, T, tol, deadlock_only)
     if not ok and not sat.deadlock and sat.steady_cyc_px <= T * (1 + tol_soft):
         # inherent per-frame gap: the sliding window needs the next frame's first window (padding rows are read at one word
         # per cycle) before it can emit, which no FIFO hides completely; accept up to tol_soft but say so
         r.warnings.append(f"steady {sat.steady_cyc_px:.2f} cyc/px is {sat.steady_cyc_px / T - 1:.1%} above T: residual per-frame "
                           f"window-fill gap that FIFO sizing cannot remove")
         ok = True
+    if deadlock_only and not sat.deadlock and sat.steady_cyc_px > T * (1 + tol):
+        r.warnings.append(f"steady {sat.steady_cyc_px:.2f} cyc/px is {sat.steady_cyc_px / T - 1:.1%} above T (tolerance {tol:.1%}): rate is the MILP's to fix, FIFOs sized deadlock-free only")
     graph = sat.graph
     for name, occ in sat.fifo_max.items():
         graph["fifos"][name]["max_occ"] = occ

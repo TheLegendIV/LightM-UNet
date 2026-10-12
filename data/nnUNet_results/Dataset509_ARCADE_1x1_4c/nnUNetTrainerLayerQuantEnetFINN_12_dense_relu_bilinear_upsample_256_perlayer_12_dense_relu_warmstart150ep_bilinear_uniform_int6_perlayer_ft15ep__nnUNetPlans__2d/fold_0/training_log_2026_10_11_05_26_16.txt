@@ -1,0 +1,139 @@
+
+This is the configuration used by this training:
+Configuration name: 2d
+ {'data_identifier': 'nnUNetPlans_2d', 'preprocessor_name': 'DefaultPreprocessor', 'batch_size': 12, 'patch_size': [512, 512], 'median_image_size_in_voxels': [512.0, 512.0], 'spacing': [1.0, 1.0], 'normalization_schemes': ['ZScoreNormalization'], 'use_mask_for_norm': [False], 'UNet_class_name': 'PlainConvUNet', 'UNet_base_num_features': 32, 'n_conv_per_stage_encoder': [2, 2, 2, 2, 2, 2, 2, 2], 'n_conv_per_stage_decoder': [2, 2, 2, 2, 2, 2, 2], 'num_pool_per_axis': [7, 7], 'pool_op_kernel_sizes': [[1, 1], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2]], 'conv_kernel_sizes': [[3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3]], 'unet_max_num_features': 512, 'resampling_fn_data': 'resample_data_or_seg_to_shape', 'resampling_fn_seg': 'resample_data_or_seg_to_shape', 'resampling_fn_data_kwargs': {'is_seg': False, 'order': 3, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_seg_kwargs': {'is_seg': True, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_probabilities': 'resample_data_or_seg_to_shape', 'resampling_fn_probabilities_kwargs': {'is_seg': False, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'batch_dice': True} 
+ 
+These are the global plan.json settings:
+ {'dataset_name': 'Dataset509_ARCADE_1x1_4c', 'plans_name': 'nnUNetPlans', 'original_median_spacing_after_transp': [999.0, 1.0, 1.0], 'original_median_shape_after_transp': [1, 512, 512], 'image_reader_writer': 'NaturalImage2DIO', 'transpose_forward': [0, 1, 2], 'transpose_backward': [0, 1, 2], 'experiment_planner_used': 'ExperimentPlanner', 'label_manager': 'LabelManager', 'foreground_intensity_properties_per_channel': {'0': {'max': 255.0, 'mean': 97.36139678955078, 'median': 94.0, 'min': 0.0, 'percentile_00_5': 31.0, 'percentile_99_5': 185.0, 'std': 31.739503860473633}}} 
+ 
+2026-10-11 05:26:17.939067: unpacking dataset... 
+2026-10-11 05:26:22.092914: unpacking done... 
+2026-10-11 05:26:22.093494: do_dummy_2d_data_aug: False 
+2026-10-11 05:26:22.099763: Using splits from existing split file: /gpfs/home1/yhussein/LightM-UNet/data/nnUNet_preprocessed/Dataset509_ARCADE_1x1_4c/splits_final.json 
+2026-10-11 05:26:22.100348: The split file contains 1 splits. 
+2026-10-11 05:26:22.100422: Desired fold for training: 0 
+2026-10-11 05:26:22.100480: This split has 1000 training and 200 validation cases. 
+2026-10-11 05:26:22.143029: Unable to plot network architecture: 
+2026-10-11 05:26:22.143133: No module named 'IPython' 
+2026-10-11 05:26:22.182245:  
+2026-10-11 05:26:22.182384: Epoch 0 
+2026-10-11 05:26:22.182523: Current learning rate: 0.001 
+2026-10-11 05:28:30.138959: train_loss -0.5913 
+2026-10-11 05:28:30.139210: val_loss -0.4701 
+2026-10-11 05:28:30.139341: Pseudo dice [0.6606, 0.7485, 0.6698, 0.5217] 
+2026-10-11 05:28:30.139453: Epoch time: 127.99 s 
+2026-10-11 05:28:30.139535: Yayy! New best EMA pseudo Dice: 0.6502 
+2026-10-11 05:28:31.375273:  
+2026-10-11 05:28:31.375465: Epoch 1 
+2026-10-11 05:28:31.375594: Current learning rate: 0.00094 
+2026-10-11 05:30:36.738311: train_loss -0.5939 
+2026-10-11 05:30:36.738556: val_loss -0.5963 
+2026-10-11 05:30:36.738678: Pseudo dice [0.6494, 0.8284, 0.6964, 0.7003] 
+2026-10-11 05:30:36.738787: Epoch time: 125.4 s 
+2026-10-11 05:30:36.738870: Yayy! New best EMA pseudo Dice: 0.657 
+2026-10-11 05:30:38.102697:  
+2026-10-11 05:30:38.102932: Epoch 2 
+2026-10-11 05:30:38.103063: Current learning rate: 0.00088 
+2026-10-11 05:32:41.846354: train_loss -0.5874 
+2026-10-11 05:32:41.846609: val_loss -0.6167 
+2026-10-11 05:32:41.846740: Pseudo dice [0.6733, 0.8072, 0.6856, 0.7211] 
+2026-10-11 05:32:41.846845: Epoch time: 123.78 s 
+2026-10-11 05:32:41.846929: Yayy! New best EMA pseudo Dice: 0.6635 
+2026-10-11 05:32:43.255048:  
+2026-10-11 05:32:43.255285: Epoch 3 
+2026-10-11 05:32:43.255414: Current learning rate: 0.00082 
+2026-10-11 05:34:48.012437: train_loss -0.6009 
+2026-10-11 05:34:48.012764: val_loss -0.6218 
+2026-10-11 05:34:48.012897: Pseudo dice [0.6807, 0.8068, 0.6899, 0.7295] 
+2026-10-11 05:34:48.013006: Epoch time: 124.79 s 
+2026-10-11 05:34:48.013093: Yayy! New best EMA pseudo Dice: 0.6698 
+2026-10-11 05:34:49.400514:  
+2026-10-11 05:34:49.400681: Epoch 4 
+2026-10-11 05:34:49.400816: Current learning rate: 0.00076 
+2026-10-11 05:36:53.651654: train_loss -0.6023 
+2026-10-11 05:36:53.651915: val_loss -0.5775 
+2026-10-11 05:36:53.652035: Pseudo dice [0.671, 0.8125, 0.6565, 0.7122] 
+2026-10-11 05:36:53.652139: Epoch time: 124.29 s 
+2026-10-11 05:36:53.652255: Yayy! New best EMA pseudo Dice: 0.6741 
+2026-10-11 05:36:55.208545:  
+2026-10-11 05:36:55.209031: Epoch 5 
+2026-10-11 05:36:55.209166: Current learning rate: 0.00069 
+2026-10-11 05:38:59.569517: train_loss -0.6063 
+2026-10-11 05:38:59.569742: val_loss -0.6203 
+2026-10-11 05:38:59.569869: Pseudo dice [0.7051, 0.8012, 0.7011, 0.7095] 
+2026-10-11 05:38:59.569969: Epoch time: 124.4 s 
+2026-10-11 05:38:59.570046: Yayy! New best EMA pseudo Dice: 0.6797 
+2026-10-11 05:39:00.938795:  
+2026-10-11 05:39:00.939048: Epoch 6 
+2026-10-11 05:39:00.939193: Current learning rate: 0.00063 
+2026-10-11 05:41:04.551486: train_loss -0.6081 
+2026-10-11 05:41:04.551804: val_loss -0.6282 
+2026-10-11 05:41:04.551931: Pseudo dice [0.6736, 0.821, 0.7014, 0.7258] 
+2026-10-11 05:41:04.552033: Epoch time: 123.65 s 
+2026-10-11 05:41:04.552114: Yayy! New best EMA pseudo Dice: 0.6847 
+2026-10-11 05:41:06.145179:  
+2026-10-11 05:41:06.145390: Epoch 7 
+2026-10-11 05:41:06.145516: Current learning rate: 0.00057 
+2026-10-11 05:43:09.787352: train_loss -0.6074 
+2026-10-11 05:43:09.787641: val_loss -0.629 
+2026-10-11 05:43:09.787773: Pseudo dice [0.6831, 0.8204, 0.696, 0.7252] 
+2026-10-11 05:43:09.787881: Epoch time: 123.68 s 
+2026-10-11 05:43:09.787963: Yayy! New best EMA pseudo Dice: 0.6894 
+2026-10-11 05:43:11.167016:  
+2026-10-11 05:43:11.167204: Epoch 8 
+2026-10-11 05:43:11.167332: Current learning rate: 0.0005 
+2026-10-11 05:45:16.155783: train_loss -0.6091 
+2026-10-11 05:45:16.156027: val_loss -0.6134 
+2026-10-11 05:45:16.156151: Pseudo dice [0.6822, 0.821, 0.7038, 0.7165] 
+2026-10-11 05:45:16.156248: Epoch time: 125.02 s 
+2026-10-11 05:45:16.156325: Yayy! New best EMA pseudo Dice: 0.6935 
+2026-10-11 05:45:17.567814:  
+2026-10-11 05:45:17.567995: Epoch 9 
+2026-10-11 05:45:17.568122: Current learning rate: 0.00044 
+2026-10-11 05:47:22.182899: train_loss -0.6165 
+2026-10-11 05:47:22.183136: val_loss -0.6437 
+2026-10-11 05:47:22.183254: Pseudo dice [0.6996, 0.8097, 0.7096, 0.7377] 
+2026-10-11 05:47:22.183354: Epoch time: 124.65 s 
+2026-10-11 05:47:22.183433: Yayy! New best EMA pseudo Dice: 0.6981 
+2026-10-11 05:47:23.683119:  
+2026-10-11 05:47:23.683603: Epoch 10 
+2026-10-11 05:47:23.683747: Current learning rate: 0.00037 
+2026-10-11 05:49:28.685033: train_loss -0.6228 
+2026-10-11 05:49:28.685278: val_loss -0.6304 
+2026-10-11 05:49:28.685404: Pseudo dice [0.7021, 0.7986, 0.7153, 0.7436] 
+2026-10-11 05:49:28.685509: Epoch time: 125.04 s 
+2026-10-11 05:49:28.685599: Yayy! New best EMA pseudo Dice: 0.7023 
+2026-10-11 05:49:30.042096:  
+2026-10-11 05:49:30.042280: Epoch 11 
+2026-10-11 05:49:30.042405: Current learning rate: 0.0003 
+2026-10-11 05:51:34.129232: train_loss -0.6251 
+2026-10-11 05:51:34.131393: val_loss -0.6368 
+2026-10-11 05:51:34.131517: Pseudo dice [0.694, 0.818, 0.7135, 0.7145] 
+2026-10-11 05:51:34.131614: Epoch time: 124.12 s 
+2026-10-11 05:51:34.131698: Yayy! New best EMA pseudo Dice: 0.7055 
+2026-10-11 05:51:35.488909:  
+2026-10-11 05:51:35.489146: Epoch 12 
+2026-10-11 05:51:35.489274: Current learning rate: 0.00023 
+2026-10-11 05:53:41.253196: train_loss -0.6235 
+2026-10-11 05:53:41.253441: val_loss -0.6459 
+2026-10-11 05:53:41.253561: Pseudo dice [0.6938, 0.801, 0.7229, 0.7305] 
+2026-10-11 05:53:41.253663: Epoch time: 125.8 s 
+2026-10-11 05:53:41.253752: Yayy! New best EMA pseudo Dice: 0.7087 
+2026-10-11 05:53:42.631076:  
+2026-10-11 05:53:42.631332: Epoch 13 
+2026-10-11 05:53:42.631476: Current learning rate: 0.00016 
+2026-10-11 05:55:47.128651: train_loss -0.6174 
+2026-10-11 05:55:47.128922: val_loss -0.6511 
+2026-10-11 05:55:47.129045: Pseudo dice [0.698, 0.8132, 0.7131, 0.7522] 
+2026-10-11 05:55:47.129143: Epoch time: 124.53 s 
+2026-10-11 05:55:47.130231: Yayy! New best EMA pseudo Dice: 0.7122 
+2026-10-11 05:55:48.682635:  
+2026-10-11 05:55:48.682859: Epoch 14 
+2026-10-11 05:55:48.682990: Current learning rate: 9e-05 
+2026-10-11 05:57:53.140530: train_loss -0.6287 
+2026-10-11 05:57:53.140824: val_loss -0.6491 
+2026-10-11 05:57:53.140954: Pseudo dice [0.7062, 0.8202, 0.7091, 0.7374] 
+2026-10-11 05:57:53.141061: Epoch time: 124.49 s 
+2026-10-11 05:57:53.141145: Yayy! New best EMA pseudo Dice: 0.7153 
+2026-10-11 05:57:55.084366: Training done. 
+2026-10-11 05:57:55.085525: Skipping final full validation because ENET_SKIP_FINAL_VALIDATION=1 (default) 

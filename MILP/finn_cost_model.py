@@ -523,6 +523,7 @@ def conv_cost_pe_simd(
     swu_ram_style: str = "distributed", thr_ram_style: str = "block",
 ) -> dict:
     """The general per-layer cost at an explicit (PE, SIMD) folding choice.
+    cycles include the sliding window's per-frame fill gap (`window_fill_cycles`, see below).
     See finn_cost_model.md for the full derivation of every term below
     (mvu_lut breakdown, accumulator-width bound, RTL/HLS LUT derates, DSP
     lane-packing, standalone-vs-fused Thresholding, ram_style axes)."""
@@ -613,7 +614,15 @@ def conv_cost_pe_simd(
         (layer.hin + 2 * layer.ph) * (layer.win + 2 * layer.pw) * math.ceil(layer.cin / simd_swu)
         if layer.ph or layer.pw else 0
     )
-    cycles = max(mvu_cycles, swu_cycles, fmpad_cycles)
+    # Window-fill gap (analytical simulation of the SWG, 2026-10-12): the sliding window serves ONE frame at a time, so after a frame's last window it has to read the next frame's first
+    # window -- (kh_eff - 1) padded rows + kw_eff pixels, cf words each, at one word per cycle -- before the MVAU gets its first input. That time is not hidden by any FIFO (they only buffer
+    # the data, the READ is serial), so the frame's period is mvu_cycles + the fill. Simulated gap / this formula: 0.95-0.98 at dilation 8 and 16 (the cases that matter, 0.4-1.0 % of the
+    # frame), 0.76-0.89 at pad 2-4, ~0 at dilation 1; 1.28 when the block runs at T = 36 cyc/px (not captured). A binding SWU / FMPadding read already covers it.
+    window_fill_cycles = 0
+    if layer.kh > 1 or layer.kw > 1:
+        kh_eff, kw_eff = (layer.kh - 1) * layer.dh + 1, (layer.kw - 1) * layer.dw + 1
+        window_fill_cycles = ((kh_eff - 1) * (layer.win + 2 * layer.pw) + kw_eff) * math.ceil(layer.cin / simd_swu)
+    cycles = max(mvu_cycles + window_fill_cycles, swu_cycles, fmpad_cycles)
     return {
         "total_pe": total_pe, "total_simd_lanes": total_simd_lanes,
         "swu_bram18": swu_bram18, "swu_uram18": swu_uram18, "wm_bram18": wm_bram18, "wm_uram18": wm_uram18,
@@ -621,7 +630,7 @@ def conv_cost_pe_simd(
         "swu_lut": swu_lut, "mvu_lut": mvu_lut, "thr_lut": thr_lut, "mp_lut": 0,
         "total_lut": total_lut, "mvu_dsp": mvu_dsp, "total_dsp": mvu_dsp,
         "cycles": cycles, "mvu_cycles": mvu_cycles, "swu_cycles": swu_cycles, "fmpad_cycles": fmpad_cycles,
-        "impl_style": impl_style, "simd_swu": simd_swu, "thr_pe": thr_pe, "acc_bits": acc_bits,
+        "window_fill_cycles": window_fill_cycles, "impl_style": impl_style, "simd_swu": simd_swu, "thr_pe": thr_pe, "acc_bits": acc_bits,
     }
 
 

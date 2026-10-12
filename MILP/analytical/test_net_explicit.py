@@ -144,5 +144,31 @@ class TestSingleTolerance(unittest.TestCase):
         self.assertEqual(net_explicit.deadlock_errors(blocks, errors), {"b": "deadlock"})
 
 
+class TestDeadlockOnlySizing(unittest.TestCase):
+    """verify_with_sim(deadlock_only=True): first deadlock-free schedule entry, no escalation for rate, rate above tol = warning."""
+    def _block(self, dilation):
+        return model_bottleneck(cin=32, v=4, z=4, T=72, bits=4, height=32, width=32, dilation=dilation)
+
+    def test_takes_first_entry_and_only_warns_on_a_rate_miss(self):
+        r = self._block(8)
+        v = verify_with_sim(r, tol=0.001, deadlock_only=True, max_tries=10)
+        self.assertEqual(v["tries"], 1)                                   # no escalation although the rate is above 0.1 %
+        self.assertTrue(v["ok"] and not v["deadlock"])
+        self.assertGreater(v["steady_cyc_px"], 72 * 1.001)
+        self.assertTrue(any("above T" in w for w in r.warnings))
+
+    def test_default_mode_is_unchanged(self):
+        r = self._block(1)
+        v = verify_with_sim(r)
+        self.assertLessEqual(v["steady_cyc_px"], 72 * 1.02)
+
+    def test_shrunk_not_slower_than_sized(self):
+        a, b = self._block(8), self._block(8)
+        va = verify_with_sim(a, deadlock_only=True)
+        vb = verify_with_sim(b, shrink=False, deadlock_only=True)
+        self.assertLessEqual(va["steady_cyc_px"], vb["steady_cyc_px"] * 1.001)
+        self.assertLessEqual(a.totals.get("bram18", 0) if isinstance(a.totals, dict) else 0, (b.totals.get("bram18", 10**9) if isinstance(b.totals, dict) else 10**9))
+
+
 if __name__ == "__main__":
     unittest.main()

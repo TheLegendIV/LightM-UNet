@@ -332,3 +332,12 @@ because the pool already reads the INT-A input stream. Consequences in the model
 the DWCs are Dup->Thr_m, Thr_m->pool, pool->Concat. Rate and totals are unchanged (the sim still gives 5.02 cyc/px, MaxPool at 100% of F), so the order alone does not explain the 15.78 cyc/px measured in
 hardware. What the first probes got wrong is where the join FIFO was forced: on thr_m -> concat, an edge that does not exist in hardware, leaving the real join edge (maxpool -> concat) at FINN's 2 words.
 Rule: forced FIFO depths only take effect on edges present in the landed graph; check the edge list of `stages.fifo` ("edge not in prediction") after every new block.
+
+## FIFO depth does not set the steady rate (rate_vs_depth, 2026-10-12)
+
+`verify_with_sim(deadlock_only=True)` (what `net_explicit.py` uses) takes the first sizing-schedule entry that does not deadlock, shrinks every FIFO to its observed occupancy and only WARNS about a rate
+above the 5 % `WARN_TOLERANCE`. Measured on one block (128 ch, 64x64, T = 72, INT6, saturated 3 frames, every schedule entry): the steady rate is +0.07 % (dilation 1), +0.86 % (8), +1.03 % (16)
+at the first entry and stays there however large the elastic / pad FIFOs get (x1 -> x8 = 1,044 -> 8,352 words at dilation 8: 72.62 cyc/px at every step). Only uniform depths of 32-128 trim it (to +0.69 %), by
+growing `src->Dup`, `Dup->skip`, `SWG_m->out`, which have nothing to do with the window. With effectively infinite FIFOs it reaches 72.00 because the saturated source then runs a whole frame ahead
+(`Dup->skip` holds ~82k words): the gap is hidden by buffering a frame, which a real upstream running at ~T cannot do. The residual is the sliding window's per-frame fill gap, an architectural
+effect modelled in the MILP (`finn_cost_model.md`, "Window-fill gap"), not something FIFOs fix. Observed occupancies at dilation 8: input FIFO of the window ~1,044 words, pad FIFO ~2,630.

@@ -1,17 +1,17 @@
 """Simulate a GIVEN folding (a MILP solution) in the analytical block models + simulators and remove its deadlocks at the cheapest FIFO sizes.
 
-    python3 MILP/analytical/net_explicit.py <layer_bits_folding_ARM.json> --out-dir <dir> --tag ARM_simfifo [--workers 6] [--tolerance-pct 2] [--max-rounds 1]
+    python3 MILP/analytical/net_explicit.py <layer_bits_folding_ARM.json> --out-dir <dir> --tag ARM_simfifo [--workers 6] [--max-rounds 1]
 
 The MILP prices a few FIFOs in closed form (skip, prefetch, DWC) and never simulates the design; the analytical flow (net_fold.py) searches its own folding
 and simulates every block. This script closes the gap: every block model is fed the MILP's PE / SIMD / threshold PE as explicit folds (bottleneck.explicit_folds)
 and the per-site bits of the folding (bits_map), then
-  1. each block is simulated alone (saturated input, 3 frames) against its own rate target T = its slowest MILP node, and its internal FIFOs are sized to the SMALLEST
-     memory that is deadlock-free and reaches T within --tolerance-pct (the verify_with_sim schedule, extended to uniform depth x16, then shrunk to the observed occupancy);
-     a block that cannot get within the tolerance at any depth (the dilated convs' per-frame window-fill gap, a MILP-level effect) is sized for the rate it does reach and
-     only WARNED about (`rate.exceeds_tolerance`, printed as WARNING): speed is the MILP's job, the simulation only removes deadlocks;
+  1. each block is simulated alone (saturated input, 3 frames) and its internal FIFOs are sized to the SMALLEST memory that is deadlock-free: the first entry of the verify_with_sim
+     schedule that does not deadlock, shrunk to the observed occupancy (verify_with_sim(deadlock_only=True)). The rate a block reaches is whatever its folding gives -- extra FIFO depth does not
+     change the steady rate -- and a block slower than its own target T (its slowest MILP node) by more than WARN_TOLERANCE (5 %) is only WARNED about (`rate.exceeds_tolerance`, printed as WARNING):
+     speed is the MILP's job, so a warning points at a shortfall in the MILP's model (the dilated convs' per-frame window-fill gap, ...), not at the FIFOs;
   2. the whole network is chained (inter-block FIFOs at depth 2, saturated input, 3 frames). Pass = no deadlock. The last-frame period is compared with the slowest block's own
-     achieved period within the same tolerance and reported (`within_tolerance`). Only a DEADLOCK (or, with rounds to spare, saturated interface FIFOs behind a rate miss) makes
-     the full FIFOs grow and the chain re-run, up to --max-rounds (default 1: a pure check, nothing grown unverified).
+     achieved period within the same tolerance and reported (`within_tolerance`). Only a DEADLOCK makes the full FIFOs grow and the chain re-run, up to --max-rounds (default 1: a pure check,
+     nothing grown unverified).
 Output `layer_bits_folding_<tag>.json` = the MILP json with `intra_block_fifos` (every FIFO of the simulation, in the FINN bridge's role vocabulary, with the MILP's own
 depth estimate next to it where the MILP listed the FIFO), `inter_block_fifos`, `block_verification`, `fifo_sim` (what was found / grown) and the FIFO totals; the folding is untouched.
 """
@@ -37,6 +37,7 @@ import net_fold  # noqa: E402
 from bottleneck import fifo_memory, finalize_fifo_costs  # noqa: E402
 from node_names import block_output_name, milp_node  # noqa: E402
 
+WARN_TOLERANCE = 0.05               # a rate more than 5 % past its target is printed as a WARNING (never sizes anything, never fails); not a CLI option
 MAX_TRIES = 10                     # the extended _SIZING_SCHEDULE has 10 entries (up/int/fnl default to 6)
 FRAMES = 3
 INTRA_GROWTH = 4                  # a full intra-block FIFO of a deadlocked chain is grown x4 per round (every round of the real nets costs minutes); interfaces x2
@@ -134,26 +135,16 @@ def build_blocks(d: dict, a, ctx) -> tuple[list, list[str]]:
 
 # ---------------------------------------------------------------------------------------------- per-block simulation (parallel)
 def _verify_keep(args):
-    """verify_with_sim at ONE rate tolerance (strict == soft, so a block is never accepted past it without being shrunk). Fails only on a DEADLOCK. A block that cannot reach its own cycle
-    budget within the tolerance at ANY depth (a per-frame window-fill gap no FIFO hides, large for the dilated convs) is re-sized for the rate it does reach (first schedule entry that gets
-    there, then shrunk to the observed occupancy), and the rate miss is recorded, not rejected: making the design faster is the MILP's job."""
+    """verify_with_sim(deadlock_only=True): the FIRST sizing-schedule entry that does not deadlock, shrunk to the observed occupancy. Fails only on a DEADLOCK. The rate a block reaches is
+    whatever its folding gives (more FIFO depth does not change the steady rate: it only buffers the saturated source ahead); a rate above the tolerance is recorded (annotate_rate) and warned
+    about, never sized for. Speed is the MILP's job."""
     kind, r, stage, tol = args
     import bottleneck, dn_bottleneck, fnl_block, int_bottleneck, up_bottleneck
     ver = {"reg": bottleneck, "dn": dn_bottleneck, "up": up_bottleneck, "init": int_bottleneck, "final": fnl_block}[kind].verify_with_sim
     try:
-        ver(r, max_tries=MAX_TRIES, tol=tol, tol_soft=tol)
-        return r, None
+        ver(r, max_tries=MAX_TRIES, tol=tol, tol_soft=tol, deadlock_only=True)
     except RuntimeError as e:
-        err = str(e)
-    v = r.verification
-    if v.get("deadlock"):
-        return r, err
-    T = r.params["T"]
-    achieved = v["steady_cyc_px"]
-    try:
-        ver(r, max_tries=MAX_TRIES, tol=achieved / T - 1 + 0.005, tol_soft=achieved / T - 1 + 0.005)
-    except RuntimeError as e2:
-        return r, f"{err}; relaxed to the achieved rate: {e2}"
+        return r, str(e)
     return r, None
 
 
@@ -214,8 +205,8 @@ def grow_intra(r, name: str, new_depth: int) -> int:
 
 def run_chain_rounds(blocks: list, F_net: int, tol: float, max_rounds: int, log=print, milp_cap: int | None = None) -> dict:
     """Chain the blocks (inter-block depth 2) and, on a deadlock, grow the full FIFOs and re-run, up to max_rounds. `ok` = no deadlock (the pass criterion). `within_tolerance` = the last-frame
-    period is within F_net * (1 + tol), F_net = the slowest block's own achieved period (or the MILP node): a rate miss beyond it is reported and, only with rounds to spare, the interface FIFOs
-    that saturated behind it are doubled. Nothing is grown after the LAST round (it would not be verified). Mutates the blocks' fifo_graph."""
+    period is within F_net * (1 + tol), F_net = the slowest block's own achieved period (or the MILP node): a rate miss beyond it is only reported (FIFOs do not change the steady rate).
+    Nothing is grown after the LAST round (it would not be verified). Mutates the blocks' fifo_graph."""
     n = len(blocks)
     depths = [net_fifo.MIN_DEPTH] * (n - 1)
     rounds, grown = [], {}                          # grown: (stage, fifo name) | ("iface", i) -> [first depth, last depth]
@@ -245,9 +236,9 @@ def run_chain_rounds(blocks: list, F_net: int, tol: float, max_rounds: int, log=
                     first_out=res["first_out"], iface_max=res["iface_max"], full=[label(f) for f in res["full"]], seconds=round(time.time() - t0))
         rounds.append(info)
         log(f"  chain round {rnd}: deadlock={res['deadlock']} period={period} (slowest block {F_net}, tolerance limit {limit:.0f}, within={within}) first_out={info['first_out']} full={len(info['full'])} [{info['seconds']} s]", flush=True)
-        if within or rnd == max_rounds:
+        if ok or rnd == max_rounds:                  # no deadlock = done: a rate miss is reported, FIFOs do not fix it
             break
-        targets = res["full"] if res["deadlock"] else [f for f in res["saturated"] if id(f) in iface]    # a rate miss without deadlock: only the interfaces can help
+        targets = res["full"]
         acted = []
         for f in targets:
             if id(f) in iface:
@@ -285,9 +276,6 @@ def main() -> int:
     ap.add_argument("--bits", type=int, default=6, help="uniform fallback precision; with the default (per-site bits) it only fills the roles a block has no site for")
     ap.add_argument("--uniform-bits", action="store_true", help="ignore the folding's per-site bits and model every stream and weight at --bits (the pre-2026-10-11 behaviour)")
     ap.add_argument("--workers", type=int, default=min(6, os.cpu_count() or 1))
-    ap.add_argument("--tolerance-pct", type=float, default=2.0, help="THE rate tolerance, in percent (default 2): the sizing AIMS at it (a block gets the cheapest FIFOs that reach its own rate target within it) and "
-                    "the whole-net period is compared with the slowest block's achieved period within it. Beyond it the run prints a WARNING and flags it in fifo_sim (rate.exceeds_tolerance / chain.within_tolerance); "
-                    "it never fails: only a deadlock does")
     ap.add_argument("--max-rounds", type=int, default=1, help="whole-net chain rounds (default 1: one pure check). More rounds grow the full FIFOs of a deadlocked chain (x4 intra, x2 interfaces) and re-run")
     ap.add_argument("--reuse-blocks", action="store_true", help="reuse <out-dir>/blocks.pkl (the simulated blocks of an earlier run) instead of re-simulating every block")
     ap.add_argument("--no-chain", action="store_true", help="per-block simulation only (skip the whole-net runs)")
@@ -307,7 +295,7 @@ def run(a) -> int:
     t0 = time.time()
     blocks, warns = build_blocks(d, a, ctx)
     print(f"{a.tag}: {len(blocks)} blocks built from the MILP folding ({len(warns)} warnings)", flush=True)
-    tol = a.tolerance_pct / 100.0
+    tol = WARN_TOLERANCE
     milp_cap = int(d["_diagnostics"]["max_node_cycles"])
     cache = a.out_dir / "blocks.pkl"
     if a.reuse_blocks and cache.exists():
@@ -324,18 +312,18 @@ def run(a) -> int:
     for stage, _, r in blocks:
         if r.verification["rate"]["exceeds_tolerance"]:
             rt = r.verification["rate"]
-            msg = f"{stage} reaches {rt['achieved_cyc_px']:.2f} vs its target {rt['target_cyc_px']:.2f} cyc/px ({rt['over_pct']:+.2f}% > the {rt['tolerance_pct']:g}% tolerance), frame period {rt['period_cycles']}; FIFOs sized for the rate it reaches"
+            msg = f"{stage} reaches {rt['achieved_cyc_px']:.2f} vs its target {rt['target_cyc_px']:.2f} cyc/px ({rt['over_pct']:+.2f}% > the {rt['tolerance_pct']:g}% tolerance), frame period {rt['period_cycles']}; FIFOs sized to within {rt['tolerance_pct']:g}% of the best rate it reaches"
             print(f"  WARNING (rate, not a failure): {msg}", flush=True)
             warns.append(f"rate: {msg}")
     nodes = {**d["per_layer"], **d["extra_nodes"]}
     F_net = int(max([v["cycles"] for v in nodes.values()] + [r.verification["rate"]["period_cycles"] for _, _, r in blocks]))
     chain = None
     if not a.no_chain:
-        print(f"whole-net chain: pass = no deadlock; period reported against the slowest block {F_net} (+{a.tolerance_pct:g}%) and the MILP cap {milp_cap}; inter-block depth 2, up to {a.max_rounds} round(s)", flush=True)
+        print(f"whole-net chain: pass = no deadlock; period reported against the slowest block {F_net} (+{100 * tol:g}%) and the MILP cap {milp_cap}; inter-block depth 2, up to {a.max_rounds} round(s)", flush=True)
         chain = run_chain_rounds(blocks, F_net, tol, a.max_rounds, milp_cap=milp_cap)
         if chain["ok"] and not chain["within_tolerance"]:
             lr = chain["last"]
-            msg = f"whole-net period {lr['period']} is {lr['vs_slowest_block_pct']:+.2f}% over the slowest block's own {F_net} (tolerance {a.tolerance_pct:g}%), {lr['vs_milp_cap_pct']:+.2f}% over the MILP cap {milp_cap}; deadlock-free"
+            msg = f"whole-net period {lr['period']} is {lr['vs_slowest_block_pct']:+.2f}% over the slowest block's own {F_net} (tolerance {100 * tol:g}%), {lr['vs_milp_cap_pct']:+.2f}% over the MILP cap {milp_cap}; deadlock-free"
             print(f"  WARNING (rate, not a failure): {msg}", flush=True)
             warns.append(f"rate: {msg}")
     out = assemble_output(d, blocks, chain, errors, warns, a, F_net, time.time() - t0)
@@ -388,7 +376,7 @@ def assemble_output(d: dict, blocks: list, chain: dict | None, errors: dict, war
     it = g["intra_block_fifo_totals"]
     g["total_lut_with_all_fifos"] = g["total_lut_calibrated"] + it["fifo_lut"] + it["dwc_lut"] + g["inter_block_fifo_lut"]
     out["fifo_sim"] = dict(
-        source=str(a.folding_json.name), tag=a.tag, tolerance_pct=a.tolerance_pct, bits=a.bits, bits_source=("per-site bits of the folding (bits_map per block, bottleneck.RoleBits)" if getattr(a, "sites", None) else "uniform --bits"), seconds=round(seconds), net_target_cycles=F_net, workers=a.workers,
+        source=str(a.folding_json.name), tag=a.tag, tolerance_pct=round(100 * tol, 2), bits=a.bits, bits_source=("per-site bits of the folding (bits_map per block, bottleneck.RoleBits)" if getattr(a, "sites", None) else "uniform --bits"), seconds=round(seconds), net_target_cycles=F_net, workers=a.workers,
         blocks={stage: dict(kind=kind, ok=(stage not in errors), error=errors.get(stage), tries=r.verification.get("tries"), deadlock=r.verification.get("deadlock"), T=r.params.get("T"),
                             steady_cyc_px=r.verification.get("steady_cyc_px"), rate=r.verification.get("rate"), rate_miss=r.verification.get("rate_miss"), uniform_depth=r.verification.get("uniform_depth"), elastic_depth=r.verification.get("elastic_depth"),
                             full_fifos=(r.verification.get("full_fifos") or []) if stage in errors else [], warnings=list(r.warnings))

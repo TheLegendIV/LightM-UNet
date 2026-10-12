@@ -30,7 +30,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bottleneck as reg  # noqa: E402
 from bottleneck import (  # noqa: E402
-    BottleneckResult, NodeResult, RoleBits, SkipFifo, _SIZING_SCHEDULE, _dwc, _fifo_attrs, _fifo_bram18, _geom, _min_pe, _retarget_threshold,
+    BottleneckResult, NodeResult, RoleBits, SkipFifo, _SIZING_SCHEDULE, _accepted, _shrink_accepted, _dwc, _fifo_attrs, _fifo_bram18, _geom, _min_pe, _retarget_threshold,
     _search_mvau, _search_vvau, finalize_fifo_costs,
 )
 
@@ -260,7 +260,7 @@ def model_up_bottleneck(
 
 
 def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02, max_tries: int = 6, shrink: bool = True,
-                    tol_soft: float = 0.03, fifo_mem: str = "auto") -> dict:
+                    tol_soft: float = 0.03, fifo_mem: str = "auto", deadlock_only: bool = False) -> dict:
     """Paced 2-frame run with both join FIFOs unbounded measures what each needs; then a saturated 3-frame run escalates the FIFOs in
     front of FMPad_k / FMPadPix (and a uniform depth) until the last frame's period per OUTPUT pixel is within tol of T_out."""
     from up_bottleneck_sim import UNBOUNDED, simulate_up
@@ -294,18 +294,20 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
         extra = {"FMPad_k->out": pad_out * es} if (with_pad and conv) else {}
         sat = simulate_up(r, inject_interval=0, skip_depth=r.skip_fifo.depth_words, main_depth=p["main_fifo_words"], fifo_depth=depth,
                           elastic_map=emap, fifo_depths=extra, frames=3)
-        if not sat.deadlock and sat.steady_cyc_px <= T * (1 + tol):
+        if _accepted(sat, T, tol, deadlock_only):
             break
-    ok = (not sat.deadlock) and sat.steady_cyc_px <= T * (1 + tol)
+    ok = _accepted(sat, T, tol, deadlock_only)
     if ok and shrink:
         sized = {k: max(fifo_depth, occ) for k, occ in sat.fifo_max.items() if k not in ("skip FIFO", "FIFO main")}
         small = simulate_up(r, inject_interval=0, skip_depth=r.skip_fifo.depth_words, main_depth=p["main_fifo_words"], fifo_depth=depth,
                             elastic_map=emap, fifo_depths=sized, frames=3)
-        if not small.deadlock and small.steady_cyc_px <= T * (1 + tol):
+        if _shrink_accepted(small, sat, T, tol, deadlock_only):
             sat = small
     if not ok and not sat.deadlock and sat.steady_cyc_px <= T * (1 + tol_soft):
         r.warnings.append(f"steady {sat.steady_cyc_px:.2f} cyc/px is {sat.steady_cyc_px / T - 1:.1%} above T: residual per-frame window-fill gap")
         ok = True
+    if deadlock_only and not sat.deadlock and sat.steady_cyc_px > T * (1 + tol):
+        r.warnings.append(f"steady {sat.steady_cyc_px:.2f} cyc/px is {sat.steady_cyc_px / T - 1:.1%} above T (tolerance {tol:.1%}): rate is the MILP's to fix, FIFOs sized deadlock-free only")
     graph = sat.graph
     for name, occ in sat.fifo_max.items():
         graph["fifos"][name]["max_occ"] = occ

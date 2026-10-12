@@ -2,7 +2,7 @@
 
 S12 dense nearest-upsample noconv 512x512 (config_12_dense_relu_nearest_upsample), uniform INT6, 250 fps, mvau-wwidth-max 96, min-resources. There is no exemption for nodes that cannot
 satisfy the rule, so a small pct is INFEASIBLE: regular5.0.conv (1 -> 1, 3x3) tops out at 196,608 cycles within F (its next fold is 590,339) and `final` cannot go below ~263,171 cycles (1 cycle per
-512x512 output pixel), hence the chain conv -> expand.0 -> final needs 1 + pct >= 263,171 / 196,608 (pct >= ~34 %). 25 % is infeasible, 50 % is feasible, and so is DSR off.
+512x512 output pixel), hence the chain conv -> expand.0 -> final needs 1 + pct >= 263,171 / 196,608 (pct >= ~34 %). 25 % is infeasible, 50 % is feasible, and so is DSR off (50 % takes a faster fold on the dilated convs, see the test).
 """
 import json
 import subprocess
@@ -41,11 +41,15 @@ class TestDsrPct(unittest.TestCase):
         self.assertEqual(self.r["1"]["status"], "Infeasible")
         self.assertEqual(self.r["25"]["status"], "Infeasible")
 
-    def test_50_percent_is_feasible_and_equals_off(self):
+    def test_50_percent_is_feasible_and_differs_from_off_only_in_the_dilated_convs(self):
         self.assertEqual(self.r["50"]["status"], "Optimal")
         self.assertEqual(self.off["status"], "Optimal")
-        fold = lambda d: sorted((n, v["pe"], v["simd"]) for n, v in d["per_layer"].items())
-        self.assertEqual(fold(self.r["50"]), fold(self.off))
+        fold = lambda d: {n: (v["pe"], v["simd"]) for n, v in d["per_layer"].items()}
+        a, b = fold(self.r["50"]), fold(self.off)
+        # Before the sliding window's fill gap entered the conv cycles (2026-10-12) 50 % equalled OFF. The gap adds ~2 % to the dilated 3x3 convs' cycles, which pushes the slow
+        # fold (2,3) over 1.5 x its ancestor's cycles, so those convs (and only those) take the faster fold under the 50 % rule.
+        self.assertEqual({n for n in a if a[n] != b[n]}, {n for n in a if a[n] != b[n] and n.endswith(".conv")})
+        self.assertLessEqual(sum(self.r["50"]["per_layer"][n]["cycles"] for n in a if a[n] != b[n]), sum(self.off["per_layer"][n]["cycles"] for n in a if a[n] != b[n]))
 
     def test_final_layer_cannot_beat_one_cycle_per_output_pixel(self):
         self.assertGreaterEqual(self.off["per_layer"]["final"]["cycles"], 512 * 512)
