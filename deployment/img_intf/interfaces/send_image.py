@@ -245,12 +245,13 @@ def main():
     ap.add_argument("--ip", default="192.168.0.111")
     ap.add_argument("--port", type=int, default=7)
     ap.add_argument("--name", default="s12_512_nn", help="output/<name>/raw destination")
+    ap.add_argument("--input-profile", help="input scale profile in utils/input_profiles.json (default: --name)")
     a = ap.parse_args()
 
     out_dir = os.path.join(_DEPLOYMENT_DIR, "img_intf", "output", a.name, "raw")
     stem = os.path.splitext(os.path.basename(a.image))[0]
     if a.image.lower().endswith(".png"):
-        u8 = png_to_u8(a.image)
+        u8 = png_to_u8(a.image, a.input_profile or a.name)
         if u8.size != ACCEL_INPUT_BYTES:
             raise ValueError(f"{a.image}: {u8.shape} does not match {IMAGE_H}x{IMAGE_W}")
         in_dir = os.path.join(_DEPLOYMENT_DIR, "img_intf", "input")

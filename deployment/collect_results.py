@@ -1,8 +1,8 @@
 """Stream a whole nnU-Net test set through the FPGA board and record Dice in deployment/results.csv.
 
 Per image of data/nnUNet_raw/<dataset>/imagesTs:
-  1. preprocess (per-image z-score + the model's INT6 input quantizer + 128 -> board UINT8 input; see
-     img_intf/utils/preprocess.py) into data/nnUNet_preprocessed/<dataset>/img_intf_<model-name>/<case>.raw
+  1. preprocess (per-image z-score + the model's input quantizer + 128 -> board UINT8 input; scale per build in
+     img_intf/utils/input_profiles.json, see img_intf/utils/preprocess.py) into data/nnUNet_preprocessed/<dataset>/img_intf_<model-name>/<case>.raw
   2. send it to the board (v3 batch protocol, img_intf/interfaces/send_image.py) and store the returned
      512x512 class-id map in deployment/img_intf/output/<model-name>/raw/<case>.raw
   3. score the maps against data/nnUNet_raw/<dataset>/labelsTs (same per-class dice / clDice / dice_binary
@@ -46,13 +46,13 @@ COLUMNS = (
 )
 
 
-def preprocess(images: list[Path], out_dir: Path) -> list[Path]:
+def preprocess(images: list[Path], out_dir: Path, profile: str) -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     paths = []
     for png in images:
         raw = out_dir / f"{png.stem}.raw"
         if not raw.is_file() or raw.stat().st_size != IMAGE_H * IMAGE_W:
-            png_to_u8(png).tofile(raw)
+            png_to_u8(png, profile).tofile(raw)
         paths.append(raw)
     return paths
 
@@ -100,6 +100,7 @@ def upsert_row(row: dict) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--model-name", default="s12_512_nn", help="build id; names output/<model-name> and the preprocessed dir")
+    ap.add_argument("--input-profile", help="input scale profile in img_intf/utils/input_profiles.json (default: --model-name)")
     ap.add_argument("--config", default="board", help="second half of the results.csv key")
     ap.add_argument("--dataset", default="Dataset509_ARCADE_1x1_4c")
     ap.add_argument("--labels-dir", help="default: data/nnUNet_raw/<dataset>/labelsTs")
@@ -115,7 +116,8 @@ def main() -> None:
         raise FileNotFoundError(f"no PNGs in {NNUNET_RAW / a.dataset / 'imagesTs'}")
     stems = [p.stem for p in images]
     raw_dir = OUTPUT_ROOT / a.model_name / "raw"
-    inputs = preprocess(images, NNUNET_PREPROCESSED / a.dataset / f"img_intf_{a.model_name}")
+    inputs = preprocess(images, NNUNET_PREPROCESSED / a.dataset / f"img_intf_{a.model_name}",
+                        a.input_profile or a.model_name)
     print(f"[INFO] {len(inputs)} preprocessed inputs ready")
 
     send_seconds = None

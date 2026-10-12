@@ -47,6 +47,8 @@ _parser.add_argument("--max-workers", type=int, default=4)
 _parser.add_argument("--build-dir", default=None, help="FINN_BUILD_DIR base (default for 'all': finn_build_tmp/<tag>)")
 _parser.add_argument("--output-dir", default=None, help="reuse an existing output dir instead of a new timestamped one")
 _parser.add_argument("--bridge-only", action="store_true", help="write the bridged folding configs and stop")
+_parser.add_argument("--fifo-check", action="store_true",
+                     help="run each partition up to the folding/FIFO landing gates (graph steps only, no codegen/HLS/IP) and stop; needs --fifo-autosize fixed2")
 _parser.add_argument("--fifo-autosize", choices=["fixed2", "rtlsim"], default="fixed2",
                       help="'fixed2' (default): skip FINN's own rtlsim-based FIFO autosizing entirely -- every "
                            "edge gets a real FIFO at depth 2, then step_force_fifo_depths_from_milp overwrites "
@@ -67,6 +69,8 @@ if _args.blocks and _args.partitions == ["all"]:
     _parser.error("--blocks needs explicit --partitions (block names, ids or `shapes`)")
 if _args.folding_json and not _args.conv_order:
     _parser.error("--folding-json requires --conv-order")
+if _args.fifo_check and _args.fifo_autosize != "fixed2":
+    _parser.error("--fifo-check needs --fifo-autosize fixed2 (rtlsim autosizing requires generated IP)")
 
 # finn_enet_ip_build_partitioned_8way reads sys.argv[1]/[2] at import time.
 _real_argv, sys.argv = sys.argv, sys.argv[:1]
@@ -166,8 +170,9 @@ def _build_one_partition(fn, cfg, prefix, folding_file, idx, full, fold_suffix, 
     # a no-op for these nodes (PrepareIP skips anything with code_gen_dir_ipgen already set)
     # -- it only still matters for fresh nodes SplitLargeFIFOs inserts afterward.
     m = m.transform(GiveUniqueNodeNames(prefix))
-    m = step_hw_codegen(m, cfg)
-    m = step_hw_ipgen(m, cfg)
+    if not _args.fifo_check:
+        m = step_hw_codegen(m, cfg)
+        m = step_hw_ipgen(m, cfg)
     m = step_set_fifo_depths(m, cfg) if fifo_autosize == "rtlsim" else step_set_fifo_depths_fixed2(m, cfg)
     if fifo_plan is not None:
         m, fifo_report = step_force_fifo_depths_from_milp(m, fifo_plan)
@@ -187,6 +192,8 @@ def _build_one_partition(fn, cfg, prefix, folding_file, idx, full, fold_suffix, 
     ckpt_name = f"partition_{idx}_postfifo_autosize.onnx" if full else f"partition{idx}_{tag}_{fold_suffix}_postfifo_autosize.onnx"
     m.save(os.path.join(ckpt_dir, ckpt_name))
     print(f"{log} saved FIFO-autosize checkpoint: {os.path.join(ckpt_dir, ckpt_name)}", flush=True)
+    if _args.fifo_check:
+        return None
 
     # Vivado axis_data_fifo caps at depth 32768; split after the checkpoint, not via cfg.split_large_fifos.
     m = m.transform(SplitLargeFIFOs())
@@ -362,6 +369,9 @@ def main():
                 results[futs[fut]] = fut.result()
                 print(f"partition {futs[fut]} done", flush=True)
 
+    if _args.fifo_check:
+        print(f"FIFO check done. Reports in {output_dir}")
+        return
     if not do_combine:
         print(f"Done. Reports in {output_dir}")
         return

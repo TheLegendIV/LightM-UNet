@@ -3,13 +3,16 @@
 
 Run inside the FINN container (onnx copied flat into notebooks/enet/):
     docker exec -e HOME=/tmp/home_dir <c> bash -c 'cd /home/thelegendiv/finn/notebooks/enet && \\
-        python3 finn_s12_preamble.py <model_name_without_.onnx> --tag <tag>'
+        python3 finn_s12_preamble.py <model_name_without_.onnx> --tag <tag> \\
+        [--conv-order <conv_order.json> --folding-json <layer_bits_folding_*.json>]'
 Output: finn_deployment_outputs/<tag>_preamble_<timestamp>/
+With --folding-json, finn_s12_build.py --bridge-only runs automatically afterwards (skip with --no-bridge).
 """
 import argparse
 import dataclasses
 import json
 import os
+import subprocess
 import sys
 from datetime import datetime
 
@@ -28,10 +31,18 @@ _parser.add_argument(
     help="tag one partition per analytical BLOCK (initial, down1, regular1.0, ..., final: 29) instead of the 8-way stage split, and write "
          "intermediate_models/block_partitions.json (finn_s12_blocks.py). Needs --conv-order. Build the blocks with finn_s12_build.py --blocks.",
 )
-_parser.add_argument("--conv-order", help="<model>_conv_order.json (required with --blocks)")
+_parser.add_argument("--conv-order", help="<model>_conv_order.json (required with --blocks and --folding-json)")
+_parser.add_argument("--folding-json", help="MILP layer_bits_folding_*.json; when given, finn_s12_build.py --bridge-only runs on the new preamble (needs --conv-order)")
+_parser.add_argument("--target-fps", type=float, default=None, help="forwarded to the bridge")
+_parser.add_argument("--mvau-wwidth-max", type=int, default=None, help="forwarded to the bridge")
+_parser.add_argument("--no-bridge", action="store_true", help="skip the bridge-only step even when --folding-json is given")
 _args = _parser.parse_args()
 if _args.blocks and not _args.conv_order:
     _parser.error("--blocks requires --conv-order")
+if _args.folding_json and not _args.conv_order:
+    _parser.error("--folding-json requires --conv-order")
+if _args.folding_json and _args.blocks:
+    _parser.error("--folding-json bridge is not supported with --blocks")
 
 # finn_enet_ip_build_partitioned_8way reads sys.argv[1]/[2] at import time.
 _real_argv, sys.argv = sys.argv, sys.argv[:1]
@@ -107,7 +118,27 @@ def main():
     for d in report["dangling_nodes"]:
         print("  DANGLING:", d)
     print("OUTPUT_DIR=", output_dir)
+    return output_dir
+
+
+def run_bridge(preamble_dir):
+    """Folding + FIFO-plan bridge dry run (seconds, no HLS) against the fresh preamble."""
+    cmd = [sys.executable, "-u", os.path.join(os.path.dirname(os.path.abspath(__file__)), "finn_s12_build.py"),
+           preamble_dir, "--tag", _args.tag, "--conv-order", _args.conv_order,
+           "--folding-json", _args.folding_json, "--partitions", "all", "--bridge-only"]
+    if _args.target_fps is not None:
+        cmd += ["--target-fps", str(_args.target_fps)]
+    if _args.mvau_wwidth_max is not None:
+        cmd += ["--mvau-wwidth-max", str(_args.mvau_wwidth_max)]
+    print("BRIDGE:", " ".join(cmd), flush=True)
+    rc = subprocess.run(cmd, cwd=base.ENET_DIR).returncode
+    print(f"BRIDGE EXIT={rc}", flush=True)
+    return rc
 
 
 if __name__ == "__main__":
-    main()
+    out = main()
+    if _args.folding_json and not _args.no_bridge:
+        sys.exit(run_bridge(out))
+    elif not _args.folding_json and not _args.blocks:
+        print("bridge skipped: no --folding-json given")
