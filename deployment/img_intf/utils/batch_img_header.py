@@ -28,6 +28,10 @@ import struct
 from dataclasses import dataclass
 
 MAGIC = b"IMG3"
+# Pipelined streaming protocol (deployment/FINN_interface/lwip_stream): same
+# 16-byte layout, different magic so a lockstep client and a streaming server
+# (or vice versa) fail loudly instead of deadlocking.
+MAGIC_STREAM = b"IMGS"
 HEADER_SIZE_BYTES = 16
 _STRUCT_FMT = "!4sIII"
 
@@ -43,20 +47,21 @@ class BatchHeader:
     height: int
 
 
-def build_batch_header(payload_length: int, width: int = 0, height: int = 0) -> bytes:
-    return struct.pack(_STRUCT_FMT, MAGIC, payload_length, width, height)
+def build_batch_header(payload_length: int, width: int = 0, height: int = 0,
+                       magic: bytes = MAGIC) -> bytes:
+    return struct.pack(_STRUCT_FMT, magic, payload_length, width, height)
 
 
-def parse_batch_header(header_bytes: bytes) -> BatchHeader:
+def parse_batch_header(header_bytes: bytes, magic: bytes = MAGIC) -> BatchHeader:
     if len(header_bytes) < HEADER_SIZE_BYTES:
         raise ValueError(
             f"Need at least {HEADER_SIZE_BYTES} bytes for batch image header, got {len(header_bytes)}"
         )
 
-    magic, payload_length, width, height = struct.unpack(
+    got_magic, payload_length, width, height = struct.unpack(
         _STRUCT_FMT, header_bytes[:HEADER_SIZE_BYTES]
     )
-    if magic != MAGIC:
-        raise ValueError(f"Not a batch image header (bad magic: {magic!r}, expected {MAGIC!r})")
+    if got_magic != magic:
+        raise ValueError(f"Not a batch image header (bad magic: {got_magic!r}, expected {magic!r})")
 
-    return BatchHeader(magic=magic, payload_length=payload_length, width=width, height=height)
+    return BatchHeader(magic=got_magic, payload_length=payload_length, width=width, height=height)

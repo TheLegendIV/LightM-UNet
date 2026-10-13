@@ -6,7 +6,8 @@ Run inside the FINN container (onnx copied flat into notebooks/enet/):
         python3 finn_s12_preamble.py <model_name_without_.onnx> --tag <tag> \\
         [--conv-order <conv_order.json> --folding-json <layer_bits_folding_*.json>]'
 Output: finn_deployment_outputs/<tag>_preamble_<timestamp>/
-With --folding-json, finn_s12_build.py --bridge-only runs automatically afterwards (skip with --no-bridge).
+With --folding-json, finn_s12_build.py --fifo-check (bridge + folding/FIFO landing gates, no HLS) runs automatically afterwards;
+--no-fifo-check limits it to --bridge-only, --no-bridge skips it.
 """
 import argparse
 import dataclasses
@@ -32,10 +33,11 @@ _parser.add_argument(
          "intermediate_models/block_partitions.json (finn_s12_blocks.py). Needs --conv-order. Build the blocks with finn_s12_build.py --blocks.",
 )
 _parser.add_argument("--conv-order", help="<model>_conv_order.json (required with --blocks and --folding-json)")
-_parser.add_argument("--folding-json", help="MILP layer_bits_folding_*.json; when given, finn_s12_build.py --bridge-only runs on the new preamble (needs --conv-order)")
+_parser.add_argument("--folding-json", help="MILP layer_bits_folding_*.json; when given, finn_s12_build.py --fifo-check runs on the new preamble (needs --conv-order)")
 _parser.add_argument("--target-fps", type=float, default=None, help="forwarded to the bridge")
 _parser.add_argument("--mvau-wwidth-max", type=int, default=None, help="forwarded to the bridge")
-_parser.add_argument("--no-bridge", action="store_true", help="skip the bridge-only step even when --folding-json is given")
+_parser.add_argument("--no-fifo-check", action="store_true", help="run only the bridge (--bridge-only), without the folding/FIFO landing gates")
+_parser.add_argument("--no-bridge", action="store_true", help="skip the bridge/FIFO check even when --folding-json is given")
 _args = _parser.parse_args()
 if _args.blocks and not _args.conv_order:
     _parser.error("--blocks requires --conv-order")
@@ -122,10 +124,11 @@ def main():
 
 
 def run_bridge(preamble_dir):
-    """Folding + FIFO-plan bridge dry run (seconds, no HLS) against the fresh preamble."""
+    """Bridge + folding/FIFO landing gates (seconds, no HLS) against the fresh preamble."""
     cmd = [sys.executable, "-u", os.path.join(os.path.dirname(os.path.abspath(__file__)), "finn_s12_build.py"),
            preamble_dir, "--tag", _args.tag, "--conv-order", _args.conv_order,
-           "--folding-json", _args.folding_json, "--partitions", "all", "--bridge-only"]
+           "--folding-json", _args.folding_json, "--partitions", "all",
+           "--bridge-only" if _args.no_fifo_check else "--fifo-check"]
     if _args.target_fps is not None:
         cmd += ["--target-fps", str(_args.target_fps)]
     if _args.mvau_wwidth_max is not None:
