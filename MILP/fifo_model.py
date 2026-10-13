@@ -186,7 +186,7 @@ class FifoModel:
         m = fifo_memory(width, depth)
         self._add_const(key, m["lut"], m["bram18"], m["uram"], dict(
             kind="fifo", name=label, stage=stage, producer_milp=producer, consumer_milp=consumer, width_bits=int(width), depth=int(depth), mem=m["mem"],
-            depth_alloc=int(m["depth_alloc"]), lut=int(m["lut"]), mem_bram18=int(m["bram18"]), mem_uram18=int(m["uram"]), is_skip=is_skip,
+            depth_alloc=int(m["depth_alloc"]), lut=float(m["lut"]), mem_bram18=int(m["bram18"]), mem_uram18=int(m["uram"]), is_skip=is_skip,
             role_kind=role_kind, conv=conv))
 
     def _build_constants(self) -> None:
@@ -437,5 +437,5 @@ class FifoModel:
                 w = self.ports(chosen[p])["out_w"]
                 m = fifo_memory(w, depth)
                 out.append(dict(name=f"{p}->{consumer}", producer=p, consumer=consumer, src_block=sp, dst_block=sc, width_bits=int(w), mem=m["mem"], depth=depth,
-                                depth_alloc=int(m["depth_alloc"]), bram18=int(m["bram18"]), lut=int(m["lut"]), uram18=int(m["uram"]), sizing="fixed"))
+                                depth_alloc=int(m["depth_alloc"]), bram18=int(m["bram18"]), lut=float(m["lut"]), uram18=int(m["uram"]), sizing="fixed"))
         return out

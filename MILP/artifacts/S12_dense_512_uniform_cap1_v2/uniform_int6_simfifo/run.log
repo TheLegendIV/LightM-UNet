@@ -1,0 +1,8 @@
+Wrote /tmp/tmpdih1wpz4/sites.json (85 weight sites, 110 act sites).
+uniform_int6_simfifo: up blocks built WITH the frozen depthwise conv (up4.main_up.1, up5.main_up.1)
+uniform_int6_simfifo: 29 blocks built from the MILP folding (0 warnings)
+simulating 29 blocks (12 distinct shapes), 2 workers
+whole-net chain: pass = no deadlock; period reported against the slowest block 397896 (+5%) and the MILP cap 400000; inter-block depth 2, up to 1 round(s)
+  chain round 1: deadlock=False period=400206 (slowest block 397896, tolerance limit 417791, within=True) first_out=790354 full=0 [1563 s]
+uniform_int6_simfifo: wrote MILP/artifacts/S12_dense_512_uniform_cap1_v2/uniform_int6_simfifo/layer_bits_folding_uniform_int6_simfifo.json
+  blocks deadlocking alone: 0, chain deadlock-free: True, within tolerance: True, intra FIFO BRAM18 153.0 (MILP) -> 161 (sim)
