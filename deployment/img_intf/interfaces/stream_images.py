@@ -25,7 +25,8 @@ output/<name>/raw/<input stem>.raw as soon as it is received.
 
 --overlay saves each result blended over its input image as output/<name>/overlay/<stem>_overlay.png
 (--alpha sets the opacity); --show displays the same blend live in a window. For .raw inputs the
-preprocessed u8 image is the background.
+preprocessed u8 image is the background. --mp4 FILE also encodes the blended frames into a video
+(--fps, default 30; needs `pip install imageio-ffmpeg`).
 """
 import asyncio
 import glob
@@ -334,6 +335,8 @@ def main():
     ap.add_argument("--overlay", action="store_true", help="save results blended over the inputs (output/<name>/overlay)")
     ap.add_argument("--show", action="store_true", help="display the blended results live in a window")
     ap.add_argument("--alpha", type=float, default=0.5, help="opacity of the class colours in the overlay")
+    ap.add_argument("--mp4", help="encode the blended results into this mp4 file")
+    ap.add_argument("--fps", type=float, default=30.0, help="frame rate of the --mp4 video")
     a = ap.parse_args()
 
     sources = _collect_inputs(a.inputs)
@@ -356,6 +359,12 @@ def main():
         return np.fromfile(path, dtype=np.uint8).reshape(IMAGE_H, IMAGE_W)
 
     live = None  # queue to the viewer
+    video = None
+    if a.mp4:
+        import imageio_ffmpeg
+        os.makedirs(os.path.dirname(os.path.abspath(a.mp4)), exist_ok=True)
+        video = imageio_ffmpeg.write_frames(a.mp4, (IMAGE_W, IMAGE_H), fps=a.fps, macro_block_size=1)
+        video.send(None)
 
     def render(i: int, data: bytes) -> None:
         stem = os.path.splitext(streamer._out_name(i))[0]
@@ -363,6 +372,8 @@ def main():
                       np.frombuffer(data, np.uint8).reshape(IMAGE_H, IMAGE_W), a.alpha)
         if a.overlay:
             Image.fromarray(rgb).save(os.path.join(overlay_dir, f"{stem}_overlay.png"))
+        if video is not None:
+            video.send(rgb)
         if live is not None:
             live.put((i, stem, rgb))
 
@@ -376,6 +387,8 @@ def main():
 
     def finish_render() -> None:
         renderer.shutdown(wait=True)
+        if video is not None:
+            video.close()
         for j in jobs:
             j.result()  # re-raise any rendering error
 
@@ -385,7 +398,7 @@ def main():
         a.ip, a.port, sources, num_frames=a.frames,
         width=IMAGE_W, height=IMAGE_H,
         loader=load, output_dir=None if a.no_save else out_dir,
-        on_result=on_result if (a.overlay or a.show) else None,
+        on_result=on_result if (a.overlay or a.show or a.mp4) else None,
     )
     saved = None if a.no_save else out_dir
     if not a.show:
