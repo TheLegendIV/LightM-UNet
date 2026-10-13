@@ -95,12 +95,15 @@ def software_boundaries(onnx_path: Path, u8: np.ndarray, cache: Path | None, ful
 def to_stream(t: np.ndarray, dt) -> np.ndarray:
     """NHWC tensor -> stream bytes via FINN's packer (what the generated drivers and rtlsim use); 1 element per beat."""
     from finn.util.data_packing import finnpy_to_packed_bytearray
-    return finnpy_to_packed_bytearray(np.rint(t.reshape(-1, 1)), dt).reshape(-1).astype(np.uint8)
+    # little-endian words: the Verilator testbench memcpy's tdata LSB-first
+    return finnpy_to_packed_bytearray(np.rint(t.reshape(-1, 1)), dt, reverse_endian=True).reshape(-1).astype(np.uint8)
 
 
 def from_stream(b: np.ndarray, dt) -> np.ndarray:
     from finn.util.data_packing import packed_bytearray_to_finnpy
-    return np.rint(packed_bytearray_to_finnpy(b.reshape(-1, 1), dt, output_shape=(b.size, 1)).reshape(-1)).astype(np.int64)
+    nb = (dt.bitwidth() + 7) // 8
+    n = b.size // nb
+    return np.rint(packed_bytearray_to_finnpy(b.reshape(n, nb), dt, output_shape=(n, 1), reverse_endian=True).reshape(-1)).astype(np.int64)
 
 
 def diagnose(rtl: np.ndarray, sw: np.ndarray, shape: tuple, bits: int) -> dict:

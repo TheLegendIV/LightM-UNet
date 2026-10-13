@@ -1670,3 +1670,17 @@ con
 
 04:36:19 INFO  : Launch script is exported to file 'C:\DEV\repos\LightM-UNet\deployment\FINN_interface\lwip_test_system\_ide\scripts\debugger_lwip_test-default.tcl'
 00:59:51 INFO  : Disconnected from the channel tcfchan#12.
+14:24:05 DEBUG : Logs will be stored at 'C:/DEV/repos/LightM-UNet/deployment/FINN_interface/IDE.log'.
+14:24:06 INFO  : Launching XSCT server: xsct.bat -n  -interactive C:\DEV\repos\LightM-UNet\deployment\FINN_interface\temp_xsdb_launch_script.tcl
+14:24:13 INFO  : Registering command handlers for Vitis TCF services
+14:24:15 INFO  : Platform repository initialization has completed.
+14:24:16 INFO  : XSCT server has started successfully.
+14:24:24 INFO  : plnx-install-location is set to ''
+14:24:24 INFO  : Successfully done setting XSCT server connection channel  
+14:24:24 INFO  : Successfully done query RDI_DATADIR 
+14:24:24 INFO  : Successfully done setting workspace for the tool. 
+14:30:16 WARN  : Failed to update project references for project lwip_stream_system
+14:33:47 INFO  : Checking for BSP changes to sync application flags for project 'lwip_test'...
+14:38:30 INFO  : Hardware specification for platform project 'zcu106_s12' is updated.
+14:50:01 INFO  : Result from executing command 'getProjects': zcu106_s12
+14:50:01 INFO  : Result from executing command 'getPlatforms': xilinx_zcu102_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_202220_1/xilinx_zcu102_base_202220_1.xpfm;xilinx_zcu102_base_dfx_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu102_base_dfx_202220_1/xilinx_zcu102_base_dfx_202220_1.xpfm;xilinx_zcu104_base_202220_1|F:/PLD/Xilinx/Vitis/2022.2/base_platforms/xilinx_zcu104_base_202220_1/xilinx_zcu104_base_202220_1.xpfm;zcu106_s12|C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/export/zcu106_s12/zcu106_s12.xpfm
