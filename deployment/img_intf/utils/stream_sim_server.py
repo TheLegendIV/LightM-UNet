@@ -20,6 +20,7 @@ import os
 import socket
 import struct
 import sys
+import time
 
 _DEPLOYMENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 if _DEPLOYMENT_DIR not in sys.path:
@@ -39,13 +40,14 @@ def process_frame(data: bytes) -> bytes:
 class StreamSimServer:
     def __init__(self, host: str = "127.0.0.1", port: int = 0, ring_slots: int = 5,
                  proc_delay_s: float = 0.0, payload_length: int = 512 * 512,
-                 sndbuf: int = None):
+                 sndbuf: int = None, rcvbuf: int = None):
         self.host = host
         self.port = port
         self.ring_slots = ring_slots
         self.proc_delay_s = proc_delay_s
         self.payload_length = payload_length
-        self.sndbuf = sndbuf  # shrink SO_SNDBUF (testing aid, like lwIP's TCP_SND_BUF)
+        self.sndbuf = sndbuf  # shrink SO_SNDBUF/SO_RCVBUF (testing aid, like lwIP's small TCP buffers)
+        self.rcvbuf = rcvbuf
         self.occupied = 0
         self.max_occupied = 0
         self.rx_stalls = 0
@@ -65,9 +67,12 @@ class StreamSimServer:
         await self._server.wait_closed()
 
     async def _handle(self, reader, writer):
-        if self.sndbuf is not None:
+        if self.sndbuf is not None or self.rcvbuf is not None:
             sock = writer.get_extra_info("socket")
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.sndbuf)
+            if self.sndbuf is not None:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, self.sndbuf)
+            if self.rcvbuf is not None:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.rcvbuf)
         try:
             while True:
                 try:
@@ -103,7 +108,8 @@ class StreamSimServer:
                     await done.put(None)
                     return
                 if self.proc_delay_s:
-                    await asyncio.sleep(self.proc_delay_s)
+                    # asyncio.sleep() fires early for delays below the ~15 ms Windows clock tick.
+                    await asyncio.get_event_loop().run_in_executor(None, time.sleep, self.proc_delay_s)
                 await done.put(process_frame(frame))
 
         async def transmitter():

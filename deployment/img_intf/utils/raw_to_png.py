@@ -2,8 +2,10 @@
 
 Per <case>.raw in --raw-dir (as written by send_image.py / collect_results.py) writes <case>_board.png.
 With --images-dir / --labels-dir also writes <case>_panel.png: input | board | ground truth | mismatch.
+With --images-dir and --overlay also writes <case>_overlay.png: the class map blended over the input
+(background stays transparent).
 
-  python deployment/img_intf/utils/raw_to_png.py [--raw-dir D] [--png-dir D] [--images-dir D] [--labels-dir D] [--limit N]
+  python deployment/img_intf/utils/raw_to_png.py [--raw-dir D] [--png-dir D] [--images-dir D] [--labels-dir D] [--overlay] [--alpha A] [--limit N]
 """
 import argparse
 from pathlib import Path
@@ -12,7 +14,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 IFACE = Path(__file__).resolve().parent.parent
-DEFAULT_RAW_DIR = IFACE / "output" / "s12_512_nn" / "raw"
+DEFAULT_RAW_DIR = IFACE / "output" / "s12_512_bilinear_mixed68" / "raw"
 SIZE = 512
 
 # class id -> RGB (0 = background)
@@ -22,6 +24,14 @@ MISMATCH_RGB = (255, 0, 255)
 
 def colorize(cls: np.ndarray) -> np.ndarray:
     return PALETTE[np.minimum(cls, len(PALETTE) - 1)]
+
+
+def overlay(gray: np.ndarray, cls: np.ndarray, alpha: float = 0.5) -> np.ndarray:
+    """(H, W) uint8 gray + (H, W) class ids -> (H, W, 3) uint8 with classes > 0 blended in colour."""
+    rgb = np.repeat(gray[..., None], 3, axis=2).astype(np.float32)
+    fg = cls > 0
+    rgb[fg] = (1.0 - alpha) * rgb[fg] + alpha * colorize(cls)[fg].astype(np.float32)
+    return rgb.astype(np.uint8)
 
 
 def titled(rgb: np.ndarray, title: str) -> Image.Image:
@@ -39,6 +49,8 @@ def main() -> None:
     ap.add_argument("--images-dir", help="source PNGs <case>.png, for the panel")
     ap.add_argument("--labels-dir", help="ground-truth PNGs <case>.png (the _0000 suffix is stripped)")
     ap.add_argument("--limit", type=int)
+    ap.add_argument("--overlay", action="store_true", help="also write <case>_overlay.png (needs --images-dir)")
+    ap.add_argument("--alpha", type=float, default=0.5, help="overlay opacity of the class colours")
     a = ap.parse_args()
 
     raw_dir = Path(a.raw_dir)
@@ -55,6 +67,10 @@ def main() -> None:
         Image.fromarray(board_rgb).save(png_dir / f"{stem}_board.png")
 
         src = Path(a.images_dir) / f"{stem}.png" if a.images_dir else None
+        if a.overlay and src and src.is_file():
+            gray = np.asarray(Image.open(src).convert("L"))
+            Image.fromarray(overlay(gray, board, a.alpha)).save(png_dir / f"{stem}_overlay.png")
+
         gt_path = Path(a.labels_dir) / f"{stem[:-5] if stem.endswith('_0000') else stem}.png" if a.labels_dir else None
         if not (src and src.is_file() and gt_path and gt_path.is_file()):
             continue

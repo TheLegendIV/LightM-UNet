@@ -99,7 +99,7 @@ def upsert_row(row: dict) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--model-name", default="s12_512_nn", help="build id; names output/<model-name> and the preprocessed dir")
+    ap.add_argument("--model-name", default="s12_512_bilinear_mixed68", help="build id; names output/<model-name> and the preprocessed dir")
     ap.add_argument("--input-profile", help="input scale profile in img_intf/utils/input_profiles.json (default: --model-name)")
     ap.add_argument("--config", default="board", help="second half of the results.csv key")
     ap.add_argument("--dataset", default="Dataset509_ARCADE_1x1_4c")

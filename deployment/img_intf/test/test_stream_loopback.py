@@ -1,6 +1,7 @@
 import asyncio
 import os
 import sys
+import tempfile
 import unittest
 
 _DEPLOYMENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -22,6 +23,9 @@ def make_frames(n: int, size: int):
 
 
 class StreamLoopbackTest(unittest.TestCase):
+    def setUp(self):
+        self.logs = []
+
     def _run(self, *, payload, n_frames, delay_s=0.0, slots=RING_SLOTS,
              consume_delay_s=0.0, sndbuf=None, rcvbuf=None, cycle=None):
         frames = make_frames(cycle or n_frames, payload)
@@ -33,13 +37,14 @@ class StreamLoopbackTest(unittest.TestCase):
                 await asyncio.sleep(consume_delay_s)
 
         async def go():
-            srv = StreamSimServer("127.0.0.1", 0, slots, delay_s, payload, sndbuf=sndbuf)
+            srv = StreamSimServer("127.0.0.1", 0, slots, delay_s, payload,
+                                  sndbuf=sndbuf, rcvbuf=sndbuf)
             await srv.start()
             try:
                 client = AsyncImageStreamer(
                     "127.0.0.1", srv.port, frames, num_frames=n_frames,
                     payload_length=payload, on_result=on_result, rcvbuf=rcvbuf,
-                    timeout_s=60,
+                    timeout_s=60, log=self.logs.append, sndbuf=rcvbuf,
                 )
                 res = await client.run()
             finally:
@@ -66,22 +71,57 @@ class StreamLoopbackTest(unittest.TestCase):
     def test_ring_overlaps_frames(self):
         """Client does not wait per frame: the ring fills while the slow
         accelerator works, and total time is ~frames*delay, not 2x."""
-        srv, res = self._run(payload=4096, n_frames=30, delay_s=0.01)
+        srv, res = self._run(payload=4096, n_frames=30, delay_s=0.02)
         self.assertEqual(srv.max_occupied, RING_SLOTS)
         self.assertGreater(srv.rx_stalls, 0)
-        self.assertLess(res.elapsed_s, 30 * 0.01 * 2.0)
+        self.assertLess(res.elapsed_s, 30 * 0.02 * 2.0)
 
     def test_backpressure_slow_consumer(self):
         """A client that reads results slowly must stall the sender through
         the full ring (no unbounded buffering, no deadlock, no data loss)."""
-        srv, res = self._run(payload=65536, n_frames=24, delay_s=0.0,
+        srv, res = self._run(payload=65536, n_frames=40, delay_s=0.0,
                              consume_delay_s=0.02, sndbuf=8192, rcvbuf=8192)
         self.assertEqual(srv.max_occupied, RING_SLOTS)
         self.assertGreater(srv.rx_stalls, 0)
+        self.assertGreater(res.stalls, 0)
+        self.assertTrue(any("stalled" in m and "[WARN]" in m for m in self.logs))
 
     def test_single_slot_ring(self):
         srv, _ = self._run(payload=4096, n_frames=10, delay_s=0.002, slots=1)
         self.assertEqual(srv.max_occupied, 1)
+
+    def test_loader_and_direct_raw_output(self):
+        """Frames are loaded lazily via `loader`; each result lands in
+        output_dir as <input stem>.raw (<stem>_0001.raw on the second pass)."""
+        payload = 4096
+        names = ["a.png", "b.png", "c.png"]
+        loaded = []
+        frames = dict(zip(names, make_frames(3, payload)))
+
+        def loader(path):
+            loaded.append(path)
+            return frames[path]
+
+        async def go(out_dir):
+            srv = StreamSimServer("127.0.0.1", 0, RING_SLOTS, 0.0, payload)
+            await srv.start()
+            try:
+                return await AsyncImageStreamer(
+                    "127.0.0.1", srv.port, names, num_frames=5, payload_length=payload,
+                    loader=loader, output_dir=out_dir, timeout_s=30).run()
+            finally:
+                await srv.close()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = os.path.join(tmp, "raw")
+            res = asyncio.run(go(out_dir))
+            self.assertEqual(res.frames, 5)
+            self.assertEqual(loaded, ["a.png", "b.png", "c.png", "a.png", "b.png"])
+            self.assertEqual(sorted(os.listdir(out_dir)),
+                             ["a.raw", "a_0001.raw", "b.raw", "b_0001.raw", "c.raw"])
+            for stem in ("a", "b", "c"):
+                with open(os.path.join(out_dir, stem + ".raw"), "rb") as f:
+                    self.assertEqual(f.read(), process_frame(frames[stem + ".png"]))
 
     def test_two_sequential_sessions(self):
         """Server accepts a second session after a clean STOP."""
@@ -102,6 +142,21 @@ class StreamLoopbackTest(unittest.TestCase):
         srv = asyncio.run(go())
         self.assertIsNone(srv.error)
         self.assertEqual(srv.sessions, 2)
+
+
+class OverlayTest(unittest.TestCase):
+    def test_background_untouched_and_classes_blended(self):
+        import numpy as np
+        from img_intf.utils.raw_to_png import PALETTE, overlay
+        gray = np.full((4, 4), 100, np.uint8)
+        cls = np.zeros((4, 4), np.uint8)
+        cls[1, 1] = 1
+        cls[2, 2] = 4
+        out = overlay(gray, cls, 0.5)
+        self.assertEqual(out.shape, (4, 4, 3))
+        self.assertTrue((out[0, 0] == 100).all())
+        self.assertEqual(out[1, 1].tolist(), ((100 + PALETTE[1].astype(int)) // 2).tolist())
+        self.assertEqual(out[2, 2].tolist(), ((100 + PALETTE[4].astype(int)) // 2).tolist())
 
 
 if __name__ == "__main__":

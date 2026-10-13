@@ -244,7 +244,7 @@ def main():
     ap.add_argument("image", nargs="?", default=default_png, help="PNG (preprocessed here) or headerless u8 .raw")
     ap.add_argument("--ip", default="192.168.0.111")
     ap.add_argument("--port", type=int, default=7)
-    ap.add_argument("--name", default="s12_512_nn", help="output/<name>/raw destination")
+    ap.add_argument("--name", default="s12_512_bilinear_mixed68", help="output/<name>/raw destination")
     ap.add_argument("--input-profile", help="input scale profile in utils/input_profiles.json (default: --name)")
     a = ap.parse_args()
 
