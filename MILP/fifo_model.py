@@ -58,14 +58,19 @@ def skip_depth_words(conv, cout: int, pe: int, downsampling: bool = False) -> in
     return px * (cout // pe)
 
 
-def up_skip_depth_words(w_in: int, cout: int, pe: int) -> int:
+UP_SKIP_ROWS_DW = 6.0         # up block WITH the bilinear decoder's frozen depthwise conv: its window (2 rows + 3 px of the OUTPUT image through the depthwise SWG, 16 / 4 channel folds at PE 1) delays the main branch,
+                              # so the ext-end skip FIFO holds ~6 input rows: simulation (mixed 6/8, 512x512): up4 5,904 words = 5.8 rows of 64 px x 16, up5 2,604 = 5.1 rows of 128 px x 4 -> 6.0 covers both
+UP_MAIN_ROWS_DW = 0.5         # ... and the main branch, now the LONG one, needs almost no join buffer: simulation 17 words (up4, 0.02 rows); half a row is a conservative bound
+
+
+def up_skip_depth_words(w_in: int, cout: int, pe: int, dw: bool = False) -> int:
     """Up block, FIFO at the end of the ext branch (reduce -> transposed conv -> expand), `skip FIFO` of the analytical block: UP_SKIP_ROWS x W px of cout/pe words (W = input width of the block)."""
-    return math.ceil(UP_SKIP_ROWS * w_in) * (cout // pe)
+    return math.ceil((UP_SKIP_ROWS_DW if dw else UP_SKIP_ROWS) * w_in) * (cout // pe)
 
 
-def up_main_depth_words(w_in: int, cout: int, pe: int) -> int:
+def up_main_depth_words(w_in: int, cout: int, pe: int, dw: bool = False) -> int:
     """Up block, `FIFO main` at the end of the main branch (main_proj -> UpsampleNearestNeighbour -> skip_quant): UP_MAIN_ROWS x W px of cout/pe words."""
-    return math.ceil(UP_MAIN_ROWS * w_in) * (cout // pe)
+    return math.ceil((UP_MAIN_ROWS_DW if dw else UP_MAIN_ROWS) * w_in) * (cout // pe)
 
 
 def prefetch_depth_words(conv, simd_swu: int) -> int:
@@ -139,6 +144,10 @@ class FifoModel:
             return dict(in_w=g.cout * A, out_w=g.cout * A, internal=[])
         if kind == "pad_mvau":
             return dict(in_w=simd * A, out_w=pe * self.cost[key]["acc_bits"], internal=[])
+        if kind == "frozen_dw":                                                             # FMPadding -> depthwise SWG (SIMD = PE) -> VVAU; the threshold behind it is the skip_quant node
+            c = self.cost[key]
+            internal = [("swg->mvau", g.kh * g.kw * c["simd_swu"] * A, pe * simd * A)] if simd > 1 else []     # parallel_window: one KxK window per word, a DWC narrows it to the VVAU's SIMD
+            return dict(in_w=c["simd_swu"] * A, out_w=pe * c["acc_bits"], internal=internal)
         if kind == "bias":                                                                  # ChannelwiseOp: INT16 -> INT17 in the real build
             return dict(in_w=pe * self._final_acc(), out_w=pe * (self._final_acc() + 1), internal=[])
         if kind == "argmax":
@@ -147,7 +156,7 @@ class FifoModel:
         raise ValueError(f"fifo_model: no port widths for extra node kind {kind!r}")
 
     def _acc_of_pad(self, pred: str | None) -> int:
-        if pred is not None and pred in self.extras and self.extras[pred].kind == "pad_mvau":
+        if pred is not None and pred in self.extras and self.extras[pred].kind in ("pad_mvau", "frozen_dw"):
             return self.cost[self.options[pred][0][0]]["acc_bits"]
         return 0
 
@@ -198,6 +207,15 @@ class FifoModel:
                 c = self.cost[key]
                 self._fifo_item(key, f"{name}.prefetch", c["simd_swu"] * self._bits(key), prefetch_depth_words(g, c["simd_swu"]), g.stage, producer=f"{name}", consumer=f"{name}.fmpad",
                                  role_kind="prefetch", conv=name)
+        # ... and in front of the frozen depthwise conv's FMPadding (an extra node, not a traced layer)
+        for name, node in self.extras.items():
+            if node.kind != "frozen_dw":
+                continue
+            self.replaced_edges.update((p, name) for p in self.dmap.get(name, []))
+            for key, _ in self.options[name]:
+                c = self.cost[key]
+                self._fifo_item(key, f"{name}.prefetch", c["simd_swu"] * self._bits(key), prefetch_depth_words(node.geom, c["simd_swu"]), node.geom.stage, producer=name, consumer=f"{name}.fmpad",
+                                 role_kind="prefetch_dw", conv=name)
         # skip FIFO of every residual diamond (join kind add)
         for d in find_fork_join_diamonds(self.dmap):
             if self.kinds.get(d["join"]) != "add":
@@ -235,6 +253,7 @@ class FifoModel:
                     continue
                 for key, _ in self.options[pred]:
                     self._edge_fifo(key, f"{pred}->{consumer}", self.ports(key)["out_w"], self._edge_depth(pred, consumer))
+        self._dw_internal_fifos()
         # FIFOs INSIDE a conv's FINN subgraph (FMPadding -> SWG -> MVAU -> Thresholding: one per node output; the Thr output is the dataflow edge above), and one after every DWC
         for name, g in self.geom.items():
             if g.op_type == "MaxPool2d":
@@ -260,6 +279,16 @@ class FifoModel:
     def _deep_stage(stage: str) -> bool:
         return stage.startswith(("down", "up"))
 
+    def _dw_internal_fifos(self) -> None:
+        """FMPadding -> SWG -> VVAU inside the frozen depthwise conv (the VVAU -> skip_quant edge is an ordinary dataflow edge): BLOCK_FIFO_DEPTH words like every intra-block FIFO of an up block."""
+        for name, node in self.extras.items():
+            if node.kind != "frozen_dw":
+                continue
+            for key, _ in self.options[name]:
+                c, A = self.cost[key], self._bits(key)
+                self._edge_fifo(key, f"{name}.fmpad->swg", c["simd_swu"] * A, BLOCK_FIFO_DEPTH)
+                self._edge_fifo(key, f"{name}.swg->mvau", (node.geom.kh * node.geom.kw if key[2] > 1 else 1) * c["simd_swu"] * A, BLOCK_FIFO_DEPTH)
+
     def _edge_depth(self, pred: str, consumer: str) -> int:
         """Depth of the FIFO on the dataflow edge pred -> consumer: FINN's 2, BLOCK_FIFO_DEPTH when both nodes are in the SAME down / up block (the inter-block edges stay at 2)."""
         sp, sc = _stage(pred, self.geom, self.extras), _stage(consumer, self.geom, self.extras)
@@ -278,12 +307,13 @@ class FifoModel:
         if not main or not ext or f"{stage}.main_proj.0" not in self.geom:
             return
         w_in, cout = self.geom[f"{stage}.main_proj.0"].win, self.extras[d["join"]].geom.cout
-        for node, role, fn, is_skip in ((ext[0], "up_skip", up_skip_depth_words, True), (main[0], "up_main", up_main_depth_words, False)):
+        dw = any(self.kinds.get(n) == "frozen_dw" for n in main)                    # the bilinear decoder: the main branch holds the frozen depthwise conv
+        for node, role, fn, is_skip in ((ext[0], "up_skip", up_skip_depth_words, True), (main[0], "up_main_dw" if dw else "up_main", up_main_depth_words, False)):
             if node not in self.options:
                 continue
             for key, _ in self.options[node]:
                 pe = (self.cost[key].get("thr_pe") or key[1]) if node in self.geom else key[1]          # a conv's own threshold PE sets its output stream
-                self._fifo_item(key, f"{d['join']}.{'skip' if is_skip else 'main'}", pe * self._bits(key), fn(w_in, cout, pe), stage, is_skip=is_skip, producer=node, consumer=d["join"], role_kind=role)
+                self._fifo_item(key, f"{d['join']}.{'skip' if is_skip else 'main'}", pe * self._bits(key), fn(w_in, cout, pe, dw), stage, is_skip=is_skip, producer=node, consumer=d["join"], role_kind=role)
             self.skip_nodes[node] = dict(join=d["join"], n_fill_px=w_in, conv=None, kind=role)
             self.replaced_edges.add((node, d["join"]))
 
@@ -365,6 +395,13 @@ class FifoModel:
             producer, consumer = f"{stage}.thr_e", f"{stage}.add"
         elif it["role_kind"] == "up_main":
             producer, consumer = f"{stage}.thr_s", f"{stage}.add"
+        elif it["role_kind"] == "up_main_dw":                                              # bilinear decoder: the main branch ends in the depthwise conv's threshold (Thr_k)
+            producer, consumer = f"{stage}.thr_k", f"{stage}.add"
+        elif it["role_kind"] == "prefetch_dw":                                             # in front of the frozen depthwise conv's FMPadding (role fmpad_k), fed by the nearest upsampler (a DWC in between when widths differ)
+            consumer = f"{stage}.fmpad_k"
+            preds = [p for p in self.dmap.get(it["conv"], []) if p in chosen]
+            in_w = self.ports(chosen[it["conv"]])["in_w"]
+            producer = f"{stage}.dwc" if preds and self.ports(chosen[preds[0]])["out_w"] != in_w else f"{stage}.upnn"
         else:
             consumer = f"{stage}.fmpad"
             if stage == "initial":
@@ -375,7 +412,7 @@ class FifoModel:
                 producer = f"{stage}.dwc" if preds and self.ports(chosen[preds[0]])["out_w"] != in_w else f"{stage}.thr_r"
         mem = it["mem"]
         return dict(
-            stage=stage, name=(f"{stage}.skip_FIFO" if it["is_skip"] else (f"{stage}.FIFO_main" if it["role_kind"] == "up_main" else f"{stage}.prefetch")), producer=producer, consumer=consumer,
+            stage=stage, name=(f"{stage}.skip_FIFO" if it["is_skip"] else (f"{stage}.FIFO_main" if it["role_kind"] in ("up_main", "up_main_dw") else f"{stage}.prefetch")), producer=producer, consumer=consumer,
             producer_milp=it["producer_milp"], consumer_milp=it["consumer_milp"], depth=it["depth"], width_bits=it["width_bits"], max_occupancy=it["depth"],
             is_skip=it["is_skip"], mem=mem, finn_impl=("rtl" if mem == "srl" else f"vivado/{'ultra' if mem == 'uram' else 'block'}"),
             mem_bram18=it["mem_bram18"], mem_lut=it["lut"], depth_alloc=it["depth_alloc"], mem_uram18=it["mem_uram18"])

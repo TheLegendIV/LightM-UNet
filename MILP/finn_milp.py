@@ -147,6 +147,9 @@ TIED_BIT_KINDS = ("skip_quant", "residual_add")
 # ~1.4k LUT as LUTRAM (the distributed cost is not yet validated against a real build); the bridge pins depth_trigger_bram.
 JOIN_THRESHOLD_KINDS = ("skip_quant", "residual_add", "out_act")
 PAD_MVAU_BITS = (2, 8)  # (weight, act) for the downsampling zero-pad MVAU -- PROVISIONAL, see finn_milp.md
+FROZEN_DW_KIND = "frozen_dw"   # the bilinear decoder's frozen depthwise 3x3 conv `<up stage>.main_up.1` (LayerQuantEnetFINN): fixed INT8 tent-kernel weights, no quantizer site, no bit choice of its own
+FROZEN_DW_WEIGHT_BITS = 8
+FROZEN_DW_SUFFIX = ".main_up.1"
 # Real FINN v0.10.1 custom-op names (finn_milp.md "Dataflow graph" table) --
 # every threshold-kind extra node and the pad-MVAU always use the RTL variant
 # (extra_node_options hardcodes VARIANT_RTL_DSP_NOACT1 for both); the stream
@@ -154,7 +157,7 @@ PAD_MVAU_BITS = (2, 8)  # (weight, act) for the downsampling zero-pad MVAU -- PR
 EXTRA_OP_LABEL = {
     **{kind: "Thresholding_rtl" for kind in THRESHOLD_KINDS},
     "add": "AddStreams_hls", "dup": "DuplicateStreams_hls", "concat": "StreamingConcat_hls",
-    "upsample": "UpsampleNearestNeighbour_hls", "pad_mvau": "MVAU_rtl", "bias": "ChannelwiseOp_hls", "argmax": "LabelSelect_hls",
+    "upsample": "UpsampleNearestNeighbour_hls", "pad_mvau": "MVAU_rtl", "bias": "ChannelwiseOp_hls", "argmax": "LabelSelect_hls", "frozen_dw": "VVAU_hls",
 }
 
 
@@ -204,6 +207,26 @@ def insert_skip_pads(
         dataflow_map[name] = [pad]
 
 
+def insert_frozen_dw(dataflow_map: dict[str, list[str]], kinds: dict[str, str]) -> list[str]:
+    """Bilinear decoder (config DECODER_TYPE "upsample_conv", LayerQuantEnetFINN `_nearest_depthwise_bilinear_kernel`): the traced graph is the nearest decoder (the real bilinear F.interpolate has no
+    layer to trace), so insert the frozen depthwise 3x3 conv between every up block's nearest upsample and its skip_quant threshold: upsample -> `<stage>.main_up.1` -> skip_quant -> add. It is an extra
+    node (fixed weights, a fold, bits tied to the block's residual-add quantizer), exactly like the downsampling pad-MVAU. Returns the new node names."""
+    new = []
+    for name, kind in list(kinds.items()):
+        if kind != "skip_quant":
+            continue
+        stage = name[: -len(SKIP_QUANT_SUFFIX)]
+        up = f"{stage}.upsample"
+        if not stage.startswith("up") or kinds.get(up) != "upsample" or dataflow_map.get(name) != [up]:
+            continue
+        dw = stage + FROZEN_DW_SUFFIX
+        dataflow_map[dw] = [up]
+        kinds[dw] = FROZEN_DW_KIND
+        dataflow_map[name] = [dw]
+        new.append(dw)
+    return new
+
+
 def _node_shape(
     name: str, dataflow_map: dict[str, list[str]], kinds: dict[str, str], geom: dict[str, LayerGeometry],
     act_shapes: dict[str, tuple[int, int, int]], input_shape: tuple[int, int, int],
@@ -213,6 +236,8 @@ def _node_shape(
         g = geom[name]
         return g.cout, g.hout, g.wout
     kind = kinds[name]
+    if kind == FROZEN_DW_KIND:      # the depthwise conv keeps the upsampled stream: (C, 2H, 2W) = the block's output shape
+        return act_shapes[name[: -len(FROZEN_DW_SUFFIX)] + OUT_ACT_SUFFIX]
     if kind == "input_quant":
         return input_shape
     if kind == "dup":
@@ -255,6 +280,8 @@ def build_extra_nodes(
         if kind == "dup":  # belongs to the block consuming the fork -- pruning that block removes it
             consumer_stages = {stage_of(c) for c, preds in dataflow_map.items() if name in preds}
             stage = consumer_stages.pop() if len(consumer_stages) == 1 else stage_of(dataflow_map[name][0])
+        elif kind == FROZEN_DW_KIND:
+            stage = name[: -len(FROZEN_DW_SUFFIX)]
         else:
             stage = name.rsplit(".", 1)[0]
         if kind == "pad_mvau":
@@ -262,6 +289,11 @@ def build_extra_nodes(
             node_geom = LayerGeometry(
                 op_type="Conv2d", name=name, stage=stage, cin=pool.cout, hin=pool.hout, win=pool.wout,
                 cout=channels, hout=pool.hout, wout=pool.wout, kh=1, kw=1, sh=1, sw=1,
+            )
+        elif kind == FROZEN_DW_KIND:
+            node_geom = LayerGeometry(
+                op_type="Conv2d", name=name, stage=stage, cin=channels, hin=height, win=width, cout=channels, hout=height, wout=width,
+                kh=3, kw=3, sh=1, sw=1, groups=channels, ph=1, pw=1,
             )
         else:
             node_geom = LayerGeometry(
@@ -278,6 +310,11 @@ def build_extra_nodes(
             if not sources:
                 raise ValueError(f"{name}: no act-bit source resolvable (expand_layer_bits.resolve_act_sources).")
             nodes.append(ExtraNode(node_geom, kind, None, sources))
+        elif kind == FROZEN_DW_KIND:      # activation bits: the block's residual-add quantizer, like the join thresholds (the deployed rule: the main branch is quantized by the add's shared quantizer)
+            main_src = f"{stage}.expand.0"
+            if main_src not in act_names:
+                raise ValueError(f"{name}: no main-operand layer {main_src!r} to tie the frozen depthwise conv's bits to.")
+            nodes.append(ExtraNode(node_geom, kind, None, (main_src,)))
         else:
             nodes.append(ExtraNode(node_geom, kind, None, ()))
     return nodes
@@ -312,6 +349,13 @@ def extra_node_options(node: ExtraNode, force_dsp: bool) -> list[tuple[tuple, di
                     **{**rtl_kwargs, "no_activation": False},
                 )
                 options.append(((g.name, pe, simd, "auto", VARIANT_RTL_DSP_NOACT1, w, a), cost))
+    elif kind == FROZEN_DW_KIND:
+        rtl_kwargs = _variant_cost_kwargs(VARIANT_RTL_DSP_NOACT1, force_dsp)
+        for pe in ([1] if FORCE_SERIAL else divisors(max_pe(g))):                      # PE | C; SIMD | 9 (kernel elements; > 1 = the SWG's parallel_window); the SWG / FMPadding SIMD = PE
+            for simd in ([1] if FORCE_SERIAL else divisors(max_simd(g))):
+                for bits in CANDIDATE_BITS:
+                    cost = layer_cost_pe_simd(g, FROZEN_DW_WEIGHT_BITS, bits, pe, simd, RAM_STYLE_AUTO, swu_ram_style="distributed", thr_ram_style="block", **{**rtl_kwargs, "no_activation": True})
+                    options.append(((g.name, pe, simd, "auto", VARIANT_RTL_DSP_NOACT1, FROZEN_DW_WEIGHT_BITS, bits), cost))
     else:
         raise ValueError(f"unknown extra node kind {kind!r}")
     return options
@@ -596,7 +640,7 @@ def solve_joint_perlayer(
         for key, var in z.items():
             node_opts.setdefault(key[0], []).append((raw_cycles[key], var))
         dsr_nodes = {g.name for g in geometries if g.op_type != "MaxPool2d" and len({c for _, c in layer_cycle_terms[g.name]}) > 1}
-        dsr_nodes |= {n.geom.name for n in extra_nodes if n.kind in ("argmax", "pad_mvau") and len({c for _, c in layer_cycle_terms[n.geom.name]}) > 1}
+        dsr_nodes |= {n.geom.name for n in extra_nodes if n.kind in ("argmax", "pad_mvau", FROZEN_DW_KIND) and len({c for _, c in layer_cycle_terms[n.geom.name]}) > 1}
         classes_of: dict[str, dict] = {}
 
         def classes(n):
@@ -849,11 +893,25 @@ def solve_joint_perlayer(
             "top_stalls": [{"producer": p, "consumer": c, "stall_cycles": st, "producer_cycles": node_cycles[p], "consumer_cycles": node_cycles[c]} for st, p, c in edge_stall[:12] if st > 0],
         }
 
+    # The FINN bridge (hardware/finn_s12_build_steps.py) looks a conv_order logical name up in per_layer. The frozen depthwise conv is an extra node here (its resources are counted once, above), so it is
+    # MIRRORED into the written per_layer in the layer-entry schema: PE / SIMD, the SWG / FMPadding SIMD (= PE, FINN's depthwise rule) and the threshold behind it, which is the block's skip_quant.
+    frozen_layers: dict[str, dict] = {}
+    for name, v in extra_out.items():
+        if v["kind"] != FROZEN_DW_KIND:
+            continue
+        sq = extra_out.get(f"{v['stage']}.skip_quant")
+        c = layer_costs[extra_chosen[name]]
+        frozen_layers[name] = {
+            **c, "stage": v["stage"], "pe": v["pe"], "simd": v["simd"], "thr_ram_style": sq["ram_style"] if sq else "block", "thr_pe": sq["pe"] if sq else None,
+            "variant": VARIANT_RTL_DSP_NOACT1, "force_dsp": force_dsp, "mvau_noAct": True, "weight_bits": v["weight_bits"], "act_bits": v["act_bits"],
+            "lut_calibrated": v["lut_calibrated"], "bram18k_calibrated": v["bram18k_calibrated"], "frozen": True, "swg_simd": c["simd_swu"], "fmpad_simd": c["simd_swu"],
+            "parallel_window": v["simd"] > 1, "invariant": "fmpadding.simd == swg.simd == vvau.pe",
+        }
     return {
         "status": status_name,
         "layer_weight_bits": layer_weight_bits,
         "layer_act_bits": layer_act_bits,
-        "per_layer": per_layer,
+        "per_layer": {**per_layer, **frozen_layers},
         "extra_nodes": extra_out,
         **({"intra_block_fifos": fifo_out["fifos"], "inter_block_fifos": fifo_out["inter_block_fifos"], "dwcs": fifo_out["dwcs"]} if fifo_out else {}),
         "_diagnostics": {
@@ -1071,6 +1129,8 @@ def build_model_and_graph() -> tuple[
     dataflow_map, node_kinds = compute_dataflow_graph(model)
     act_shapes = trace_activation_shapes(model, INPUT_HW, IN_CHANNELS)
     insert_skip_pads(dataflow_map, node_kinds, geometries, act_shapes)
+    if globals().get("DECODER_TYPE") == "upsample_conv":      # the bilinear decoder: add the frozen depthwise 3x3 conv of every up block (2026-10-13)
+        insert_frozen_dw(dataflow_map, node_kinds)
     extra_nodes = build_extra_nodes(
         dataflow_map, node_kinds, act_shapes, geometries, predecessor_map or {}, (IN_CHANNELS, *INPUT_HW),
     )

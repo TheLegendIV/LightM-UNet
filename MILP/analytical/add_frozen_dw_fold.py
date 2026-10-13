@@ -97,6 +97,9 @@ def fold_frozen_dw(layer, a_bits: int, budget_cycles: float, force_dsp: bool = T
 def run(folding_json: Path, config: str, simfifo: Path | None, out: Path | None) -> dict:
     d = json.loads(folding_json.read_text())
     assert d["status"] == "Optimal", d["status"]
+    if any(n.endswith(finn_milp.FROZEN_DW_SUFFIX) for n in d["per_layer"]):
+        raise SystemExit(f"{folding_json}: the MILP already folded the frozen depthwise conv (extra node `{finn_milp.FROZEN_DW_KIND}`, finn_milp.py since 2026-10-13); nothing to add. "
+                         "This script is for folding jsons from solves made before that.")
     finn_milp.load_config(config)
     finn_milp.CANDIDATE_BITS = tuple(sorted(set(finn_milp.CANDIDATE_BITS) | {FROZEN_WEIGHT_BITS}))
     _model, geoms, _extras, _pred, dmap, _kinds = finn_milp.build_model_and_graph()

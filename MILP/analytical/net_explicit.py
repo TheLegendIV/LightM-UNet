@@ -2,6 +2,7 @@
 
     python3 MILP/analytical/net_explicit.py <layer_bits_folding_ARM.json> --out-dir <dir> --tag ARM_simfifo [--workers 6] [--max-iterations 3] [--max-rounds 1]
 
+A folding json whose per_layer carries the bilinear decoder's frozen depthwise conv (`<up stage>.main_up.1`: written by finn_milp.py since 2026-10-13, or added by add_frozen_dw_fold.py) builds its up blocks WITH that conv.
 The MILP prices its FIFOs in closed form (skip, prefetch, up-block join, the 32-word down / up block FIFOs, depth-2 edges) and never simulates the design; the analytical flow (net_fold.py) searches its own
 folding and simulates every block. This script closes the gap: every block model is fed the MILP's PE / SIMD / threshold PE as explicit folds (bottleneck.explicit_folds) and the per-site bits of the folding
 (bits_map), and the simulation is seeded with the MILP's FIFO depths (`seeds`, from the json's intra_block_fifos; the analytic estimate where the MILP lists none). Then
