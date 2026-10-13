@@ -83,8 +83,8 @@ class StreamLoopbackTest(unittest.TestCase):
         srv, _ = self._run(payload=4096, n_frames=10, delay_s=0.002, slots=1)
         self.assertEqual(srv.max_occupied, 1)
 
-    def test_two_sessions_same_connection_server(self):
-        """STOP returns the server to the header state; a second client works."""
+    def test_two_sequential_sessions(self):
+        """Server accepts a second session after a clean STOP."""
         frames = make_frames(3, 4096)
 
         async def go():
