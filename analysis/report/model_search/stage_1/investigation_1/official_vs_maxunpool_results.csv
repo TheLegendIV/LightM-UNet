@@ -1,0 +1,11 @@
+config_name,variant,width,f_i,f1,f2,f3,f4,f5,params,macs,mem_elements,dice,epochs,converged_flag
+nnUNetTrainerENet_enet_original_prelu_maxunpool_4c,maxunpool,Baseline,16.0,64.0,128.0,128.0,64.0,16.0,369692.0,2123825152.0,356352.0,0.8090981518999699,150.0,False
+nnUNetTrainerENet_1_naive_baseline_prelu_maxunpool_U2,maxunpool,U2,8.0,32.0,64.0,64.0,32.0,8.0,95688.0,553844736.0,178944.0,0.7878439471909293,137.0,False
+nnUNetTrainerENet_1_naive_baseline_prelu_maxunpool_U4,maxunpool,U4,4.0,16.0,32.0,32.0,16.0,4.0,25553.0,149684224.0,90240.0,0.5904842306882543,150.0,False
+nnUNetTrainerENet_1_naive_baseline_prelu_maxunpool_U8,maxunpool,U8,4.0,8.0,16.0,16.0,8.0,4.0,7329.0,56098816.0,47168.0,0.501847253089753,149.0,False
+nnUNetTrainerENet_1_naive_baseline_prelu_maxunpool_U16,maxunpool,U16,4.0,4.0,8.0,8.0,4.0,4.0,2366.0,32309248.0,25632.0,0.3312987534233073,150.0,False
+nnUNetTrainerENet_1_naive_baseline_official_Baseline,official,Baseline,16.0,64.0,128.0,128.0,64.0,16.0,362492.0,1986461696.0,356352.0,0.7919733399782543,123.0,True
+nnUNetTrainerENet_1_naive_baseline_official_U2,official,U2,8.0,32.0,64.0,64.0,32.0,8.0,93764.0,519503872.0,178944.0,0.7327902695329198,150.0,False
+nnUNetTrainerENet_1_naive_baseline_official_U4,official,U4,4.0,16.0,32.0,32.0,16.0,4.0,25010.0,141099008.0,90240.0,0.4657374756524479,150.0,False
+nnUNetTrainerENet_1_naive_baseline_official_U8,official,U8,4.0,8.0,16.0,16.0,8.0,4.0,7174.0,54394880.0,47168.0,0.1469362434956648,147.0,False
+nnUNetTrainerENet_1_naive_baseline_official_U16,official,U16,4.0,4.0,8.0,8.0,4.0,4.0,2324.0,32423936.0,25632.0,0.1920940316383587,150.0,False

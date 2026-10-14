@@ -1,4 +1,4 @@
-"""FIFO and DWC estimates for the MILP (finn_milp.py --model-fifos), derived from the analytical block models (MILP/analytical/).
+"""FIFO and DWC estimates for the MILP (finn_milp.py), derived from the analytical block models (MILP/analytical/).
 
 What the analytical models showed (see MILP/analytical/analytical.md and the S12-256 artifact):
   * The memory that matters is a handful of FIFOs per block: the SKIP FIFO of every residual diamond (depth ~ n_fill + a few pixels, n_fill = pad*W + pad + 1 of the diamond's

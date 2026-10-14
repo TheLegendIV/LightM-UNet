@@ -56,7 +56,7 @@ ever needed again, reintroduce the dial rather than repurposing this one.
   at the chosen bits.
 - Extra nodes: exactly one option each; threshold bits with sources tied to
   `max(sources)` (below).
-- Rate rules: the downstream-rate rule `--dsr-pct` (default off; no floor) and the deprecated `--pbi-ratio` (below).
+- Rate rule: the downstream-rate rule `--dsr-pct` (default off; no floor). (`--pbi-ratio` was removed 2026-10-14.)
 - Hard budgets, always enforced (not soft penalties):
   `Σ z·LUT ≤ f_lut·230,400`, `Σ z·BRAM18 ≤ f_bram·624`,
   `Σ z·DSP ≤ f_dsp·1,728`, `Σ z·URAM ≤ f_uram·96` (xczu7ev-ffvc1156-2-e).
@@ -187,10 +187,10 @@ Notes and evidence:
   4,592 LUT and ~247 BRAM18-eq unpriced before 2026-09-26 — older solves
   under-report BRAM badly (the deployed `bram20` plan reported 124 BRAM18).
 
-## FIFOs and DWCs: modelled by default (`--no-model-fifos` to switch off)
+## FIFOs and DWCs: always modelled
 
-**Default since 2026-10-08** (opt-in `--model-fifos` before; the old flag is accepted and ignored). With a single `--candidate-bits` value the FIFO / DWC terms are in every solve; with several values the model switches itself off
-(it prices streams at one bit width) and says so. `--no-model-fifos` reproduces the earlier output. `fifo_model.py` prices what the analytical blocks (`MILP/analytical/`) showed to matter, inside the solve:
+**Always on since 2026-10-14** (default since 2026-10-08; the `--no-model-fifos` and `--model-fifos` flags were removed). With a single `--candidate-bits` value the FIFO / DWC terms are in every solve; with several values the model switches itself off
+(it prices streams at one bit width) and says so. `fifo_model.py` prices what the analytical blocks (`MILP/analytical/`) showed to matter, inside the solve:
 
 * the **skip FIFO** of every residual diamond (`find_fork_join_diamonds`, join kind `add`, long branch holding a padded windowed conv): `(n_fill + max(4, 8.5% n_fill))` pixels of `Cout/PE` words,
   `n_fill = pad*W + pad + 1` (x1.10 for downsampling blocks). Its size in bits is ~fold-independent; the PE of the node before the join only sets the stream width (BRAM aspect, pow2 rounding via
@@ -216,7 +216,7 @@ Inter-block FIFOs are fixed at depth 2 (priced like the analytical artifact). NO
 initial-block `FIFO main`. Needs one `--candidate-bits` value. Extra output: top-level `intra_block_fifos` (priced FIFOs), `inter_block_fifos`, `dwcs`, `_diagnostics.fifo_model`.
 On S12-256 INT6 (force-dsp, min-resources, 250 fps) it finds 25 skip + 26 prefetch FIFOs = 146 BRAM18 (the analytical design: 143) and 175 DWCs (4.7k LUT; the analytical folding has 99).
 
-## Rate rules: `--dsr-pct` (downstream rate, frame cycles; no floor since 2026-10-11) and `--pbi-ratio RATIO` (join balance, deprecated)
+## Rate rules: `--dsr-pct` (downstream rate, frame cycles; no floor since 2026-10-11); `--pbi-ratio` (join balance) removed 2026-10-14
 
 **Downstream-rate rule (DSR): `--dsr-pct P` (OFF by default, needs `--target-fps`; no floor since 2026-10-11; renamed 2026-10-08 from `--ratchet-pct` / `--ratchet-floor`).** "Downstream no slower than upstream" in cycles PER FRAME (comparable across resolutions,
 unlike per element): for every dataflow edge P -> C between COMPUTE nodes (conv / MVAU layers, the downsampling pad-MVAU, the argmax) `cycles[C] <= (1 + pct/100) * cycles[P]`; F = clock / target-fps (400,000 at 250 fps) stays the only absolute cap.
@@ -228,7 +228,7 @@ The earlier floor (`--dsr-floor`, default 0.6, 0.33 in the 256 ablation: "a node
 old sweeps that relied on the 4 % / 0.6 default must pass `--dsr-pct 4` explicitly (and will usually be infeasible), or `--min-dsr`, which finds the least-stall folding without a pct.
 
 **`--min-dsr` (2026-10-11).** Lexicographic rate balancing, always feasible: pass 1 minimises the total stall `sum over DSR edges of max(0, cycles[C] - cycles[P])` (linear: one slack variable per edge), pass 2 minimises resources with the stall capped at
-(1 + `--min-dsr-eps`, 0.001) x pass 1's optimum. Every run with `--target-fps` reports `_diagnostics.dsr_balance` (total stall in frame cycles and over F, stalling edges, achieved DSR pct = worst edge's ratio - 1, idle cycles against the period,
+(1 + `MIN_DSR_EPS` = 0.001, a constant since 2026-10-14; the `--min-dsr-eps` flag was removed) x pass 1's optimum. Every run with `--target-fps` reports `_diagnostics.dsr_balance` (total stall in frame cycles and over F, stalling edges, achieved DSR pct = worst edge's ratio - 1, idle cycles against the period,
 LUT / DSP-weighted utilisation) and the same figures in `summary.csv` (`dsr_*` columns). 512 nearest net: stall 68,617 cycles (4 of 289 edges), achieved DSR 33.3 %, against 2,428,172 / 50.0 % for the unconstrained folding.
 
 **Infeasibility without a floor (2026-10-11).** There is deliberately NO exemption for nodes that cannot satisfy the rule: if the rule can only hold by exempting a node, the allowance is infeasible and the run says so. On the 512 nearest net
@@ -252,7 +252,7 @@ needed to hold one mechanism fixed while varying the other, which a single
 shared ratio can't express. `pbi_ratio`/`dsr_ratio` (the internal parameter
 names) each default to `None` (off); either, both, or neither may be set.
 
-1. **`--pbi-ratio` — join balance (parallel branch imbalance).** For every
+1. **(REMOVED 2026-10-14, was `--pbi-ratio`) — join balance (parallel branch imbalance).** For every
    simple 2-branch diamond (fork → {branch A, branch B} → join,
    `find_fork_join_diamonds` in `layer_topology.py`), both ways:
    `sum(cycles over branch A) ≤ ratio · sum(cycles over branch B)`. A
@@ -409,10 +409,10 @@ Every run so far passed `--force-dsp`, which masked this.
 | `--force-dsp` | forced-DSP calibration factors (`finn_cost_model.md`; currently identity) instead of the auto-resType avg_bits table. |
 | `--target-fps` | throughput target: every node ≤ `clock_mhz·1e6/target_fps` cycles (the physically meaningful rate constraint for a dataflow pipeline). |
 | `--max-latency-ms` / `--clock-mhz` | hard cap on the sum of cycles — a sequential-execution proxy, not the pipeline's real latency (see "Formulation"). The builds run at 100 MHz. |
-| `--dsr-pct` | downstream-rate rule on cycles per frame (default OFF, no floor; a pct the chain cannot hold is infeasible); see Rate rules. `--pbi-ratio` is the deprecated join-balance constraint. |
+| `--dsr-pct` | downstream-rate rule on cycles per frame (default OFF, no floor; a pct the chain cannot hold is infeasible); see Rate rules. |
 | ~~`--min-dsr`~~ | removed 2026-10-08 together with the element-rate rule it searched (and `--dsr-pct-pass2`). |
 | `--max-lut-fraction` / `--max-bram-fraction` / `--max-dsp-fraction` / `--max-uram-fraction` | maximum fraction of the device (renamed from `--hard-*-fraction`, 2026-10-02). |
-| `--force-serial` | PE=SIMD=1 everywhere, thresholds included. |
+| `--refine-bits` | with `--lexicographic`: pass 3 = pass 2 folding pinned, bits freed, accuracy under the original caps (see History 2026-10-14). |
 | `--time-limit` / `--gap-rel` | CBC limits (default 1800 s, 2%). |
 | `--pin-bits-file` | TEST-ONLY: pin `y` to a `layer_bits_*.json`, skipping the bit-choice search; folding is still solved. |
 
@@ -507,6 +507,10 @@ quantizes per site (reduce.2 / conv_bn_act.2 / residual_add / out_act …);
 cost model's calibration, not a certified hardware guarantee.
 
 ## History
+
+- 2026-10-14: `--refine-bits` (needs `--lexicographic`): third pass = pass 2's folding pinned (`solve_joint_perlayer(pinned_fold=...)`: every other fold option of every node switched off), bits freed, accuracy objective under the ORIGINAL caps; pass 2 is written as `stage2_<out>`, the final output is pass 3. On S12 bilinear-512 at 300 FPS (caps 0.7 / 0.9 / 0.9) it changed the sensitivity sum by <0.15 % (`MILP/artifacts/S12_dense_bilinear_512_fps300_v1/*_refine`): the accuracy objective is already saturated, the caps were not what limited the bits.
+
+- 2026-10-14: removed the deprecated flags `--pbi-ratio`, `--force-serial`, `--no-model-fifos` (and the no-op `--model-fifos`), `--min-dsr-eps` (now the constant `MIN_DSR_EPS` = 0.001) and `--target-fps-pass2` (`--lexicographic` pass 2 always uses `--target-fps`). FIFO / DWC modelling is unconditional; `_diagnostics.pbi_ratio`, `n_join_constraints`, `force_serial` and the `pbi_ratio_setting` summary column are gone (the `branch_imbalance` diagnostic stays). Older artifacts that used these flags reproduce only with the old finn_milp.py (git history).
 
 - 2026-10-08: FIFO / DWC modelling (`fifo_model.py`) is on by default for single-bit-width runs; `--no-model-fifos` turns it off, `--model-fifos` is a no-op.
 - 2026-10-08: the element-rate `--dsr-pct` (+ `--dsr-pct-pass2`, `--min-dsr`) was removed; the frame-rate rule formerly called the ratchet is now `--dsr-pct` / `--dsr-floor` (default 4 % / 0.6; JSON `_diagnostics.dsr`). summary.csv `dsr_*` measurement columns became `elemrate_*`.
