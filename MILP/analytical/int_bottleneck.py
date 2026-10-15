@@ -67,6 +67,7 @@ def model_int_bottleneck(
     ))
     if bits_map:
         res.params["bits_map"] = dict(rb.map)
+        res.params["bits_fallback"] = sorted(rb.fallback)
 
     g_mp = _geom("pool", cin, cin, H, W, Ho, Wo, k=2, s=2, op="MaxPool2d")
     if pool_impl not in ("streaming", "swg_pool"):
@@ -175,7 +176,7 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
     seeds (net_explicit.py): {'skip': words, 'main': words, 'prefetch': words} = the MILP's own depths of this block's FIFOs (a key it does not list falls back to the analytic estimate). The sizing STARTS there
     and may raise or lower any FIFO: skip / join FIFOs go to the paced run's measured need (+ one pixel); every other FIFO is sized by bottleneck.iterate_sizing, at most max_iterations rounds of
     (grow the FIFOs that hit their capacity until T is reached within reach_tol and nothing deadlocks -> shrink every FIFO to its observed occupancy and check cycles, deadlock and the paced run again);
-    no FIFO grows past SEED_MAX_MULT (6, i.e. +500 %) times its start. Only a deadlock raises."""
+    no FIFO grows past SEED_MAX_MULT (2**5 = 32, i.e. at most 5 doublings) times its start. Only a deadlock raises."""
     from int_bottleneck_sim import UNBOUNDED, simulate_int
 
     p = r.params
@@ -199,7 +200,7 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
     d = need_skip + w_skip
     d_main = max(2, need_main + w_main)
     if seeded:
-        # the +500 % limit is on depths the MILP gave; a FIFO it does not list (the initial block's skip / main) takes its measured need
+        # the 5-doubling limit is on depths the MILP gave; a FIFO it does not list (the initial block's skip / main) takes its measured need
         d = _seed_clip(r, "skip FIFO", d, s_skip) if seeds.get("skip") else d
         d_main = _seed_clip(r, "FIFO main", d_main, s_main) if seeds.get("main") else d_main
     _set_skip(r, d, w_skip)
@@ -207,7 +208,7 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
     sat, tries, emap = None, 0, dict(emap0)
     if seeded:
         def run(D):
-            return simulate_int(r, inject_interval=0, skip_depth=r.skip_fifo.depth_words, main_depth=p["main_fifo_words"], fifo_depth=fifo_depth, elastic_map=emap0, fifo_depths=D, frames=3)
+            return simulate_int(r, inject_interval=p["T_in"], skip_depth=r.skip_fifo.depth_words, main_depth=p["main_fifo_words"], fifo_depth=fifo_depth, elastic_map=emap0, fifo_depths=D, frames=3)
 
         def prun(D):
             return simulate_int(r, inject_interval=p["T_in"], skip_depth=r.skip_fifo.depth_words, main_depth=p["main_fifo_words"], fifo_depth=fifo_depth, elastic_map=emap0, fifo_depths=D, frames=2)

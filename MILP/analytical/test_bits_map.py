@@ -78,6 +78,13 @@ class TestMixedMap(unittest.TestCase):
         self.assertEqual(r.skip_fifo.width_bits, n["Thr_s"].pe * 8)
         self.assertEqual(r.params["bits_map"], bm)
 
+    def test_roles_missing_from_the_map_are_reported_as_fallback(self):
+        r = bottleneck.model_bottleneck(**REG, bits_map={"in": 8, "r": 6, "w_m": 6})
+        self.assertEqual(r.params["bits_fallback"], sorted({"m", "e", "s", "add", "out", "w_r", "w_e"}))
+        full = {k: 6 for k in ("in", "r", "m", "e", "s", "add", "out", "w_r", "w_m", "w_e")}
+        self.assertEqual(bottleneck.model_bottleneck(**REG, bits_map=full).params["bits_fallback"], [])
+        self.assertNotIn("bits_fallback", bottleneck.model_bottleneck(**REG).params)          # uniform model: nothing to report
+
     def test_weight_bits_change_the_cost_not_the_widths(self):
         a = bottleneck.model_bottleneck(**REG, bits_map={"w_m": 8})
         b = bottleneck.model_bottleneck(**REG)

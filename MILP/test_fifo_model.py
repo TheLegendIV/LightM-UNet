@@ -1,8 +1,8 @@
-"""Tests for fifo_model.py (finn_milp.py --model-fifos). Run in lightmunet_dev:  cd MILP && python3 test_fifo_model.py
+"""Tests for fifo_model.py (finn_milp.py, FIFO modelling is always on). Run in lightmunet_dev:  cd MILP && python3 test_fifo_model.py
 
 1. The closed-form skip / prefetch estimators reproduce the verified FIFO depths of the analytical S12-256 artifact (MILP/artifacts/S12_dense_256_u4_analytical_v1).
-2. One real solve on the S12-256 config (FIFO modelling is the default; --no-model-fifos for the comparison): feasible, the FIFO terms are in the totals and in the output lists, and the BRAM they add is the analytical
-   design's order of magnitude (143 BRAM18). The same solve without the flag has no FIFO keys.
+2. One real solve on the S12-256 config: feasible, the FIFO terms are in the totals and in the output lists, and the BRAM they add is the analytical
+   design's order of magnitude (143 BRAM18).
 """
 import json
 import subprocess
@@ -84,16 +84,11 @@ class TestModelFifosSolve(unittest.TestCase):
             assert res.returncode == 0, res.stderr[-2000:]
             return json.loads(out.read_text())
 
-        cls.on, cls.off = run([], "on.json"), run(["--no-model-fifos"], "off.json")
+        cls.on = run([], "on.json")
 
     @classmethod
     def tearDownClass(cls):
         cls.tmp.cleanup()
-
-    def test_flag_off_leaves_no_fifo_keys(self):
-        for k in ("intra_block_fifos", "inter_block_fifos", "dwcs"):
-            self.assertNotIn(k, self.off)
-        self.assertNotIn("fifo_model", self.off["_diagnostics"])
 
     def test_feasible_and_fifo_terms_are_in_the_totals(self):
         self.assertEqual(self.on["status"], "Optimal")
@@ -154,9 +149,6 @@ class TestModelFifosSolve(unittest.TestCase):
     def test_inter_block_fifos_are_fixed_at_depth_2(self):
         self.assertEqual(len(self.on["inter_block_fifos"]), 28)
         self.assertEqual({f["depth"] for f in self.on["inter_block_fifos"]}, {2})
-
-    def test_costing_fifos_raises_the_totals(self):
-        self.assertGreater(self.on["_diagnostics"]["total_bram18k_calibrated"], self.off["_diagnostics"]["total_bram18k_calibrated"])
 
 
 if __name__ == "__main__":

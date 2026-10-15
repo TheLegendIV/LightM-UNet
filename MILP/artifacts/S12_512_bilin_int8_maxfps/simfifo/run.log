@@ -1,0 +1,20 @@
+Wrote /tmp/tmpf0idgwsw/sites.json (85 weight sites, 110 act sites).
+S12_512_bilin_int8_maxfps_simfifo: up blocks built WITH the frozen depthwise conv (up4.main_up.1, up5.main_up.1)
+S12_512_bilin_int8_maxfps_simfifo: 29 blocks built from the MILP folding (0 warnings)
+simulating 29 blocks (12 distinct shapes), 3 workers
+  WARNING (rate, not a failure): stage2.3 reaches 81.99 vs its target 78.06 cyc/px (+5.02% > the 5% tolerance), frame period 335816; FIFOs sized deadlock-free only
+  WARNING (rate, not a failure): stage2.7 reaches 81.99 vs its target 78.06 cyc/px (+5.02% > the 5% tolerance), frame period 335816; FIFOs sized deadlock-free only
+  WARNING (rate, not a failure): stage3.3 reaches 81.99 vs its target 78.06 cyc/px (+5.02% > the 5% tolerance), frame period 335816; FIFOs sized deadlock-free only
+  WARNING (rate, not a failure): stage3.7 reaches 81.99 vs its target 78.06 cyc/px (+5.02% > the 5% tolerance), frame period 335816; FIFOs sized deadlock-free only
+whole-net chain: source PACED at the MILP target 327680 frame cycles, up to 5 iteration(s), interfaces doubled once per iteration (<= 5 doublings, depth <= 64) with a shrink + deadlock check each iteration; tolerance 5% (intra-block FIFOs frozen)
+  inter-block baseline (depth 2): deadlock=False period=402259 (22.76% vs the MILP target 327680, limit 344064, within=False) max depth 2, sum 56, 0 full FIFO(s) [847 s]
+  inter-block iteration 1 double 28 interface(s): deadlock=False period=402245 (22.76% vs the MILP target 327680, limit 344064, within=False) max depth 4, sum 112, 0 full FIFO(s) [758 s]
+  inter-block iteration 2 double 28 interface(s): deadlock=False period=402213 (22.75% vs the MILP target 327680, limit 344064, within=False) max depth 8, sum 224, 0 full FIFO(s) [743 s]
+  inter-block iteration 3 double 28 interface(s): deadlock=False period=402155 (22.73% vs the MILP target 327680, limit 344064, within=False) max depth 16, sum 448, 0 full FIFO(s) [762 s]
+  inter-block iteration 4 double 28 interface(s): deadlock=False period=402037 (22.69% vs the MILP target 327680, limit 344064, within=False) max depth 32, sum 896, 0 full FIFO(s) [815 s]
+  inter-block iteration 5 double 28 interface(s): deadlock=False period=401793 (22.62% vs the MILP target 327680, limit 344064, within=False) max depth 64, sum 1792, 0 full FIFO(s) [843 s]
+  inter-block iteration 5 shrink to the observed occupancy: deadlock=False period=401793 (22.62% vs the MILP target 327680, limit 344064, within=False) max depth 64, sum 1790, 0 full FIFO(s) [799 s]
+    shrink KEPT (sum 1792 -> 1790)
+  WARNING (rate, not a failure): whole-net period 401793 is +22.62% over the MILP target 327680 (tolerance 5%); deadlock-free. The inter-block FIFOs are at their limit; slowest blocks (bottleneck candidates, own period in cycles): stage3.7 (335816), stage3.3 (335816), stage2.7 (335816)
+S12_512_bilin_int8_maxfps_simfifo: wrote MILP/artifacts/S12_512_bilin_int8_maxfps/simfifo/layer_bits_folding_S12_512_bilin_int8_maxfps_simfifo.json
+  blocks deadlocking alone: 0, chain deadlock-free: True, within tolerance: False, intra FIFO BRAM18 186.0 (MILP) -> 196 (sim)

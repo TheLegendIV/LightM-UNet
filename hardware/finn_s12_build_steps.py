@@ -1168,6 +1168,8 @@ def build_partition_folding_config(partition_model_fn, sdp_node_name, logical_na
                     swu_cfg = {"SIMD": simd_swu, "parallel_window": parallel_window}
                 else:
                     swu_cfg = {"SIMD": simd_swu}
+                if compute_entry.get("swu_ram_style") == "block":      # --swu-bram: the MILP put this SWU's line buffer in BRAM (FINN's default, "distributed", is left alone otherwise)
+                    swu_cfg["ram_style"] = "block"
                 folding_config[swu_node.name] = swu_cfg
                 print(f"{log} {swu_node.name:30s} {swu_node.op_type:12s} (SWU) {swu_cfg}")
                 if fmpad_node is not None:

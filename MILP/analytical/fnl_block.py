@@ -59,6 +59,7 @@ def model_fnl_block(
     ))
     if bits_map:
         res.params["bits_map"] = dict(rb.map)
+        res.params["bits_fallback"] = sorted(rb.fallback)
     if px_out > F:
         raise ValueError(f"F={F} is below the final layer's floor of {px_out} cycles/frame (one output pixel per cycle)")
 
@@ -125,7 +126,7 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
     seeds (net_explicit.py): {'skip': words, 'main': words, 'prefetch': words} = the MILP's own depths of this block's FIFOs (a key it does not list falls back to the analytic estimate). The sizing STARTS there
     and may raise or lower any FIFO: skip / join FIFOs go to the paced run's measured need (+ one pixel); every other FIFO is sized by bottleneck.iterate_sizing, at most max_iterations rounds of
     (grow the FIFOs that hit their capacity until T is reached within reach_tol and nothing deadlocks -> shrink every FIFO to its observed occupancy and check cycles, deadlock and the paced run again);
-    no FIFO grows past SEED_MAX_MULT (6, i.e. +500 %) times its start. Only a deadlock raises."""
+    no FIFO grows past SEED_MAX_MULT (2**5 = 32, i.e. at most 5 doublings) times its start. Only a deadlock raises."""
     from fnl_block_sim import simulate_fnl
 
     p = r.params
@@ -137,7 +138,7 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
         deadlock_only = True
 
         def run(D):
-            return simulate_fnl(r, inject_interval=0, fifo_depth=fifo_depth, elastic_map=emap0, fifo_depths=D, frames=3)
+            return simulate_fnl(r, inject_interval=p["T_in"], fifo_depth=fifo_depth, elastic_map=emap0, fifo_depths=D, frames=3)
         sat, _sized, tries = _iterate(run, None, T, reach_tol, max_iterations)
         depth, emap, shrink = fifo_depth, dict(emap0), False
     else:

@@ -271,12 +271,59 @@ class TestIterateSizing(unittest.TestCase):
         self.assertLessEqual(sat.steady_cyc_px, 72.0 * 1.01)
         self.assertFalse(sat.deadlock)
 
-    def test_growth_stops_at_six_times_the_start(self):
+    def _graded(self, need, T=72.0):
+        """a run whose rate improves ~2 % per doubling of FIFO a until a reaches `need` (then T is met)."""
+        import math
+
+        def run(D):
+            depths = dict(self.START)
+            depths.update(D)
+            sim = _FakeSim(depths, {"a": need})
+            sim.steady_cyc_px = T if depths["a"] >= need else 90.0 - 2.0 * math.log2(depths["a"] / 2)
+            return sim
+        return run
+
+    def test_growth_stops_after_five_doublings_of_the_start(self):
         from bottleneck import iterate_sizing
-        run, _ = self._run({"a": 100, "b": 4, "c": 1})
-        sat, D, it = iterate_sizing(run, None, 72.0, 0.01, 3)
-        self.assertEqual(D["a"], 12)                             # 6 x 2: the +500 % limit
+        sat, D, it = iterate_sizing(self._graded(500), None, 72.0, 0.01, 5)
+        self.assertEqual(D["a"], 64)                             # 2 doubled five times (2**5 x 2): the growth limit; one doubling per iteration
         self.assertGreater(sat.steady_cyc_px, 72.0 * 1.01)       # target not reachable within the limit: the closest state is returned
+
+    def test_a_need_inside_five_doublings_is_reached(self):
+        from bottleneck import iterate_sizing
+        run, _ = self._run({"a": 40, "b": 4, "c": 1})
+        sat, D, it = iterate_sizing(run, None, 72.0, 0.01, 5)
+        self.assertLessEqual(sat.steady_cyc_px, 72.0 * 1.01)     # 40 words < 64: reachable in 5 iterations (the old 6x limit stopped at 12)
+        self.assertEqual(D["a"], 40)
+
+    def _paced(self, need, steady_short, steady_ok, T=72.0):
+        """a run whose rate depends only on FIFO a reaching its need: steady_short below it, steady_ok at / above it."""
+        def run(D):
+            depths = dict(self.START)
+            depths.update(D)
+            sim = _FakeSim(depths, {"a": need})
+            sim.steady_cyc_px = steady_short if depths["a"] < need else steady_ok
+            return sim
+        return run
+
+    def test_growth_that_improves_the_rate_by_under_one_percent_is_discarded(self):
+        from bottleneck import iterate_sizing
+        run = self._paced(need=8, steady_short=80.0, steady_ok=79.5)          # +0.6 % faster only, target 72 (+5 % = 75.6) not reached either way
+        sat, D, it = iterate_sizing(run, None, 72.0, 0.05, 5)
+        self.assertEqual(D["a"], 2)                                           # the seed sizing stays
+        self.assertEqual(sat.steady_cyc_px, 80.0)
+
+    def test_growth_that_improves_the_rate_by_over_one_percent_is_kept(self):
+        from bottleneck import iterate_sizing
+        run = self._paced(need=8, steady_short=80.0, steady_ok=78.0)          # 2.5 % faster
+        sat, D, it = iterate_sizing(run, None, 72.0, 0.05, 5)
+        self.assertEqual(D["a"], 8)
+        self.assertEqual(sat.steady_cyc_px, 78.0)
+
+    def test_fewer_iterations_mean_fewer_doublings(self):
+        from bottleneck import iterate_sizing
+        sat, D, it = iterate_sizing(self._graded(500), None, 72.0, 0.01, 3)
+        self.assertEqual(D["a"], 16)                             # 2 -> 4 -> 8 -> 16: one doubling per iteration
 
     def test_a_shrink_that_deadlocks_is_rejected(self):
         from bottleneck import iterate_sizing
