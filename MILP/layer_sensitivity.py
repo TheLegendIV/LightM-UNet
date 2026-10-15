@@ -44,7 +44,9 @@ import argparse
 import importlib
 import json
 import random
+import resource
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -169,6 +171,20 @@ def run_layer_sensitivity(
     weight_delta_sum = {n: {bit: 0.0 for bit in CANDIDATE_BITS} for n in layer_names}
     act_delta_sum = {n: {bit: 0.0 for bit in CANDIDATE_BITS} for n in layer_names}
 
+    def _hms(seconds: float) -> str:
+        seconds = int(max(seconds, 0))
+        return f"{seconds // 3600:d}:{seconds % 3600 // 60:02d}:{seconds % 60:02d}"
+
+    def _progress(batch_i: int, status: str) -> None:
+        """One flushed line per batch: elapsed time, mean seconds per batch so far, ETA, peak host RSS -- tail the log of a long run (a SLURM job) to see when it finishes."""
+        done = batch_i + 1
+        elapsed = time.perf_counter() - t_start
+        per_batch = elapsed / done
+        rss_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+        print(f"[{status}] batch {done}/{len(batches)} | elapsed {_hms(elapsed)} | {per_batch:.1f} s/batch | ETA {_hms((len(batches) - done) * per_batch)} | "
+              f"{time.strftime('%H:%M:%S')} | peak RSS {rss_mb:.0f} MB", flush=True)
+
+    t_start = time.perf_counter()
     n_used = 0
     for batch_i, (img, seg) in enumerate(batches):
         img, seg = img.to(device), seg.to(device)
@@ -180,7 +196,8 @@ def run_layer_sensitivity(
             # own run functions already document and skip (H/W not evenly
             # divisible by ENet's stride-8 downsample factor). A representative
             # sample is enough.
-            print(f"  [skip] batch {batch_i + 1}/{len(batches)} (shape {tuple(img.shape)}) failed forward pass: {error}")
+            print(f"  [skip] batch {batch_i + 1}/{len(batches)} (shape {tuple(img.shape)}) failed forward pass: {error}", flush=True)
+            _progress(batch_i, "skip")
             continue
         loss = loss_fn(out, seg)
         n_used += 1
@@ -207,7 +224,7 @@ def run_layer_sensitivity(
                 for b, d in deltas.items():
                     act_delta_sum[n][b] += d
 
-        print(f"batch {batch_i + 1}/{len(batches)} done.")
+        _progress(batch_i, "done")
 
     for h in handles:
         h.remove()
