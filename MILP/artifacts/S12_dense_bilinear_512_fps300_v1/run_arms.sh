@@ -12,11 +12,12 @@
 set -u
 cd /workspace/LightM-UNet
 FPS=${FPS:-300}; CLOCK=${CLOCK:-100}
-HERE=MILP/artifacts/S12_dense_bilinear_512_fps${FPS}_v1
+SENS=${SENS:-MILP/artifacts/layer_sensitivity_12_dense_relu_warmstart150ep.json}      # SENS=<other layer_sensitivity json> TAG=<suffix> to solve the same arms with another sensitivity (results go to ..._v1<TAG>)
+HERE=MILP/artifacts/S12_dense_bilinear_512_fps${FPS}_v1${TAG:-}
 CONFIG=config_12_dense_relu_warmstart150ep
 ARMS=("$@"); if [ ${#ARMS[@]} -eq 0 ]; then ARMS=(bits468 bits68); fi
 solve() {
-  local arm=$1 base=${1%_r2} lut=0.7 bram=0.9 dsp=0.9 bits refine=""
+  local arm=$1 base=${1%_r2} lut=${CAP_LUT:-0.7} bram=${CAP_BRAM:-0.9} dsp=${CAP_DSP:-0.9} bits refine=""      # CAP_LUT / CAP_BRAM / CAP_DSP override the default caps
   base=${base%_refine}; [ "$arm" != "${arm%_refine}" ] && refine="--refine-bits"
   base=${base%_swubram}
   bits=$(echo "${base#bits}" | sed 's/./&,/g; s/,$//')       # 468 -> 4,6,8 ; 68 -> 6,8
@@ -30,7 +31,7 @@ P
   fi
   mkdir -p "$HERE/$arm"
   echo "$arm: bits $bits caps LUT $lut BRAM $bram DSP $dsp" > "$HERE/$arm/solve.log"
-  python3 MILP/finn_milp.py --config $CONFIG --sensitivity-file MILP/artifacts/layer_sensitivity_12_dense_relu_warmstart150ep.json \
+  python3 MILP/finn_milp.py --config $CONFIG --sensitivity-file $SENS \
     --candidate-bits "$bits" --force-dsp --lexicographic $refine --max-lut-fraction $lut --max-bram-fraction $bram --max-dsp-fraction $dsp --max-uram-fraction 1.0 \
     --target-fps $FPS --clock-mhz $CLOCK --time-limit 900 --gap-rel 0.001 --out-file "$HERE/$arm/layer_bits_folding_$arm.json" >> "$HERE/$arm/solve.log" 2>&1
 }

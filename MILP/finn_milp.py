@@ -60,6 +60,7 @@ XCZU7EV = {"LUT": 230_400, "BRAM_18K": 624, "DSP": 1_728, "URAM": 96}
 CANDIDATE_BITS = (2, 4, 6, 8, 16)
 INPUT_HW = (512, 512)
 RAM_STYLES = (RAM_STYLE_BLOCK, "distributed")  # the standalone Thresholding node's memory -- the only free RAM choice
+SENSITIVITY_OBJ_SCALE = 1e6  # objective scale of the accuracy term (solver tolerance, see solve_joint_perlayer)
 MIN_DSR_EPS = 0.001  # --min-dsr: relative slack of pass 1's optimal total stall that pass 2 may spend on resources
 
 VARIANT_RTL_DSP_NOACT1 = "rtl_dsp_noact1"  # standalone Thresholding_rtl after an MVAU_rtl; SWU line buffer in LUTRAM (FINN's default `ram_style="distributed"`)
@@ -439,8 +440,10 @@ def solve_joint_perlayer(
     for name in layer_names:
         act_sources = [s for s in _act_sensitivity_sources(name, predecessor_map) if s in sensitivity]
         for w, a in candidate_pairs:
-            sens_w = sensitivity[name]["sensitivity_w"][str(w)] if name in sensitivity else 0.0
-            sens_a = max((sensitivity[s]["sensitivity_a"][str(a)] for s in act_sources), default=0.0)
+            # |trace| x delta: a Hessian-trace estimate can come out negative (estimator noise, or a non-minimum checkpoint), which would make FEWER bits look better; delta > 0, so abs() keeps the
+            # magnitude and restores the order 4 bits > 6 bits > 8 bits for every layer (2026-10-15; default, no flag).
+            sens_w = abs(sensitivity[name]["sensitivity_w"][str(w)]) if name in sensitivity else 0.0
+            sens_a = max((abs(sensitivity[s]["sensitivity_a"][str(a)]) for s in act_sources), default=0.0)
             raw_sensitivity[(name, w, a)] = sens_w + sens_a
     sens_norm = _normalize(raw_sensitivity)
 
@@ -722,7 +725,9 @@ def solve_joint_perlayer(
             + pulp.lpSum(z[k] * raw_dsp[k] for k in z) / XCZU7EV["DSP"]
         )
     else:
-        prob += sensitivity_term
+        # x1e6: the mean normalised sensitivity is ~1e-4 and its per-layer differences ~1e-6 (the min-max span is set by one huge-trace layer), below CBC's objective-improvement / feasibility
+        # tolerances (~1e-5 / 1e-7): with the raw scale CBC returned "Optimal" solutions that a pinned re-solve beat (stage2.4.reduce.0 at 6 activation bits where 8 was feasible and better).
+        prob += SENSITIVITY_OBJ_SCALE * sensitivity_term
 
     # ---- Solve and extract ----
     status = prob.solve(pulp.PULP_CBC_CMD(msg=0, timeLimit=time_limit, gapRel=gap_rel))
