@@ -91,13 +91,15 @@ def model_up_bottleneck(
     cmid, A = cin // v, bits
     rb = RoleBits(bits, bits_map, UP_ROLES)
     A_in, A_p, A_k, A_r, A_u, A_e, A_add, A_out = (rb.a(x) for x in ("in", "p", "k", "r", "u", "e", "add", "out"))
-    W_p, W_k, W_r, W_u, W_e = (rb.w(x) for x in ("p", "k", "r", "u", "e"))
+    W_p, W_r, W_u, W_e = (rb.w(x) for x in ("p", "r", "u", "e"))
+    W_k = 8 if skip_dw else rb.w("k")       # skip_dw (bilinear): the frozen depthwise conv's INT8 tent kernel, not a quantized-weight role
     res = BottleneckResult(params=dict(
         cin=cin, cmid=cmid, cout=cout, v=v, z=v, T=T, F=F, T_in=T_in, bits=bits, k=3, dilation=1, stride=1, height=H, width=W,
         hout=Ho, wout=Wo, pad=1, block="up", skip_conv=skip_conv, skip_dw=skip_dw, skip_pad="n/a", skip_order="n/a", pad_group=None,
     ))
     if bits_map:
         res.params["bits_map"] = dict(rb.map)
+        res.params["bits_fallback"] = sorted(rb.fallback)
     if px_out > F:
         raise ValueError(f"F={F} is below the UpsampleNearestNeighbour floor of {px_out} cycles/frame (one output pixel per cycle, not foldable)")
 
@@ -266,7 +268,7 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
     seeds (net_explicit.py): {'skip': words, 'main': words, 'prefetch': words} = the MILP's own depths of this block's FIFOs (a key it does not list falls back to the analytic estimate). The sizing STARTS there
     and may raise or lower any FIFO: skip / join FIFOs go to the paced run's measured need (+ one pixel); every other FIFO is sized by bottleneck.iterate_sizing, at most max_iterations rounds of
     (grow the FIFOs that hit their capacity until T is reached within reach_tol and nothing deadlocks -> shrink every FIFO to its observed occupancy and check cycles, deadlock and the paced run again);
-    no FIFO grows past SEED_MAX_MULT (6, i.e. +500 %) times its start. Only a deadlock raises."""
+    no FIFO grows past SEED_MAX_MULT (2**5 = 32, i.e. at most 5 doublings) times its start. Only a deadlock raises."""
     from up_bottleneck_sim import UNBOUNDED, simulate_up
 
     p = r.params
@@ -296,7 +298,7 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
     d = need_skip + ext_w                                   # measured need + one pixel (the analytic estimate above is rough, either way)
     d_main = max(2, need_main + main_w)
     if seeded:
-        # the +500 % limit is on depths the MILP gave; a FIFO it does not list (the initial block's skip / main) takes its measured need
+        # the 5-doubling limit is on depths the MILP gave; a FIFO it does not list (the initial block's skip / main) takes its measured need
         d = _seed_clip(r, "skip FIFO", d, s_skip) if seeds.get("skip") else d
         d_main = _seed_clip(r, "FIFO main", d_main, s_main) if seeds.get("main") else d_main
     if d != r.skip_fifo.depth_words:
@@ -306,7 +308,7 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
     sat, tries, emap = None, 0, dict(emap0)
     if seeded:
         def run(D):
-            return simulate_up(r, inject_interval=0, skip_depth=r.skip_fifo.depth_words, main_depth=p["main_fifo_words"], fifo_depth=fifo_depth, elastic_map=emap0, fifo_depths=D, frames=3)
+            return simulate_up(r, inject_interval=p["T_in"], skip_depth=r.skip_fifo.depth_words, main_depth=p["main_fifo_words"], fifo_depth=fifo_depth, elastic_map=emap0, fifo_depths=D, frames=3)
 
         def prun(D):
             return simulate_up(r, inject_interval=p["T_in"], skip_depth=r.skip_fifo.depth_words, main_depth=p["main_fifo_words"], fifo_depth=fifo_depth, elastic_map=emap0, fifo_depths=D, frames=2)

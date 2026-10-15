@@ -181,13 +181,15 @@ class TestSeededSizingLimit(unittest.TestCase):
         verify_with_sim(r, deadlock_only=True, seeds={}, reach_tol=0.05)
         self.assertFalse(any("limited" in w for w in r.warnings))
 
-    def test_a_listed_fifo_is_limited_to_six_times_its_start(self):
-        from bottleneck import SEED_MAX_MULT, seed_clip
+    def test_a_listed_fifo_is_limited_to_five_doublings_of_its_start(self):
+        from bottleneck import MAX_DOUBLINGS, SEED_MAX_MULT, seed_clip
         r = model_int_bottleneck(cin=1, cout=4, bits=4, height=64, width=64, F=64 * 64 * 5)
-        self.assertEqual(SEED_MAX_MULT, 6)
-        self.assertEqual(seed_clip(r, "skip FIFO", 193, 4), 24)                  # the initial block's measured need against a 4-word start
-        self.assertTrue(any("skip FIFO" in w and "limited to 24" in w for w in r.warnings))
-        self.assertEqual(seed_clip(r, "skip FIFO", 20, 4), 20)                   # inside the limit: untouched
+        self.assertEqual(MAX_DOUBLINGS, 5)
+        self.assertEqual(SEED_MAX_MULT, 32)                                       # 2**5: at most five doublings
+        self.assertEqual(seed_clip(r, "skip FIFO", 100, 4), 100)                  # inside 4 x 32 = 128, untouched
+        self.assertEqual(seed_clip(r, "skip FIFO", 193, 4), 128)                  # the initial block's measured need against a 4-word start: beyond five doublings, limited
+        self.assertTrue(any("skip FIFO" in w and "limited to 128" in w for w in r.warnings))
+        self.assertEqual(seed_clip(r, "skip FIFO", 20, 4), 20)                    # inside the limit: untouched
 
 
 if __name__ == "__main__":

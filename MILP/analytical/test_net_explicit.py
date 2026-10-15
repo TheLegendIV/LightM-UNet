@@ -73,14 +73,21 @@ class TestExplicitFolds(unittest.TestCase):
                 model_bottleneck(32, 4, 4, 72, 4, 16, 16)
 
 
-class TestChainEscalation(unittest.TestCase):
-    def test_undersized_skip_fifo_deadlocks_and_is_grown(self):
-        T = 72
+class TestInterBlockSizing(unittest.TestCase):
+    """size_interfaces: paced whole-net run, only the interface FIFOs are resized, final shrink + deadlock check."""
+
+    @staticmethod
+    def _blocks(n=2, T=72):
         blocks = []
-        for i in range(2):
+        for i in range(n):
             r = model_bottleneck(32, 4, 4, T, 4, 16, 16)
             verify_with_sim(r)
             blocks.append((f"b{i}", "reg", r))
+        return blocks
+
+    def test_undersized_intra_skip_fifo_deadlocks_and_is_not_resized_by_the_chain(self):
+        T = 72
+        blocks = self._blocks(2, T)
         need = blocks[0][2].fifo_graph["fifos"]["skip FIFO"]["depth"]
         self.assertGreater(need, 8)
         net_explicit.grow_intra(blocks[0][2], "skip FIFO", 2)                      # starve the skip path of block 0
@@ -88,35 +95,57 @@ class TestChainEscalation(unittest.TestCase):
         res = net_fifo.run_chain(net_fifo.compose(caps, [2]), 10 ** 6)
         self.assertTrue(res["deadlock"])
         self.assertTrue(any(f.name == "skip FIFO" for f in res["full"]))             # the blocked chain names the culprit
-        rep = net_explicit.run_chain_rounds(blocks, T * 256, 0.03, 6, log=lambda *a, **k: None)
-        self.assertTrue(rep["ok"], rep["rounds"])
-        self.assertTrue(rep["rounds"][0]["deadlock"])
-        self.assertTrue(any(g["where"] == "b0" and g["fifo"] == "skip FIFO" and g["depth_after"] > 2 for g in rep["grown"]))
+        rep = net_explicit.size_interfaces(blocks, T * 256, 0.05, 3, log=lambda *a, **k: None)
+        self.assertFalse(rep["ok"], rep["rounds"])                                   # only interfaces may grow: an intra-block deadlock is reported, not fixed
+        self.assertTrue(all(r["deadlock"] for r in rep["rounds"]))
+        self.assertEqual(blocks[0][2].fifo_graph["fifos"]["skip FIFO"]["depth"], 2)  # the intra-block FIFO was NOT touched
+        self.assertTrue(any("skip FIFO" in name for name in rep["last"]["full"]))
 
-    def test_matching_blocks_pass_without_growth(self):
-        blocks = []
-        for i in range(2):
-            r = model_bottleneck(32, 4, 4, 72, 4, 16, 16)
-            verify_with_sim(r)
-            blocks.append((f"b{i}", "reg", r))
-        rep = net_explicit.run_chain_rounds(blocks, 72 * 256, 0.03, 3, log=lambda *a, **k: None)
+    def test_matching_blocks_pass_with_a_paced_source_and_end_deadlock_checked(self):
+        blocks = self._blocks(2, 72)
+        rep = net_explicit.size_interfaces(blocks, 72 * 256, 0.05, 3, log=lambda *a, **k: None)
         self.assertTrue(rep["ok"])
+        self.assertTrue(rep["within_tolerance"], rep["last"])
+        self.assertGreater(rep["pace_cycles_per_input_px"], 0)                       # a PACED source, not saturated
         self.assertEqual(rep["grown"], [])
+        self.assertTrue(all(d >= net_fifo.MIN_DEPTH for d in rep["interface_depths"]))
+        self.assertFalse(rep["last"]["deadlock"])                                    # the handed-back depths were simulated
+
+    def test_final_shrink_never_hands_back_a_deadlocked_or_slower_net(self):
+        blocks = self._blocks(3, 72)
+        rep = net_explicit.size_interfaces(blocks, 72 * 256, 0.05, 3, log=lambda *a, **k: None)
+        self.assertTrue(rep["ok"])
+        for sh in rep["shrink"]:
+            if sh["accepted"]:
+                self.assertLessEqual(sh["sum_after"], sh["sum_before"])
+        self.assertFalse(rep["last"]["deadlock"])
+        self.assertLessEqual(max(rep["interface_depths"]), net_explicit.IFACE_MAX_DEPTH)       # 5 doublings from depth 2
 
 
-    def test_one_round_is_a_pure_check_nothing_is_grown(self):
-        T = 72
-        blocks = []
-        for i in range(2):
-            r = model_bottleneck(32, 4, 4, T, 4, 16, 16)
-            verify_with_sim(r)
-            blocks.append((f"b{i}", "reg", r))
-        net_explicit.grow_intra(blocks[0][2], "skip FIFO", 2)
-        rep = net_explicit.run_chain_rounds(blocks, T * 256, 0.05, 1, log=lambda *a, **k: None)      # the default --max-rounds 1
-        self.assertFalse(rep["ok"])
-        self.assertTrue(rep["rounds"][0]["deadlock"])
-        self.assertEqual(rep["grown"], [])                                   # growing after the last round would be unverified
-        self.assertEqual(blocks[0][2].fifo_graph["fifos"]["skip FIFO"]["depth"], 2)
+class TestChooseInterfaceState(unittest.TestCase):
+    @staticmethod
+    def _st(period, depths, grown, deadlock=False):
+        return dict(period=period, interface_depths=list(depths), grown=grown, deadlock=deadlock)
+
+    def test_growth_under_one_percent_keeps_the_baseline(self):
+        base = self._st(400000, [2, 2], False)
+        states = [base, self._st(399000, [8, 8], True), self._st(397000, [32, 32], True)]     # best is 0.75 % faster
+        self.assertIs(net_explicit.choose_interface_state(base, states, 0.01), base)
+
+    def test_growth_over_one_percent_is_kept_and_the_best_state_wins(self):
+        base = self._st(400000, [2, 2], False)
+        states = [base, self._st(399000, [8, 8], True), self._st(390000, [32, 32], True), self._st(390000, [32, 8], True)]
+        chosen = net_explicit.choose_interface_state(base, states, 0.01)
+        self.assertEqual(chosen["interface_depths"], [32, 8])                  # same period: fewer words
+
+    def test_a_deadlocked_baseline_accepts_any_deadlock_free_grown_state(self):
+        base = self._st(None, [2, 2], False, deadlock=True)
+        states = [base, self._st(500000, [8, 8], True)]
+        self.assertEqual(net_explicit.choose_interface_state(base, states, 0.01)["interface_depths"], [8, 8])
+
+    def test_growth_is_x4_per_iteration(self):
+        self.assertEqual(net_explicit.IFACE_GROWTH, 4)
+        self.assertEqual(net_explicit.IFACE_MAX_DEPTH, 2 * 4 ** 5)
 
 
 class _FakeBlock:

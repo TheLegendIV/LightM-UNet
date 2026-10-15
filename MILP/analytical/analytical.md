@@ -343,3 +343,14 @@ growing `src->Dup`, `Dup->skip`, `SWG_m->out`, which have nothing to do with the
 effect modelled in the MILP (`finn_cost_model.md`, "Window-fill gap"), not something FIFOs fix. Observed occupancies at dilation 8: input FIFO of the window ~1,044 words, pad FIFO ~2,630.
 
 **Exception: down and up blocks.** There FIFO depth DOES set the rate. Their nodes are balanced within a few % of the budget and move whole rows in bursts (zero insertion, strided window, upsampler), so with FINN's 2-word FIFOs they run well over the MILP's cycles: 512x512 INT6, down1 +29 %, down2 +26 %, up4 +81 %, up5 +48 %. Uniform depth sweep (steady cyc/px against the target): down1 23.24 / 21.93 / 20.18 / 18.01 at 2 / 8 / 16 / 32, down2 90.61 / 81.14 / 72.05 / 72.03, up4 28.97 / 24.41 / 21.41 / 16.00, up5 5.93 / 5.12 / 4.37 / 4.00; 64 changes nothing. So every intra-block FIFO of a down / up block starts at `bottleneck.BLOCK_FIFO_DEPTH = 32` (sims and `fifo_model.py`; regular blocks stay at 2 and reach +/- 1.5 %). That is a property of the block, not a rate escalation, and costs the same as depth 4 (SRL32).
+
+## FIFO simulation of a MILP folding: `net_explicit.py` (state 2026-10-15)
+
+Both stages use a PACED source at the MILP target (a saturated source lets the FIFOs run ahead and hides the rate problem), the same `--max-iterations` (default 5), a 5 % tolerance, and a growth limit of 5 steps.
+* **Intra-block** (`bottleneck.iterate_sizing`, each block alone, 3 frames): seed = the MILP depths (down / up blocks start at 32). Per iteration: ONE doubling of the FIFOs at capacity when the block deadlocks or misses its MILP cycles by more than 5 %,
+  then shrink to the observed occupancy and verify (deadlock, rate, paced deadlock check). No FIFO grows past 2**5 = 32x its start. Skip / join FIFOs are not doubled: they take the paced run's measured need (the other branch's latency).
+  A sizing reached by growing is kept only if it is more than 1 % faster than the seed run (`MIN_IMPROVEMENT`); a block still more than 5 % over its target is only warned about.
+* **Inter-block** (`size_interfaces`, the whole net chained, blocks frozen, 3 frames, source paced at the MILP frame cycles): interfaces start at depth 2. Per iteration: one x4 step (2 -> 8 -> 32 ...) of the full (deadlock) or at-capacity (rate miss > 5 %)
+  interfaces, then shrink to the observed peak occupancy and verify; at most 5 steps. The depths handed back are the best grown state only if it is more than 1 % faster than the depth-2 baseline, else depth 2. Nothing intra-block is resized here:
+  a chain still over 5 % of the MILP target is warned about with the slowest blocks named.
+* Roles missing from the folding's per-site bits use `--fallback-bits` (default 8) and are warned about.

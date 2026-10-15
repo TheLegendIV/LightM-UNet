@@ -61,7 +61,8 @@ CANDIDATE_BITS = (2, 4, 6, 8, 16)
 INPUT_HW = (512, 512)
 RAM_STYLES = (RAM_STYLE_BLOCK, "distributed")  # the standalone Thresholding node's memory -- the only free RAM choice
 SENSITIVITY_OBJ_SCALE = 1e6  # objective scale of the accuracy term (solver tolerance, see solve_joint_perlayer)
-MIN_DSR_EPS = 0.001  # --min-dsr: relative slack of pass 1's optimal total stall that pass 2 may spend on resources
+MIN_BRAM_EPS = 0.001  # --min-bram: relative slack of pass 1's optimal BRAM18 count that pass 2 may spend on the other resources
+MIN_STALL_EPS = 0.001  # --min-stall: relative slack of pass 1's optimal total stall that pass 2 may spend on resources
 
 VARIANT_RTL_DSP_NOACT1 = "rtl_dsp_noact1"  # standalone Thresholding_rtl after an MVAU_rtl; SWU line buffer in LUTRAM (FINN's default `ram_style="distributed"`)
 VARIANT_RTL_DSP_NOACT1_SWU_BLOCK = "rtl_dsp_noact1_swu_block"  # same, with the SWU line buffer in BRAM (`ram_style="block"`); offered to every layer that has a window (SWU_BRAM)
@@ -409,7 +410,6 @@ def solve_joint_perlayer(
     max_lut_fraction: float, max_bram_fraction: float,
     time_limit: int, gap_rel: float, max_cycles: float | None = None,
     pinned_bits: dict[str, tuple[int, int]] | None = None,
-    pinned_fold: dict[str, tuple] | None = None,
     predecessor_map: dict[str, list[str]] | None = None,
     force_dsp: bool = False,
     max_dsp_fraction: float = 1.0,
@@ -421,9 +421,11 @@ def solve_joint_perlayer(
     mvau_wwidth_max: int | None = None,
     feasibility_only: bool = False,
     dsr_pct: float | None = None,
-    min_dsr: bool = False,
+    min_stall: bool = False,
+    min_bram: bool = False,
     max_fps: bool = False,
     max_fps_eps: float = 0.001,
+    max_accuracy_eps: float = 0.001,
 ) -> dict:
     """Build and solve the MILP. Formulation: finn_milp.md "Formulation".
     feasibility_only: zero objective (any feasible point is Optimal)."""
@@ -539,16 +541,6 @@ def solve_joint_perlayer(
                     z[key].upBound = 0
                     n_wwidth_blocked += 1
 
-    # pinned_fold {node name: (pe, simd, ram_style[, variant])}: every other fold option of that node is switched off; the bits stay free (--refine-bits, pass 3).
-    if pinned_fold is not None:
-        missing = (set(layer_names) | set(extra_keys)) - set(pinned_fold)
-        if missing:
-            raise ValueError(f"pinned_fold is missing node(s): {sorted(missing)[:5]}")
-        for key in z:
-            pf = pinned_fold[key[0]]
-            if tuple(key[1:1 + len(pf)]) != tuple(pf):
-                z[key].upBound = 0
-
     layer_cycles_expr: dict[str, pulp.LpAffineExpression] = {
         name: pulp.lpSum(zvar * cyc for zvar, cyc in terms) for name, terms in layer_cycle_terms.items()
     }
@@ -612,10 +604,10 @@ def solve_joint_perlayer(
     # is tiny (a 4-channel threshold at PE 1 = 65,536 cycles) while the conv behind them cannot be faster than ~131,072 under the width cap, so an edge rule on them is infeasible
     # at any small pct. Nodes pick from a few distinct cycle values, so the disjunction becomes pair exclusions on cycle-class indicators (no big-M, no slack variable).
     n_dsr_constraints = 0
-    dsr_edges: list[tuple[str, str]] = []          # (P, C): compute node C and each of its nearest compute ancestors P (for the hard rule, the --min-dsr stall and the dsr_balance diagnostics)
+    dsr_edges: list[tuple[str, str]] = []          # (P, C): compute node C and each of its nearest compute ancestors P (for the hard rule, the --min-stall stall and the dsr_balance diagnostics)
     stall_vars: list = []
-    if min_dsr and (max_node_cycles is None or dataflow_map is None):
-        raise ValueError("--min-dsr needs --target-fps and the dataflow graph.")
+    if min_stall and (max_node_cycles is None or dataflow_map is None):
+        raise ValueError("--min-stall needs --target-fps and the dataflow graph.")
     if dsr_pct is not None and max_node_cycles is not None and dataflow_map is None:
         raise ValueError("--dsr-pct needs the dataflow graph (dataflow_map).")
     if max_node_cycles is not None and dataflow_map is not None:
@@ -657,8 +649,8 @@ def solve_joint_perlayer(
                     if bad:
                         prob += pulp.lpSum(zs1) + pulp.lpSum(bad) <= 1, f"dsr_{n_dsr_constraints}"
                         n_dsr_constraints += 1
-        if min_dsr:
-            # --min-dsr: per DSR edge a stall variable s_e >= cycles[C] - cycles[P], s_e >= 0 (linear: the cycles of a node are linear in its fold variables); pass 1 minimises sum(s_e).
+        if min_stall:
+            # --min-stall: per DSR edge a stall variable s_e >= cycles[C] - cycles[P], s_e >= 0 (linear: the cycles of a node are linear in its fold variables); pass 1 minimises sum(s_e).
             for i, (p_name, c_name) in enumerate(dsr_edges):
                 sv = pulp.LpVariable(f"stall_{i}", lowBound=0)
                 prob += sv >= layer_cycles_expr[c_name] - layer_cycles_expr[p_name], f"stall_def_{i}"
@@ -703,6 +695,7 @@ def solve_joint_perlayer(
         + pulp.lpSum(z[k] * raw_dsp[k] for k in z) / XCZU7EV["DSP"]
     )
     stall_total = pulp.lpSum(stall_vars)
+    bram_total = pulp.lpSum(z[k] * raw_bram[k] for k in z) + fifo_bram          # BRAM18 of the whole design (nodes + modelled FIFOs / DWCs), the quantity the BRAM budget row caps
     if max_fps:
         # --max-fps: F >= cycles of every node (layers and extra nodes), pass 1 minimises F = the slowest node's frame cycles = maximises FPS; pass 2 (below) minimises resources at that F.
         frame_cycles = pulp.LpVariable("frame_cycles", lowBound=0)
@@ -712,7 +705,9 @@ def solve_joint_perlayer(
         prob += pulp.LpAffineExpression([(next(iter(y.values())), 0)])
     elif max_fps:
         prob += frame_cycles
-    elif min_dsr:
+    elif min_bram:
+        prob += bram_total                                    # pass 1: the fewest BRAM18 of the whole design; pass 2 (below) minimises resources at that BRAM count
+    elif min_stall:
         prob += stall_total / max_node_cycles                 # pass 1: total stall in units of the per-node budget F; pass 2 (below) minimises resources under this stall
     elif min_resources:
         # --min-resources: replace the accuracy objective by the equal-weight mean of the
@@ -734,7 +729,7 @@ def solve_joint_perlayer(
     status_name = pulp.LpStatus[status]
     if status_name not in ("Optimal", "Infeasible"):
         raise RuntimeError(f"per-layer ILP hit an unexpected solver status: {status_name!r}.")
-    min_dsr_info = None
+    min_stall_info = None
     max_fps_info = None
     if max_fps and status_name == "Optimal":
         cycles1 = pulp.value(frame_cycles)
@@ -745,15 +740,38 @@ def solve_joint_perlayer(
         if status_name != "Optimal":
             raise RuntimeError(f"--max-fps pass 2 is {status_name!r} although pass 1 was Optimal.")
         max_fps_info = {"pass1_frame_cycles": cycles1, "eps": max_fps_eps}
-    if min_dsr and status_name == "Optimal":
+    if min_stall and status_name == "Optimal":
         stall1 = pulp.value(stall_total) or 0.0
-        prob += stall_total <= stall1 * (1 + MIN_DSR_EPS) + 1e-6, "min_dsr_roof"
+        prob += stall_total <= stall1 * (1 + MIN_STALL_EPS) + 1e-6, "min_stall_roof"
         prob.setObjective(resources_obj)                      # pass 2: cheapest fold among those within (1 + eps) of the optimal total stall
         status = prob.solve(pulp.PULP_CBC_CMD(msg=0, timeLimit=time_limit, gapRel=gap_rel))
         status_name = pulp.LpStatus[status]
         if status_name != "Optimal":
-            raise RuntimeError(f"--min-dsr pass 2 is {status_name!r} although pass 1 was Optimal.")
-        min_dsr_info = {"pass1_total_stall_cycles": stall1, "pass1_total_stall_over_F": stall1 / max_node_cycles, "eps": MIN_DSR_EPS}
+            raise RuntimeError(f"--min-stall pass 2 is {status_name!r} although pass 1 was Optimal.")
+        min_stall_info = {"pass1_total_stall_cycles": stall1, "pass1_total_stall_over_F": stall1 / max_node_cycles, "eps": MIN_STALL_EPS}
+
+    min_bram_info = None
+    if min_bram and status_name == "Optimal":
+        bram1 = pulp.value(bram_total)
+        prob += bram_total <= bram1 * (1 + MIN_BRAM_EPS) + 1e-6, "min_bram_roof"
+        prob.setObjective(resources_obj)                      # pass 2: cheapest design among those within (1 + eps) of the fewest BRAM18
+        status = prob.solve(pulp.PULP_CBC_CMD(msg=0, timeLimit=time_limit, gapRel=gap_rel))
+        status_name = pulp.LpStatus[status]
+        if status_name != "Optimal":
+            raise RuntimeError(f"--min-bram pass 2 is {status_name!r} although pass 1 was Optimal.")
+        min_bram_info = {"pass1_bram18": bram1, "eps": MIN_BRAM_EPS}
+
+    max_accuracy_info = None
+    accuracy_mode = not (feasibility_only or max_fps or min_stall or min_bram or min_resources)       # the default objective: maximum accuracy, then the cheapest design within eps of it
+    if accuracy_mode and status_name == "Optimal":
+        sens1 = pulp.value(SENSITIVITY_OBJ_SCALE * sensitivity_term)
+        prob += SENSITIVITY_OBJ_SCALE * sensitivity_term <= sens1 * (1 + max_accuracy_eps) + 1e-6, "max_accuracy_roof"
+        prob.setObjective(resources_obj)                      # pass 2: cheapest bits + fold among those within (1 + eps) of the best achievable accuracy proxy (bits are NOT pinned)
+        status = prob.solve(pulp.PULP_CBC_CMD(msg=0, timeLimit=time_limit, gapRel=gap_rel))
+        status_name = pulp.LpStatus[status]
+        if status_name != "Optimal":
+            raise RuntimeError(f"accuracy-mode pass 2 is {status_name!r} although pass 1 was Optimal.")
+        max_accuracy_info = {"pass1_sensitivity_norm_mean": sens1 / SENSITIVITY_OBJ_SCALE, "eps": max_accuracy_eps}
 
     n_binary_vars = len(y) + len(z)
     n_constraints = (
@@ -918,8 +936,8 @@ def solve_joint_perlayer(
             "candidate_bits": list(CANDIDATE_BITS), "n_layers": n_layers,
             "n_binary_vars": n_binary_vars, "n_constraints": n_constraints,
             "dsr": {"pct": dsr_pct if max_node_cycles is not None else None, "n_constraints": n_dsr_constraints},
-            **({"dsr_balance": dsr_balance} if dsr_balance else {}), **({"min_dsr": min_dsr_info} if min_dsr_info else {}),
-            **({"max_fps": max_fps_info} if max_fps_info else {}),
+            **({"dsr_balance": dsr_balance} if dsr_balance else {}), **({"min_stall": min_stall_info} if min_stall_info else {}), **({"min_bram": min_bram_info} if min_bram_info else {}),
+            **({"max_fps": max_fps_info} if max_fps_info else {}), **({"max_accuracy": max_accuracy_info} if max_accuracy_info else {}),
             "min_resources": min_resources, "mvau_wwidth_max": mvau_wwidth_max,
             "n_wwidth_blocked_folds": n_wwidth_blocked,
             # one cycle value whatever the fold; used for the foldable-only element-rate stats
@@ -968,14 +986,12 @@ _SUMMARY_FIELDS = [
     "n_binary_vars", "n_layers", "n_zero_sensitivity_layers", "zero_sensitivity_layers",
     "branch_imbalance_n_diamonds", "branch_imbalance_median_ratio", "branch_imbalance_max_ratio",
     "dsr_pct_setting",
-    "min_dsr", "min_dsr_pass1_stall_cycles",
+    "min_stall", "min_stall_pass1_stall_cycles",
     "dsr_n_edges", "dsr_n_stalling_edges", "dsr_total_stall_cycles", "dsr_total_stall_over_F", "dsr_achieved_pct", "dsr_worst_edge",
     "dsr_period_cycles", "dsr_idle_cycles_total", "dsr_util_lut_weighted", "dsr_util_dsp_weighted",
     "elemrate_n_nodes", "elemrate_median", "elemrate_mean", "elemrate_max", "elemrate_worst_node",
     "elemrate_foldable_n_nodes", "elemrate_foldable_median", "elemrate_foldable_max", "elemrate_foldable_worst_node",
-    "sensitivity_raw_sum", "sensitivity_norm_mean", "lexicographic",
-    "stage1_lut_pct", "stage1_bram_pct", "stage1_dsp_pct", "stage1_sensitivity_raw_sum",
-    "stage2_lut_pct", "stage2_bram_pct", "stage2_dsp_pct", "stage2_sensitivity_raw_sum",
+    "sensitivity_raw_sum", "sensitivity_norm_mean",
 ]
 
 
@@ -1008,8 +1024,8 @@ def _write_run_summary(
         # element-rate ratio (cycles per OUTPUT element, downstream vs upstream; the chain_rate_imbalance diagnostic): measured only, no constraint uses it any more.
         "dsr_pct_setting": args.dsr_pct,
         # rate balance of the SOLVED folding (frame cycles, per DSR edge P -> C): stall = max(0, cycles[C] - cycles[P]); achieved DSR = the worst edge's cycles[C] / cycles[P] - 1;
-        # idle = period - cycles per node (period = the slowest node); utilisation = resource-weighted cycles / period. Written for EVERY run that has --target-fps (not only --min-dsr).
-        "min_dsr": bool(args.min_dsr), "min_dsr_pass1_stall_cycles": diag.get("min_dsr", {}).get("pass1_total_stall_cycles"),
+        # idle = period - cycles per node (period = the slowest node); utilisation = resource-weighted cycles / period. Written for EVERY run that has --target-fps (not only --min-stall).
+        "min_stall": bool(args.min_stall), "min_stall_pass1_stall_cycles": diag.get("min_stall", {}).get("pass1_total_stall_cycles"),
         "dsr_n_edges": diag.get("dsr_balance", {}).get("n_edges"), "dsr_n_stalling_edges": diag.get("dsr_balance", {}).get("n_stalling_edges"),
         "dsr_total_stall_cycles": diag.get("dsr_balance", {}).get("total_stall_cycles"), "dsr_total_stall_over_F": diag.get("dsr_balance", {}).get("total_stall_over_F"),
         "dsr_achieved_pct": diag.get("dsr_balance", {}).get("achieved_dsr_pct"),
@@ -1024,15 +1040,6 @@ def _write_run_summary(
         "elemrate_foldable_max": elem.get("foldable_max_ratio"),
         "elemrate_foldable_worst_node": elem.get("foldable_worst_node"),
         "sensitivity_raw_sum": diag.get("sensitivity_raw_sum"), "sensitivity_norm_mean": diag.get("sensitivity_norm_mean"),
-        "lexicographic": bool(diag.get("lexicographic")),
-        "stage1_lut_pct": diag.get("lexicographic", {}).get("stage1_lut_pct"),
-        "stage1_bram_pct": diag.get("lexicographic", {}).get("stage1_bram_pct"),
-        "stage1_dsp_pct": diag.get("lexicographic", {}).get("stage1_dsp_pct"),
-        "stage1_sensitivity_raw_sum": diag.get("lexicographic", {}).get("stage1_sensitivity_raw_sum"),
-        "stage2_lut_pct": diag.get("lexicographic", {}).get("stage2_lut_pct"),
-        "stage2_bram_pct": diag.get("lexicographic", {}).get("stage2_bram_pct"),
-        "stage2_dsp_pct": diag.get("lexicographic", {}).get("stage2_dsp_pct"),
-        "stage2_sensitivity_raw_sum": diag.get("lexicographic", {}).get("stage2_sensitivity_raw_sum"),
     }
 
     summary_path = out_dir / "summary.csv"
@@ -1049,9 +1056,8 @@ def _write_run_summary(
         "max-lut-fraction": args.max_lut_fraction, "max-bram-fraction": args.max_bram_fraction,
         "max-dsp-fraction": args.max_dsp_fraction, "max-uram-fraction": args.max_uram_fraction, "force-dsp": args.force_dsp,
         "max-latency-ms": args.max_latency_ms, "clock-mhz": args.clock_mhz, "target-fps": args.target_fps,
-        "dsr-pct": args.dsr_pct, "min-dsr": args.min_dsr, "max-fps": args.max_fps, "max-fps-eps": args.max_fps_eps,
+        "dsr-pct": args.dsr_pct, "min-stall": args.min_stall, "min-bram": args.min_bram, "max-fps": args.max_fps, "max-fps-eps": args.max_fps_eps, "max-accuracy-eps": args.max_accuracy_eps,
         "mvau-wwidth-max": args.mvau_wwidth_max, "min-resources": args.min_resources,
-        "lexicographic": args.lexicographic, "refine-bits": args.refine_bits,
         "time-limit": args.time_limit, "gap-rel": args.gap_rel,
     }
     run_args = {
@@ -1163,29 +1169,25 @@ def main() -> None:
                               f"ancestor by at most this much (needs --target-fps; there is no floor: a pct the chain cannot hold is infeasible). Compute nodes = conv/MVAU layers, the pad-MVAU, the argmax; "
                               f"thresholds, dup, add, pools, concat and upsample are relayed through. (Until 2026-10-08 this flag was an element-rate rule; that was removed and the frame-rate rule, "
                               f"formerly --ratchet-pct, took the name.)")
-    parser.add_argument("--min-dsr", action="store_true",
+    parser.add_argument("--min-stall", action="store_true",
                          help="Lexicographic rate balancing (needs --target-fps and ONE --candidate-bits value). Pass 1 minimises the TOTAL STALL: the sum over DSR edges (P -> C, nearest compute ancestors, "
                               "relayed through thresholds / dup / add) of max(0, cycles[C] - cycles[P]), in units of the per-node budget; pass 2 minimises resources (the --min-resources objective) with the "
-                              "total stall capped at (1 + MIN_DSR_EPS = 0.001) x pass 1's optimum. Always feasible (the stall is soft); combine with the default (no hard DSR) or a hard --dsr-pct. "
+                              "total stall capped at (1 + MIN_STALL_EPS = 0.001) x pass 1's optimum. Always feasible (the stall is soft); combine with the default (no hard DSR) or a hard --dsr-pct. "
                               "_diagnostics.dsr_balance (written whenever the dataflow graph and --target-fps are given) reports total stall, stalling edges, achieved DSR pct and idle / utilisation.")
     parser.add_argument("--max-fps", action="store_true",
                          help="Objective = maximum FPS (for FIXED bits: one --candidate-bits value or --pin-bits-file). Pass 1 minimises the slowest node's cycles per frame (the pipeline's frame time); "
                               "pass 2 minimises resources (the --min-resources objective) with the frame time capped at (1 + --max-fps-eps) x pass 1's optimum. --target-fps, if also given, stays a hard "
                               "floor; the FPS reached is in summary.csv (fps) and _diagnostics.max_fps.")
     parser.add_argument("--max-fps-eps", type=float, default=0.001, help="--max-fps: relative slack of pass 1's optimal frame time that pass 2 may spend on resources.")
+    parser.add_argument("--min-bram", action="store_true",
+                         help="Objective = the fewest BRAM18 of the whole design (nodes + modelled FIFOs / DWCs; for FIXED bits, e.g. one --candidate-bits value). Pass 1 minimises the BRAM18 count; pass 2 minimises resources "
+                              "(the --min-resources objective) with the BRAM18 count capped at (1 + MIN_BRAM_EPS = 0.001) x pass 1's optimum. Same shape as --max-fps / --min-stall.")
+    parser.add_argument("--max-accuracy-eps", type=float, default=0.001, help="default objective (maximum accuracy): pass 1 minimises the accuracy proxy (mean normalised |sensitivity|); pass 2 minimises resources with the proxy capped at (1 + eps) x pass 1's optimum, bits and folding free "
+                              "(default 0.001, as --max-fps-eps / MIN_STALL_EPS). Every objective mode has this shape: --max-fps (frame time), --min-stall (stall), default (accuracy); --min-resources is the resource objective itself.")
     parser.add_argument("--mvau-wwidth-max", type=int, default=None,
                          help="Hard cap on weight_bits * SIMD of every dense layer's fold (FINN SetFolding's "
                               "mvau_wwidth_max quantity). Pass the SAME value to FINN's build config so the MILP "
                               "and FINN auto-fold are compared under one width limit. Off by default.")
-    parser.add_argument("--lexicographic", action="store_true",
-                         help="Two passes with the SAME constraints. Pass 1: accuracy objective (sets the bits and a "
-                              "resource roof = its own LUT/BRAM/DSP use). Pass 2: bits pinned to pass 1 (epsilon 0), "
-                              "LUT/BRAM/DSP capped at pass 1's use, objective = --min-resources. Pass 2 only chooses "
-                              "folding. Writes pass 1 next to the output as stage1_<out-file name>.")
-    parser.add_argument("--refine-bits", action="store_true",
-                         help="--lexicographic only: a THIRD pass. Pass 2's folding is pinned (every node's PE / SIMD / RAM style / variant) and the bits are freed again: accuracy objective under the "
-                              "ORIGINAL caps, so the budget pass 2 shaved off is available to the bits. Writes pass 2 next to the output as stage2_<out-file name>; the final output is pass 3 "
-                              "(pass 2 if pass 3 is not Optimal).")
     parser.add_argument("--min-resources", action="store_true",
                          help="Objective = equal-weight mean of LUT/BRAM_18K/DSP fractions of the board instead of "
                               "accuracy. For FIXED bits (one --candidate-bits value or --pin-bits-file): picks the "
@@ -1279,8 +1281,10 @@ def main() -> None:
         print(f"--max-latency-ms {args.max_latency_ms} @ {args.clock_mhz}MHz -> max_cycles={max_cycles:.0f} "
               f"(hard constraint).")
 
-    if args.max_fps and (args.min_dsr or args.lexicographic or args.min_resources):
-        raise SystemExit("--max-fps is its own two-pass mode (frame time, then resources): drop --min-dsr / --lexicographic / --min-resources.")
+    if args.max_fps and (args.min_stall or args.min_resources or args.min_bram):
+        raise SystemExit("--max-fps is its own two-pass mode (frame time, then resources): drop --min-stall / --min-resources / --min-bram.")
+    if args.min_bram and (args.min_stall or args.min_resources or args.pin_bits_file):
+        raise SystemExit("--min-bram is its own two-pass mode (BRAM18, then resources): drop --min-stall / --min-resources / --pin-bits-file.")
     if args.max_fps and len(CANDIDATE_BITS) > 1 and args.pin_bits_file is None:
         print(f"WARNING: --max-fps with candidate bits {CANDIDATE_BITS} and no --pin-bits-file: pass 2 minimises resources, so it will pick the cheapest (lowest) bits among the fastest folds.")
 
@@ -1292,75 +1296,11 @@ def main() -> None:
         max_node_cycles=max_node_cycles,
         min_resources=args.min_resources, mvau_wwidth_max=args.mvau_wwidth_max,
         extra_nodes=extra_nodes, dataflow_map=dataflow_map,
-        dsr_pct=args.dsr_pct, min_dsr=args.min_dsr,
-        max_fps=args.max_fps, max_fps_eps=args.max_fps_eps,
+        dsr_pct=args.dsr_pct, min_stall=args.min_stall, min_bram=args.min_bram,
+        max_fps=args.max_fps, max_fps_eps=args.max_fps_eps, max_accuracy_eps=args.max_accuracy_eps,
     )
-    if args.min_dsr and (args.lexicographic or args.pin_bits_file):
-        raise SystemExit("--min-dsr is its own two-pass mode (stall, then resources): drop --lexicographic / --pin-bits-file.")
-    if args.refine_bits and not args.lexicographic:
-        raise SystemExit("--refine-bits is the third pass of --lexicographic: add --lexicographic.")
-    if args.lexicographic:
-        if args.min_resources or args.pin_bits_file is not None:
-            raise SystemExit("--lexicographic already does its own pinning and min-resources; drop --min-resources/--pin-bits-file.")
-        if result["status"] == "Optimal":
-            d1 = result["_diagnostics"]
-            stage1 = {k: result[k] for k in ("status", "layer_weight_bits", "layer_act_bits", "per_layer", "extra_nodes", "_diagnostics")}
-            stage1_path = args.out_file.parent / f"stage1_{args.out_file.name}"
-            args.out_file.parent.mkdir(parents=True, exist_ok=True)
-            stage1_path.write_text(json.dumps(stage1, indent=2))
-            print(f"--lexicographic: pass 1 (accuracy) Optimal -> {stage1_path}; pass 2 pins its bits and minimizes resources "
-                  f"under roof LUT {d1['lut_pct_of_budget']:.2f}% BRAM {d1['bram_pct_of_budget']:.2f}% DSP {d1['dsp_pct_of_budget']:.2f}%.")
-            roof = 1.0 + 1e-6  # float slack: pass 1's own fold must stay feasible
-            pinned2 = {n: (result["layer_weight_bits"][n], result["layer_act_bits"][n]) for n in layer_names}
-            roofs = tuple(d1[k] / 100 * roof for k in ("lut_pct_of_budget", "bram_pct_of_budget", "dsp_pct_of_budget"))
-            result = solve_joint_perlayer(
-                sensitivity, geometries, roofs[0], roofs[1],
-                args.time_limit, args.gap_rel, max_cycles=max_cycles, pinned_bits=pinned2,
-                predecessor_map=predecessor_map, force_dsp=args.force_dsp,
-                max_dsp_fraction=roofs[2], max_uram_fraction=args.max_uram_fraction,
-                max_node_cycles=max_node_cycles,
-                min_resources=True, mvau_wwidth_max=args.mvau_wwidth_max,
-                extra_nodes=extra_nodes, dataflow_map=dataflow_map,
-                dsr_pct=args.dsr_pct, min_dsr=args.min_dsr,
-            )
-            if result["status"] == "Optimal":
-                result["_diagnostics"]["lexicographic"] = {
-                    "stage1_lut_pct": d1["lut_pct_of_budget"], "stage1_bram_pct": d1["bram_pct_of_budget"],
-                    "stage1_dsp_pct": d1["dsp_pct_of_budget"], "stage1_sensitivity_raw_sum": d1["sensitivity_raw_sum"],
-                    "stage1_bottleneck_node": d1["bottleneck_node"], "stage1_file": stage1_path.name,
-                }
-            else:
-                print("WARNING: --lexicographic pass 2 is not Optimal although pass 1's own fold satisfies it -- "
-                      "solver gap/time limit; result is the pass-2 status.")
-            if args.refine_bits and result["status"] == "Optimal":
-                d2 = result["_diagnostics"]
-                stage2 = {k: result[k] for k in ("status", "layer_weight_bits", "layer_act_bits", "per_layer", "extra_nodes", "_diagnostics")}
-                stage2_path = args.out_file.parent / f"stage2_{args.out_file.name}"
-                stage2_path.write_text(json.dumps(stage2, indent=2))
-                print(f"--refine-bits: pass 2 (min resources) Optimal -> {stage2_path}: LUT {d2['lut_pct_of_budget']:.2f}% BRAM {d2['bram_pct_of_budget']:.2f}% DSP {d2['dsp_pct_of_budget']:.2f}%; "
-                      f"pass 3 pins its folding, frees the bits, maximises accuracy under the original caps.")
-                fold_pin = {n: (v["pe"], v["simd"], v["thr_ram_style"], v["variant"]) for n, v in result["per_layer"].items() if n in layer_names}
-                fold_pin.update({n: (v["pe"], v["simd"], v["ram_style"]) for n, v in result["extra_nodes"].items()})
-                result3 = solve_joint_perlayer(
-                    sensitivity, geometries, args.max_lut_fraction, args.max_bram_fraction,
-                    args.time_limit, args.gap_rel, max_cycles=max_cycles, pinned_fold=fold_pin,
-                    predecessor_map=predecessor_map, force_dsp=args.force_dsp,
-                    max_dsp_fraction=args.max_dsp_fraction, max_uram_fraction=args.max_uram_fraction,
-                    max_node_cycles=max_node_cycles,
-                    min_resources=False, mvau_wwidth_max=args.mvau_wwidth_max,
-                    extra_nodes=extra_nodes, dataflow_map=dataflow_map,
-                    dsr_pct=args.dsr_pct, min_dsr=args.min_dsr,
-                )
-                if result3["status"] == "Optimal":
-                    result3["_diagnostics"]["lexicographic"] = {
-                        **d2["lexicographic"],
-                        "stage2_lut_pct": d2["lut_pct_of_budget"], "stage2_bram_pct": d2["bram_pct_of_budget"],
-                        "stage2_dsp_pct": d2["dsp_pct_of_budget"], "stage2_sensitivity_raw_sum": d2["sensitivity_raw_sum"],
-                        "stage2_file": stage2_path.name, "refine_bits": True,
-                    }
-                    result = result3
-                else:
-                    print(f"WARNING: --refine-bits pass 3 is {result3['status']!r} although pass 2's own solution satisfies it -- solver gap/time limit; result stays pass 2.")
+    if args.min_stall and args.pin_bits_file:
+        raise SystemExit("--min-stall is its own two-pass mode (stall, then resources): drop --pin-bits-file.")
     hardware_nodes = [*geometries, *(node.geom for node in extra_nodes)]
     result["dataflow_graph"] = {
         "input": [IN_CHANNELS, *INPUT_HW],

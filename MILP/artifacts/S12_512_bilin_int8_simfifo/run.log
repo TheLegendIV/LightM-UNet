@@ -1,0 +1,13 @@
+Wrote /tmp/tmpdiktf6fs/sites.json (85 weight sites, 110 act sites).
+S12_512_bilin_int8_simfifo: up blocks built WITH the frozen depthwise conv (up4.main_up.1, up5.main_up.1)
+S12_512_bilin_int8_simfifo: 29 blocks built from the MILP folding (0 warnings)
+simulating 29 blocks (12 distinct shapes), 3 workers
+  WARNING (rate, not a failure): stage2.3 reaches 81.99 vs its target 78.06 cyc/px (+5.02% > the 5% tolerance), frame period 335816; FIFOs sized deadlock-free only
+  WARNING (rate, not a failure): stage2.7 reaches 81.99 vs its target 78.06 cyc/px (+5.02% > the 5% tolerance), frame period 335816; FIFOs sized deadlock-free only
+  WARNING (rate, not a failure): stage3.3 reaches 81.99 vs its target 78.06 cyc/px (+5.02% > the 5% tolerance), frame period 335816; FIFOs sized deadlock-free only
+  WARNING (rate, not a failure): stage3.7 reaches 81.99 vs its target 78.06 cyc/px (+5.02% > the 5% tolerance), frame period 335816; FIFOs sized deadlock-free only
+whole-net chain: pass = no deadlock; period reported against the slowest block 335816 (+5%) and the MILP cap 333333; inter-block depth 2, up to 1 round(s)
+  chain round 1: deadlock=False period=402255 (slowest block 335816, tolerance limit 352607, within=False) first_out=649236 full=0 [690 s]
+  WARNING (rate, not a failure): whole-net period 402255 is +19.78% over the slowest block's own 335816 (tolerance 5%), +20.68% over the MILP cap 333333; deadlock-free
+S12_512_bilin_int8_simfifo: wrote MILP/artifacts/S12_512_bilin_int8_simfifo/layer_bits_folding_S12_512_bilin_int8_simfifo.json
+  blocks deadlocking alone: 0, chain deadlock-free: True, within tolerance: False, intra FIFO BRAM18 186.0 (MILP) -> 196 (sim)

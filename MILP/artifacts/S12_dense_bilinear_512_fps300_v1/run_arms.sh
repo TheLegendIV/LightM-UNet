@@ -1,6 +1,6 @@
 #!/bin/bash
 # S12 dense bilinear-512 (config_12_dense_relu_warmstart150ep), $FPS (default 300) FPS @ $CLOCK (default 100) MHz (the maxpool floor is ~305 FPS at 100 MHz; 350+ is infeasible).
-# --lexicographic: pass 1 = accuracy objective (least sensitivity), pass 2 = bits pinned, minimise resources under pass 1's own use.
+# default objective (2026-10-15): pass 1 = accuracy (least |sensitivity|), pass 2 = cheapest design with the proxy within 0.1 % of pass 1's optimum (bits and folding free). Until then this script used --lexicographic / --refine-bits (removed).
 #   bits468 / bits68       : candidate bits 4,6,8 / 6,8; caps LUT 0.7 / BRAM 0.9 / DSP 0.9 (URAM 1.0, inert)
 #   bits468_r2 / bits68_r2 : round 2 -- same bits, but the caps are the RESOURCES OF THE BASE ARM'S PASS-2 RESULT (summary.csv lut/bram/dsp_pct_of_budget, rounded UP to 4 decimals so
 #                            that result stays feasible): max accuracy under those caps, then min resources again.
@@ -17,8 +17,7 @@ HERE=MILP/artifacts/S12_dense_bilinear_512_fps${FPS}_v1${TAG:-}
 CONFIG=config_12_dense_relu_warmstart150ep
 ARMS=("$@"); if [ ${#ARMS[@]} -eq 0 ]; then ARMS=(bits468 bits68); fi
 solve() {
-  local arm=$1 base=${1%_r2} lut=${CAP_LUT:-0.7} bram=${CAP_BRAM:-0.9} dsp=${CAP_DSP:-0.9} bits refine=""      # CAP_LUT / CAP_BRAM / CAP_DSP override the default caps
-  base=${base%_refine}; [ "$arm" != "${arm%_refine}" ] && refine="--refine-bits"
+  local arm=$1 base=${1%_r2} lut=${CAP_LUT:-0.7} bram=${CAP_BRAM:-0.9} dsp=${CAP_DSP:-0.9} bits      # CAP_LUT / CAP_BRAM / CAP_DSP override the default caps
   base=${base%_swubram}
   bits=$(echo "${base#bits}" | sed 's/./&,/g; s/,$//')       # 468 -> 4,6,8 ; 68 -> 6,8
   if [ "$arm" != "${arm%_r2}" ]; then
@@ -32,7 +31,7 @@ P
   mkdir -p "$HERE/$arm"
   echo "$arm: bits $bits caps LUT $lut BRAM $bram DSP $dsp" > "$HERE/$arm/solve.log"
   python3 MILP/finn_milp.py --config $CONFIG --sensitivity-file $SENS \
-    --candidate-bits "$bits" --force-dsp --lexicographic $refine --max-lut-fraction $lut --max-bram-fraction $bram --max-dsp-fraction $dsp --max-uram-fraction 1.0 \
+    --candidate-bits "$bits" --force-dsp --max-lut-fraction $lut --max-bram-fraction $bram --max-dsp-fraction $dsp --max-uram-fraction 1.0 \
     --target-fps $FPS --clock-mhz $CLOCK --time-limit 900 --gap-rel 0.001 --out-file "$HERE/$arm/layer_bits_folding_$arm.json" >> "$HERE/$arm/solve.log" 2>&1
 }
 pids=(); for arm in "${ARMS[@]}"; do solve "$arm" & pids+=($!); done

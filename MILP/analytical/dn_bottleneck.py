@@ -82,6 +82,7 @@ def model_dn_bottleneck(
     ))
     if bits_map:
         res.params["bits_map"] = dict(rb.map)
+        res.params["bits_fallback"] = sorted(rb.fallback)
 
     # ---- geometries
     g_r = _geom("reduce", cin, cmid, height, width, ho, wo, k=2, s=2, d=1, p=0)
@@ -274,7 +275,7 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
     seeds (net_explicit.py): {'skip': words, 'main': words, 'prefetch': words} = the MILP's own depths of this block's FIFOs (a key it does not list falls back to the analytic estimate). The sizing STARTS there
     and may raise or lower any FIFO: skip / join FIFOs go to the paced run's measured need (+ one pixel); every other FIFO is sized by bottleneck.iterate_sizing, at most max_iterations rounds of
     (grow the FIFOs that hit their capacity until T is reached within reach_tol and nothing deadlocks -> shrink every FIFO to its observed occupancy and check cycles, deadlock and the paced run again);
-    no FIFO grows past SEED_MAX_MULT (6, i.e. +500 %) times its start. Only a deadlock raises."""
+    no FIFO grows past SEED_MAX_MULT (2**5 = 32, i.e. at most 5 doublings) times its start. Only a deadlock raises."""
     from dn_bottleneck_sim import UNBOUNDED, simulate_dn
 
     p = r.params
@@ -298,7 +299,7 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
     paced = simulate_dn(r, inject_interval=p["T_in"], skip_depth=UNBOUNDED, fifo_depth=fifo_depth, elastic_map=emap, frames=2)
     need = paced.fifo_max["skip FIFO"]
     if seeded:
-        d = _seed_clip(r, "skip FIFO", need + words_px, s_skip) if seeds.get("skip") else need + words_px      # the +500 % limit is on depths the MILP gave; an unlisted FIFO takes its measured need
+        d = _seed_clip(r, "skip FIFO", need + words_px, s_skip) if seeds.get("skip") else need + words_px      # the 5-doubling limit is on depths the MILP gave; an unlisted FIFO takes its measured need
         if d != s_skip:
             r.warnings.append(f"skip FIFO set from the start {s_skip} to {d} words by simulation")
             _set_skip(r, d, words_px)
@@ -311,7 +312,7 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
     emap0 = dict(emap)
     if seeded:
         def run(D):
-            return simulate_dn(r, inject_interval=0, skip_depth=r.skip_fifo.depth_words, fifo_depth=fifo_depth, elastic_map=emap0, fifo_depths=D, frames=3)
+            return simulate_dn(r, inject_interval=p["T_in"], skip_depth=r.skip_fifo.depth_words, fifo_depth=fifo_depth, elastic_map=emap0, fifo_depths=D, frames=3)
 
         def prun(D):
             return simulate_dn(r, inject_interval=p["T_in"], skip_depth=r.skip_fifo.depth_words, fifo_depth=fifo_depth, elastic_map=emap0, fifo_depths=D, frames=2)

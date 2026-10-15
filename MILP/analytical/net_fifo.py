@@ -47,11 +47,11 @@ def verified_depths(r) -> dict:
     return {n: f["depth"] for n, f in r.fifo_graph["fifos"].items() if f["producer"] != "Source" and f["consumer"] != "Sink"}
 
 
-def capture_block(kind: str, r, frames: int = DEFAULT_FRAMES) -> dict:
-    """Build (not run) the block's simulation network with its verified intra-block depths, saturated source, `frames` back-to-back frames."""
+def capture_block(kind: str, r, frames: int = DEFAULT_FRAMES, inject_interval: float = 0) -> dict:
+    """Build (not run) the block's simulation network with its verified intra-block depths, `frames` back-to-back frames, source = saturated (inject_interval 0) or paced (cycles per input pixel)."""
     CAPTURE["out"] = out = []
     try:
-        _sim_of(kind)(r, inject_interval=0, fifo_depths=verified_depths(r), frames=frames)
+        _sim_of(kind)(r, inject_interval=inject_interval, fifo_depths=verified_depths(r), frames=frames)
     finally:
         CAPTURE["out"] = None
     b = out[0]
