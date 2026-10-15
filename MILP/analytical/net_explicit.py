@@ -9,10 +9,12 @@ BOTH stages use a PACED source at the MILP's target (not a saturated one, which 
   1. INTRA-block, every block alone (paced at its own MILP cycles, 3 frames, full control over its FIFOs): per iteration grow the FIFOs that hit capacity until the block sustains its MILP cycles within 5 % and nothing
      deadlocks, then shrink every FIFO to its observed occupancy and check again (bottleneck.iterate_sizing); no FIFO is doubled more than 5 times (2**5 = 32x the depth it starts from, SEED_MAX_MULT). Skip / join FIFOs go to the paced
      run's measured need. A block still slower than its target by more than 5 % is WARNED about (`rate.exceeds_tolerance`): that points at the MILP's model (e.g. the window-fill gap of the dilated convs), not at the FIFOs;
-  2. INTER-block, the whole net chained (paced at the MILP's frame cycles, 3 frames, intra-block FIFOs and block simulations FROZEN): per iteration (--max-iterations) a deadlock grows the interface FIFOs that are full, a
-     chain slower than the target by more than 5 % grows the interface FIFOs at capacity, grown x4 once per iteration (2 -> 8 -> 32 ...), at most 5 steps, then shrunk to the observed occupancy and re-verified; the grown depths are kept only if the net is > 1 % faster than at depth 2. The deadlock check is part of every run. At the FINAL
-     stage every interface is shrunk to its observed peak occupancy regardless of the tolerance, the net is re-simulated and the shrunk depths are handed back only if it does not deadlock and is not slower (0.1 %).
-     Nothing intra-block is ever resized here: a chain still beyond 5 % of the MILP target is only WARNED about, with the slowest blocks named as the bottleneck candidates.
+  2. BLOCK PAIRS (net_pairs.py, 2026-10-16): every adjacent pair is run with the producer's source PACED at the MILP target. A pair more than 5 % above max(MILP target, the two blocks' own periods) is relaxed: first the
+     interface FIFO (x4 per step, 5 steps, kept only if > 1 % faster), then -- when even an unbounded interface does not bring it within 5 % -- the PRODUCER's output chain (expand MVAU, its threshold, skip threshold,
+     add, out_act) one divisor of Cout at a time, repriced with finn_milp's cost model, rejected when it would break a cap of the MILP (the folding json's _diagnostics.max_*_fraction), the producer re-simulated.
+     Changes are logged (`sim_folding_changes`, `fifo_sim.boundary`) and written into per_layer / extra_nodes;
+  3. WHOLE NET, one paced run on the result: a deadlock check and a target check with warnings (a rate miss does not fail the run; a deadlock does). When the pair stage changed anything, the original MILP folding at
+     interface depth 2 is run in parallel and the changes are kept only if they make the whole net more than 1 % faster, else the run falls back to the original folding. Nothing is resized here.
 Output `layer_bits_folding_<tag>.json` = the MILP json with `intra_block_fifos` (every FIFO of the simulation, in the FINN bridge's role vocabulary, with the MILP's own
 depth estimate next to it where the MILP listed the FIFO), `inter_block_fifos`, `block_verification`, `fifo_sim` (what was found / grown) and the FIFO totals; the folding is untouched.
 """
@@ -26,6 +28,7 @@ import os
 import pickle
 import sys
 import time
+from multiprocessing import Pool
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -35,17 +38,12 @@ for p in (REPO / "enet", REPO / "MILP", REPO / "MILP" / "utils", REPO / "MILP" /
 import finn_milp  # noqa: E402
 import net_fifo  # noqa: E402
 import net_fold  # noqa: E402
-from bottleneck import MAX_DOUBLINGS, MIN_IMPROVEMENT, fifo_memory, finalize_fifo_costs  # noqa: E402
+import net_pairs  # noqa: E402
+from bottleneck import MIN_IMPROVEMENT, fifo_memory, finalize_fifo_costs  # noqa: E402
 from node_names import block_output_name, milp_node  # noqa: E402
 
 WARN_TOLERANCE = 0.05               # a rate more than 5 % past its target is printed as a WARNING (never sizes anything, never fails); not a CLI option
 FRAMES = 3
-IFACE_GROWTH = 4                  # an inter-block FIFO that is full (deadlock) or at capacity (rate miss) grows x4 per whole-net iteration (2 -> 8 -> 32 -> ...) ...
-IFACE_MAX_DEPTH = net_fifo.MIN_DEPTH * IFACE_GROWTH ** MAX_DOUBLINGS      # ... at most 5 growth steps (the default --max-iterations): 2 -> 2048 words
-IFACE_MIN_IMPROVEMENT = MIN_IMPROVEMENT                    # the grown depths are kept only when the whole net is more than 1 % faster than at the depth-2 baseline; otherwise depth 2 stays
-
-
-# ---------------------------------------------------------------------------------------------- MILP entry -> explicit folds
 LEGACY_FINAL_BIAS_PE = 1   # PE of the final block's bias add (ChannelwiseOp) for folding jsons from BEFORE the MILP had a `final.bias` node (2026-10-11): the real build's value; newer jsons carry the PE
 
 
@@ -269,92 +267,51 @@ def _chain_once(blocks: list, depths: list[int], F_target: int, tol: float, inte
     return res, info
 
 
-def choose_interface_state(baseline: dict, states: list[dict], min_improvement: float) -> dict:
-    """The depths to hand back: the best (lowest period, then fewest words) deadlock-free state that went through a growth AND is more than `min_improvement` faster than the baseline; the baseline
-    (depth 2) when there is none. A deadlocked baseline has nothing to beat: every deadlock-free grown state qualifies."""
-    ok = [i for i in states if i.get("grown") and not i["deadlock"] and i["period"] is not None
-          and (baseline["deadlock"] or baseline["period"] is None or i["period"] <= baseline["period"] * (1 - min_improvement))]
-    if not ok:
-        return baseline
-    return min(ok, key=lambda i: (i["period"], sum(i["interface_depths"])))
+own_period = net_pairs.own_period
 
 
-def size_interfaces(blocks: list, F_target: int, tol: float, max_iterations: int, log=print) -> dict:
-    """INTER-block FIFO sizing on the whole net, the same loop as the intra-block sizing (bottleneck.iterate_sizing) on the interface FIFOs. The source is paced at F_target frame cycles (the MILP's own
-    target); nothing intra-block is resized. Start: every interface at net_fifo.MIN_DEPTH. A baseline run first, then per iteration (at most max_iterations, default 5):
-      1. ONE GROWTH STEP when the chain deadlocks (the full interfaces) or is slower than F_target * (1 + tol) (the interfaces whose peak occupancy reached their depth): x IFACE_GROWTH (4: 2 -> 8 -> 32 ...),
-         at most MAX_DOUBLINGS (5) steps; run again;
-      2. SHRINK every interface to its observed peak occupancy (>= net_fifo.MIN_DEPTH) and run again: accepted when it does not deadlock and is no slower than the run it shrinks (0.1 %) or is within the
-         tolerance -- so what is handed back has always been deadlock-checked, tolerance met or not.
-    Ends early when an iteration changes nothing. The depths handed back (choose_interface_state): the best grown state if it is more than 1 % faster than the depth-2 baseline, else the BASELINE (growth that does
-    not pay is discarded). `ok` = they are deadlock-free. `within_tolerance` = their period is within F_target * (1 + tol); if not, the caller warns (the intra-block FIFOs are not touched here) and names the slowest blocks."""
-    n = len(blocks)
-    interval = F_target / _input_pixels(blocks[0][2])
-    depths = [net_fifo.MIN_DEPTH] * (n - 1)
-    limit = F_target * (1 + tol)
-    rounds, grown, shrinks = [], {}, []
-
-    def run(depths_now, phase, is_grown):
-        _, info = _chain_once(blocks, depths_now, F_target, tol, interval, len(rounds) + 1)
-        info["phase"], info["grown"] = phase, is_grown
-        rounds.append(info)
-        log(f"  inter-block {phase}: deadlock={info['deadlock']} period={info['period']} ({info['vs_target_pct']}% vs the MILP target {F_target}, limit {limit:.0f}, within={info['within_tolerance']}) "
-            f"max depth {max(depths_now)}, sum {sum(depths_now)}, {len(info['full'])} full FIFO(s) [{info['seconds']} s]", flush=True)
-        return info
-
-    baseline = cur = run(depths, "baseline (depth 2)", False)
-    went_up = False
-    for it in range(1, max_iterations + 1):
-        changed = False
-        if cur["deadlock"] or not cur["within_tolerance"]:
-            if cur["deadlock"]:
-                targets = [j for j in cur["full_interfaces"] if depths[j] < IFACE_MAX_DEPTH]
-                for name in cur["full"]:
-                    if not name.startswith("iface"):
-                        log(f"    full intra-block FIFO {name} (not resized here)", flush=True)
-            else:
-                targets = [j for j, m in enumerate(cur["iface_max"]) if m >= depths[j] and depths[j] < IFACE_MAX_DEPTH]
-            if targets:
-                for j in targets:
-                    old = depths[j]
-                    depths[j] = min(old * IFACE_GROWTH, IFACE_MAX_DEPTH)
-                    grown.setdefault(j, [old, old])[1] = depths[j]
-                went_up = True
-                cur = run(depths, f"iteration {it} grow {len(targets)} interface(s) x{IFACE_GROWTH}", True)
-                cur["grown_interfaces"] = [f"iface{j} ({blocks[j][0]} -> {blocks[j + 1][0]})" for j in targets]
-                changed = True
-            else:
-                log("    no full / at-capacity interface below its growth limit -- nothing to grow", flush=True)
-        if not cur["deadlock"]:
-            small = [max(net_fifo.MIN_DEPTH, min(d, m)) for d, m in zip(depths, cur["iface_max"])]
-            if small != depths:
-                info = run(small, f"iteration {it} shrink to the observed occupancy", went_up)
-                accepted = (not info["deadlock"]) and info["period"] is not None and (info["period"] <= cur["period"] * 1.001 or info["within_tolerance"])
-                shrinks.append(dict(iteration=it, accepted=bool(accepted), period=info["period"], deadlock=info["deadlock"], sum_before=sum(depths), sum_after=sum(small)))
-                log(f"    shrink {'KEPT' if accepted else 'rejected, previous depths kept'} (sum {sum(depths)} -> {sum(small) if accepted else sum(depths)})", flush=True)
-                if accepted:
-                    depths, cur = small, info
-                    changed = True
-        if not changed:
-            break
-    chosen = choose_interface_state(baseline, rounds, IFACE_MIN_IMPROVEMENT)
-    discarded = chosen is baseline and went_up
-    if discarded:
-        best_p = min((i["period"] for i in rounds if i.get("grown") and not i["deadlock"] and i["period"] is not None), default=None)
-        log(f"  growth DISCARDED: the best grown state ({best_p}) is not more than {100 * IFACE_MIN_IMPROVEMENT:g}% faster than the depth-2 baseline ({baseline['period']}) -> depth 2 kept", flush=True)
-    ok = not chosen["deadlock"]
-    slowest = sorted(((own_period(r), stage) for stage, _, r in blocks), reverse=True)[:3]
-    return dict(ok=ok, within_tolerance=bool(ok and chosen["within_tolerance"]), rounds=rounds, interface_depths=list(chosen["interface_depths"]), growth_discarded=bool(discarded),
-                min_improvement_pct=round(100 * IFACE_MIN_IMPROVEMENT, 2), baseline_period=baseline["period"],
-                grown=[dict(where="iface", fifo=f"iface{j}", depth_before=v[0], depth_after=v[1]) for j, v in grown.items()], shrink=shrinks, last=chosen, target=F_target, limit=limit, milp_cap=F_target,
-                tolerance_pct=round(100 * tol, 2), pace_cycles_per_input_px=round(interval, 4), growth=IFACE_GROWTH, max_depth=IFACE_MAX_DEPTH, max_iterations=max_iterations,
-                bottleneck_candidates=[dict(block=stage, period_cycles=p) for p, stage in slowest])
+def keep_changes(base: dict, mod: dict, min_improvement: float) -> bool:
+    """The pair stage's changes survive only when the changed design is more than `min_improvement` faster than the original MILP folding at interface depth 2 (a deadlocked original has nothing to beat)."""
+    if mod["deadlock"] or mod["period"] is None:
+        return False
+    if base["deadlock"] or base["period"] is None:
+        return True
+    return mod["period"] <= base["period"] * (1 - min_improvement)
 
 
-def own_period(r) -> int:
-    """The block's own simulated frame period (annotate_rate's value when it ran, else steady cyc/px x output pixels)."""
-    v = r.verification
-    return int(v["rate"]["period_cycles"]) if "rate" in v else int(v["steady_cyc_px"] * r.params["hout"] * r.params["wout"])
+_JOBS: list | None = None
+
+
+def _chain_job(k: int) -> dict:
+    blocks, depths, F, tol, interval = _JOBS[k]
+    return _chain_once(blocks, depths, F, tol, interval, k + 1)[1]
+
+
+def final_check(blocks_new: list, depths_new: list[int], blocks_orig: list, F: int, tol: float, changed: bool, workers: int = 2, log=print) -> tuple[dict, bool]:
+    """The whole-net stage: ONE paced run of the pair stage's result (deadlock + target check; nothing is resized). With `changed`, the original MILP folding at depth 2 runs in parallel and the changes are
+    kept only if keep_changes says so. Returns (chain report, changes kept)."""
+    global _JOBS
+    interval = F / net_pairs.input_pixels(blocks_new[0][2])
+    n_if = len(blocks_new) - 1
+    _JOBS = [(blocks_new, depths_new, F, tol, interval)] + ([(blocks_orig, [net_fifo.MIN_DEPTH] * n_if, F, tol, interval)] if changed else [])
+    if len(_JOBS) > 1 and workers > 1:
+        with Pool(len(_JOBS)) as pool:
+            infos = pool.map(_chain_job, range(len(_JOBS)))
+    else:
+        infos = [_chain_job(k) for k in range(len(_JOBS))]
+    mod, base = infos[0], (infos[1] if changed else None)
+    keep = keep_changes(base, mod, MIN_IMPROVEMENT) if changed else True
+    final = mod if keep else base
+    limit = F * (1 + tol)
+    log(f"  whole net (changed design): deadlock={mod['deadlock']} period={mod['period']} ({mod['vs_target_pct']}% vs the MILP target {F}) [{mod['seconds']} s]", flush=True)
+    if changed:
+        log(f"  whole net (original MILP folding, interface depth 2): deadlock={base['deadlock']} period={base['period']} ({base['vs_target_pct']}%) -> pair-stage changes "
+            f"{'KEPT' if keep else 'DISCARDED: not more than %g%% faster than the original' % (100 * MIN_IMPROVEMENT)}", flush=True)
+    slowest = sorted(((own_period(r), stage) for stage, _, r in (blocks_new if keep else blocks_orig)), reverse=True)[:3]
+    chain = dict(ok=not final["deadlock"], within_tolerance=bool(final["within_tolerance"]), rounds=infos, interface_depths=list(depths_new if keep else [net_fifo.MIN_DEPTH] * n_if),
+                 last=final, target=F, limit=limit, milp_cap=F, tolerance_pct=round(100 * tol, 2), pace_cycles_per_input_px=round(interval, 4), changed=bool(changed), changes_kept=bool(keep),
+                 original=base, min_improvement_pct=round(100 * MIN_IMPROVEMENT, 2), grown=[], shrink=[], bottleneck_candidates=[dict(block=stage, period_cycles=p) for p, stage in slowest])
+    return chain, keep
 
 
 # ---------------------------------------------------------------------------------------------- main / output
@@ -367,10 +324,10 @@ def main() -> int:
     ap.add_argument("--fallback-bits", type=int, default=8, help="precision (weights and activations) of a role the folding's per-site bits do not cover (default 8); every block that has to use it is WARNED about. With --uniform-bits it is the precision of every role")
     ap.add_argument("--uniform-bits", action="store_true", help="ignore the folding's per-site bits and model every stream and weight at --fallback-bits (the pre-2026-10-11 behaviour)")
     ap.add_argument("--workers", type=int, default=min(6, os.cpu_count() or 1))
-    ap.add_argument("--max-iterations", type=int, default=5, help="sizing iterations of BOTH stages (default 5). Intra-block (per block, paced source): grow the FIFOs at capacity until the block's MILP cycles are reached within 5 %% and nothing deadlocks, then shrink to the observed occupancy and check again (bottleneck.iterate_sizing, at most 5 doublings = 32x the starting depth). Inter-block (whole net, paced at the MILP target): grow the full / at-capacity interface FIFOs x4 (2 -> 8 -> 32 ..., at most 5 steps), shrink + verify every iteration; growth that does not make the net > 1 %% faster is discarded (depth 2 stays) until the chain is deadlock-free and within 5 %%; a final shrink + deadlock check always follows")
+    ap.add_argument("--max-iterations", type=int, default=5, help="sizing iterations (default 5). Intra-block (per block, paced source): grow the FIFOs at capacity until the block's MILP cycles are reached within 5 %% and nothing deadlocks, then shrink to the observed occupancy and check again (bottleneck.iterate_sizing, at most 5 doublings = 32x the starting depth). Inter-block (whole net, paced at the MILP target): grow the full / at-capacity interface FIFOs x4 (2 -> 8 -> 32 ..., at most 5 steps), shrink + verify every iteration; growth that does not make the net > 1 %% faster is discarded (depth 2 stays) until the chain is deadlock-free and within 5 %%; a final shrink + deadlock check always follows")
     ap.add_argument("--reuse-blocks", action="store_true", help="reuse <out-dir>/blocks.pkl (the simulated blocks of an earlier run) instead of re-simulating every block")
     ap.add_argument("--only", default="", help="with --reuse-blocks: comma-separated stages to re-simulate (e.g. up4,up5); every other block is taken from the cache")
-    ap.add_argument("--no-chain", action="store_true", help="per-block simulation only (skip the whole-net runs)")
+    ap.add_argument("--no-chain", action="store_true", help="per-block simulation only (skip the block-pair stage and the whole-net run)")
     a = ap.parse_args()
     raise SystemExit(run(a))
 
@@ -424,23 +381,51 @@ def run(a) -> int:
             warns.append(f"rate: {msg}")
     nodes = {**d["per_layer"], **d["extra_nodes"]}
     F_net = int(max([v["cycles"] for v in nodes.values()] + [r.verification["rate"]["period_cycles"] for _, _, r in blocks]))
-    chain = None
-    if not a.no_chain:
-        print(f"whole-net chain: source PACED at the MILP target {milp_cap} frame cycles, up to {a.max_iterations} iteration(s), interfaces x{IFACE_GROWTH} per iteration (<= {MAX_DOUBLINGS} steps, depth <= {IFACE_MAX_DEPTH}) with a shrink + deadlock check each iteration, growth kept only if > {100 * IFACE_MIN_IMPROVEMENT:g}% faster than depth 2; "
-              f"tolerance {100 * tol:g}% (intra-block FIFOs frozen)", flush=True)
-        chain = size_interfaces(blocks, milp_cap, tol, a.max_iterations)
+    chain, boundary, changes = None, None, []
+    blocks_final, d_final = blocks, d
+    if not a.no_chain and len(blocks) > 1:
+        print(f"block-pair stage: producer source PACED at the MILP target {milp_cap} frame cycles, a pair is flagged when > {100 * tol:g}% above max(target, own periods); interface FIFO x"
+              f"{net_pairs.IFACE_GROWTH} steps, then the producer's output chain; caps from the MILP", flush=True)
+
+        def rebuild(d_new):
+            nb, _w = build_blocks(d_new, a, ctx)
+            return {st: (st, kd, r) for st, kd, r in nb}
+
+        def resim(sub):
+            sim, errs = verify_blocks_keep(sub, 1, tol, a.max_iterations)
+            annotate_rate(sim, tol, {sim[0][0]: sim[0][2].params["F_milp"]})
+            errors.update(deadlock_errors(sim, errs))
+            return sim
+
+        blocks_new, d_new, depths, boundary, changes = net_pairs.relax_pairs(blocks, d, ctx, milp_cap, tol, a.max_iterations, a.workers, rebuild, resim)
+        changed = bool(changes) or any(x > net_fifo.MIN_DEPTH for x in depths)
+        print(f"whole-net stage: one paced run{' (+ the original MILP folding at depth 2 in parallel)' if changed else ''}; deadlock + target check, warnings only", flush=True)
+        chain, keep = final_check(blocks_new, depths, blocks, milp_cap, tol, changed, workers=a.workers)
+        if keep:
+            blocks_final, d_final = blocks_new, d_new
+        else:
+            changes = []
+            warns.append("pair stage: the changes did not make the whole net more than 1 % faster than the original MILP folding; fell back to the original folding at depth 2")
+        flagged = [r for r in boundary if r["action"] != "none"]
+        print(f"  pair stage: {len(flagged)} of {len(boundary)} pairs needed action; {len(changes)} folding change(s) kept", flush=True)
+        for c in changes:
+            print(f"    {c['stage']}: {c['pe_step']} ({c['pair']}), delta {c['delta']}", flush=True)
         if not chain["ok"]:
-            msg = "whole-net chain DEADLOCKS at every iteration (only the inter-block FIFOs were resized): " + "; ".join(chain["last"]["full"][:6])
+            msg = "whole-net chain DEADLOCKS: " + "; ".join(chain["last"]["full"][:6])
             print(f"  FAILED: {msg}", flush=True)
             warns.append(f"chain: {msg}")
         elif not chain["within_tolerance"]:
             lr = chain["last"]
             names = ", ".join(f"{b['block']} ({b['period_cycles']})" for b in chain["bottleneck_candidates"])
-            msg = (f"whole-net period {lr['period']} is {lr['vs_target_pct']:+.2f}% over the MILP target {milp_cap} (tolerance {100 * tol:g}%); deadlock-free. The inter-block FIFOs are at their limit; "
+            unresolved = [r["pair"] for r in boundary if "UNRESOLVED" in r["action"]]
+            msg = (f"whole-net period {lr['period']} is {lr['vs_target_pct']:+.2f}% over the MILP target {milp_cap} (tolerance {100 * tol:g}%); deadlock-free. Unresolved pairs: {unresolved or 'none'}; "
                    f"slowest blocks (bottleneck candidates, own period in cycles): {names}")
             print(f"  WARNING (rate, not a failure): {msg}", flush=True)
             warns.append(f"rate: {msg}")
-    out = assemble_output(d, blocks, chain, errors, warns, a, F_net, time.time() - t0)
+    F_net = int(max([v["cycles"] for v in {**d_final["per_layer"], **d_final["extra_nodes"]}.values()] + [r.verification["rate"]["period_cycles"] for _, _, r in blocks_final]))
+    out = assemble_output(d_final, blocks_final, chain, errors, warns, a, F_net, time.time() - t0)
+    out["sim_folding_changes"] = changes
+    out["fifo_sim"]["boundary"] = boundary
     a.out_dir.mkdir(parents=True, exist_ok=True)
     path = a.out_dir / f"layer_bits_folding_{a.tag}.json"
     path.write_text(json.dumps(out, indent=1))

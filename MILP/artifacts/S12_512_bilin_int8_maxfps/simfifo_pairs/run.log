@@ -1,0 +1,20 @@
+Wrote /tmp/tmpki77g4op/sites.json (85 weight sites, 110 act sites).
+S12_512_bilin_int8_maxfps_pairs: up blocks built WITH the frozen depthwise conv (up4.main_up.1, up5.main_up.1)
+S12_512_bilin_int8_maxfps_pairs: 29 blocks built from the MILP folding (0 warnings)
+reusing the simulated blocks of MILP/artifacts/S12_512_bilin_int8_maxfps/simfifo_pairs/blocks.pkl
+  WARNING (rate, not a failure): stage2.3 reaches 81.99 vs its target 78.06 cyc/px (+5.02% > the 5% tolerance), frame period 335816; FIFOs sized deadlock-free only
+  WARNING (rate, not a failure): stage2.7 reaches 81.99 vs its target 78.06 cyc/px (+5.02% > the 5% tolerance), frame period 335816; FIFOs sized deadlock-free only
+  WARNING (rate, not a failure): stage3.3 reaches 81.99 vs its target 78.06 cyc/px (+5.02% > the 5% tolerance), frame period 335816; FIFOs sized deadlock-free only
+  WARNING (rate, not a failure): stage3.7 reaches 81.99 vs its target 78.06 cyc/px (+5.02% > the 5% tolerance), frame period 335816; FIFOs sized deadlock-free only
+block-pair stage: producer source PACED at the MILP target 327680 frame cycles, a pair is flagged when > 5% above max(target, own periods); interface FIFO x4 steps, then the producer's output chain; caps from the MILP
+  pair scan: 28 pairs x (depth 2, unbounded) in 612 s
+  FLAGGED regular5.0 -> final: depth-2 period 389886 (18.98% over 327680), unbounded 389886 (18.98%), peak 125490 words
+simulating 1 blocks (1 distinct shapes), 1 workers
+    producer step 1 (PE 1 -> 2, +502.4 LUT, +0.0 DSP): depth-2 327680, unbounded 327680
+whole-net stage: one paced run (+ the original MILP folding at depth 2 in parallel); deadlock + target check, warnings only
+  whole net (changed design): deadlock=False period=335995 (2.54% vs the MILP target 327680) [792 s]
+  whole net (original MILP folding, interface depth 2): deadlock=False period=402259 (22.76%) -> pair-stage changes KEPT
+  pair stage: 1 of 28 pairs needed action; 1 folding change(s) kept
+    regular5.0: PE 1 -> 2 (regular5.0 -> final), delta {'lut': 502.4, 'bram': 0.0, 'dsp': 0.0, 'uram': 0.0}
+S12_512_bilin_int8_maxfps_pairs: wrote MILP/artifacts/S12_512_bilin_int8_maxfps/simfifo_pairs/layer_bits_folding_S12_512_bilin_int8_maxfps_pairs.json
+  blocks deadlocking alone: 0, chain deadlock-free: True, within tolerance: True, intra FIFO BRAM18 186.0 (MILP) -> 195 (sim)

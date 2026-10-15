@@ -4,7 +4,8 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import net_explicit  # noqa: E402
+import net_explicit
+import net_pairs  # noqa: E402
 import net_fifo  # noqa: E402
 from bottleneck import explicit_folds, model_bottleneck, verify_with_sim  # noqa: E402
 from dn_bottleneck import model_dn_bottleneck  # noqa: E402
@@ -73,8 +74,8 @@ class TestExplicitFolds(unittest.TestCase):
                 model_bottleneck(32, 4, 4, 72, 4, 16, 16)
 
 
-class TestInterBlockSizing(unittest.TestCase):
-    """size_interfaces: paced whole-net run, only the interface FIFOs are resized, final shrink + deadlock check."""
+class TestWholeNetCheckAndPairs(unittest.TestCase):
+    """final_check (deadlock + target check, nothing resized) and the block-pair stage helpers."""
 
     @staticmethod
     def _blocks(n=2, T=72):
@@ -85,7 +86,7 @@ class TestInterBlockSizing(unittest.TestCase):
             blocks.append((f"b{i}", "reg", r))
         return blocks
 
-    def test_undersized_intra_skip_fifo_deadlocks_and_is_not_resized_by_the_chain(self):
+    def test_undersized_intra_skip_fifo_deadlocks_and_nothing_is_resized(self):
         T = 72
         blocks = self._blocks(2, T)
         need = blocks[0][2].fifo_graph["fifos"]["skip FIFO"]["depth"]
@@ -95,57 +96,67 @@ class TestInterBlockSizing(unittest.TestCase):
         res = net_fifo.run_chain(net_fifo.compose(caps, [2]), 10 ** 6)
         self.assertTrue(res["deadlock"])
         self.assertTrue(any(f.name == "skip FIFO" for f in res["full"]))             # the blocked chain names the culprit
-        rep = net_explicit.size_interfaces(blocks, T * 256, 0.05, 3, log=lambda *a, **k: None)
-        self.assertFalse(rep["ok"], rep["rounds"])                                   # only interfaces may grow: an intra-block deadlock is reported, not fixed
-        self.assertTrue(all(r["deadlock"] for r in rep["rounds"]))
+        chain, keep = net_explicit.final_check(blocks, [2], blocks, T * 256, 0.05, False, workers=1, log=lambda *a, **k: None)
+        self.assertFalse(chain["ok"])                                                # reported, not fixed
+        self.assertTrue(chain["last"]["deadlock"])
         self.assertEqual(blocks[0][2].fifo_graph["fifos"]["skip FIFO"]["depth"], 2)  # the intra-block FIFO was NOT touched
-        self.assertTrue(any("skip FIFO" in name for name in rep["last"]["full"]))
+        self.assertTrue(any("skip FIFO" in name for name in chain["last"]["full"]))
 
-    def test_matching_blocks_pass_with_a_paced_source_and_end_deadlock_checked(self):
+    def test_matching_blocks_pass_with_a_paced_source(self):
         blocks = self._blocks(2, 72)
-        rep = net_explicit.size_interfaces(blocks, 72 * 256, 0.05, 3, log=lambda *a, **k: None)
-        self.assertTrue(rep["ok"])
-        self.assertTrue(rep["within_tolerance"], rep["last"])
-        self.assertGreater(rep["pace_cycles_per_input_px"], 0)                       # a PACED source, not saturated
-        self.assertEqual(rep["grown"], [])
-        self.assertTrue(all(d >= net_fifo.MIN_DEPTH for d in rep["interface_depths"]))
-        self.assertFalse(rep["last"]["deadlock"])                                    # the handed-back depths were simulated
+        chain, keep = net_explicit.final_check(blocks, [2], blocks, 72 * 256, 0.05, False, workers=1, log=lambda *a, **k: None)
+        self.assertTrue(chain["ok"] and chain["within_tolerance"], chain["last"])
+        self.assertGreater(chain["pace_cycles_per_input_px"], 0)                     # a PACED source, not saturated
+        self.assertTrue(keep)
+        self.assertFalse(chain["changed"])
 
-    def test_final_shrink_never_hands_back_a_deadlocked_or_slower_net(self):
-        blocks = self._blocks(3, 72)
-        rep = net_explicit.size_interfaces(blocks, 72 * 256, 0.05, 3, log=lambda *a, **k: None)
-        self.assertTrue(rep["ok"])
-        for sh in rep["shrink"]:
-            if sh["accepted"]:
-                self.assertLessEqual(sh["sum_after"], sh["sum_before"])
-        self.assertFalse(rep["last"]["deadlock"])
-        self.assertLessEqual(max(rep["interface_depths"]), net_explicit.IFACE_MAX_DEPTH)       # 5 doublings from depth 2
+    def test_pair_run_matching_blocks_is_not_flagged(self):
+        blocks = self._blocks(2, 72)
+        F = 72 * 256
+        res = net_pairs.run_pairs(blocks, [(0, 2), (0, net_pairs.DEEP)], F, 1)
+        ref = net_pairs.reference_period(blocks, 0, F)
+        self.assertFalse(res[(0, 2)]["deadlock"])
+        self.assertLessEqual(res[(0, 2)]["period"] / ref - 1, 0.05)
 
+    def test_keep_changes_gate(self):
+        base = dict(deadlock=False, period=402000)
+        self.assertFalse(net_explicit.keep_changes(base, dict(deadlock=False, period=399000), 0.01))     # 0.75 % faster: discarded
+        self.assertTrue(net_explicit.keep_changes(base, dict(deadlock=False, period=390000), 0.01))      # 3 % faster: kept
+        self.assertFalse(net_explicit.keep_changes(base, dict(deadlock=True, period=None), 0.01))        # a deadlocked change never survives
+        self.assertTrue(net_explicit.keep_changes(dict(deadlock=True, period=None), dict(deadlock=False, period=500000), 0.01))   # nothing to beat
 
-class TestChooseInterfaceState(unittest.TestCase):
-    @staticmethod
-    def _st(period, depths, grown, deadlock=False):
-        return dict(period=period, interface_depths=list(depths), grown=grown, deadlock=deadlock)
+    def test_caps_are_read_from_the_milp_diagnostics_and_enforced(self):
+        d = {"_diagnostics": {"max_lut_fraction": 0.5, "max_bram_fraction": 0.5, "max_dsp_fraction": 0.5, "max_uram_fraction": 1.0,
+                              "total_lut_calibrated": 100000.0, "total_bram18k_calibrated": 100.0, "total_dsp": 100, "total_uram18": 0.0}}
+        self.assertEqual(net_pairs.check_caps(d), [])
+        self.assertEqual(net_pairs.check_caps(d, {"lut": 20000.0}), ["lut"])                      # 100k + 20k > 0.5 x 230,400
+        d["_diagnostics"]["total_bram18k_calibrated"] = 400.0
+        self.assertEqual(net_pairs.check_caps(d), ["bram"])                                      # 400 > 0.5 x 624
 
-    def test_growth_under_one_percent_keeps_the_baseline(self):
-        base = self._st(400000, [2, 2], False)
-        states = [base, self._st(399000, [8, 8], True), self._st(397000, [32, 32], True)]     # best is 0.75 % faster
-        self.assertIs(net_explicit.choose_interface_state(base, states, 0.01), base)
-
-    def test_growth_over_one_percent_is_kept_and_the_best_state_wins(self):
-        base = self._st(400000, [2, 2], False)
-        states = [base, self._st(399000, [8, 8], True), self._st(390000, [32, 32], True), self._st(390000, [32, 8], True)]
-        chosen = net_explicit.choose_interface_state(base, states, 0.01)
-        self.assertEqual(chosen["interface_depths"], [32, 8])                  # same period: fewer words
-
-    def test_a_deadlocked_baseline_accepts_any_deadlock_free_grown_state(self):
-        base = self._st(None, [2, 2], False, deadlock=True)
-        states = [base, self._st(500000, [8, 8], True)]
-        self.assertEqual(net_explicit.choose_interface_state(base, states, 0.01)["interface_depths"], [8, 8])
-
-    def test_growth_is_x4_per_iteration(self):
-        self.assertEqual(net_explicit.IFACE_GROWTH, 4)
-        self.assertEqual(net_explicit.IFACE_MAX_DEPTH, 2 * 4 ** 5)
+    def test_widen_producer_on_the_s12_512_maxfps_folding(self):
+        import json
+        f = net_explicit.REPO / "MILP/artifacts/S12_512_bilin_int8_maxfps/pinned_minres/layer_bits_folding_pinned_minres.json"
+        if not f.exists():
+            self.skipTest("artifact not present")
+        import finn_milp
+        import net_fold
+        d = json.loads(f.read_text())
+        finn_milp.load_config("config_12_dense_relu_warmstart150ep")
+        finn_milp.CANDIDATE_BITS = (8,)
+        _m, geoms, extras, _p, dmap, kinds = finn_milp.build_model_and_graph()
+        net_fold.BILINEAR_UP = True
+        net_fold.add_bilinear_dw(geoms, dmap)
+        ctx = (geoms, extras, {g.name: g for g in geoms}, {n.geom.name: n for n in extras}, dmap, kinds)
+        d2, info = net_pairs.widen_producer(d, "regular5.0", "reg", ctx)
+        self.assertEqual(info["pe_step"], "PE 1 -> 2")
+        self.assertEqual(d2["per_layer"]["regular5.0.expand.0"]["pe"], 2)
+        for k in ("skip_quant", "add", "out_act", "residual_add"):
+            self.assertEqual(d2["extra_nodes"][f"regular5.0.{k}"]["pe"], 2)
+            self.assertEqual(d2["extra_nodes"][f"regular5.0.{k}"]["cycles"], 131072)
+        self.assertTrue(400 < info["delta"]["lut"] < 700, info["delta"])                         # about +500 LUT
+        self.assertEqual(net_pairs.check_caps(d2), [])
+        self.assertEqual(d["per_layer"]["regular5.0.expand.0"]["pe"], 1)                         # the input folding is not modified
+        self.assertIsNone(net_pairs.widen_producer(d, "regular5.0", "init", ctx)[0])
 
 
 class _FakeBlock:
