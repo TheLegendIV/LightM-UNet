@@ -35,7 +35,7 @@ Usage:
         --config config_12_separable_dense_relu \\
         --net-name nnUNetTrainerENet_12_separable_dense_relu \\
         --checkpoint-name checkpoint_best.pth \\
-        --n-batches 16 --n-probes 10 \\
+        --n-batches 64 --n-probes 30 \\
         --out-file compression/hawq/artifacts/layer_sensitivity_12_separable_dense_relu.json
 """
 from __future__ import annotations
@@ -43,9 +43,11 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import random
 import sys
 from pathlib import Path
 
+import numpy as np
 import torch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -96,6 +98,28 @@ def build_fp32_model(checkpoint_path: Path) -> ENet:
     return model
 
 
+class _LazyBatches:
+    """Same sample as sensitivity.load_real_batches (same RNG / seed / file order) but each (image, seg) pair is read from disk when iterated instead of all up front: 1200 batches at
+    512x512 held at once (float32 image + int64 seg) were ~3.6 GB and got the container OOM-killed (2026-10-15)."""
+
+    def __init__(self, dataset_name: str, n_batches: int, seed: int):
+        preprocessed_dir = _sensitivity.NNUNET_PREPROCESSED / dataset_name / "nnUNetPlans_2d"
+        image_files = sorted(p for p in preprocessed_dir.glob("*.npy") if not p.name.endswith("_seg.npy"))
+        if not image_files:
+            raise FileNotFoundError(f"No preprocessed .npy images found under {preprocessed_dir}")
+        self.paths = random.Random(seed).sample(image_files, k=min(n_batches, len(image_files)))
+
+    def __len__(self) -> int:
+        return len(self.paths)
+
+    def __iter__(self):
+        for img_path in self.paths:
+            img = torch.from_numpy(np.load(img_path)).float()
+            seg = torch.from_numpy(np.load(img_path.with_name(img_path.stem + "_seg.npy"))).long()
+            seg[seg == -1] = 0
+            yield img, seg
+
+
 def run_layer_sensitivity(
     checkpoint_path: Path, dataset_name: str, n_batches: int, n_probes: int, device: str, seed: int,
 ) -> dict:
@@ -135,8 +159,8 @@ def run_layer_sensitivity(
     handles = [named_modules[name].register_forward_hook(make_hook(name)) for name in layer_names]
     assert len(handles) == len(layer_names)
 
-    batches = load_real_batches(dataset_name, n_batches, seed=seed)
-    print(f"Loaded {len(batches)} real (image, seg) batches from {dataset_name}.")
+    batches = _LazyBatches(dataset_name, n_batches, seed)
+    print(f"Sampled {len(batches)} real (image, seg) batches from {dataset_name} (loaded one at a time).")
 
     weight_trace_sum = {n: 0.0 for n in layer_names}
     weight_numel = {n: t.numel() for n, t in flat_weight_targets.items()}
@@ -223,8 +247,8 @@ def main() -> None:
     parser.add_argument("--configuration", default="2d")
     parser.add_argument("--fold", type=int, default=0)
     parser.add_argument("--checkpoint-name", default="checkpoint_best.pth")
-    parser.add_argument("--n-batches", type=int, default=16, help="Real preprocessed images to average the trace estimate over.")
-    parser.add_argument("--n-probes", type=int, default=10, help="Rademacher probes per batch (Hutchinson's method).")
+    parser.add_argument("--n-batches", type=int, default=64, help="Real preprocessed images to average the trace estimate over (default 64; 16 x 10 probes gave negative traces that were estimator noise -- 2026-10-15).")
+    parser.add_argument("--n-probes", type=int, default=30, help="Rademacher probes per batch (Hutchinson's method; default 30).")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--candidate-bits", type=str, default=None,

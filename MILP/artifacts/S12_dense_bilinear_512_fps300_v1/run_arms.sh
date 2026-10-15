@@ -6,6 +6,8 @@
 #                            that result stays feasible): max accuracy under those caps, then min resources again.
 #   bits468_refine / bits68_refine : the ORIGINAL caps (0.7 / 0.9 / 0.9), --refine-bits: pass 1 accuracy, pass 2 min resources, then pass 3 = pass 2's folding pinned, bits freed, accuracy again under the
 #                            same caps (the budget pass 2 shaved off is room for the bits). stage1_ / stage2_ files hold passes 1 / 2.
+# NOTE (2026-10-15): the SWU line buffer may use BRAM by default now (finn_milp.SWU_BRAM). bits468 / bits68 / *_r2 / *_refine in this folder were solved BEFORE that (LUTRAM only) and no longer reproduce;
+#   bits468_swubram / bits68_swubram are the same arms (0.7 / 0.9 / 0.9 caps, accuracy then min resources) solved with the BRAM option, i.e. what bits468 / bits68 give today.
 # Run in lightmunet_dev:   bash MILP/artifacts/S12_dense_bilinear_512_fps300_v1/run_arms.sh [arm ...]     (default: bits468 bits68; round 2 arms must be named, after their base arms are Optimal)
 set -u
 cd /workspace/LightM-UNet
@@ -16,6 +18,7 @@ ARMS=("$@"); if [ ${#ARMS[@]} -eq 0 ]; then ARMS=(bits468 bits68); fi
 solve() {
   local arm=$1 base=${1%_r2} lut=0.7 bram=0.9 dsp=0.9 bits refine=""
   base=${base%_refine}; [ "$arm" != "${arm%_refine}" ] && refine="--refine-bits"
+  base=${base%_swubram}
   bits=$(echo "${base#bits}" | sed 's/./&,/g; s/,$//')       # 468 -> 4,6,8 ; 68 -> 6,8
   if [ "$arm" != "${arm%_r2}" ]; then
     read lut bram dsp < <(python3 - "$HERE/$base/summary.csv" <<'P'

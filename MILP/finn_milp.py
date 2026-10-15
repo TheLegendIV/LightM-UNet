@@ -62,14 +62,21 @@ INPUT_HW = (512, 512)
 RAM_STYLES = (RAM_STYLE_BLOCK, "distributed")  # the standalone Thresholding node's memory -- the only free RAM choice
 MIN_DSR_EPS = 0.001  # --min-dsr: relative slack of pass 1's optimal total stall that pass 2 may spend on resources
 
-VARIANT_RTL_DSP_NOACT1 = "rtl_dsp_noact1"  # the only resource variant (standalone Thresholding_rtl after an MVAU_rtl)
+VARIANT_RTL_DSP_NOACT1 = "rtl_dsp_noact1"  # standalone Thresholding_rtl after an MVAU_rtl; SWU line buffer in LUTRAM (FINN's default `ram_style="distributed"`)
+VARIANT_RTL_DSP_NOACT1_SWU_BLOCK = "rtl_dsp_noact1_swu_block"  # same, with the SWU line buffer in BRAM (`ram_style="block"`); offered to every layer that has a window (SWU_BRAM)
+SWU_BRAM = True  # every layer with a window may place its SWU line buffer in BRAM (default since 2026-10-15; PROVISIONAL: FINN's own estimator, no real "block" SWU data)
 
 
 def _variant_cost_kwargs(variant: str, force_dsp: bool) -> dict:
     """variant -> (impl_style, force_dsp, no_activation) for layer_cost_pe_simd."""
-    if variant == VARIANT_RTL_DSP_NOACT1:
+    if variant in (VARIANT_RTL_DSP_NOACT1, VARIANT_RTL_DSP_NOACT1_SWU_BLOCK):
         return {"impl_style": IMPL_STYLE_RTL, "force_dsp": force_dsp, "no_activation": True}
     raise ValueError(f"unknown resource variant {variant!r}")
+
+
+def _variant_swu_style(variant: str) -> str:
+    """variant -> the SWU line buffer's ram_style (`swu_ram_style` of layer_cost_pe_simd)."""
+    return "block" if variant == VARIANT_RTL_DSP_NOACT1_SWU_BLOCK else "distributed"
 
 
 def _calibration_force_dsp(variant_kwargs: dict) -> bool:
@@ -143,8 +150,8 @@ THRESHOLD_KINDS = ("skip_quant", "residual_add", "out_act", "input_quant", "act"
 # so their bits are tied to expand.0's act bits (the network follows act_bits["residual_add"], see
 # LayerQuantENet._residual_add_quant; expand_layer_bits.py maps the same tie).
 TIED_BIT_KINDS = ("skip_quant", "residual_add")
-# Join thresholds (skip_quant/residual_add/out_act) are LUTRAM only: a 255-step join threshold is ~7 BRAM18 as BRAM vs
-# ~1.4k LUT as LUTRAM (the distributed cost is not yet validated against a real build); the bridge pins depth_trigger_bram.
+# Join thresholds (skip_quant/residual_add/out_act): memory style is a free choice since 2026-10-15 (was LUTRAM only: a 255-step join threshold is ~7 BRAM18 as BRAM vs
+# ~1.4k LUT as LUTRAM; the distributed cost is not yet validated against a real build); the bridge pins depth_trigger_bram from the chosen style.
 JOIN_THRESHOLD_KINDS = ("skip_quant", "residual_add", "out_act")
 PAD_MVAU_BITS = (2, 8)  # (weight, act) for the downsampling zero-pad MVAU -- PROVISIONAL, see finn_milp.md
 FROZEN_DW_KIND = "frozen_dw"   # the bilinear decoder's frozen depthwise 3x3 conv `<up stage>.main_up.1` (LayerQuantEnetFINN): fixed INT8 tent-kernel weights, no quantizer site, no bit choice of its own
@@ -328,7 +335,7 @@ def extra_node_options(node: ExtraNode, force_dsp: bool) -> list[tuple[tuple, di
     if kind in THRESHOLD_KINDS:
         bit_options = (node.fixed_bits,) if node.fixed_bits is not None else CANDIDATE_BITS
         for pe in divisors(g.cout):
-            for ram_style in (("distributed",) if kind in JOIN_THRESHOLD_KINDS else RAM_STYLES):
+            for ram_style in RAM_STYLES:
                 for bits in bit_options:
                     key = (g.name, pe, 1, ram_style, VARIANT_RTL_DSP_NOACT1, 0, bits)
                     # join thresholds' input is the add/operand datatype (real: INT10 at 8 bits) -> bits + 2
@@ -363,11 +370,13 @@ def extra_node_options(node: ExtraNode, force_dsp: bool) -> list[tuple[tuple, di
 
 # ---- Search space and sensitivity helpers ----
 
-def candidate_folds(layer: LayerGeometry) -> list[tuple[int, int, str, str]]:
-    """Every (PE, SIMD, thr_ram_style, variant). MaxPool2d: one fixed sentinel fold."""
+def candidate_folds(layer: LayerGeometry, swu_bram: bool = False) -> list[tuple[int, int, str, str]]:
+    """Every (PE, SIMD, thr_ram_style, variant). MaxPool2d: one fixed sentinel fold. swu_bram: layers with a window (kernel > 1x1) also get the BRAM-SWU variant."""
     if layer.op_type == "MaxPool2d":
         return [(1, 1, "block", VARIANT_RTL_DSP_NOACT1)]
     variants = [VARIANT_RTL_DSP_NOACT1]
+    if swu_bram and (layer.kh > 1 or layer.kw > 1):
+        variants.append(VARIANT_RTL_DSP_NOACT1_SWU_BLOCK)
     return [
         (pe, simd, ram_style, variant)
         for pe in divisors(max_pe(layer)) for simd in divisors(max_simd(layer))
@@ -448,7 +457,7 @@ def solve_joint_perlayer(
     layer_cycle_terms: dict[str, list[tuple[pulp.LpVariable, float]]] = {g.name: [] for g in geometries}
 
     for layer in geometries:
-        folds = candidate_folds(layer)
+        folds = candidate_folds(layer, swu_bram=SWU_BRAM)
         layer_folds[layer.name] = folds
         for pe, simd, ram_style, variant in folds:
             variant_kwargs = _variant_cost_kwargs(variant, force_dsp)
@@ -459,10 +468,10 @@ def solve_joint_perlayer(
                 # VVAU_hls nodes actually built with ram_style="auto", of
                 # which 179 landed 0 real BRAM (LUTRAM), not "block"'s
                 # always-nonzero prediction -- see finn_cost_model.py's
-                # _WM_BRAM_AUTO_MIN_WMEM). SWU buffer stays distributed.
+                # _WM_BRAM_AUTO_MIN_WMEM). SWU buffer: distributed, or block (the SWU_BRAM variant, default).
                 cost = layer_cost_pe_simd(
                     layer, w, a, pe, simd, RAM_STYLE_AUTO,
-                    swu_ram_style="distributed", thr_ram_style=ram_style, **variant_kwargs,
+                    swu_ram_style=_variant_swu_style(variant), thr_ram_style=ram_style, **variant_kwargs,
                 )
                 key = (layer.name, pe, simd, ram_style, variant, w, a)
                 layer_costs[key] = cost
@@ -796,7 +805,7 @@ def solve_joint_perlayer(
         cost = layer_costs[(layer.name, pe, simd, ram_style, variant, w, a)]
         variant_kwargs = _variant_cost_kwargs(variant, force_dsp)
         per_layer[layer.name] = {
-            "stage": layer.stage, "pe": pe, "simd": simd, "thr_ram_style": ram_style, "variant": variant,
+            "stage": layer.stage, "pe": pe, "simd": simd, "thr_ram_style": ram_style, "variant": variant, "swu_ram_style": _variant_swu_style(variant),
             "force_dsp": variant_kwargs["force_dsp"], "mvau_noAct": variant_kwargs["no_activation"],
             "weight_bits": w, "act_bits": a, **cost,
         }
@@ -1236,7 +1245,7 @@ def main() -> None:
               f"HAWQ-measured) -- given a fixed raw sensitivity of 0.0 for every (w,a), see module docstring.")
 
     candidate_pairs_count = len(CANDIDATE_BITS) ** 2
-    n_folds_per_layer = [len(candidate_folds(g)) for g in geometries]
+    n_folds_per_layer = [len(candidate_folds(g, swu_bram=SWU_BRAM)) for g in geometries]
     n_z = sum(n_folds_per_layer) * candidate_pairs_count
     n_y = len(layer_names) * candidate_pairs_count
     print(f"Traced {len(geometries)} layers (per-layer granularity, no block grouping). "
