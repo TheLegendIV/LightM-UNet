@@ -8,6 +8,9 @@ Matches deployment/FINN_interface/lwip_stream/src/run.c ("IMGS" protocol):
   S->C  per frame, in order, no prefix/ack: output_bytes_per_frame bytes
   C->S  0x00 (stop)
   S->C  "ACK" after the last result
+  S->C  optional trailer right behind the ACK: "HWL" + 3 x u32 BE PL-clock ticks (first input beat, first output
+        beat, last output beat of the session's first frame, from the axi_late_mon block): the single-frame
+        inference latency. Read when read_hw_trailer=True (the CLI does); other clients just close after the ACK.
 
 The sender and the receiver run as separate asyncio tasks, so the sender may
 block on TCP backpressure (server ring full) while results keep draining.
@@ -48,6 +51,8 @@ from img_intf.utils.batch_img_header import (  # noqa: E402
 IMAGE_H = int(os.getenv("IMAGE_H", "512"))
 IMAGE_W = int(os.getenv("IMAGE_W", "512"))
 ACCEL_INPUT_BYTES = int(os.getenv("ACCEL_INPUT_BYTES", str(IMAGE_H * IMAGE_W)))
+PL_CLOCK_MHZ = float(os.getenv("PL_CLOCK_MHZ", "187.481262"))  # accelerator clock: converts the server's PL ticks to time
+HW_TRAILER_WAIT_S = 0.5  # how long to wait for the optional hardware-latency trailer behind the stop ACK
 
 FrameSource = Union[bytes, str]  # raw bytes, or a path handed to `loader`
 ResultCallback = Callable[[int, bytes], Union[None, Awaitable[None]]]
@@ -63,12 +68,33 @@ class StreamResult:
         self.frames = 0
         self.elapsed_s = 0.0
         self.latencies_s: List[float] = []  # send-start -> result-complete, per frame
+        self.done_times: List[float] = []    # perf_counter() at which each result was complete
         self.stalls = 0                     # sends that blocked on server backpressure
         self.stalled_s = 0.0
+        self.hw_ticks = None                # (input_first, output_first, output_last) PL ticks of the first frame
+        self.send_times: List[float] = []   # perf_counter() at which each frame started to be sent
+        self.prep_start: dict = {}          # frame index -> perf_counter() at the start of its preprocessing
+        self.prep_s: dict = {}              # frame index -> preprocessing duration in s
+        self.app = None                     # set by the CLI: postprocess/overlay timings and app wall clock
 
     @property
     def fps(self) -> float:
         return self.frames / self.elapsed_s if self.elapsed_s > 0 else 0.0
+
+    @property
+    def steady_fps(self) -> float:
+        """Result rate once the pipeline is full: the first result (start-up, pipeline fill) is excluded."""
+        span = self.done_times[-1] - self.done_times[0] if len(self.done_times) > 1 else 0.0
+        return (len(self.done_times) - 1) / span if span > 0 else 0.0
+
+    @property
+    def hw_latency_ms(self):
+        """(input -> first output beat, input -> last output beat) of the first frame in ms, or None."""
+        if self.hw_ticks is None:
+            return None
+        t_in, t_first, t_last = self.hw_ticks  # unsigned 32-bit subtraction handles one wrap of the PL counter
+        to_ms = lambda t: (t % 2**32) / PL_CLOCK_MHZ / 1000  # noqa: E731
+        return to_ms(t_first - t_in), to_ms(t_last - t_in)
 
 
 class AsyncImageStreamer:
@@ -104,6 +130,7 @@ class AsyncImageStreamer:
         stall_warn_s: float = 0.05,
         log: Callable[[str], None] = print,
         sndbuf: Optional[int] = None,
+        read_hw_trailer: bool = False,
     ):
         if not frames:
             raise ValueError("no frames to send")
@@ -122,12 +149,21 @@ class AsyncImageStreamer:
         self.output_dir = output_dir
         self.stall_warn_s = stall_warn_s
         self.log = log
+        self.read_hw_trailer = read_hw_trailer
         self.output_bytes = payload_length
+        self._prep_start: dict = {}  # frame index -> perf_counter() when its loader (preprocessing) started
+        self._prep_s: dict = {}      # frame index -> loader duration in s
         self._last_stall_log = float("-inf")
 
     def _frame_bytes(self, index: int) -> bytes:
         src = self.frames[index % len(self.frames)]
-        data = bytes(src) if isinstance(src, (bytes, bytearray)) else self.loader(src)
+        if isinstance(src, (bytes, bytearray)):
+            data = bytes(src)
+        else:
+            t = time.perf_counter()
+            data = self.loader(src)  # file read + preprocessing
+            self._prep_start[index] = t
+            self._prep_s[index] = time.perf_counter() - t
         if len(data) != self.payload_length:
             raise ValueError(f"frame {index}: {len(data)} bytes, expected {self.payload_length}")
         return data
@@ -185,7 +221,9 @@ class AsyncImageStreamer:
         loop = asyncio.get_event_loop()
         for i in range(self.num_frames):
             data = await reader.readexactly(self.output_bytes)
-            result.latencies_s.append(time.perf_counter() - send_times[i])
+            now = time.perf_counter()
+            result.latencies_s.append(now - send_times[i])
+            result.done_times.append(now)
             result.frames += 1
             if self.output_dir:
                 await loop.run_in_executor(None, self._save, i, data)
@@ -196,6 +234,14 @@ class AsyncImageStreamer:
         ack = await reader.readexactly(3)
         if ack != b"ACK":
             raise ConnectionError(f"expected stop ACK, got {ack!r}")
+        if self.read_hw_trailer:
+            result.elapsed_s = time.perf_counter() - self._t0  # stop the clock before waiting for the trailer
+            try:  # optional "HWL" + 3 x u32 BE PL ticks (input_first, output_first, output_last) behind the ACK
+                trailer = await asyncio.wait_for(reader.readexactly(15), HW_TRAILER_WAIT_S)
+            except (asyncio.TimeoutError, asyncio.IncompleteReadError):
+                trailer = b""
+            if trailer[:3] == b"HWL":
+                result.hw_ticks = struct.unpack("!3I", trailer[3:])
 
     async def run(self) -> StreamResult:
         coro = self._run()
@@ -222,7 +268,9 @@ class AsyncImageStreamer:
             self.output_bytes = struct.unpack("!I", reply[3:])[0]
 
             send_times: List[float] = []
-            t0 = time.perf_counter()
+            result.send_times = send_times
+            result.prep_start, result.prep_s = self._prep_start, self._prep_s
+            t0 = self._t0 = time.perf_counter()
             sender = asyncio.ensure_future(self._send_frames(writer, send_times, result))
             receiver = asyncio.ensure_future(self._receive_results(reader, send_times, result))
             try:
@@ -231,7 +279,8 @@ class AsyncImageStreamer:
                 sender.cancel()
                 receiver.cancel()
                 raise
-            result.elapsed_s = time.perf_counter() - t0
+            if not result.elapsed_s:
+                result.elapsed_s = time.perf_counter() - t0
             return result
         finally:
             writer.close()
@@ -306,15 +355,116 @@ def _show_live(q, title: str, total: int) -> None:
     root.mainloop()
 
 
-def _report(res: StreamResult, out_dir: Optional[str]) -> None:
+def _pct(sorted_vals: List[float], q: float) -> float:
+    return sorted_vals[min(len(sorted_vals) - 1, int(q * len(sorted_vals)))]
+
+
+def _app_stats(res: StreamResult) -> dict:
+    """Whole-application numbers: preprocessing + PC->board->PC loop + postprocessing (overlay / video / viewer).
+    A frame's application latency runs from the start of its preprocessing to the end of its postprocessing
+    (to the result arriving when there is no postprocessing)."""
+    n = res.frames
+    app = res.app or {}
+    render_s = app.get("render_s", {})
+    render_done = app.get("render_done", {})
+    starts = [res.prep_start.get(i, res.send_times[i]) for i in range(n)]
+    ends = [render_done.get(i, res.done_times[i]) for i in range(n)]
+    wall = app["t1"] - app["t0"] if "t0" in app and "t1" in app else max(ends) - min(starts)
+    lat = sorted(e - s for s, e in zip(starts, ends))
+    span = max(ends) - min(ends)
+    out = {
+        "wall_s": wall, "fps": n / wall if wall > 0 else 0.0,
+        "steady_fps": (n - 1) / span if n > 1 and span > 0 else 0.0,
+        "latency_first_ms": (ends[0] - starts[0]) * 1000, "latency_median_ms": lat[len(lat) // 2] * 1000,
+        "latency_p95_ms": _pct(lat, 0.95) * 1000, "latency_max_ms": lat[-1] * 1000,
+        "prep_ms": None, "post_ms": None,
+    }
+    if res.prep_s:
+        v = sorted(res.prep_s.values())
+        out["prep_ms"] = (sum(v) / len(v) * 1000, v[len(v) // 2] * 1000, v[-1] * 1000)
+    if render_s:
+        v = sorted(render_s.values())
+        out["post_ms"] = (sum(v) / len(v) * 1000, v[len(v) // 2] * 1000, v[-1] * 1000)
+    return out
+
+
+def _report(res: StreamResult, out_dir: Optional[str], metrics_path: Optional[str] = None,
+            payload_bytes: int = ACCEL_INPUT_BYTES) -> None:
+    """The first block is the PC -> board -> PC loop (network, board CPU, accelerator, network); the second block is
+    the whole application around it (preprocessing and postprocessing/overlay on the PC)."""
     lat = sorted(res.latencies_s)
-    print(f"[INFO] {res.frames} frame(s) in {res.elapsed_s:.3f} s -> {res.fps:.2f} fps; "
-          f"latency median {lat[len(lat) // 2] * 1000:.1f} ms, max {lat[-1] * 1000:.1f} ms")
+    p95 = _pct(lat, 0.95)
+    first_ms = res.latencies_s[0] * 1000  # frame 0 enters an empty pipeline: the unloaded loop latency
+    steady = res.steady_fps
+    mb_s = steady * payload_bytes / 1e6  # payload per direction
+    print(f"[INFO] PC->PC throughput: {res.frames} frame(s) in {res.elapsed_s:.3f} s -> {res.fps:.2f} fps overall")
+    if steady:
+        print(f"[INFO] PC->PC steady state (first result excluded): {steady:.2f} fps = {1000 / steady:.2f} ms/frame, "
+              f"{mb_s:.1f} MB/s ({mb_s * 8:.0f} Mbit/s) per direction")
+    print(f"[INFO] PC->PC latency, first frame (empty pipeline, send start -> result complete): {first_ms:.1f} ms")
+    print(f"[INFO] PC->PC turnaround under load (includes queueing behind earlier frames): "
+          f"min {lat[0] * 1000:.1f}, median {lat[len(lat) // 2] * 1000:.1f}, p95 {p95 * 1000:.1f}, "
+          f"max {lat[-1] * 1000:.1f} ms")
     if res.stalls:
         print(f"[WARN] {res.stalls} send(s) stalled by a full server buffer, "
               f"{res.stalled_s:.2f} s total")
+    hw = res.hw_latency_ms
+    if hw is not None:
+        print(f"[INFO] inference latency of that first frame, accelerator only (PL clock {PL_CLOCK_MHZ} MHz): "
+              f"{hw[1]:.3f} ms full image, {hw[0]:.3f} ms to the first output pixel; "
+              f"the other {first_ms - hw[1]:.1f} ms of the loop is network + board CPU")
+    else:
+        print("[INFO] no hardware-latency trailer from the server (firmware without the latency monitor?)")
+
+    ap = _app_stats(res)
+    stage = lambda t: f"mean {t[0]:.1f}, median {t[1]:.1f}, max {t[2]:.1f} ms"  # noqa: E731
+    print("[INFO] --- whole application (preprocess + board loop + postprocess/overlay) ---")
+    if ap["prep_ms"]:
+        print(f"[INFO] preprocessing per frame (worker thread, overlapped with the loop): {stage(ap['prep_ms'])}")
+    if ap["post_ms"]:
+        print(f"[INFO] postprocessing/overlay per frame (worker thread, overlapped): {stage(ap['post_ms'])}")
+    print(f"[INFO] application throughput: {res.frames} frame(s) in {ap['wall_s']:.3f} s -> {ap['fps']:.2f} fps overall"
+          + (f", steady state {ap['steady_fps']:.2f} fps = {1000 / ap['steady_fps']:.2f} ms/frame" if ap["steady_fps"] else ""))
+    print(f"[INFO] application latency, preprocess start -> result processed: first frame {ap['latency_first_ms']:.1f} ms; "
+          f"under load median {ap['latency_median_ms']:.1f}, p95 {ap['latency_p95_ms']:.1f}, max {ap['latency_max_ms']:.1f} ms")
+    if steady and ap["steady_fps"] and ap["steady_fps"] < 0.95 * steady:
+        interval_ms = 1000 / steady
+        limits = [name for name, t in (("preprocessing", ap["prep_ms"]), ("postprocessing/overlay", ap["post_ms"]))
+                  if t and t[0] > interval_ms]
+        print(f"[INFO] the PC side slows the loop from {steady:.1f} to {ap['steady_fps']:.1f} fps"
+              + (f": {' and '.join(limits)} take longer per frame than the {interval_ms:.1f} ms loop interval" if limits else ""))
     if out_dir:
         print(f"[INFO] class maps in {out_dir}")
+    if metrics_path:
+        import json
+        os.makedirs(os.path.dirname(metrics_path), exist_ok=True)
+        with open(metrics_path, "w") as f:
+            json.dump({
+                "frames": res.frames,
+                "pc_to_pc": {
+                    "elapsed_s": round(res.elapsed_s, 4), "fps": round(res.fps, 3), "steady_fps": round(steady, 3),
+                    "mb_per_s_per_direction": round(mb_s, 3), "latency_first_frame_ms": round(first_ms, 2),
+                    "turnaround_min_ms": round(lat[0] * 1000, 2),
+                    "turnaround_median_ms": round(lat[len(lat) // 2] * 1000, 2),
+                    "turnaround_p95_ms": round(p95 * 1000, 2), "turnaround_max_ms": round(lat[-1] * 1000, 2),
+                    "stalls": res.stalls,
+                },
+                "application": {
+                    "wall_s": round(ap["wall_s"], 4), "fps": round(ap["fps"], 3),
+                    "steady_fps": round(ap["steady_fps"], 3), "latency_first_ms": round(ap["latency_first_ms"], 2),
+                    "latency_median_ms": round(ap["latency_median_ms"], 2),
+                    "latency_p95_ms": round(ap["latency_p95_ms"], 2), "latency_max_ms": round(ap["latency_max_ms"], 2),
+                    "preprocess_ms_mean_median_max": None if not ap["prep_ms"] else [round(x, 2) for x in ap["prep_ms"]],
+                    "postprocess_ms_mean_median_max": None if not ap["post_ms"] else [round(x, 2) for x in ap["post_ms"]],
+                },
+                "accelerator": {
+                    "pl_clock_mhz": PL_CLOCK_MHZ,
+                    "hw_ticks": None if res.hw_ticks is None else list(res.hw_ticks),
+                    "first_output_ms": None if hw is None else round(hw[0], 4),
+                    "latency_ms": None if hw is None else round(hw[1], 4),
+                },
+            }, f, indent=2)
+        print(f"[INFO] metrics written to {metrics_path}")
 
 
 def main():
@@ -329,7 +479,7 @@ def main():
     ap.add_argument("--ip", default="192.168.0.111")
     ap.add_argument("--port", type=int, default=7)
     ap.add_argument("--frames", type=int, default=None, help="frames to send (inputs are cycled); default one pass")
-    ap.add_argument("--name", default="s12_512_bilinear_mixed68", help="output/<name>/stream destination and default input profile")
+    ap.add_argument("--name", default="s12_512_bilinear_int8_maxfps", help="output/<name>/stream destination and default input profile")
     ap.add_argument("--input-profile", help="input scale profile in utils/input_profiles.json (default: --name)")
     ap.add_argument("--no-save", action="store_true", help="do not write returned class maps")
     ap.add_argument("--overlay", action="store_true", help="save results blended over the inputs (output/<name>/overlay)")
@@ -381,16 +531,27 @@ def main():
     renderer = ThreadPoolExecutor(1)  # keeps blending/PNG writing off the receive loop, in order
 
     jobs = []
+    render_s: dict = {}     # frame index -> postprocessing (blend/save/video/viewer) duration
+    render_done: dict = {}  # frame index -> perf_counter() when its postprocessing finished
+    app_t: dict = {}        # application wall clock: t0 before the stream starts, t1 after the last frame is processed
+
+    def render_timed(i: int, data: bytes) -> None:
+        t = time.perf_counter()
+        render(i, data)
+        render_done[i] = time.perf_counter()
+        render_s[i] = render_done[i] - t
 
     def on_result(i: int, data: bytes) -> None:
-        jobs.append(renderer.submit(render, i, data))
+        jobs.append(renderer.submit(render_timed, i, data))
 
-    def finish_render() -> None:
+    def finish_render(res: StreamResult) -> None:
         renderer.shutdown(wait=True)
         if video is not None:
             video.close()
         for j in jobs:
             j.result()  # re-raise any rendering error
+        app_t["t1"] = time.perf_counter()
+        res.app = {**app_t, "render_s": render_s, "render_done": render_done}
 
     if a.overlay:
         os.makedirs(overlay_dir, exist_ok=True)
@@ -399,12 +560,15 @@ def main():
         width=IMAGE_W, height=IMAGE_H,
         loader=load, output_dir=None if a.no_save else out_dir,
         on_result=on_result if (a.overlay or a.show or a.mp4) else None,
+        read_hw_trailer=True,
     )
     saved = None if a.no_save else out_dir
+    metrics_path = None if a.no_save else os.path.join(os.path.dirname(out_dir), "stream_metrics.json")
     if not a.show:
+        app_t["t0"] = time.perf_counter()
         res = asyncio.run(streamer.run())
-        finish_render()
-        _report(res, saved)
+        finish_render(res)
+        _report(res, saved, metrics_path)
         return
 
     import queue
@@ -414,8 +578,9 @@ def main():
 
     def worker():
         try:
+            app_t["t0"] = time.perf_counter()
             box["res"] = asyncio.run(streamer.run())
-            finish_render()
+            finish_render(box["res"])
         except BaseException as e:  # reported after the window closes
             box["err"] = e
         finally:
@@ -426,7 +591,7 @@ def main():
     if "err" in box:
         raise box["err"]
     if "res" in box:
-        _report(box["res"], saved)
+        _report(box["res"], saved, metrics_path)
 
 
 if __name__ == "__main__":

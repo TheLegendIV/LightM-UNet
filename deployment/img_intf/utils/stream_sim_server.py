@@ -40,7 +40,7 @@ def process_frame(data: bytes) -> bytes:
 class StreamSimServer:
     def __init__(self, host: str = "127.0.0.1", port: int = 0, ring_slots: int = 5,
                  proc_delay_s: float = 0.0, payload_length: int = 512 * 512,
-                 sndbuf: int = None, rcvbuf: int = None):
+                 sndbuf: int = None, rcvbuf: int = None, hw_ticks: tuple = None):
         self.host = host
         self.port = port
         self.ring_slots = ring_slots
@@ -48,6 +48,7 @@ class StreamSimServer:
         self.payload_length = payload_length
         self.sndbuf = sndbuf  # shrink SO_SNDBUF/SO_RCVBUF (testing aid, like lwIP's small TCP buffers)
         self.rcvbuf = rcvbuf
+        self.hw_ticks = hw_ticks  # (input_first, output_first, output_last): sent as the optional "HWL" trailer
         self.occupied = 0
         self.max_occupied = 0
         self.rx_stalls = 0
@@ -117,6 +118,8 @@ class StreamSimServer:
                 result = await done.get()
                 if result is None:
                     writer.write(b"ACK")
+                    if self.hw_ticks is not None:
+                        writer.write(b"HWL" + struct.pack("!3I", *self.hw_ticks))
                     await writer.drain()
                     return
                 writer.write(result)

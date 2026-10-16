@@ -32,11 +32,22 @@ MAGIC = b"IMG3"
 # 16-byte layout, different magic so a lockstep client and a streaming server
 # (or vice versa) fail loudly instead of deadlocking.
 MAGIC_STREAM = b"IMGS"
+# Test-split benchmark server (deployment/FINN_interface/lwip_collect_results): same layout, own magic.
+MAGIC_COLLECT = b"IMGC"
 HEADER_SIZE_BYTES = 16
 _STRUCT_FMT = "!4sIII"
 
 MARKER_STOP = 0x00
 MARKER_IMAGE = 0x01
+# lwip_collect_results commands (see img_intf/interfaces/collect_split.py and the server's run.c):
+#   MARKER_LOAD    + payload          : upload one image into board DDR (no reply)
+#   MARKER_LATENCY                    : lockstep per image; reply "LAT" + u32 n + n x 3 u32 PL ticks
+#   MARKER_RUN     + u8 mode + u8 reps: run the whole split `reps` times; reply "RUN" + u32 reps + reps x 3 u32 PL ticks
+#   MARKER_FETCH                      : reply "OUT" + u32 n, then n class maps
+MARKER_LOAD = 0x03
+MARKER_LATENCY = 0x04
+MARKER_RUN = 0x05
+MARKER_FETCH = 0x06
 
 
 @dataclass(frozen=True)
