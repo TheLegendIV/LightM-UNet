@@ -37,7 +37,7 @@ CALIBRATION_SEED=0
 
 DATASET_ID=509
 DATASET_NAME="Dataset509_ARCADE_1x1_4c"
-TRAINER_CLASS="nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_bilinear_upsample_256_perlayer"
+TRAINER_CLASS="nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_bilinear_upsample_perlayer"
 FP32_SOURCE_NET_NAME="nnUNetTrainerENet_12_dense_relu_warmstart150ep"
 BITS_DIR="MILP/artifacts/S12_dense_bilinear_512_uniform_v1"
 
