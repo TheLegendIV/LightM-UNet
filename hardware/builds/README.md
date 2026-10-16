@@ -65,6 +65,17 @@ When a job is retired, `git mv` its folder into
   `finn_hawq_preamble_..._w8_16_v4_trained_256x256.py`, and
   `finn_ooc_..._v4_256x256.py` (dedicated `finn_build_tmp/.../w8_16_v4/`
   build dir) — no artifacts shared with `..._w8_16_v2`.
+- **`S12_dense_512_bilinear_int8_maxfps_v1`** — 512x512 bilinear (frozen nearest + depthwise)
+  decoder, uniform INT8 (85 weight / 110 act sites), checkpoint
+  `nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_bilinear_upsample_256_perlayer_12_dense_relu_warmstart150ep_bilinear_uniform_int8_perlayer_ft15ep`,
+  folded from `MILP/artifacts/S12_512_bilin_int8_maxfps/simfifo_pairs/` (max-FPS solve with
+  BRAM joins and BRAM SWUs). Export script `finn_export_..._ft15ep.py` (run in the CPU pytorch
+  container, gates on Dice/uint8 agreement), `_launch_bilinear_int8_maxfps_preamble.sh` runs the
+  FINN preamble plus the bridge/FIFO landing gates (no HLS). Full 8-way build run 2026-10-15 (partition 1
+  deadlocked: FIFO role map landed on renumbered nodes, fixed by name-stable FIFO insertion + a role-map
+  signature check); partitions 1, 5, 7 rebuilt 2026-10-16 with that fix and `LabelSelect` PE 5 / final
+  pixel-padding SIMD 4 (`_launch_p157_rebuild.sh`), all rtlsim PASS. Assemble partitions 0, 2, 3, 4, 6 from the
+  full-build dir and 1, 5, 7 from the `..._p157fix` dir.
 This folder was emptied out on 2026-09-26 (see
 `hardware/archive/pre_builds_refactor_20260926/` for the other 2 build
 families that stayed archived: `12_dense_relu_warmstart150ep_alpha025` and

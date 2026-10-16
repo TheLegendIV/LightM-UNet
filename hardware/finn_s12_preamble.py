@@ -7,7 +7,8 @@ Run inside the FINN container (onnx copied flat into notebooks/enet/):
         [--conv-order <conv_order.json> --folding-json <layer_bits_folding_*.json>]'
 Output: finn_deployment_outputs/<tag>_preamble_<timestamp>/
 With --folding-json, finn_s12_build.py --fifo-check (bridge + folding/FIFO landing gates, no HLS) runs automatically afterwards;
---no-fifo-check limits it to --bridge-only, --no-bridge skips it.
+--no-fifo-check limits it to --bridge-only, --no-bridge skips it. The FIFO check also asserts that every node the bridge's FIFO role map names
+is still the same kind of node (op type and channel/MH/MW shape) after DWC/FIFO insertion, and fails the preamble if not.
 """
 import argparse
 import dataclasses

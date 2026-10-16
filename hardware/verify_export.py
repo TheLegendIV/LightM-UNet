@@ -183,18 +183,21 @@ def check_onnx(
 
 # ------------------------------------------------------------------ G3: first-threshold structure
 def check_first_thresholds(onnx_path: Path) -> None:
-    """The first MultiThreshold of a streamlined model must hold integer u-domain thresholds 97..159."""
+    """The first MultiThreshold of a streamlined model must hold the integer u-domain thresholds centred on 128
+    (n = 2**bits - 1 of them: 97..159 for INT6, 1..255 for INT8)."""
     from qonnx.core.modelwrapper import ModelWrapper
 
     model = ModelWrapper(str(onnx_path))
     mt = model.get_nodes_by_op_type("MultiThreshold")[0]
     t = model.get_initializer(mt.input[1])
-    expected = np.arange(97, 160, dtype=np.float64)
-    assert t.shape[1] == 63, f"expected 63 thresholds per channel, got {t.shape}"
+    n = t.shape[1]
+    assert n + 1 in (16, 32, 64, 128, 256), f"unexpected threshold count per channel: {t.shape}"
+    half = (n - 1) // 2
+    expected = np.arange(128 - half, 128 + half + 1, dtype=np.float64)
     assert np.allclose(t, expected[None, :], atol=1e-3), (
-        f"[G3] first MultiThreshold thresholds are not 97..159: min={t.min()} max={t.max()} "
+        f"[G3] first MultiThreshold thresholds are not {int(expected[0])}..{int(expected[-1])}: min={t.min()} max={t.max()} "
         f"(input contract not absorbed into the thresholds)")
-    print(f"[G3] {Path(onnx_path).name}: first MultiThreshold thresholds == 97..159")
+    print(f"[G3] {Path(onnx_path).name}: first MultiThreshold thresholds == {int(expected[0])}..{int(expected[-1])}")
 
 
 def main() -> None:

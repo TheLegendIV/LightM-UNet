@@ -344,7 +344,9 @@ def extra_node_options(node: ExtraNode, force_dsp: bool) -> list[tuple[tuple, di
                     in_bits = bits + 2 if kind in TIED_BIT_KINDS else THR_DEFAULT_IN_BITS
                     options.append((key, threshold_node_cost(g, bits, pe, ram_style=ram_style, in_bits=in_bits)))
     elif kind in FOLDABLE_STREAM_KINDS:
-        for pe in divisors(g.cout):
+        # LabelSelect_hls is not pipelined across pixels (HLS interval 12 cycles at PE 1; the real S12 partition 7 ran at ~10 cycles/pixel), so its
+        # PE is never traded for area: the argmax always reads all labels in one word.
+        for pe in ([g.cout] if kind == "argmax" else divisors(g.cout)):
             options.append(((g.name, pe, 1, "none", "stream", 0, 0), stream_node_cost(kind, g, pe)))
     elif kind in STREAM_NODE_KINDS:
         options.append(((g.name, 1, 1, "none", "stream", 0, 0), stream_node_cost(kind, g)))

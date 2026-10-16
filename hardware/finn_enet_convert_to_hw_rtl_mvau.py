@@ -32,6 +32,7 @@ MultiThreshold nodes left).
 
 Everything else is a byte-for-byte copy of finn_enet_build.step_enet_convert_to_hw.
 """
+import os
 import sys
 
 import numpy as np
@@ -158,7 +159,13 @@ def step_enet_convert_to_hw_rtl_mvau(model: ModelWrapper, cfg: DataflowBuildConf
     model = model.transform(MoveTransposePastJoinConcat())
     model = model.transform(InferShapes())
     model = model.transform(InferDataTypes())
-    for trn in [to_hw.InferStreamingMaxPool, to_hw.InferConcatLayer, AbsorbConsecutiveTransposes]:
+    second_loop = [to_hw.InferStreamingMaxPool, to_hw.InferConcatLayer, AbsorbConsecutiveTransposes]
+    if os.environ.get("INITIAL_POOL_ROUTE") == "infer_pool":
+        # initial block's 1-channel pool branch -> depthwise SWG + Pool_hls (see finn_infer_pool_initial.py); the other pools stay StreamingMaxPool
+        from finn_infer_pool_initial import InferInitialPool  # noqa: E402
+        second_loop = [InferInitialPool, to_hw.InferConvInpGen] + second_loop
+        print("[convert_to_hw] INITIAL_POOL_ROUTE=infer_pool: 1-channel MaxPool lowered with InferInitialPool", flush=True)
+    for trn in second_loop:
         model = model.transform(trn())
         model = model.transform(InferDataLayouts())
         model = model.transform(GiveUniqueNodeNames())

@@ -43,7 +43,7 @@ def model_fnl_block(
     bias=True (LayerQuantEnetFINN default, Int32Bias) adds the integer bias add after the MVAU; bias=False is the final layer of the production
     export (finn_enet_prod_export.py), which has none.
     argmax=True appends the deployed network's final argmax over the `cout` output channels (FINN LabelSelect, one label per pixel): foldable PE | cout,
-    ceil(cout / PE) cycles per output pixel, input = the stream before it (MVAU_f or Bias), output one UINT8 label per pixel (as in the real FINN build:
+    ceil(cout / PE) cycles per output pixel, PE forced to cout (see below), input = the stream before it (MVAU_f or Bias), output one UINT8 label per pixel (as in the real FINN build:
     hardware/builds/S12_dense_256_u4_analytical_v1/probes/partition7_fifo_check_20261005_222226)."""
     if (F is None) == (T_out is None):
         raise ValueError("give exactly one of F (frame cycles) or T_out (cycles per output pixel)")
@@ -71,7 +71,7 @@ def model_fnl_block(
     pe_b = _min_pe(cout, px_out, F, "Bias") if bias else None
     c_b = fcm.stream_node_cost("add", g_b, pe_b) if bias else None   # ChannelwiseOp add: priced like AddStreams (provisional)
     g_a = _geom("argmax", cout, cout, Ho, Wo, Ho, Wo, op="LabelSelect_hls")
-    pe_a = _min_pe(cout, px_out, F, "LabelSelect") if argmax else None
+    pe_a = cout if argmax else None                     # forced full PE: LabelSelect_hls is not pipelined across pixels (see finn_milp.py's argmax options)
     c_a = fcm.stream_node_cost("argmax", g_a, pe_a) if argmax else None
     swu = c_f["simd_swu"]
     cf = math.ceil(cin / swu)

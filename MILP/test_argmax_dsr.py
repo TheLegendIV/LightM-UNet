@@ -60,9 +60,10 @@ class TestArgmaxNode(unittest.TestCase):
         g = self.node.geom
         self.assertEqual((g.cin, g.cout, g.hout, g.wout, g.stage, g.op_type), (5, 5, 256, 256, "final", "LabelSelect_hls"))
 
-    def test_options_are_the_divisors_of_the_label_count(self):
+    def test_only_the_full_label_parallelism_is_offered(self):
+        # LabelSelect_hls is not pipelined across pixels (~10 cycles/pixel at PE 1 in the real build), so the argmax is never folded
         opts = {k[1]: c["cycles"] for k, c in finn_milp.extra_node_options(self.node, True)}
-        self.assertEqual(opts, {1: 5 * 256 * 256, 5: 256 * 256})
+        self.assertEqual(opts, {5: 256 * 256})
 
     def test_cost_grows_with_pe_and_has_no_memory(self):
         c1, c5 = (stream_node_cost("argmax", self.node.geom, pe) for pe in (1, 5))

@@ -365,7 +365,7 @@ def match_conv_order_to_nodes(full_model, conv_order_file):
 
     weight_like_idx = [
         idx for idx, node in enumerate(full_model.graph.node)
-        if node.op_type in ("MatrixVectorActivation", "MVAU", "VVAU") or "MaxPool" in node.op_type
+        if node.op_type in ("MatrixVectorActivation", "MVAU", "VVAU") or "MaxPool" in node.op_type or node.op_type == "Pool"
     ]
 
     def _weight_tensor(node):
@@ -759,10 +759,14 @@ def _find_init_block_extra_nodes(kernel_model, stage, dup_node, conv_path_head):
         by_name[f"{stage}.thr_m"] = pool_head.name
         by_name[f"{stage}.pool_quant"] = pool_head.name
         maxpool = _real_consumer(kernel_model, pool_head)
-    elif pool_head is not None and pool_head.op_type.startswith("StreamingMaxPool"):
+        if maxpool is not None and maxpool.op_type in SWU_OP_TYPES:
+            # InferPool route: depthwise SWG in front of Pool_hls
+            by_name[f"{stage}.swg_p"] = maxpool.name
+            maxpool = _real_consumer(kernel_model, maxpool)
+    elif pool_head is not None and pool_head.op_type.startswith(("StreamingMaxPool", "Pool")):
         maxpool = pool_head
     concat = None
-    if maxpool is not None and maxpool.op_type.startswith("StreamingMaxPool"):
+    if maxpool is not None and maxpool.op_type.startswith(("StreamingMaxPool", "Pool")):
         by_name[f"{stage}.maxpool"] = maxpool.name
         concat = _real_consumer(kernel_model, maxpool)
     if concat is not None and concat.op_type.startswith("StreamingConcat"):
@@ -942,6 +946,41 @@ def _find_block_join_nodes(kernel_model, logical_names, prev_block=None, claimed
     return by_name
 
 
+def _node_signature(model, node_name):
+    """(op family, NumChannels | MH x MW | Channels) of a node: stable across the bridge -> FIFO-forcing steps, so a
+    role map that ended up on the wrong node (names renumbered by a graph reorder) is detectable."""
+    node = next((n for n in model.graph.node if n.name == node_name), None)
+    if node is None:
+        return None
+    inst = getCustomOp(node)
+    dims = []
+    for attr in ("NumChannels", "Channels", "MH", "MW", "IFMChannels"):
+        try:
+            dims.append(int(inst.get_nodeattr(attr)))
+        except (AttributeError, KeyError):
+            pass
+    return [node.op_type.rsplit("_", 1)[0] if node.op_type.endswith(("_hls", "_rtl")) else node.op_type, dims]
+
+
+def _name_new_nodes(model, existing_names):
+    """GiveUniqueNodeNames numbers EVERY node by its list position, and InsertDWC/InsertFIFO can reorder parallel branches
+    (seen on the INT8 512 partition 1: the two Thresholdings of down1 swapped numbers once DWCs were inserted), so the
+    names the folding bridge keyed its role map on would land on the wrong nodes. Keep every pre-existing node's name and
+    only name the inserted ones (op_type_<n>, as GiveUniqueNodeNames does)."""
+    taken = set(existing_names)
+    counters = {}
+    for n in model.graph.node:
+        if n.name in existing_names:
+            continue
+        k = counters.get(n.op_type, 0)
+        while f"{n.op_type}_{k}" in taken:
+            k += 1
+        n.name = f"{n.op_type}_{k}"
+        taken.add(n.name)
+        counters[n.op_type] = k + 1
+    return model
+
+
 def step_set_fifo_depths_fixed2(model, cfg):
     """Default FIFO-depth strategy for S12-dense builds -- skips FINN's own auto-sizing entirely (both
     'characterize' and 'largefifo_rtlsim' run real HLS-rtlsim/Verilator cosimulation, which is what makes
@@ -951,10 +990,13 @@ def step_set_fifo_depths_fixed2(model, cfg):
     max(outFIFODepths, inFIFODepths) node-attr defaults), and deliberately do NOT call RemoveShallowFIFOs --
     every inserted FIFO must stay a real node so step_force_fifo_depths_from_milp (called right after this)
     can see, override, and report EVERY one of them, matched or not."""
+    # back to the bridge's (unprefixed, list-order) names BEFORE inserting anything; the original nodes keep them afterwards
+    model = model.transform(GiveUniqueNodeNames())
+    existing = {n.name for n in model.graph.node}
     model = model.transform(InsertDWC())
     model = model.transform(InsertFIFO(create_shallow_fifos=True, vivado_ram_style=cfg.large_fifo_mem_style))
     model = model.transform(SpecializeLayers(cfg._resolve_fpga_part()))
-    model = model.transform(GiveUniqueNodeNames())
+    model = _name_new_nodes(model, existing)
     model = model.transform(GiveReadableTensorNames())
     return model
 
@@ -969,6 +1011,16 @@ def step_force_fifo_depths_from_milp(model, fifo_plan: dict, min_depth: int = 2,
     not) also carries the REAL producer/consumer node name + op_type, so unmatched edges are directly
     actionable without a separate describe-the-graph pass."""
     role_of_node = fifo_plan["role_of_node"]
+    node_sig = fifo_plan.get("node_sig")
+    if node_sig:
+        # the role map is keyed on node NAMES: refuse to force depths if a name now points at a different node
+        # (renumbering after a graph reorder put the skip FIFO depth on the main branch and deadlocked partition 1)
+        bad = []
+        for name, want in node_sig.items():
+            have = _node_signature(model, name)
+            if have is None or have != want:
+                bad.append(f"{name} ({role_of_node.get(name)}): bridge saw {want}, model has {have}")
+        assert not bad, "FIFO role map no longer matches the graph:\n  " + "\n  ".join(bad)
     wanted = {tuple(k.split("=>", 1)): v for k, v in fifo_plan["wanted"].items()}
     wanted_by_producer = fifo_plan.get("wanted_by_producer", {})
     n_total = n_forced = n_forced_virtual_dwc = n_forced_producer_only = n_forced_dwc_bridge = 0
@@ -1123,6 +1175,23 @@ def build_partition_folding_config(partition_model_fn, sdp_node_name, logical_na
         note = "" if (safe_pe, safe_simd) == (pe, simd) else f" (clamped from PE={pe} SIMD={simd}, MH={mh} MW={mw})"
         print(f"{log} {node.name:30s} {node.op_type:12s} {logical_name:25s} [{json_key}] PE={safe_pe} SIMD={safe_simd}{note}")
 
+        if json_key == "final" and extra_nodes is not None:
+            # bias ChannelwiseOp and the on-chip argmax (LabelSelect) behind the last MVAU: the MILP prices them as
+            # extra nodes final.bias / final.argmax. LabelSelect_hls is not pipelined across pixels (HLS interval 12
+            # at PE=1, i.e. ~10 cycles/pixel), so left at FINN's default PE=1 it caps the whole network.
+            bias_node = kernel_model.find_consumer(node.output[0])
+            if bias_node is not None and bias_node.op_type.startswith("ChannelwiseOp"):
+                bias_pe = (extra_nodes.get("final.bias") or {}).get("pe")
+                if bias_pe:
+                    folding_config[bias_node.name] = {"PE": _largest_divisor_leq(getCustomOp(bias_node).get_nodeattr("NumChannels"), bias_pe)}
+                    print(f"{log} {bias_node.name:30s} {bias_node.op_type:12s} (final bias) {folding_config[bias_node.name]}")
+                argmax_node = kernel_model.find_consumer(bias_node.output[0])
+                if argmax_node is not None and argmax_node.op_type.startswith("LabelSelect"):
+                    argmax_pe = (extra_nodes.get("final.argmax") or {}).get("pe")
+                    if argmax_pe:
+                        folding_config[argmax_node.name] = {"PE": _largest_divisor_leq(getCustomOp(argmax_node).get_nodeattr("Labels"), argmax_pe)}
+                        print(f"{log} {argmax_node.name:30s} {argmax_node.op_type:12s} (final argmax) {folding_config[argmax_node.name]}")
+
         if entry.get("node_type") == "depthwise_vvau_slot":
             fmpad_node, swu_node = _find_preceding_swu_fmpad_vvau(kernel_model, node)
             folding_config[swu_node.name] = {"SIMD": safe_pe}
@@ -1144,8 +1213,8 @@ def build_partition_folding_config(partition_model_fn, sdp_node_name, logical_na
         elif compute_entry.get("simd_swu") is not None and node.op_type.startswith("MVAU"):
             # FINN leaves dense-conv SWU SIMD=1 otherwise, making the SWU the bottleneck.
             _, up0_leaf = _stage_leaf(json_key)
-            if up0_leaf == "up.0":
-                # up_bottleneck.py's 2x2-lowered conv has TWO chained FMPadding nodes (FMPadPix, FMPad_u)
+            if up0_leaf in ("up.0", "final"):
+                # up_bottleneck.py's 2x2-lowered conv (and `final`, the same lowered transposed conv) has TWO chained FMPadding nodes (FMPadPix, FMPad_u)
                 # before its SWG -- _find_dense_swu_fmpad only finds the nearer FMPad_u, so FMPadPix's own
                 # SIMD would otherwise silently stay at FINN's default/auto instead of matching the chain.
                 fmpadpix_node, fmpad_node, swu_node = _find_up_block_fmpad_chain(kernel_model, node)
@@ -1193,13 +1262,18 @@ def build_partition_folding_config(partition_model_fn, sdp_node_name, logical_na
 
     claimed_mvau_names = _claimed_mvau_names(kernel_model, logical_names, per_layer)
 
-    # residual-join thresholds: memory placement only (their MILP PE is not applied here -- they
-    # stay at FINN's own PE, same as the original partition2_wm bridge this was ported from).
+    # residual-join thresholds: memory placement plus the MILP PE of skip_quant/residual_add/out_act and the
+    # AddStreams node (the pair stage of the MILP raises these together with expand.0; left at FINN's own PE=1
+    # they would cap the block at one pixel per cycle).
     n_join = 0
     if extra_nodes is not None and conv_order_file is not None:
         prev_block = _previous_block_name(conv_order_file, logical_names[0]) if logical_names else None
         joins = _find_join_thresholds(kernel_model, logical_names, prev_block, claimed_mvau_names)
         for thr_name, (block, kind) in joins.items():
+            if kind in ("residual_add", "out_act"):
+                join_pe = (extra_nodes.get(f"{block}.{kind}") or {}).get("pe")
+                if join_pe:
+                    folding_config.setdefault(thr_name, {})["PE"] = join_pe
             style = (extra_nodes.get(f"{block}.{kind}") or {}).get("ram_style")
             if style not in THRESH_TRIGGER_BY_STYLE:
                 print(f"{log} WARNING {thr_name}: no ram_style for {block}.{kind} in folding json (got {style!r}) -- left on auto")
@@ -1215,6 +1289,28 @@ def build_partition_folding_config(partition_model_fn, sdp_node_name, logical_na
                   f"depth_trigger_bram={THRESH_TRIGGER_BY_STYLE[style]}")
         if n_join:
             print(f"{log} pinned depth_trigger_bram on {n_join} residual-join Thresholding node(s)")
+        adds = [n for n in kernel_model.graph.node if n.op_type.startswith("AddStreams")]
+        add_blocks = [ln[: -len(".expand.0")] for ln in logical_names if ln.endswith(".expand.0")]
+        if len(adds) == len(add_blocks):
+            for add, block in zip(adds, add_blocks):
+                add_pe = (extra_nodes.get(f"{block}.add") or {}).get("pe")
+                if add_pe:
+                    folding_config.setdefault(add.name, {})["PE"] = add_pe
+                    print(f"{log} {add.name:30s} {add.op_type:12s} (add) {block} PE={add_pe}")
+        if any(ln.startswith("initial.") for ln in logical_names):
+            # the init block's own thresholds (not around an AddStreams, so not found as joins): left unpinned they stay on
+            # Vivado "auto", which can put a >=64-deep stage in BRAM although the MILP priced them at 0 BRAM18
+            init_roles = build_partition_role_nodes(kernel_model, logical_names, per_layer)
+            for milp_key, role in (("initial.input_quant", "initial.input_quant"), ("initial.pool_quant", "initial.pool_quant"),
+                                   ("initial.act", "initial.thr_act")):
+                thr_name = init_roles.get(role)
+                style = (extra_nodes.get(milp_key) or {}).get("ram_style")
+                if thr_name is None or style not in THRESH_TRIGGER_BY_STYLE:
+                    print(f"{log} WARNING {milp_key}: no Thresholding node ({thr_name!r}) or ram_style ({style!r}) -- left on auto")
+                    continue
+                folding_config.setdefault(thr_name, {})["depth_trigger_bram"] = THRESH_TRIGGER_BY_STYLE[style]
+                print(f"{log} {thr_name:30s} Thresholding  (init {milp_key}) ram_style={style} "
+                      f"depth_trigger_bram={THRESH_TRIGGER_BY_STYLE[style]}")
     elif extra_nodes is not None or conv_order_file is not None:
         print(f"{log} WARNING: need BOTH extra_nodes and conv_order_file to bridge join thresholds -- got "
               f"extra_nodes={extra_nodes is not None} conv_order_file={conv_order_file is not None}, skipping")
@@ -1290,6 +1386,7 @@ def build_partition_folding_config(partition_model_fn, sdp_node_name, logical_na
               f"spec(s) matched to a real node pair, {len(wanted_by_producer)} more matchable via producer-only "
               f"inter-block convention ({len(unresolved)} fully unresolved)")
         fifo_plan = {"role_of_node": role_of_node, "wanted": wanted, "wanted_by_producer": wanted_by_producer,
-                     "unresolved": unresolved}
+                     "unresolved": unresolved,
+                     "node_sig": {name: _node_signature(kernel_model, name) for name in role_of_node}}
 
     return folding_config, fifo_plan

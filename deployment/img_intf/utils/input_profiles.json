@@ -8,5 +8,10 @@
     "scale": 0.027521416544914246,
     "bits": 8,
     "source": "S12_dense_512_bilinear_mixed68_v1 ft15ep, initial.input_quant"
+  },
+  "s12_512_bilinear_int8_maxfps": {
+    "scale": 0.027540819719433784,
+    "bits": 8,
+    "source": "S12_dense_512_bilinear_int8_maxfps_v1 ft15ep (uniform INT8, calibrated warm start), initial.input_quant"
   }
 }

@@ -64,12 +64,12 @@ class TestFnlModel(unittest.TestCase):
         self.assertNotIn("bias", to_folding_config(r)["folding"])
         self.assertLess(r.totals["lut"], self.r.totals["lut"])
 
-    def test_argmax_pe_follows_the_budget(self):
-        a = self.n["LabelSelect"]                    # F = 73728: 5 labels per pixel at PE 1 would need 327,680 cycles -> PE 5, one pixel per cycle
+    def test_argmax_pe_is_forced_to_the_label_count(self):
+        a = self.n["LabelSelect"]                    # PE = labels at any budget: LabelSelect_hls is not pipelined across pixels (~10 cycles/pixel at PE 1 in the real build)
         acc = self.n["MVAU_f"].out_width_bits // self.n["MVAU_f"].pe          # accumulator bits; the bias add makes it acc + 1 (INT16 -> INT17 in the real build)
         self.assertEqual((a.pe, a.frame_cycles, a.out_width_bits, a.in_width_bits), (5, PX_OUT, 8, 5 * (acc + 1)))
         loose = {x.name: x for x in model_fnl_block(**{**REF, "F": 400000}).nodes}["LabelSelect"]
-        self.assertEqual((loose.pe, loose.frame_cycles), (1, 5 * PX_OUT))          # the cheapest PE that fits the 250 fps budget
+        self.assertEqual((loose.pe, loose.frame_cycles), (5, PX_OUT))
         self.assertLessEqual(max(x.frame_cycles for x in self.r.nodes), REF["F"])
 
     def test_argmax_can_be_left_out(self):

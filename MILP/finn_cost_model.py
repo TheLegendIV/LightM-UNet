@@ -436,6 +436,8 @@ _UPSAMPLE_LUT = 184
 # LabelSelect (the network's final argmax over the output channels, one label per pixel): FINN reads PE channel values per cycle and keeps a running
 # (max value, index) pair, so a pixel takes ceil(labels / PE) cycles. NO real or HLS-estimate data exists yet: the LUT per PE lane below is a placeholder
 # (one accumulator-wide comparator + max register + index mux, ~20-bit logits) and is to be replaced by a FINN probe (see FINN_AGENT_HANDOFF.md).
+# The CYCLES are optimistic: LabelSelect_hls is not pipelined across pixels (HLS interval 12 at PE 1, i.e. ~10 cycles/pixel measured in the real S12 512 partition 7 rtlsim and on
+# the board), so finn_milp.py / analytical/fnl_block.py only offer PE = labels for it.
 _LABELSELECT_LUT_PER_PE = 64
 # bias: the final layer's integer bias add, a FINN ChannelwiseOp (INT16 -> INT17 in the real build), one element-wise add per channel and pixel. NO real or HLS-estimate data (the node is not in the calibration CSVs):
 # priced like AddStreams, as analytical/fnl_block.py does -- PROVISIONAL.
