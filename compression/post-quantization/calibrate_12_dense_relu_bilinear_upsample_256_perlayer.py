@@ -195,7 +195,7 @@ def main() -> None:
     new_checkpoint = dict(reference_checkpoint)
     new_checkpoint["network_weights"] = network_weights
     new_checkpoint["trainer_name"] = args.trainer_name or (
-        "nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_bilinear_upsample_256_perlayer" if args.model_class == "finn"
+        "nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_bilinear_upsample_perlayer" if args.model_class == "finn"
         else "nnUNetTrainerLayerQuantENet_12_dense_relu_bilinear_upsample_256_perlayer")
     out_checkpoint_path = out_fold_dir / "checkpoint_best.pth"
     torch.save(new_checkpoint, out_checkpoint_path)
