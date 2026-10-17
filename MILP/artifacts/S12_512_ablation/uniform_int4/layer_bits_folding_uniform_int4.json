@@ -4945,7 +4945,7 @@
     "stage2.0.skip_quant": {
       "kind": "skip_quant",
       "stage": "stage2.0",
-      "pe": 1,
+      "pe": 2,
       "simd": 1,
       "ram_style": "distributed",
       "weight_bits": null,
@@ -4955,8 +4955,8 @@
         "stage2.0.expand.0"
       ],
       "channels": 32,
-      "cycles": 131072,
-      "lut_calibrated": 37.0176,
+      "cycles": 65536,
+      "lut_calibrated": 74.0352,
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0
@@ -5089,7 +5089,7 @@
     "stage2.4.skip_quant": {
       "kind": "skip_quant",
       "stage": "stage2.4",
-      "pe": 1,
+      "pe": 2,
       "simd": 1,
       "ram_style": "distributed",
       "weight_bits": null,
@@ -5099,8 +5099,8 @@
         "stage2.4.expand.0"
       ],
       "channels": 32,
-      "cycles": 131072,
-      "lut_calibrated": 37.0176,
+      "cycles": 65536,
+      "lut_calibrated": 74.0352,
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0
@@ -5233,7 +5233,7 @@
     "stage3.0.skip_quant": {
       "kind": "skip_quant",
       "stage": "stage3.0",
-      "pe": 2,
+      "pe": 1,
       "simd": 1,
       "ram_style": "distributed",
       "weight_bits": null,
@@ -5243,8 +5243,8 @@
         "stage3.0.expand.0"
       ],
       "channels": 32,
-      "cycles": 65536,
-      "lut_calibrated": 74.0352,
+      "cycles": 131072,
+      "lut_calibrated": 37.0176,
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0
@@ -5377,7 +5377,7 @@
     "stage3.4.skip_quant": {
       "kind": "skip_quant",
       "stage": "stage3.4",
-      "pe": 2,
+      "pe": 1,
       "simd": 1,
       "ram_style": "distributed",
       "weight_bits": null,
@@ -5387,8 +5387,8 @@
         "stage3.4.expand.0"
       ],
       "channels": 32,
-      "cycles": 65536,
-      "lut_calibrated": 74.0352,
+      "cycles": 131072,
+      "lut_calibrated": 37.0176,
       "bram18k_calibrated": 0.0,
       "dsp": 0,
       "uram18": 0.0
@@ -6920,15 +6920,15 @@
       "consumer": "stage2.0.add",
       "producer_milp": "stage2.0.skip_quant",
       "consumer_milp": "stage2.0.add",
-      "depth": 4576,
-      "width_bits": 4,
-      "max_occupancy": 4576,
+      "depth": 2288,
+      "width_bits": 8,
+      "max_occupancy": 2288,
       "is_skip": true,
       "mem": "bram",
       "finn_impl": "vivado/block",
-      "mem_bram18": 2,
-      "mem_lut": 153.20000000000002,
-      "depth_alloc": 4608,
+      "mem_bram18": 1,
+      "mem_lut": 194.692,
+      "depth_alloc": 2288,
       "mem_uram18": 0
     },
     {
@@ -6992,15 +6992,15 @@
       "consumer": "stage2.4.add",
       "producer_milp": "stage2.4.skip_quant",
       "consumer_milp": "stage2.4.add",
-      "depth": 4576,
-      "width_bits": 4,
-      "max_occupancy": 4576,
+      "depth": 2288,
+      "width_bits": 8,
+      "max_occupancy": 2288,
       "is_skip": true,
       "mem": "bram",
       "finn_impl": "vivado/block",
-      "mem_bram18": 2,
-      "mem_lut": 153.20000000000002,
-      "depth_alloc": 4608,
+      "mem_bram18": 1,
+      "mem_lut": 194.692,
+      "depth_alloc": 2288,
       "mem_uram18": 0
     },
     {
@@ -7064,15 +7064,15 @@
       "consumer": "stage3.0.add",
       "producer_milp": "stage3.0.skip_quant",
       "consumer_milp": "stage3.0.add",
-      "depth": 2288,
-      "width_bits": 8,
-      "max_occupancy": 2288,
+      "depth": 4576,
+      "width_bits": 4,
+      "max_occupancy": 4576,
       "is_skip": true,
       "mem": "bram",
       "finn_impl": "vivado/block",
-      "mem_bram18": 1,
-      "mem_lut": 194.692,
-      "depth_alloc": 2288,
+      "mem_bram18": 2,
+      "mem_lut": 153.20000000000002,
+      "depth_alloc": 4608,
       "mem_uram18": 0
     },
     {
@@ -7136,15 +7136,15 @@
       "consumer": "stage3.4.add",
       "producer_milp": "stage3.4.skip_quant",
       "consumer_milp": "stage3.4.add",
-      "depth": 2288,
-      "width_bits": 8,
-      "max_occupancy": 2288,
+      "depth": 4576,
+      "width_bits": 4,
+      "max_occupancy": 4576,
       "is_skip": true,
       "mem": "bram",
       "finn_impl": "vivado/block",
-      "mem_bram18": 1,
-      "mem_lut": 194.692,
-      "depth_alloc": 2288,
+      "mem_bram18": 2,
+      "mem_lut": 153.20000000000002,
+      "depth_alloc": 4608,
       "mem_uram18": 0
     },
     {
@@ -8319,6 +8319,20 @@
       "lut": 4.3485000000000005
     },
     {
+      "name": "down2.out_act.dup->stage2.0.skip_quant",
+      "stage": "stage2.0",
+      "in_width": 4,
+      "out_width": 8,
+      "lut": 7.8273
+    },
+    {
+      "name": "stage2.0.skip_quant->stage2.0.add",
+      "stage": "stage2.0",
+      "in_width": 8,
+      "out_width": 4,
+      "lut": 4.3485000000000005
+    },
+    {
       "name": "stage2.2.out_act.dup->stage2.3.skip_quant",
       "stage": "stage2.3",
       "in_width": 4,
@@ -8328,6 +8342,20 @@
     {
       "name": "stage2.3.skip_quant->stage2.3.add",
       "stage": "stage2.3",
+      "in_width": 8,
+      "out_width": 4,
+      "lut": 4.3485000000000005
+    },
+    {
+      "name": "stage2.3.out_act.dup->stage2.4.skip_quant",
+      "stage": "stage2.4",
+      "in_width": 4,
+      "out_width": 8,
+      "lut": 7.8273
+    },
+    {
+      "name": "stage2.4.skip_quant->stage2.4.add",
+      "stage": "stage2.4",
       "in_width": 8,
       "out_width": 4,
       "lut": 4.3485000000000005
@@ -8347,20 +8375,6 @@
       "lut": 4.3485000000000005
     },
     {
-      "name": "stage2.7.out_act.dup->stage3.0.skip_quant",
-      "stage": "stage3.0",
-      "in_width": 4,
-      "out_width": 8,
-      "lut": 7.8273
-    },
-    {
-      "name": "stage3.0.skip_quant->stage3.0.add",
-      "stage": "stage3.0",
-      "in_width": 8,
-      "out_width": 4,
-      "lut": 4.3485000000000005
-    },
-    {
       "name": "stage3.2.out_act.dup->stage3.3.skip_quant",
       "stage": "stage3.3",
       "in_width": 4,
@@ -8370,20 +8384,6 @@
     {
       "name": "stage3.3.skip_quant->stage3.3.add",
       "stage": "stage3.3",
-      "in_width": 8,
-      "out_width": 4,
-      "lut": 4.3485000000000005
-    },
-    {
-      "name": "stage3.3.out_act.dup->stage3.4.skip_quant",
-      "stage": "stage3.4",
-      "in_width": 4,
-      "out_width": 8,
-      "lut": 7.8273
-    },
-    {
-      "name": "stage3.4.skip_quant->stage3.4.add",
-      "stage": "stage3.4",
       "in_width": 8,
       "out_width": 4,
       "lut": 4.3485000000000005
@@ -8617,7 +8617,7 @@
       "n_edges": 290,
       "n_stalling_edges": 37,
       "total_stall_cycles": 6417899.0,
-      "total_stall_over_F": 6.8464431394749194,
+      "total_stall_over_F": 6.417899,
       "achieved_dsr_pct": 125.19798278808594,
       "worst_edge": [
         "regular5.0.reduce.0",
@@ -8850,7 +8850,7 @@
     "max_dsp_fraction": 0.3,
     "max_uram_fraction": 0.3,
     "max_cycles": null,
-    "max_node_cycles": 937406.31,
+    "max_node_cycles": 1000000.0,
     "bottleneck_node": "stage2.3.conv",
     "bottleneck_cycles": 811272,
     "sensitivity_raw_sum": 1.220418599838944,
@@ -8903,8 +8903,8 @@
           "branch_b_len": 3
         },
         {
-          "join": "stage3.0.add",
-          "fork": "stage2.7.out_act.dup",
+          "join": "stage2.0.add",
+          "fork": "down2.out_act.dup",
           "ratio": 28.0338134765625,
           "branch_a_sum": 65536,
           "branch_a_len": 1,
@@ -8912,8 +8912,8 @@
           "branch_b_len": 3
         },
         {
-          "join": "stage3.4.add",
-          "fork": "stage3.3.out_act.dup",
+          "join": "stage2.4.add",
+          "fork": "stage2.3.out_act.dup",
           "ratio": 28.0338134765625,
           "branch_a_sum": 65536,
           "branch_a_len": 1,
@@ -8993,8 +8993,8 @@
           "branch_b_len": 3
         },
         {
-          "join": "stage2.0.add",
-          "fork": "down2.out_act.dup",
+          "join": "stage3.0.add",
+          "fork": "stage2.7.out_act.dup",
           "ratio": 14.01690673828125,
           "branch_a_sum": 131072,
           "branch_a_len": 1,
@@ -9002,8 +9002,8 @@
           "branch_b_len": 3
         },
         {
-          "join": "stage2.4.add",
-          "fork": "stage2.3.out_act.dup",
+          "join": "stage3.4.add",
+          "fork": "stage3.3.out_act.dup",
           "ratio": 14.01690673828125,
           "branch_a_sum": 131072,
           "branch_a_len": 1,
@@ -9150,7 +9150,19 @@
           "worst_downstream_rate": 24.758056640625
         },
         {
+          "node": "stage2.0.skip_quant",
+          "ratio": 49.51611328125,
+          "own_rate": 0.5,
+          "worst_downstream_rate": 24.758056640625
+        },
+        {
           "node": "stage2.3.skip_quant",
+          "ratio": 49.51611328125,
+          "own_rate": 0.5,
+          "worst_downstream_rate": 24.758056640625
+        },
+        {
+          "node": "stage2.4.skip_quant",
           "ratio": 49.51611328125,
           "own_rate": 0.5,
           "worst_downstream_rate": 24.758056640625
@@ -9162,19 +9174,7 @@
           "worst_downstream_rate": 24.758056640625
         },
         {
-          "node": "stage3.0.skip_quant",
-          "ratio": 49.51611328125,
-          "own_rate": 0.5,
-          "worst_downstream_rate": 24.758056640625
-        },
-        {
           "node": "stage3.3.skip_quant",
-          "ratio": 49.51611328125,
-          "own_rate": 0.5,
-          "worst_downstream_rate": 24.758056640625
-        },
-        {
-          "node": "stage3.4.skip_quant",
           "ratio": 49.51611328125,
           "own_rate": 0.5,
           "worst_downstream_rate": 24.758056640625

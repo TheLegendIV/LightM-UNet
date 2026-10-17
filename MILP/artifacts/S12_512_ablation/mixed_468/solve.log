@@ -3,30 +3,29 @@ Predecessor map: 86/88 layers have a real, traced predecessor (the rest are the 
 Extra dataflow nodes: 148 {'input_quant': 1, 'concat': 1, 'act': 1, 'upsample': 2, 'out_act': 27, 'residual_add': 27, 'skip_quant': 27, 'add': 27, 'pool_quant': 1, 'bias': 1, 'argmax': 1, 'dup': 28, 'pad_mvau': 2, 'frozen_dw': 2}.
 Note: ['down1.pool', 'down2.pool', 'initial.pool'] have no sensitivity entry (MaxPool2d, no weight, never HAWQ-measured) -- given a fixed raw sensitivity of 0.0 for every (w,a), see module docstring.
 Traced 88 layers (per-layer granularity, no block grouping). candidate_bits=(4, 6, 8) -> 9 (w,a) pairs. y: 792 binaries, z: 59760 binaries (60552 total). Solving (time_limit=300s, gap_rel=0.001)...
---target-fps 200.0 @ 187.481262MHz -> every node <= 937406 cycles (hard constraint).
-WARNING: accuracy-mode pass 2 is 'Not Solved' although pass 1 was Optimal -- keeping the pass-1 solution (accuracy-optimal, resources NOT minimised).
+--target-fps 100.0 @ 100.0MHz -> every node <= 1000000 cycles (hard constraint).
 Wrote MILP\artifacts\S12_512_ablation\mixed_468\layer_bits_folding_mixed_468.json
 ILP status: Optimal
-LUT used (calibrated): 69120 (30.0% of 230400 budget) -- GUARANTEED (hard constraint).
+LUT used (calibrated): 69118 (30.0% of 230400 budget) -- GUARANTEED (hard constraint).
 BRAM_18K used (calibrated): 187 (30.0% of 624 budget) -- GUARANTEED (hard constraint).
-DSP used: 233 (13.5% of 1728 budget) -- GUARANTEED (hard constraint).
-Bottleneck: stage2.3.conv at 811272 cycles/frame -> 231.1 FPS @ 187.481262MHz
-Total cycles (sum over nodes): 78130477
+DSP used: 219 (12.7% of 1728 budget) -- GUARANTEED (hard constraint).
+Bottleneck: stage2.3.conv at 811272 cycles/frame -> 123.3 FPS @ 100.0MHz
+Total cycles (sum over nodes): 78000831
 Branch imbalance (diagnostic, 28 fork/join diamonds): median=28.03x max=28.38x
 Chain-rate imbalance (diagnostic, 235 nodes with a descendant): median=16.00x max=192.26x
   input_quant   x  1: LUT       90  BRAM_18K    0.0  DSP    0  cycles     262144
   concat        x  1: LUT      107  BRAM_18K    0.0  DSP    0  cycles      65536
   act           x  1: LUT       90  BRAM_18K    0.0  DSP    0  cycles     262144
   upsample      x  2: LUT      368  BRAM_18K    0.0  DSP    0  cycles      81920
-  out_act       x 27: LUT     1591  BRAM_18K    0.0  DSP    0  cycles    4849664
-  residual_add  x 27: LUT     1070  BRAM_18K    0.0  DSP    0  cycles    4849664
-  skip_quant    x 27: LUT     1922  BRAM_18K    0.0  DSP    0  cycles    2949120
+  out_act       x 27: LUT     1563  BRAM_18K    0.0  DSP    0  cycles    4849664
+  residual_add  x 27: LUT     1035  BRAM_18K    0.0  DSP    0  cycles    4849664
+  skip_quant    x 27: LUT     1923  BRAM_18K    0.0  DSP    0  cycles    2818048
   add           x 27: LUT     1806  BRAM_18K    0.0  DSP    0  cycles    4849664
   pool_quant    x  1: LUT       56  BRAM_18K    0.0  DSP    0  cycles     262144
   bias          x  1: LUT      334  BRAM_18K    0.0  DSP    0  cycles     262144
   argmax        x  1: LUT      226  BRAM_18K    0.0  DSP    0  cycles     524288
   dup           x 28: LUT     1750  BRAM_18K    0.0  DSP    0  cycles    5111808
-  pad_mvau      x  2: LUT      405  BRAM_18K    0.0  DSP    4  cycles    1048576
+  pad_mvau      x  2: LUT      407  BRAM_18K    0.0  DSP    3  cycles    1048576
   frozen_dw     x  2: LUT     2306  BRAM_18K    0.0  DSP    2  cycles    1579148
 Wrote MILP\artifacts\S12_512_ablation\mixed_468\pruning_layer_bits_folding_mixed_468.json
 Wrote MILP\artifacts\S12_512_ablation\mixed_468\final_output.onnx

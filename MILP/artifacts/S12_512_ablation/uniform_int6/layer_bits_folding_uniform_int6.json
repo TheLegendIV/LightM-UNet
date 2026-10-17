@@ -19,12 +19,12 @@
     "max_dsp_fraction": 0.3,
     "max_uram_fraction": 0.3,
     "max_cycles": null,
-    "max_node_cycles": 937406.31,
+    "max_node_cycles": 1000000.0,
     "throughput_floor_violations": {},
     "solver_time_limit_s": 300,
     "solver_gap_rel": 0.001,
     "force_dsp": true,
-    "note": "Solver status 'Infeasible' -- no joint per-layer (bits, folding) assignment satisfies the requested hard LUT/BRAM/DSP/URAM budget(s) (max_lut_fraction=0.3, max_bram_fraction=0.3, max_dsp_fraction=0.3, max_uram_fraction=0.3) and max_node_cycles=937406 (nodes that cannot reach it even fully folded: none) at all."
+    "note": "Solver status 'Infeasible' -- no joint per-layer (bits, folding) assignment satisfies the requested hard LUT/BRAM/DSP/URAM budget(s) (max_lut_fraction=0.3, max_bram_fraction=0.3, max_dsp_fraction=0.3, max_uram_fraction=0.3) and max_node_cycles=1000000 (nodes that cannot reach it even fully folded: none) at all."
   },
   "dataflow_graph": {
     "input": [
