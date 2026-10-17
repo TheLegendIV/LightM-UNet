@@ -35,8 +35,16 @@ _BRAM_ANCHOR_FACTORS = (22 / 171, 906 / 1_495)
 # RTL/noActivation=1 builds -- v1, v2, v4, warmstart150ep -- went into it).
 # Treat the next new real build (v5, or w8_16_v2/_512 once synthesized) as
 # the first genuine holdout check before trusting this further.
-_RTL_MVU_LUT_DERATE_BITS = (3.5, 8.0)
+_RTL_MVU_LUT_DERATE_BITS = (3.5, 8.0)       # LEGACY: the avg_bits derate below is no longer applied (2026-10-17, see _MVAU_RTL_LUT_*); kept for provenance
 _RTL_MVU_LUT_DERATE_FACTORS = (0.6704, 0.2884)
+# 2026-10-17 refit (hardware/utils/fit_cost_model_from_node_csv.py, 7 pooled real datasets, n = 572 MVAU_rtl nodes, MILP/calibration.csv): the derate above could not be made to generalise --
+# pooled, per-dataset sum errors ran from -19 % to +72 % (nn256_v1 / nn256_w8_16_v4 over, the first full-INT8 build under) and the avg_bits term was the unstable part. A structural fit
+# generalises far better (median abs error 17.5 % against 27-37 %, per-dataset sum errors within +-24 %, leave-one-dataset-out -30 % .. +29 %): the RTL MVU does its multiplies in DSPs,
+# so its LUT is a fixed part, a part per PE (accumulator / control) and a part per PE*SIMD lane, and does NOT depend on the operand widths (adding PE*avg_bits: 1.45, no better).
+#   real_LUT ~= _MVAU_RTL_LUT_BASE + _MVAU_RTL_LUT_PER_PE * PE + _MVAU_RTL_LUT_PER_LANE * PE * SIMD
+_MVAU_RTL_LUT_BASE = 68.0979
+_MVAU_RTL_LUT_PER_PE = 5.89105
+_MVAU_RTL_LUT_PER_LANE = 14.3331
 
 
 def _interpolate_derating(
@@ -184,14 +192,25 @@ _THR_RTL_LUT_PER_NUMSTEP_PE = 0.1095   # LEGACY, see above
 # formula + 1 LUT per 64 bits of LUTRAM overestimated Thresholding LUT by +83% / +144% / +96% on this and the two nn-up builds (real LUTRAM of these nodes is ~0).
 # Only identified at output_bits = 6 (numSteps is 63 in every row): the older auto-placement builds fit ~5.9 LUT per input bit (+0.047/step) and sit 10-30% below this
 # at the same width, so other output widths are NOT calibrated. See MILP/calibration.csv.
-_THR_RTL_LUT_PER_INBIT_PE = 9.0428
+_THR_RTL_LUT_PER_INBIT_PE = 9.0428      # LEGACY (INT6-only form PE*9.04*in_bits = _THR_BLOCK_LUT_PER_INOUTBIT_PE * 6 at out_bits = 6): no longer used
 # 2026-10-11 refit of the OTHER placement, ram_style "distributed" (depth_trigger_bram 999999: no stage may use BRAM): the 48 conv thresholds the MILP pinned to it in the real v4 build
 # (12_dense_relu_nearest_conv_upsample_256_w8_16_v4: all PE=1, numSteps 15 / 63 / 255, in_bits 12-19, joined by (partition, node name) to the pinned folding config), real LUT sum 8,009,
 # BRAM18 5 (3 nodes), real LUTRAM 0: forced out of BRAM the threshold ROM is synthesised as plain logic LUTs, so there is no separate "LUTRAM" resource to price. OLS through the origin:
 #   real_LUT ~= PE * (4.6881 * in_bits + 0.5926 * numSteps)       medAPE 10.0 %, leave-one-out 10.4 %, sum ratio 0.99   (the removed 1 LUT / 64 bits term: 2.36x over, medAPE 84 %)
 # Identified only at PE=1 and in_bits >= 12 (the residual-join thresholds are 7-10 bits wide: an extrapolation); see MILP/calibration.csv.
-_THR_DIST_LUT_PER_INBIT_PE = 4.6881
-_THR_DIST_LUT_PER_STEP_PE = 0.5926
+_THR_DIST_LUT_PER_INBIT_PE = 4.6881      # LEGACY (pre-2026-10-17 form PE*(4.69*in_bits + 0.593*numSteps)): no longer used, see _THR_DIST_LUT_PER_INOUTBIT_PE
+_THR_DIST_LUT_PER_STEP_PE = 0.5926      # LEGACY, see above
+# 2026-10-17 refit (hardware/utils/fit_cost_model_from_node_csv.py, pooled node CSVs that record depth_trigger_bram: S12 INT6 256 bilinear, S12 INT8 512 bilinear v2, tied_dsr104), see MILP/calibration.csv.
+# The INT6-only fits above (output_bits = 6 in every row) did not extrapolate: the INT8 512 build's 255-step thresholds sat -23 % (block) and -25 % .. -66 % (distributed) off them.
+#   "block"       : real_LUT ~= c * PE * in_bits * out_bits          (the old 9.04 per input bit IS c * 6 at out_bits = 6; leave-one-dataset-out sum error +4 % / -10 % / +4 %)
+#   "distributed" : real_LUT ~= PE * in_bits * out_bits * c1 + c2 * channels * numSteps * in_bits   (second term only for wide inputs, in_bits >= _THR_DIST_WIDE_IN_BITS: a conv threshold's
+#                   ROM, forced into logic, grows with its total bits; the 7-12 bit residual-join thresholds stay small at any channel count). EXPECTED-VALUE fit: real nodes of identical
+#                   geometry differ 3-4x (32 ch x 19-20 bit x 255 steps: 450-480 LUT for most, 1,430-2,130 for the rest -- presumably how well Vivado can compress the threshold ROM), so a
+#                   single node can be far off; the sum over a design is what the fit targets.
+_THR_BLOCK_LUT_PER_INOUTBIT_PE = 1.55741
+_THR_DIST_LUT_PER_INOUTBIT_PE = 1.4245
+_THR_DIST_LUT_PER_ROMBIT = 0.00519297
+_THR_DIST_WIDE_IN_BITS = 13
 # Memory placement is PINNED, not left to Vivado: the bridge writes `depth_trigger_bram` on every
 # Thresholding_rtl node (thresholding.sv: a stage whose depth >= trigger goes to BRAM, a shallower one
 # to LUTRAM; trigger 0 = "auto", Vivado's own undocumented choice, which the MILP cannot predict).
@@ -328,7 +347,10 @@ def _finn_buffer_uram18(buffer_width: int, buffer_depth: int) -> int:
     return int(cascade_depth * cascade_width)
 
 
-_SWU_LUT_DERATE = 0.9951  # OLS-through-origin, n=51 real SWU nodes (S12 dense 256x256 v1+v2), R^2=0.970 -- see finn_cost_model.md / MILP/calibration.csv
+_SWU_LUT_DERATE = 0.934527  # OLS-through-origin, n=51 real SWU nodes (S12 dense 256x256 v1+v2), R^2=0.970 -- see finn_cost_model.md / MILP/calibration.csv
+# VVAU_hls (the frozen depthwise bilinear conv): the generic mvu_lut formula was built for MVAUs and over-predicts every real VVAU (+150 % .. +370 % in all builds, n = 8..11 nodes);
+# this multiplies it for depthwise layers. Fitted by hardware/utils/fit_cost_model_from_node_csv.py; 1.0 = unfitted.
+_VVAU_HLS_LUT_DERATE = 0.264539
 
 
 # ---- SWU (sliding window unit) ----
@@ -395,7 +417,12 @@ def _thresholding_rtl_cost(
     else:
         raise ValueError(f"unsupported thresholding ram_style {ram_style!r}")
     num_steps = 2 ** output_bits - 1
-    lut = pe * (_THR_DIST_LUT_PER_INBIT_PE * in_bits + _THR_DIST_LUT_PER_STEP_PE * num_steps) if ram_style == "distributed" else pe * _THR_RTL_LUT_PER_INBIT_PE * in_bits
+    if ram_style == "distributed":
+        lut = pe * in_bits * output_bits * _THR_DIST_LUT_PER_INOUTBIT_PE
+        if in_bits >= _THR_DIST_WIDE_IN_BITS:
+            lut += _THR_DIST_LUT_PER_ROMBIT * channels * num_steps * in_bits
+    else:
+        lut = pe * in_bits * output_bits * _THR_BLOCK_LUT_PER_INOUTBIT_PE
     bram18 = 0
     cf = channels // pe
     for stage in range(output_bits):
@@ -429,9 +456,9 @@ def threshold_node_cost(
 # FINN v0.10.1 prices all four at 0 (no estimator overrides). 2026-10-11: replaced the HLS-csynth estimates (131 / 115 per PE, which were +80..+100% vs real) by the
 # mean REAL post-route LUT of the three S12-dense 256 OOC builds (v2, w8_16_v4, bilinear): Add 66.9 (n=81, 64.6-68.7 per build, 6- and 8-bit), Dup 62.5 (n=84, 60.5-63.6),
 # Concat 107 (n=3, 84-128), Upsample 184 (n=6, 134-246). EVERY real Add/Dup node is PE=1, so the per-PE scaling is still the unverified linear assumption.
-_ADDSTREAMS_LUT_PER_PE = 66.9
-_DUPSTREAMS_LUT_PER_PE = 62.5
-_CONCAT_LUT = 107
+_ADDSTREAMS_LUT_PER_PE = 68.2267
+_DUPSTREAMS_LUT_PER_PE = 65.8397
+_CONCAT_LUT = 112.667
 _UPSAMPLE_LUT = 184
 # LabelSelect (the network's final argmax over the output channels, one label per pixel): FINN reads PE channel values per cycle and keeps a running
 # (max value, index) pair, so a pixel takes ceil(labels / PE) folds. Measured 2026-10-16 (S12 512, 5 labels, rtlsim of partition 7 / board): LabelSelect_hls is NOT pipelined
@@ -440,9 +467,10 @@ _UPSAMPLE_LUT = 184
 _LABELSELECT_CYCLES_PER_FOLD = 2
 # LUT: real post-synthesis LabelSelect_hls_0, PE 5 (S12 INT8 512, in the full-design partition synthesis): 226 LUT, 216 of them the 5 x ~17-bit input register slice, i.e. ~45 per PE lane
 # (ONE real point: the PE 1 value is extrapolated linearly).
-_LABELSELECT_LUT_PER_PE = 45.2
-# bias: the final layer's integer bias add, a FINN ChannelwiseOp (INT16 -> INT17 in the real build), one element-wise add per channel and pixel. NO real or HLS-estimate data (the node is not in the calibration CSVs):
-# priced like AddStreams, as analytical/fnl_block.py does -- PROVISIONAL.
+_LABELSELECT_LUT_PER_PE = 39
+# bias: the final layer's integer bias add, a FINN ChannelwiseOp (INT16 -> INT17 in the real build), one element-wise add per channel and pixel. ONE real point (2026-10-17, S12 INT8 512 v2,
+# PE 5): 253 LUT = 50.6 per PE lane, 24 % below the AddStreams price it used to share. PE > 1 beyond this point is extrapolated.
+_BIAS_LUT_PER_PE = 50.6
 STREAM_NODE_KINDS = ("add", "dup", "concat", "upsample", "bias", "argmax")
 FOLDABLE_STREAM_KINDS = ("add", "dup", "bias", "argmax")  # PE | channels (argmax: PE | labels); concat/upsample: all channels per cycle, not foldable
 
@@ -455,7 +483,7 @@ def stream_node_cost(kind: str, layer: LayerGeometry, pe: int = 1) -> dict:
         lut = pe * _LABELSELECT_LUT_PER_PE
     elif kind in FOLDABLE_STREAM_KINDS:
         cycles = layer.hout * layer.wout * math.ceil(layer.cout / pe)
-        lut = pe * {"add": _ADDSTREAMS_LUT_PER_PE, "dup": _DUPSTREAMS_LUT_PER_PE, "bias": _ADDSTREAMS_LUT_PER_PE}[kind]
+        lut = pe * {"add": _ADDSTREAMS_LUT_PER_PE, "dup": _DUPSTREAMS_LUT_PER_PE, "bias": _BIAS_LUT_PER_PE}[kind]
     elif kind in ("concat", "upsample"):
         cycles, lut = layer.hout * layer.wout, {"concat": _CONCAT_LUT, "upsample": _UPSAMPLE_LUT}[kind]
     else:
@@ -479,39 +507,24 @@ def stream_node_cost(kind: str, layer: LayerGeometry, pe: int = 1) -> dict:
 # bram_estimation/uram_estimation/dsp override exists there either, matching
 # every real DWC row in the calibration data: real_BRAM18/BRAM36/URAM/DSP are
 # all 0). See finn_cost_model.md for the real-data fit.
-_DWC_LUT_FACTOR = 0.8697  # real/raw, S12 dense 256x256 v1+v2, n=258 real DWC nodes.
-# CAUTION, unlike every other factor in this file: per-node fit quality is
-# weak (uncentered R^2=0.15-0.17, median per-node abs error ~85-89%) -- FINN's
-# own lut_estimation() barely tracks real per-node DWC LUT at all. This
-# aggregate ratio is only trustworthy for a TOTAL-budget-level check (errors
-# partly cancel in the sum); do not use dwc_cost() for any per-node decision.
-# See MILP/calibration.csv.
+_DWC_LUT_FACTOR = 0.8697  # LEGACY (real/raw of FINN's own lut_estimation, S12 dense 256x256 v1+v2, n=258): no longer used, see _DWC_LUT_PER_IN_BIT
+# 2026-10-17 refit (hardware/utils/fit_cost_model_from_node_csv.py, 4 pooled datasets, n = 525 real DWC nodes, MILP/calibration.csv): FINN's own estimate barely tracks the real LUT
+# (uncentered R^2 0.20, median abs error 82 %, leave-one-dataset-out -81 % .. +7 %), while the stream widths do:
+#   real_LUT ~= 1.0784 * in_width + 0.0930 * out_width        R^2 0.993, median abs error 6.7 %, leave-one-dataset-out -8 % .. +4 %
+# i.e. one LUT per input-stream bit (the input register stage) and almost nothing per output bit.
+_DWC_LUT_PER_IN_BIT = 1.0784
+_DWC_LUT_PER_OUT_BIT = 0.092951
 
 
 def dwc_cost(in_width: int, out_width: int) -> dict:
-    """LUT of a StreamingDataWidthConverter_rtl converting an `in_width`-bit
-    stream to `out_width` bits (both AXI-stream widths in bits, i.e.
-    PE*SIMD*(weight_bits or act_bits) of each side's own node -- NOT PE/SIMD
-    alone). Raw formula is FINN's own shift-register-based estimate (assumes
-    an intermediate width = lcm(in_width, out_width)); real Vivado data
-    shows real/raw is asymmetric between widening and narrowing conversions
-    (see finn_cost_model.md), so `_DWC_LUT_FACTOR` is a single aggregate
-    correction, same caveat as every other flat factor in this file."""
-    minw, maxw = min(in_width, out_width), max(in_width, out_width)
-    intw = abs(maxw * minw) // math.gcd(maxw, minw)
-    cnt_luts, cset_luts = 0, 0
-    if in_width != intw:
-        cnt_luts += abs(math.ceil(math.log(in_width / intw, 2)))
-        cset_luts += intw
-    if intw != out_width:
-        cnt_luts += abs(math.ceil(math.log(intw / out_width, 2)))
-        cset_luts += out_width
-    raw_lut = cnt_luts + cset_luts
+    """LUT of a StreamingDataWidthConverter_rtl converting an `in_width`-bit stream to `out_width` bits (both AXI-stream widths in bits, i.e. PE*SIMD*(weight_bits or act_bits)
+    of each side's own node -- NOT PE/SIMD alone). Linear in the two widths (see _DWC_LUT_PER_IN_BIT); FINN's own shift-register-based lut_estimation() is not used (it does not track
+    the real LUT)."""
     return {
         "total_pe": 0, "total_simd_lanes": 0,
         "swu_bram18": 0, "wm_bram18": 0, "wm_uram18": 0, "thr_bram18": 0, "thr_uram18": 0,
         "swu_lut": 0, "mvu_lut": 0, "thr_lut": 0, "mp_lut": 0,
-        "total_lut": raw_lut * _DWC_LUT_FACTOR, "mvu_dsp": 0, "total_dsp": 0,
+        "total_lut": _DWC_LUT_PER_IN_BIT * in_width + _DWC_LUT_PER_OUT_BIT * out_width, "mvu_dsp": 0, "total_dsp": 0,
         # cycles: NOT modeled -- FINN's own get_exp_cycles for this op isn't
         # overridden in streamingdatawidthconverter.py either (inherits
         # whatever HWCustomOp's generic default is), and no real per-node
@@ -590,11 +603,14 @@ def conv_cost_pe_simd(
     mvu_lut = c0 + c1 * M * P * (mult_luts + addertree_luts + acc_luts + thr_luts_fused + comp_luts_fused)
 
     if impl_style == IMPL_STYLE_RTL:
-        mvu_lut *= _interpolate_derating((W + A) / 2, _RTL_MVU_LUT_DERATE_FACTORS, anchor_bits=_RTL_MVU_LUT_DERATE_BITS)
+        # 2026-10-17: MVAU_rtl LUT is structural, not bits-driven -- real_LUT ~= base + per_pe*P + per_lane*P*Q (the DSPs take the multiplies), see the _MVAU_RTL_LUT_* comment
+        mvu_lut = _MVAU_RTL_LUT_BASE + _MVAU_RTL_LUT_PER_PE * P + _MVAU_RTL_LUT_PER_LANE * P * Q + c1 * M * P * (thr_luts_fused + comp_luts_fused)
 
     _HLS_MVU_LUT_MULT_DERATE = 0.7402
     if impl_style == IMPL_STYLE_HLS and not use_dsp:
         mvu_lut *= _HLS_MVU_LUT_MULT_DERATE
+    if depthwise:
+        mvu_lut *= _VVAU_HLS_LUT_DERATE
 
     # Standalone Thresholding_rtl under noActivation=1 -- thr_pe must satisfy
     # PE_thr >= P*Q/mw (and PE_thr | NumChannels) to keep up with the MVAU.
@@ -671,8 +687,8 @@ def conv_transpose_cost(
     return conv_cost(equivalent, weight_bits, act_bits, folding, force_dsp=force_dsp)
 
 
-_MAXPOOL_FIXED_LUT = 157.2
-_MAXPOOL_LUT_PER_CHANNEL = 26.66
+_MAXPOOL_FIXED_LUT = 135.273
+_MAXPOOL_LUT_PER_CHANNEL = 40.3108
 # StreamingMaxPool_hls loop nest (finn-hlslib): for yp / ky / xp / kx, with only the innermost kx loop (k iterations) pipelined at II = 1 and NOT flattened into its parents, so every
 # (yp, ky, xp) pays that loop's pipeline fill. Measured 2026-10-16: S12 512 INT8 partition 0 with the 1-channel 2x2 initial pool = 854,044 rtlsim cycles for 256 * 2 * 256 = 131,072
 # iterations = 6.5 cycles per iteration, i.e. kw + 4.5 (ONE geometry: k = 2, 1 channel; the word is all channels wide, so the loop count does not depend on them). FINN's own

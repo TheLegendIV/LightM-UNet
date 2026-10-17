@@ -1,6 +1,11 @@
 """Fit an avg_bits-dependent RTL MVU LUT derate against real per-node data,
 and (optionally) log the fit to MILP/calibration.csv.
 
+SUPERSEDED 2026-10-17: finn_cost_model.py no longer applies this derate to MVAU_rtl (a structural
+`base + per_pe*PE + per_lane*PE*SIMD` fit generalises far better) -- use
+hardware/utils/fit_cost_model_from_node_csv.py (spec `mvau_rtl_lut`). `raw_and_current_mvu_lut`
+below divides out the LEGACY derate constants and is only meaningful for the old formula.
+
 Why: finn_cost_model.py's RTL LUT derate (applied inside `conv_cost_pe_simd`
 whenever `impl_style=="rtl"`) was originally a FLAT scalar
 (`_RTL_MVU_LUT_DERATE=0.4868`), fit on ONE dataset (warmstart150ep, avg_bits

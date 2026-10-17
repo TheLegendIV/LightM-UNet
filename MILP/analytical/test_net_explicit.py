@@ -153,7 +153,7 @@ class TestWholeNetCheckAndPairs(unittest.TestCase):
         for k in ("skip_quant", "add", "out_act", "residual_add"):
             self.assertEqual(d2["extra_nodes"][f"regular5.0.{k}"]["pe"], 2)
             self.assertEqual(d2["extra_nodes"][f"regular5.0.{k}"]["cycles"], 131072)
-        self.assertTrue(400 < info["delta"]["lut"] < 700, info["delta"])                         # about +500 LUT
+        self.assertTrue(600 < info["delta"]["lut"] < 1000, info["delta"])                        # about +830 LUT (+500 before the 2026-10-17 recalibration of the INT8 threshold / MVAU prices)
         self.assertEqual(net_pairs.check_caps(d2), [])
         self.assertEqual(d["per_layer"]["regular5.0.expand.0"]["pe"], 1)                         # the input folding is not modified
         self.assertIsNone(net_pairs.widen_producer(d, "regular5.0", "init", ctx)[0])

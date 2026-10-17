@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import unittest
 
+import finn_cost_model as fcm
 from finn_cost_model import LayerGeometry, _thresholding_rtl_cost, conv_cost_pe_simd, layer_cost_pe_simd
 
 W, A = 6, 6  # every real node in the probe is W6A6, force_dsp=True
@@ -204,19 +205,28 @@ class ThresholdingPlacementTest(unittest.TestCase):
         lut, bram18, uram = _thresholding_rtl_cost(1, 8, 32, "block", in_bits=10)
         self.assertEqual(bram18, 1 + 2 + 4)  # 18x1024 primitives for depth 1024/2048/4096
         self.assertEqual(uram, 0)
-        # 2026-10-11 refit: LUT = 9.0428 * PE * in_bits; shallow stages of a "block" node add no LUTRAM (real ~0)
-        self.assertAlmostEqual(lut, 9.0428 * 10)
+        # 2026-10-17 refit: LUT = c * PE * in_bits * out_bits; shallow stages of a "block" node add no LUTRAM (real ~0)
+        self.assertAlmostEqual(lut, fcm._THR_BLOCK_LUT_PER_INOUTBIT_PE * 10 * 8)
 
     def test_distributed_is_all_lutram(self):
         lut, bram18, _ = _thresholding_rtl_cost(1, 8, 32, "distributed", in_bits=10)
         self.assertEqual(bram18, 0)
-        self.assertAlmostEqual(lut, 4.6881 * 10 + 0.5926 * 255)  # forced out of BRAM: refit on the 48 pinned v4 nodes, no separate LUTRAM term
+        # forced out of BRAM: no separate LUTRAM term; a narrow (< _THR_DIST_WIDE_IN_BITS) join threshold has no ROM term
+        self.assertAlmostEqual(lut, fcm._THR_DIST_LUT_PER_INOUTBIT_PE * 10 * 8)
+
+    def test_distributed_wide_input_adds_the_rom_term(self):
+        narrow, _, _ = _thresholding_rtl_cost(1, 8, 32, "distributed", in_bits=fcm._THR_DIST_WIDE_IN_BITS - 1)
+        wide, _, _ = _thresholding_rtl_cost(1, 8, 32, "distributed", in_bits=fcm._THR_DIST_WIDE_IN_BITS)
+        rom = fcm._THR_DIST_LUT_PER_ROMBIT * 32 * 255 * fcm._THR_DIST_WIDE_IN_BITS
+        self.assertAlmostEqual(wide, fcm._THR_DIST_LUT_PER_INOUTBIT_PE * fcm._THR_DIST_WIDE_IN_BITS * 8 + rom)
+        self.assertGreater(wide, narrow)
 
     def test_lut_scales_with_pe_and_input_width_not_channels(self):
         base, _, _ = _thresholding_rtl_cost(1, 6, 32, "block", in_bits=7)
         self.assertAlmostEqual(_thresholding_rtl_cost(4, 6, 32, "block", in_bits=7)[0], 4 * base)
         self.assertAlmostEqual(_thresholding_rtl_cost(1, 6, 8, "block", in_bits=7)[0], base)
         self.assertGreater(_thresholding_rtl_cost(1, 6, 32, "block", in_bits=15)[0], base)
+        self.assertGreater(_thresholding_rtl_cost(1, 8, 32, "block", in_bits=7)[0], base)     # and with the output width
 
     def test_four_bit_output_never_reaches_bram(self):
         _, bram18, _ = _thresholding_rtl_cost(1, 4, 32, "block", in_bits=12)
