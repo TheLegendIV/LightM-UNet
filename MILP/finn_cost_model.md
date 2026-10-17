@@ -5,6 +5,30 @@ only the formulas and short comments needed to read them; everything about
 *why* a constant has the value it has, what real hardware it was fit against,
 and what regimes/branches came and went lives here.
 
+## 2026-10-17 recalibration from the INT8 512 v2 build (`hardware/utils/fit_cost_model_from_node_csv.py`)
+
+The first full-INT8 512x512 build (S12_dense_512_bilinear_int8_v2, 1,091 real nodes) showed the LUT model 26.5 % low on the kinds it prices (76k against 104k real; every earlier
+INT4/INT6 build had it 3-17 % HIGH), and the MILP's total 37 % low against the 178k LUT of the OOC synthesis. All constants below were refitted with one reusable script (OLS through the
+origin per node kind, datasets pooled, leave-one-dataset-out checks; see `hardware/README.md` for the workflow). Fits are logged in `MILP/calibration.csv` (rows dated 2026-10-17).
+
+| component | before | after | evidence |
+|---|---|---|---|
+| MVAU_rtl LUT | `(300 + 1.1*P*(...)) * derate(avg_bits)` | `68.1 + 5.89*PE + 14.33*PE*SIMD` | n=572, 7 datasets: median error 17.5 % (derate form 27-37 %), per-dataset sum error within +-24 % (derate form -19 % .. +72 %); an added `PE*avg_bits` term does nothing, so the RTL MVU LUT is not bits-driven (the DSPs take the multiplies) |
+| Thresholding, block | `9.04 * PE * in_bits` (only right at out_bits = 6) | `1.557 * PE * in_bits * out_bits` | n=240, 3 datasets: median error 7.8 %, leave-one-dataset-out +4 % / -10 % / +4 % |
+| Thresholding, distributed | `PE*(4.69*in_bits + 0.593*numSteps)` | `1.4245*PE*in_bits*out_bits + 0.0052*channels*numSteps*in_bits` (2nd term only for in_bits >= 13) | n=212: R^2 0.42 -> 0.80, median error 80 % -> 28 %. Expected-value fit: identical-geometry nodes differ 3-4x (32 ch x 19-20 bit x 255 steps: 450-480 LUT for most, 1,430-2,130 for the rest), leave-one-dataset-out -44 % / +54 % |
+| DWC | FINN lut_estimation x 0.87 | `1.0784*inWidth + 0.0930*outWidth` | n=525, 4 datasets: R^2 0.20 -> 0.993, median error 82 % -> 6.7 %, leave-one-dataset-out -8 % .. +4 % |
+| VVAU_hls (frozen depthwise) | generic mvu_lut | x 0.2645 | n=10: over-predicted +150..+370 % in every build; refit -5 % |
+| SWU | derate 0.9951 | 0.9345 | n=217 |
+| StreamingMaxPool | `157.2 + 26.66*C` | `135.3 + 40.31*C` | n=17 |
+| Add / Dup / Concat | 66.9 / 62.5 / 107 per PE (Concat flat) | 68.2 / 65.8 / 112.7 | n=150 / 156 / 6 |
+| LabelSelect | 45.2 per PE (226 LUT at PE 5) | 39.0 per PE (195 LUT) | the earlier 226 was a partition-level synthesis figure; ONE point |
+| bias ChannelwiseOp | priced like AddStreams (66.9 per PE) | 50.6 per PE | ONE point (253 LUT at PE 5) |
+
+Effect: modelled-kind LUT per dataset is now -7 % .. +19 % (the INT8 512 build -26.5 % -> -7 %). The v2 `--max-fps` solve now predicts 149.5k LUT (111.4k before, 178k real from OOC
+synthesis). **Not modelled, and still the main gap:** (a) a per-partition "own logic" row of the hierarchical reports (1.6-10.3k LUT in partitions 1-6, about 42k in total) that belongs to no
+node, (b) FMPadding (2.8k LUT real), (c) Upsample, whose LUT scales with channels x bits (`102 + 2.41*C*A`, R^2 0.97) and needs the activation width passed to `stream_node_cost`, and (d) FIFO BRAM
+(real 194 BRAM18 of FIFOs). Pool_hls (123 LUT) is already within 0.2 %. The MVAU change removes the model's bits-dependence of the RTL MVU LUT: INT4 and INT8 MVAUs now cost the same.
+
 ## Overview
 
 Analytical FINN dataflow resource-cost formulas, parameterized by weight

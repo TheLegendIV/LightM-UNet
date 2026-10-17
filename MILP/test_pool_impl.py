@@ -28,7 +28,8 @@ class TestLabelSelect(unittest.TestCase):
             self.assertEqual(stream_node_cost("argmax", LABELS_512, pe)["cycles"], 512 * 512 * 2 * math.ceil(5 / pe))
 
     def test_lut_matches_the_real_pe5_node(self):
-        self.assertAlmostEqual(stream_node_cost("argmax", LABELS_512, 5)["total_lut"], 226, delta=2)
+        # real LabelSelect_hls_0 PE 5: 226 LUT in the first partition synthesis, 195 in the hierarchical report of the v2 build's routed OOC checkpoint (calibration 2026-10-17: 39 per PE)
+        self.assertAlmostEqual(stream_node_cost("argmax", LABELS_512, 5)["total_lut"], 195, delta=2)
 
     def test_other_foldable_stream_nodes_keep_one_cycle_per_fold(self):
         self.assertEqual(stream_node_cost("add", LABELS_512, 5)["cycles"], 512 * 512)

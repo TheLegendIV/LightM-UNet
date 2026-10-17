@@ -227,15 +227,15 @@ def build_row(partition, node, hier):
             "depth": a.get("depth"), "folded_shape": to_str(a.get("folded_shape")),
             "impl_style": a.get("impl_style"),
         })
+    elif op_type in DWC_TYPES:           # before STREAM_TYPES: DWC op types are also in STREAM_KIND_BY_OP_TYPE, which would otherwise swallow them without writing the widths
+        row.update({
+            "node_kind": "DWC", "dataType": a.get("dataType"), "bits": dtype_bits(a.get("dataType")),
+            "shape": to_str(a.get("shape")), "inWidth": a.get("inWidth"), "outWidth": a.get("outWidth"),
+        })
     elif op_type in STREAM_TYPES:
         row.update({
             "node_kind": STREAM_KIND_BY_OP_TYPE[op_type], "PE": a.get("PE"),
             "NumChannels": a.get("NumChannels"),
-        })
-    elif op_type in DWC_TYPES:
-        row.update({
-            "node_kind": "DWC", "dataType": a.get("dataType"), "bits": dtype_bits(a.get("dataType")),
-            "shape": to_str(a.get("shape")), "inWidth": a.get("inWidth"), "outWidth": a.get("outWidth"),
         })
     elif op_type in FMPADDING_TYPES:
         img = dim2(a.get("ImgDim"))

@@ -148,6 +148,19 @@ dense-specific by name): `finn_enet_build.py`, `finn_stage_partition.py`,
 LUT/DSP/BRAM calibration data). `mvau_lut_correlation_report.txt` is a
 derived correlation summary.
 
+**Recalibrating the MILP cost model from a finished build** (host steps need no Vivado / FINN):
+
+1. *Dump every node of the build* (FINN container): `utils/build_node_resource_calibration_csv.py --build-dir finn_build_tmp/<job> --onnx-dir <8way output>/intermediate_models/supported_op_partitions
+   --onnx-pattern 'partition_{i}.onnx' --out node_resource_calibration_<job>.csv` runs `report_utilization -hierarchical` on each partition's routed OOC checkpoint and joins it with the landed
+   ONNX attributes (`utils/dump_node_attrs_all.py`): MVAU/VVAU, Thresholding (with its pinned `depth_trigger_bram`), SWU, FIFO, DWC (with stream widths), FMPadding, Add/Dup/Concat/Upsample,
+   MaxPool, Pool, ChannelwiseOp, LabelSelect. Example launcher: `builds/S12_dense_512_bilinear_int8_v2/_launch_calibration_dump_int8_v2.sh`; copy the CSV to `builds/<job>/results/`.
+2. *Fit and apply*: `python hardware/utils/fit_cost_model_from_node_csv.py [--csv <the new CSV>] [--apply --write-calibration-csv]` pools every known dataset (registry `DATASETS` in the script;
+   add the new build there) and fits each node kind by OLS through the origin against structural features. It prints, per fit, the live model's and the refit's median / sum error and a
+   leave-one-dataset-out sum error per dataset (does it generalise to an unseen build?), `--apply` patches the constants in `MILP/finn_cost_model.py`, and `--write-calibration-csv` logs
+   them to `MILP/calibration.csv`. Adding a node kind or feature set is one `Spec(...)` in the script. `utils/fit_rtl_mvu_lut_derate.py` and `utils/fit_threshold_bram_cutoff.py` are older
+   single-purpose fits (the RTL MVAU derate is superseded by the structural fit in the new script; the threshold BRAM cutoff is still used).
+3. *Check*: `checks/compare_model_vs_real_resources_from_dataset.py <csv>` prints the model-vs-real total per node kind for any such CSV.
+
 ## Probes (`probes/`)
 
 Matched export+build(+OOC-synth) script triples for tiny, fast-iterating

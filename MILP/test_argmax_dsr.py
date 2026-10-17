@@ -91,10 +91,10 @@ class TestBiasNode(unittest.TestCase):
         g = self.node.geom
         self.assertEqual((g.cin, g.cout, g.hout, g.wout, g.stage, g.op_type), (5, 5, 256, 256, "final", "ChannelwiseOp_hls"))
 
-    def test_options_are_the_divisors_of_the_channel_count_and_cost_like_an_add(self):
+    def test_options_are_the_divisors_of_the_channel_count_and_cost_per_pe(self):
         opts = {k[1]: c for k, c in finn_milp.extra_node_options(self.node, True)}
         self.assertEqual({pe: c["cycles"] for pe, c in opts.items()}, {1: 5 * 256 * 256, 5: 256 * 256})
-        self.assertAlmostEqual(opts[5]["total_lut"], 5 * stream_node_cost("add", self.node.geom, 1)["total_lut"])
+        self.assertAlmostEqual(opts[5]["total_lut"], 5 * stream_node_cost("bias", self.node.geom, 1)["total_lut"])     # the measured ChannelwiseOp, 50.6 LUT per PE lane
         self.assertEqual((opts[5]["wm_bram18"], opts[5]["total_dsp"]), (0, 0))
 
     def test_bias_is_relayed_through_by_the_dsr_not_a_dsr_node(self):
