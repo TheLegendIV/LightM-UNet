@@ -9,6 +9,8 @@ Output: finn_deployment_outputs/<tag>_preamble_<timestamp>/
 With --folding-json, finn_s12_build.py --fifo-check (bridge + folding/FIFO landing gates, no HLS) runs automatically afterwards;
 --no-fifo-check limits it to --bridge-only, --no-bridge skips it. The FIFO check also asserts that every node the bridge's FIFO role map names
 is still the same kind of node (op type and channel/MH/MW shape) after DWC/FIFO insertion, and fails the preamble if not.
+The MILP's per-pool implementation (per_layer[*.pool].pool_impl) selects the pool route of the conversion step (swg_pool for initial.pool = InferPool, see
+finn_infer_pool_initial.py; it replaces setting INITIAL_POOL_ROUTE by hand) and finn_s12_build.py checks the lowered partitions against it.
 """
 import argparse
 import dataclasses
@@ -46,6 +48,33 @@ if _args.folding_json and not _args.conv_order:
     _parser.error("--folding-json requires --conv-order")
 if _args.folding_json and _args.blocks:
     _parser.error("--folding-json bridge is not supported with --blocks")
+
+
+def apply_pool_route_from_milp(folding_json):
+    """The MILP's per-pool implementation (per_layer[<pool>].pool_impl) decides how the conversion step lowers MaxPool: swg_pool for `initial.pool` -> INITIAL_POOL_ROUTE=infer_pool
+    (finn_infer_pool_initial.py). A choice this flow cannot lower (InferPool in a down block) or an INITIAL_POOL_ROUTE that contradicts the MILP fails here, before any FINN step runs.
+    MILP JSONs without pool_impl (solves before 2026-10-16) leave INITIAL_POOL_ROUTE as set."""
+    with open(folding_json) as f:
+        impls = {n: v["pool_impl"] for n, v in json.load(f).get("per_layer", {}).items() if n.endswith(".pool") and "pool_impl" in v}
+    if not impls:
+        print("pool route: MILP json has no pool_impl -- INITIAL_POOL_ROUTE=%r" % os.environ.get("INITIAL_POOL_ROUTE", ""))
+        return
+    unsupported = sorted(n for n, i in impls.items() if i == "swg_pool" and n != "initial.pool")
+    if unsupported:
+        sys.exit(f"MILP chose InferPool (swg_pool) for {unsupported}: this flow lowers InferPool only for initial.pool. Re-solve with finn_milp.py --pool-impl-scope initial.")
+    route = "infer_pool" if impls.get("initial.pool") == "swg_pool" else ""
+    have = os.environ.get("INITIAL_POOL_ROUTE", "")
+    if have and have != route:
+        sys.exit(f"INITIAL_POOL_ROUTE={have!r} contradicts the MILP's pool_impl {impls}")
+    if route:
+        os.environ["INITIAL_POOL_ROUTE"] = route
+    else:
+        os.environ.pop("INITIAL_POOL_ROUTE", None)
+    print(f"pool route from the MILP: {impls} -> INITIAL_POOL_ROUTE={route!r}")
+
+
+if _args.folding_json:
+    apply_pool_route_from_milp(_args.folding_json)
 
 # finn_enet_ip_build_partitioned_8way reads sys.argv[1]/[2] at import time.
 _real_argv, sys.argv = sys.argv, sys.argv[:1]

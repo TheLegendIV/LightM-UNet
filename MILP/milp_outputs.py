@@ -40,7 +40,7 @@ def _layer_op_type(op: str, variant: str) -> str:
     VARIANT_RTL_DSP_NOACT1 vs VARIANT_HLS_LUT_NOACT0, the latter only
     no longer reachable: --allow-lut-mult was removed)."""
     if op == "MaxPool2d":
-        return "StreamingMaxPool_hls"
+        return "Pool_hls" if variant == "pool_swg" else "StreamingMaxPool_hls"
     return "MVAU_rtl" if variant.startswith("rtl") else "MVAU_hls"
 
 

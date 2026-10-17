@@ -13,7 +13,9 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from bottleneck_sim import UNBOUNDED, Fifo, FmPadNode, MvauNode, Sink, Source, SimResult, StreamNode, run_network  # noqa: E402,F401
+from finn_cost_model import _LABELSELECT_CYCLES_PER_FOLD as LABELSELECT_II  # noqa: E402
 from up_bottleneck_sim import FmPadPixelNode, SwgGenNode  # noqa: E402
 
 
@@ -68,7 +70,7 @@ def simulate_fnl(
         la_w = cout // n["LabelSelect"].pe
         f = link("Bias" if "Bias" in n else "MVAU_f", bias_w, "LabelSelect", la_w, f_out, n_out)
         f_out = fifo("LabelSelect->out")
-        order.append(StreamNode("LabelSelect", [f], [f_out], la_w, 1, n_out))
+        order.append(StreamNode("LabelSelect", [f], [f_out], la_w, 1, n_out, ii=LABELSELECT_II))
         sink_w = 1
     sink = Sink("Sink", f_out, sink_w)
     order.append(sink)

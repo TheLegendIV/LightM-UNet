@@ -47,6 +47,7 @@ from finn_s12_build_steps import (  # noqa: E402
     step_fix_weight_dtype_bipolar_bug,
     step_force_dsp,
     step_minimize_bit_width_standalone_thresh_aware,
+    step_set_fifo_depths_fixed2,
 )
 
 import finn.builder.build_dataflow_config as build_cfg  # noqa: E402
@@ -438,6 +439,7 @@ def main():
     ap.add_argument("--skip-scale", type=float, default=1.0, help="scale the forced skip FIFO depth (0.5 = negative control)")
     ap.add_argument("--rtlsim-frames", type=int, default=3)
     ap.add_argument("--ooc", action="store_true", help="also run out-of-context synthesis after rtlsim")
+    ap.add_argument("--skip-rtlsim", action="store_true", help="go from the stitched IP straight to --ooc (e.g. when Verilator cannot build the stitched design: 'Importing from missing package mvu_pkg')")
     ap.add_argument("--stop-after", choices=["convert", "folding", "fifo", "stitch", "rtlsim"], default="rtlsim")
     a = ap.parse_args()
 
@@ -508,7 +510,8 @@ def main():
 
     m = step_hw_codegen(m, cfg)
     m = step_hw_ipgen(m, cfg)
-    m = step_set_fifo_depths(m, cfg)                      # FINN's own sizing (largefifo_rtlsim)
+    # --skip-rtlsim: FINN's own sizing (largefifo_rtlsim) runs Verilator on the stitched design, which cannot read the RTL MVAU's SystemVerilog package; the main flow's fixed depth-2 step needs no simulation
+    m = step_set_fifo_depths_fixed2(m, cfg) if a.skip_rtlsim else step_set_fifo_depths(m, cfg)     # FINN's own sizing (largefifo_rtlsim)
     m.save(os.path.join(out_dir, "after_stock_fifo_sizing.onnx"))
     m, fifo_report = step_force_fifo_depths(m, roles, cfgj["fifos"], a.fifo_policy, a.skip_scale)
     result["stages"]["fifo"] = fifo_report
@@ -536,19 +539,20 @@ def main():
         return
 
     # primary check: multi-frame rtlsim. A deadlock shows up as a timeout / no output; run_probes.sh wraps this in `timeout`.
-    m = step_measure_rtlsim_performance(m, cfg)
-    m.save(final)
-    perf_file = os.path.join(out_dir, "report", "rtlsim_performance.json")
-    if os.path.exists(perf_file):
-        perf = json.load(open(perf_file))
-        result["stages"]["rtlsim"] = perf
-        px = probe["height"] * probe["width"]
-        stable = perf.get("stable_throughput[images/s]") or perf.get("throughput[images/s]")
-        fclk = perf.get("fclk[mhz]", 1000.0 / CLK_NS) * 1e6
-        if stable:
-            result["stages"]["rtlsim"]["steady_cyc_per_pixel"] = fclk / stable / px
-            result["stages"]["rtlsim"]["target_cyc_per_pixel"] = cfgj["predicted"]["T"]
-    save_result()
+    if not a.skip_rtlsim:
+        m = step_measure_rtlsim_performance(m, cfg)
+        m.save(final)
+        perf_file = os.path.join(out_dir, "report", "rtlsim_performance.json")
+        if os.path.exists(perf_file):
+            perf = json.load(open(perf_file))
+            result["stages"]["rtlsim"] = perf
+            px = probe["height"] * probe["width"]
+            stable = perf.get("stable_throughput[images/s]") or perf.get("throughput[images/s]")
+            fclk = perf.get("fclk[mhz]", 1000.0 / CLK_NS) * 1e6
+            if stable:
+                result["stages"]["rtlsim"]["steady_cyc_per_pixel"] = fclk / stable / px
+                result["stages"]["rtlsim"]["target_cyc_per_pixel"] = cfgj["predicted"]["T"]
+        save_result()
 
     if a.ooc:
         m = m.transform(SynthOutOfContext(part=FPGA_PART, clk_period_ns=CLK_NS))

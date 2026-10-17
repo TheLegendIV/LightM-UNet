@@ -1211,17 +1211,25 @@ derivation. Only `K=S, p=0` transposed convs are used anywhere in this
 architecture (`up4.up.0`, `up5.up.0`, `final`), matching that file's own
 confirmed case.
 
-`maxpool_cost`: MaxPool2d = SWU + comparator array, no MVAU/weights —
+`maxpool_cost`: MaxPool2d as `StreamingMaxPool_hls` = comparator array, no MVAU/weights —
 `act_bits` only (no `weight_bits`, nothing to quantize). No P/Q/folding at
-all — pooling was never a folded MVAU to begin with. `cycles`: real FINN's
-`StreamingMaxPool.get_exp_cycles()` (`hls/streamingmaxpool_hls.py`) is
-`int(ifm_dim**2 * (1 + 1/k**2))` — input-pixel-driven, NOT hout*wout. A
-pooling window still has to read every input pixel once regardless of how
-many output pixels the stride produces, so cycles scale with `hin*win` —
-~k²x more than the output-pixel count this formula previously (wrongly)
-used, which silently assumed downsampling also cuts cycle cost by the same
-factor (confirmed a real ~4x undercount for this repo's 2x2/stride-2
-pools).
+all — pooling was never a folded MVAU to begin with. `cycles` (corrected 2026-10-16):
+the HLS loop nest is `for yp / ky / xp / kx` with only the innermost `kx` loop
+pipelined (not flattened), so every `(yp, ky, xp)` iteration costs `kw + 4.5`
+cycles: `hout * kh * wout * (kw + 4.5)`. Measured on the real S12 512 INT8 build:
+partition 0 with the 1-channel 2×2 pool = 854,044 rtlsim cycles = 131,072
+iterations × 6.5 (ONE geometry: 2×2, 1 channel; the stream word is all channels
+wide, so channels do not change the loop count). FINN's own `get_exp_cycles()`
+(`hls/streamingmaxpool_hls.py`) is `int(ifm_dim**2 * (1 + 1/k**2))` = 1.25
+cycles/input pixel, which is 2.6× too low here.
+
+`pool_swg_cost`: the same MaxPool2d lowered by FINN's `Pool` route (InferPool):
+depthwise `ConvolutionInputGenerator_rtl` (SIMD = PE, priced by `_finn_swu`) +
+`Pool_hls` (PE | C), cycles `max((C·K²/PE)·OH·OW, SWG cycles)`. `Pool_hls` is one
+flat II = 1 loop, so there is no per-window overhead: 328,268 measured rtlsim
+cycles for partition 0 (incl. fill) against 854,044 with StreamingMaxPool. LUT
+`86 + 4.6·PE·bits` fitted to ONE real node (Pool_hls_0, 1 channel / 8 bit = 123
+LUT: 80 loop control + 2 register slices); PE > 1 is extrapolated.
 
 ## `layer_cost_pe_simd_auto_ram`
 

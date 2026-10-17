@@ -120,7 +120,8 @@ class FifoModel:
         if self._is_layer(name):
             g, c = self.geom[name], self.cost[key]
             if g.op_type == "MaxPool2d":
-                return dict(in_w=g.cin * A, out_w=g.cin * A, internal=[])
+                w = (key[1] if key[4] == "pool_swg" else g.cin) * A      # StreamingMaxPool: all channels per word; InferPool: PE channels per word
+                return dict(in_w=w, out_w=w, internal=[])
             internal = []
             if g.kh * g.kw > 1 and simd > g.cin:                                   # parallel_window: one KxK window per SWG word, a DWC narrows it to the MVAU's SIMD
                 internal.append(("swg->mvau", g.kh * g.kw * c["simd_swu"] * A, simd * A))
@@ -257,6 +258,10 @@ class FifoModel:
         # FIFOs INSIDE a conv's FINN subgraph (FMPadding -> SWG -> MVAU -> Thresholding: one per node output; the Thr output is the dataflow edge above), and one after every DWC
         for name, g in self.geom.items():
             if g.op_type == "MaxPool2d":
+                for key, _ in self.options[name]:
+                    if key[4] == "pool_swg":                                                # InferPool: depthwise SWG -> Pool_hls is one FIFO inside the pool's FINN subgraph
+                        d_int = BLOCK_FIFO_DEPTH if self._deep_stage(_stage(name, self.geom, self.extras)) else 2
+                        self._edge_fifo(key, f"{name}.swg->pool", key[1] * self._bits(key), d_int)
                 continue
             for key, _ in self.options[name]:
                 c = self.cost[key]

@@ -1,7 +1,7 @@
 """Tests for int_bottleneck.py / int_bottleneck_sim.py. Run: python3 test_int_bottleneck.py (standard library only; ONNX test skipped without onnx).
 
-Reference: ENet U4 initial block, Cin=1 -> Cout=4, INT4, 256x256 input -> 128x128 output, F = 81920 cycles (the maxpool floor 1.25*256*256),
-i.e. T_out = 5.0 cycles per OUTPUT pixel.
+Reference: ENet U4 initial block, Cin=1 -> Cout=4, INT4, 256x256 input -> 128x128 output, F = 212992 cycles (the StreamingMaxPool floor: 128*2*128 iterations x 6.5 cycles, measured loop-nest cost;
+FINN's own estimate would be 1.25*256*256 = 81920), i.e. T_out = 13 cycles per OUTPUT pixel.
 """
 import os
 import sys
@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from int_bottleneck import export_onnx, model_int_bottleneck, rate_report, to_folding_config, verify_with_sim  # noqa: E402
 from int_bottleneck_sim import UNBOUNDED, simulate_int  # noqa: E402
 
-REF = dict(cin=1, cout=4, bits=4, height=256, width=256, F=81920)
+REF = dict(cin=1, cout=4, bits=4, height=256, width=256, F=212992)
 
 
 class TestIntModel(unittest.TestCase):
@@ -22,22 +22,24 @@ class TestIntModel(unittest.TestCase):
 
     def test_budget_and_geometry(self):
         p = self.r.params
-        self.assertEqual((p["hout"], p["wout"], p["cmid"], p["F"]), (128, 128, 3, 81920))
-        self.assertAlmostEqual(p["T"], 5.0)
-        self.assertAlmostEqual(p["T_in"], 1.25)
+        self.assertEqual((p["hout"], p["wout"], p["cmid"], p["F"]), (128, 128, 3, 212992))
+        self.assertAlmostEqual(p["T"], 13.0)
+        self.assertAlmostEqual(p["T_in"], 3.25)
 
     def test_maxpool_sets_the_floor(self):
-        self.assertEqual(self.n["MaxPool"].frame_cycles, 81920)        # 1.25 * 256 * 256, not foldable
+        self.assertEqual(self.n["MaxPool"].frame_cycles, 212992)       # 128 * 2 * 128 x (2 + 4.5), not foldable
         with self.assertRaises(ValueError) as cm:
             model_int_bottleneck(**{**REF, "F": 73728})
-        self.assertIn("81920", str(cm.exception))
+        self.assertIn("212992", str(cm.exception))
 
     def test_every_node_within_frame_budget(self):
         for x in self.r.nodes:
-            self.assertLessEqual(x.frame_cycles, 81920, x.name)
+            self.assertLessEqual(x.frame_cycles, 212992, x.name)
 
     def test_conv_branch_uses_a_parallel_window(self):
-        c = self.n["MVAU_c"]
+        # the tight pool-route budget (69632, 4.25 cycles/output pixel) forces the whole 3x3 window per cycle; at the StreamingMaxPool floor (212992) the conv branch folds narrower
+        r = model_int_bottleneck(**{**REF, "F": 69632}, pool_impl="swg_pool")
+        c = {x.name: x for x in r.nodes}["MVAU_c"]
         self.assertEqual(c.simd, 9)                                     # MW = 9 on one input channel: SIMD = whole window
         self.assertEqual(c.dsp, (c.pe + 1) // 2 * c.simd)
 
@@ -64,7 +66,7 @@ class TestIntModel(unittest.TestCase):
         with self.assertRaises(ValueError):
             model_int_bottleneck(**{**REF, "F": 65536}, pool_impl="swg_pool")     # depthwise SWG needs 66050 cycles
         with self.assertRaises(ValueError):
-            model_int_bottleneck(**{**REF, "F": 69632})                        # StreamingMaxPool still needs 81920
+            model_int_bottleneck(**{**REF, "F": 69632})                        # StreamingMaxPool still needs 212992
 
     def test_rejects_bad_inputs(self):
         with self.assertRaises(ValueError):
@@ -84,7 +86,7 @@ class TestIntSim(unittest.TestCase):
     def test_reaches_target_without_deadlock(self):
         self.assertTrue(self.v["ok"])
         self.assertFalse(self.v["deadlock"])
-        self.assertLessEqual(self.v["steady_cyc_px"], 5.0 * 1.02)
+        self.assertLessEqual(self.v["steady_cyc_px"], 13.0 * 1.02)
         self.assertEqual(len(self.v["frame_periods"]), 2)
 
     def test_fifo_edges_follow_the_landed_graph_order(self):
@@ -146,7 +148,7 @@ class TestIntSim(unittest.TestCase):
         self.assertEqual(f["swg_p"]["SIMD"], 1)
 
     def test_folding_config(self):
-        cfg = to_folding_config(self.r)
+        cfg = to_folding_config(self.rp)                                # pool route at its tight budget: parallel window, SIMD 9
         f = cfg["folding"]
         self.assertEqual(f["swg"]["parallel_window"], 1)
         self.assertEqual(f["mvau_c"]["SIMD"], 9)

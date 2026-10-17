@@ -111,6 +111,7 @@ from finn_s12_build_steps import (  # noqa: E402
     URAM_BUDGET_BLOCKS,
     URAM_PARTITIONS,
     build_partition_folding_config,
+    check_pool_impl,
     install_relaxed_stage_boundaries,
     load_partition_logical_names,
     step_allocate_uram_fifos,
@@ -330,6 +331,7 @@ def main():
             logical = load_partition_logical_names(_args.preamble_dir, _args.conv_order)
         fifo_plans = {i: None for i in part_ids}
         for i in part_ids:
+            check_pool_impl(getCustomOp(sdp_nodes[i]).get_nodeattr("model"), logical[i][1], per_layer, i)
             fc, fifo_plan = build_partition_folding_config(
                 getCustomOp(sdp_nodes[i]).get_nodeattr("model"), sdp_nodes[i].name, logical[i][0], per_layer,
                 cfg, tag=f"p{i}", extra_nodes=extra_nodes, conv_order_file=_args.conv_order,

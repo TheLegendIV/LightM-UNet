@@ -450,6 +450,22 @@ def load_partition_logical_names(preamble_dir, conv_order_file, n_partitions=8):
     return result
 
 
+def check_pool_impl(partition_model_fn, pool_logical_names, per_layer, partition):
+    """The MILP's per-pool implementation (per_layer[<pool>].pool_impl: streaming = StreamingMaxPool_hls, swg_pool = depthwise SWG + Pool_hls) must be what the lowered partition
+    contains. A mismatch (e.g. INITIAL_POOL_ROUTE set differently from the MILP's choice) would silently run a different pool than the one the MILP priced; MILP JSONs without
+    pool_impl (older solves) are skipped."""
+    pools = [n for n in ModelWrapper(partition_model_fn).graph.node if n.op_type.startswith(("StreamingMaxPool", "Pool"))]
+    if len(pools) != len(pool_logical_names):
+        raise RuntimeError(f"[bridge p{partition}] {len(pools)} pool nodes in the partition but {len(pool_logical_names)} logical pools {pool_logical_names}")
+    for node, name in zip(pools, pool_logical_names):
+        want = (per_layer.get(name) or {}).get("pool_impl")
+        have = "swg_pool" if node.op_type.startswith("Pool") else "streaming"
+        if want is not None and want != have:
+            raise RuntimeError(f"[bridge p{partition}] MILP chose pool_impl={want!r} for {name} but the partition has {node.op_type} ({have}); "
+                               f"lower the pool as the MILP priced it (finn_s12_preamble.py reads pool_impl from --folding-json)")
+        print(f"[bridge p{partition}] pool {name}: {node.op_type} ({have})" + ("" if want is not None else " -- MILP json has no pool_impl"))
+
+
 def _resolve_folding_entry(logical_name, per_layer, extra_nodes=None):
     if logical_name in per_layer:
         return per_layer[logical_name], logical_name

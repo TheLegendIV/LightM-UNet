@@ -54,12 +54,16 @@ def _pair_run(args):
     return dict(i=i, depth=depth, deadlock=bool(res["deadlock"]), period=period, peak=int(res["iface_max"][0]))
 
 
-def run_pairs(blocks: list, tasks: list[tuple[int, int]], F: int, workers: int) -> dict:
-    """{(pair, depth): result} -- every task is one paced pair run on the (frozen) blocks."""
+def _init_pairs(blocks, F):
     global _BLOCKS
     _BLOCKS, _CFG["F"] = blocks, F
+
+
+def run_pairs(blocks: list, tasks: list[tuple[int, int]], F: int, workers: int) -> dict:
+    """{(pair, depth): result} -- every task is one paced pair run on the (frozen) blocks."""
+    _init_pairs(blocks, F)
     if workers > 1 and len(tasks) > 1:
-        with Pool(min(workers, len(tasks))) as pool:
+        with Pool(min(workers, len(tasks)), initializer=_init_pairs, initargs=(blocks, F)) as pool:      # initializer: spawn (Windows) workers do not inherit the globals
             out = pool.map(_pair_run, tasks)
     else:
         out = [_pair_run(t) for t in tasks]

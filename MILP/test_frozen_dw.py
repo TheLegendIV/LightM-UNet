@@ -2,7 +2,7 @@
 
 1. graph: config DECODER_TYPE "upsample_conv" gets one `frozen_dw` extra node per up block between the nearest upsample and skip_quant (a depthwise 3x3, groups = C, at the upsampled resolution, bits tied to the
    block's expand.0 / residual-add quantizer); the nearest-decoder configs get none.
-2. solve (finn_milp.py, uniform INT6, 250 FPS, caps 1.0): the node is folded (PE | C, SIMD | 9, within the per-node cycle budget), mirrored into per_layer in the layer-entry schema the FINN bridge reads (SWG /
+2. solve (finn_milp.py, uniform INT6, 180 FPS at 100 MHz, caps 1.0 -- 250 FPS is infeasible at 512x512 since LabelSelect alone needs 524,288 cycles): the node is folded (PE | C, SIMD | 9, within the per-node cycle budget), mirrored into per_layer in the layer-entry schema the FINN bridge reads (SWG /
    FMPadding SIMD = PE, thr_pe / thr_ram_style = skip_quant's), its prefetch FIFO and the depthwise-variant up-block join FIFOs are listed with the roles the bridge maps (fmpad_k, thr_k), and nothing is counted twice.
 """
 import json
@@ -65,7 +65,7 @@ class TestSolve(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         out = Path(cls.tmp.name) / "int6.json"
         cmd = [sys.executable, str(HERE / "finn_milp.py"), "--config", "config_12_dense_relu_warmstart150ep", "--sensitivity-file", str(SENS), "--candidate-bits", "6", "--force-dsp",
-               "--min-resources", "--max-lut-fraction", "1.0", "--max-bram-fraction", "1.0", "--max-dsp-fraction", "1.0", "--max-uram-fraction", "1.0", "--target-fps", "250",
+               "--min-resources", "--max-lut-fraction", "1.0", "--max-bram-fraction", "1.0", "--max-dsp-fraction", "1.0", "--max-uram-fraction", "1.0", "--target-fps", "180",
                "--clock-mhz", "100", "--time-limit", "600", "--gap-rel", "0.001", "--out-file", str(out)]
         res = subprocess.run(cmd, cwd=HERE.parent, capture_output=True, text=True, timeout=1500)
         assert res.returncode == 0, res.stderr[-1500:]

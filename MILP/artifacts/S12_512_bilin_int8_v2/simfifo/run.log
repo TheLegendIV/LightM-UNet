@@ -1,0 +1,12 @@
+Wrote C:\Users\320303~1\AppData\Local\Temp\tmpyrw7t2x3\sites.json (85 weight sites, 110 act sites).
+maxfps_simfifo: up blocks built WITH the frozen depthwise conv (up4.main_up.1, up5.main_up.1)
+maxfps_simfifo: 29 blocks built from the MILP folding (0 warnings)
+reusing the simulated blocks of MILP\artifacts\S12_512_bilin_int8_v2\simfifo\blocks.pkl
+block-pair stage: producer source PACED at the MILP target 524812 frame cycles, a pair is flagged when > 5% above max(target, own periods); interface FIFO x4 steps, then the producer's output chain; caps from the MILP
+  pair scan: 28 pairs x (depth 2, unbounded) in 920 s
+whole-net stage: one paced run; deadlock + target check, warnings only
+  whole net (changed design): deadlock=False period=579049 (10.33% vs the MILP target 524812) [1339 s]
+  pair stage: 0 of 28 pairs needed action; 0 folding change(s) kept
+  WARNING (rate, not a failure): whole-net period 579049 is +10.33% over the MILP target 524812 (tolerance 5%); deadlock-free. Unresolved pairs: none; slowest blocks (bottleneck candidates, own period in cycles): stage3.7 (548862), stage3.3 (548862), stage2.7 (548862)
+maxfps_simfifo: wrote MILP\artifacts\S12_512_bilin_int8_v2\simfifo\layer_bits_folding_maxfps_simfifo.json
+  blocks deadlocking alone: 0, chain deadlock-free: True, within tolerance: False, intra FIFO BRAM18 191.0 (MILP) -> 189 (sim)

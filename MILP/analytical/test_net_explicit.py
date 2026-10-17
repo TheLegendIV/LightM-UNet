@@ -50,7 +50,7 @@ class TestExplicitFolds(unittest.TestCase):
         self.check(lambda: model_up_bottleneck(cin=32, cout=16, v=4, bits=4, height=32, width=32, T_out=18, skip_conv=False))
 
     def test_init(self):
-        self.check(lambda: model_int_bottleneck(cin=1, cout=4, bits=4, height=256, width=256, F=81920))
+        self.check(lambda: model_int_bottleneck(cin=1, cout=4, bits=4, height=256, width=256, F=212992))
 
     def test_final(self):
         self.check(lambda: model_fnl_block(cin=4, cout=5, bits=4, height=128, width=128, F=73728, bias=True, argmax=True))

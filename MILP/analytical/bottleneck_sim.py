@@ -81,11 +81,13 @@ class Sink:
 
 
 class StreamNode:
-    """II = 1 node. Per pixel it consumes in_w words (from every input) and emits out_w words (to every output)."""
+    """II = `ii` node (default 1). Per pixel it consumes in_w words (from every input) and emits out_w words (to every output); a word is accepted at most every `ii` cycles
+    (LabelSelect_hls: 2 cycles per word, finn_cost_model._LABELSELECT_CYCLES_PER_FOLD)."""
 
-    def __init__(self, name, ins: list, outs: list, in_w: int, out_w: int, n_px: int):
+    def __init__(self, name, ins: list, outs: list, in_w: int, out_w: int, n_px: int, ii: int = 1):
         self.name, self.ins, self.outs, self.in_w, self.out_w, self.n = name, ins, outs, in_w, out_w, n_px
         self.I = self.O = 0
+        self.ii, self._accept_at = ii, 0
         self.total_in, self.total_out = n_px * in_w, n_px * out_w
         self.chunk = max(1, math.ceil(in_w / out_w))
 
@@ -107,12 +109,13 @@ class StreamNode:
             else:
                 emit_blocked = True
         limit = (self._needed(self.O) if self.O < self.total_out else self.total_in) + self.chunk
-        if self.I < self.total_in and self.I < limit and all(f.q for f in self.ins):
+        if self.I < self.total_in and self.I < limit and t >= self._accept_at and all(f.q for f in self.ins):
             expect = self.I // self.in_w
             for f in self.ins:
                 pid, _ = f.q.popleft()
                 assert pid == expect, f"{self.name}: token for pixel {pid}, expected {expect}"
             self.I += 1
+            self._accept_at = t + self.ii
             progressed = True
         if progressed:
             return BUSY

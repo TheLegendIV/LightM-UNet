@@ -258,12 +258,17 @@ def search_swg_pool(g_pool: LayerGeometry, bits: int, budget: int, parallel_wind
     input values + 2 and no per-window write phase; a DWC (K^2 * PE -> PE words) then feeds Pool_hls."""
     c, k2, ohw = g_pool.cin, g_pool.kh * g_pool.kw, g_pool.hout * g_pool.wout
     best = None
-    for pe in ([c] if parallel_window else fcm.divisors(c)):
+    pes = [c] if parallel_window else fcm.divisors(c)
+    if "Pool" in _EXPLICIT:                                              # explicit_folds: the MILP's pool PE, no budget search
+        if c % _EXPLICIT["Pool"]:
+            raise ValueError(f"explicit fold Pool: PE={_EXPLICIT['Pool']} does not divide {c} channels")
+        pes = [_EXPLICIT["Pool"]]
+    for pe in pes:
         pool_cycles = (c * k2 // pe) * ohw
         swg_lut, swg_bram18, swg_uram18, swg_cycles = fcm._finn_swu(g_pool, bits, pe, True, parallel_window)
         if best is None:
             best = (pe, pool_cycles, swg_cycles)
-        if pool_cycles <= budget and swg_cycles <= budget:
+        if "Pool" in _EXPLICIT or (pool_cycles <= budget and swg_cycles <= budget):
             return dict(pe=pe, pool_cycles=pool_cycles, pool_lut=120 + pe * bits * (k2 - 1) * 3, swg_cycles=swg_cycles, swg_lut=swg_lut,
                         swg_bram18=swg_bram18, swg_uram18=swg_uram18)
     raise ValueError(f"{g_pool.name}: Pool route cannot reach {budget} cycles/frame even with PE = C = {c} (needs {best and best[1]} / SWG {best and best[2]})")

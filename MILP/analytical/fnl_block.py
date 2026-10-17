@@ -43,7 +43,8 @@ def model_fnl_block(
     bias=True (LayerQuantEnetFINN default, Int32Bias) adds the integer bias add after the MVAU; bias=False is the final layer of the production
     export (finn_enet_prod_export.py), which has none.
     argmax=True appends the deployed network's final argmax over the `cout` output channels (FINN LabelSelect, one label per pixel): foldable PE | cout,
-    ceil(cout / PE) cycles per output pixel, PE forced to cout (see below), input = the stream before it (MVAU_f or Bias), output one UINT8 label per pixel (as in the real FINN build:
+    2 * ceil(cout / PE) cycles per output pixel (measured: not pipelined across pixels), the smallest PE that meets the budget (PE = cout when it cannot: then the slowest node exceeds F and a
+    warning says so), input = the stream before it (MVAU_f or Bias), output one UINT8 label per pixel (as in the real FINN build:
     hardware/builds/S12_dense_256_u4_analytical_v1/probes/partition7_fifo_check_20261005_222226)."""
     if (F is None) == (T_out is None):
         raise ValueError("give exactly one of F (frame cycles) or T_out (cycles per output pixel)")
@@ -71,7 +72,9 @@ def model_fnl_block(
     pe_b = _min_pe(cout, px_out, F, "Bias") if bias else None
     c_b = fcm.stream_node_cost("add", g_b, pe_b) if bias else None   # ChannelwiseOp add: priced like AddStreams (provisional)
     g_a = _geom("argmax", cout, cout, Ho, Wo, Ho, Wo, op="LabelSelect_hls")
-    pe_a = cout if argmax else None                     # forced full PE: LabelSelect_hls is not pipelined across pixels (see finn_milp.py's argmax options)
+    pe_a = None
+    if argmax:      # smallest PE | labels that meets the budget; LabelSelect_hls costs 2 cycles per fold and pixel, so a budget below 2 cycles/pixel is out of reach even at PE = labels
+        pe_a = next((pe for pe in fcm.divisors(cout) if fcm._LABELSELECT_CYCLES_PER_FOLD * px_out * (cout // pe) <= F), cout)
     c_a = fcm.stream_node_cost("argmax", g_a, pe_a) if argmax else None
     swu = c_f["simd_swu"]
     cf = math.ceil(cin / swu)
@@ -104,7 +107,8 @@ def model_fnl_block(
             res.warnings.append(f"DWC {d.edge} needs {d.cyc_px:.2f} cyc/px (output pixels) > T_out={T:.2f}")
     res.skip_fifo = None
     mv = next(x for x in nd if x.name == "MVAU_f")
-    res.latency_first_out_cycles = int(math.ceil(2 * (Wo + 1) * cf + mv.cyc_px + (cout / pe_b if bias else 0) + (cout / pe_a if argmax else 0) + 8))
+    res.latency_first_out_cycles = int(math.ceil(2 * (Wo + 1) * cf + mv.cyc_px + (cout / pe_b if bias else 0)
+                                                 + (fcm._LABELSELECT_CYCLES_PER_FOLD * cout / pe_a if argmax else 0) + 8))
     res.frame_cycles = int(res.latency_first_out_cycles + (px_out - 1) * T)
     dwc_lut = sum(d.lut for d in res.dwcs)
     res.totals = dict(lut=sum(x.lut for x in nd) + dwc_lut, bram18=sum(x.bram18 for x in nd), uram=sum(x.uram for x in nd),
@@ -115,7 +119,7 @@ def model_fnl_block(
     res.warnings.append("FMPadding_Pixel and ChannelwiseOp LUTs are not calibrated in finn_cost_model (priced 0 / like AddStreams); the MVAU counts the MACs "
                         "on inserted zeros")
     if argmax:
-        res.warnings.append("LabelSelect (argmax) LUT is a placeholder (finn_cost_model._LABELSELECT_LUT_PER_PE): no FINN estimate or probe data yet")
+        res.warnings.append("LabelSelect (argmax) LUT comes from ONE real point (PE 5: 226 LUT, finn_cost_model._LABELSELECT_LUT_PER_PE); its cycles are 2 per fold and pixel (measured)")
     return res
 
 

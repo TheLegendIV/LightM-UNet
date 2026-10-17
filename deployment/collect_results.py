@@ -22,6 +22,8 @@ PL_CLOCK_MHZ = 187.481262 MHz:
   hw_infer_ms / hw_infer_fps            steady-state time per image: (split time - latency of one image) / (n - 1)
   hw_first_output_ms                    mean over all images of input_first -> output_first (one image alone)
   hw_latency_ms / hw_latency_max_ms     mean / slowest single-image latency (input_first -> output_last)
+  milp_bottleneck_node / milp_pred_interval_ms / milp_pred_error_pct   only with --milp-json: the MILP's predicted slowest node, its cycles per frame at PL_CLOCK_MHZ
+                                        and how far that is from hw_infer_ms (the model-vs-hardware check)
 (send_seconds is a legacy column: host time of the older lockstep runs; it is kept, not written any more.)
 
   python deployment/collect_results.py                       # whole imagesTs, default build s12_512_bilinear_int8_maxfps
@@ -59,7 +61,8 @@ CLASSES = ["LAD", "RCA", "LCX", "LM"]  # label ids 1..4 of Dataset509_ARCADE_1x1
 PL_CLOCK_MHZ = 187.481262  # accelerator clock of the current bitstream (converts PL ticks to time)
 
 PERF_COLUMNS = ["split_repeats", "split_seconds", "split_seconds_std", "split_fps", "hw_infer_ms", "hw_infer_fps",
-                "hw_first_output_ms", "hw_latency_ms", "hw_latency_max_ms"]
+                "hw_first_output_ms", "hw_latency_ms", "hw_latency_max_ms",
+                "milp_bottleneck_node", "milp_pred_interval_ms", "milp_pred_error_pct"]
 LEGACY_COLUMNS = ["send_seconds"]  # written by the older lockstep runs; carried over, never overwritten
 COLUMNS = (
     ["model_name", "config", "dataset", "n_images", "n_scored", "dice", "dice_binary"]
@@ -167,6 +170,18 @@ def run_on_board(inputs: list[Path], raw_dir: Path, ip: str, port: int, dma_mode
     return perf
 
 
+def compare_with_milp(milp_json: Path, measured_interval_ms: float) -> dict:
+    """The MILP's predicted bottleneck (cycles per frame of its slowest node at PL_CLOCK_MHZ) next to the measured steady-state interval: the model-vs-hardware check of the iteration loop."""
+    with open(milp_json) as f:
+        diag = json.load(f)["_diagnostics"]
+    cycles, node = diag["bottleneck_cycles"], diag.get("bottleneck_node")
+    pred_ms = cycles / (PL_CLOCK_MHZ * 1e3)
+    err = (pred_ms - measured_interval_ms) / measured_interval_ms * 100
+    print(f"[MILP] predicted bottleneck {node}: {cycles} cycles = {pred_ms:.4f} ms ({1000 / pred_ms:.1f} fps) vs measured steady state "
+          f"{measured_interval_ms:.4f} ms ({1000 / measured_interval_ms:.1f} fps): model {err:+.2f} %")
+    return {"milp_bottleneck_node": node, "milp_pred_interval_ms": round(pred_ms, 4), "milp_pred_error_pct": round(err, 2)}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--model-name", default="s12_512_bilinear_int8_maxfps", help="build id; names output/<model-name> and the preprocessed dir")
@@ -181,6 +196,8 @@ def main() -> None:
     ap.add_argument("--repeats", type=int, default=10, help="timed passes over the whole split (more = more accurate)")
     ap.add_argument("--dma-mode", choices=["batch", "frame"], default="batch",
                     help="batch: one idma/odma start for the whole split (numReps = n); frame: one start per image")
+    ap.add_argument("--milp-json", type=Path,
+                    help="MILP layer_bits_folding_*.json of this build: records its predicted bottleneck (cycles at the PL clock) and the error against the measured steady-state interval")
     a = ap.parse_args()
 
     images = sorted((NNUNET_RAW / a.dataset / "imagesTs").glob("*.png"))[: a.limit]
@@ -211,6 +228,8 @@ def main() -> None:
                 if (r["model_name"], r["config"]) == (a.model_name, a.config):
                     row.update({c: r.get(c) or None for c in PERF_COLUMNS})
     row.update(perf)
+    if a.milp_json is not None and row.get("hw_infer_ms") not in (None, ""):
+        row.update(compare_with_milp(a.milp_json, float(row["hw_infer_ms"])))
     upsert_row(row)
     print(f"[INFO] wrote {RESULTS_CSV.name} row ({a.model_name}, {a.config}): "
           + ", ".join(f"{k}={v:.4f}" for k, v in metrics.items() if isinstance(v, float) and k in ("dice", "dice_binary")))

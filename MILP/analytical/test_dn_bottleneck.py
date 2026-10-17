@@ -39,7 +39,7 @@ class TestDnModel(unittest.TestCase):
 
     def test_maxpool_is_full_width_and_input_driven(self):
         mp = self.n["MaxPool"]
-        self.assertEqual(mp.frame_cycles, 5120)          # 1.25 * 64 * 64
+        self.assertEqual(mp.frame_cycles, 13312)         # StreamingMaxPool_hls: 32 * 2 * 32 iterations x (2 + 4.5) cycles (measured loop-nest cost, finn_cost_model._MAXPOOL_KX_LOOP_OVERHEAD)
         self.assertEqual(mp.in_width_bits, 16 * 4)       # all channels per cycle
 
     def test_channel_pad_default_group_and_cycles(self):

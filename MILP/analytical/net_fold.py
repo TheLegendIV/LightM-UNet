@@ -129,7 +129,8 @@ def block_kind(stage: str) -> str:
     return "reg"
 
 
-def run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool = False, prev_output: str | None = None, explicit: dict | None = None, bits_map: dict | None = None):
+def run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool = False, prev_output: str | None = None, explicit: dict | None = None, bits_map: dict | None = None,
+              pool_impl: str = "streaming"):
     """Analytical model of one block at budget F_k cycles per frame -> (BlockResult, layer folds, extra folds,
     slowest, intra-block FIFOs, FIFO-verification warning). compute_fifos runs verify_with_sim + to_folding_config
     on top of the same chosen BottleneckResult (same PE/SIMD/bits as lf/xf) to also get this block's OWN FIFO depths
@@ -137,13 +138,14 @@ def run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool =
     bisection trial in main()'s latency-cap search.
     explicit: given folds instead of the budget search (bottleneck.explicit_folds; net_explicit.py simulates a MILP folding this way); F_k is then only the
     block's rate target for the simulation check.
-    bits_map: per-role precision of the block ({role: bits}, bottleneck.RoleBits; net_explicit.bits_map_for_block derives it from a MILP folding's per-site bits); None = the uniform `bits`."""
+    bits_map: per-role precision of the block ({role: bits}, bottleneck.RoleBits; net_explicit.bits_map_for_block derives it from a MILP folding's per-site bits); None = the uniform `bits`.
+    pool_impl: the block's maxpool route (initial / down blocks): "streaming" = StreamingMaxPool, "swg_pool" = depthwise SWG + Pool_hls (the MILP's `pool_impl`)."""
     from bottleneck import explicit_folds
     with explicit_folds(explicit or {}):
-        return _run_block(stage, geom, bits, F_k, compute_fifos, prev_output, bits_map)
+        return _run_block(stage, geom, bits, F_k, compute_fifos, prev_output, bits_map, pool_impl)
 
 
-def _run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool, prev_output: str | None, bits_map: dict | None = None):
+def _run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool, prev_output: str | None, bits_map: dict | None = None, pool_impl: str = "streaming"):
     kind = block_kind(stage)
     lf: dict[str, tuple] = {}     # MILP layer name -> (pe, simd, thr_pe or None, analytical frame cycles of the MVAU)
     xf: dict[str, tuple] = {}     # MILP extra node name -> (pe, simd, ram_style or None)
@@ -167,7 +169,7 @@ def _run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool,
         pool = geom[f"{stage}.pool"]
         cin, cout = pool.cin, geom[f"{stage}.expand.0"].cout
         cmid = geom[f"{stage}.reduce.0"].cout
-        r = model_dn_bottleneck(cin, cout, cout // cmid, bits, pool.hin, pool.win, T_out=F_k / (pool.hout * pool.wout), skip_order="pad_thr", skip_pad="mvau", bits_map=bits_map)
+        r = model_dn_bottleneck(cin, cout, cout // cmid, bits, pool.hin, pool.win, T_out=F_k / (pool.hout * pool.wout), skip_order="pad_thr", skip_pad="mvau", pool_impl=pool_impl, bits_map=bits_map)
         n = {x.name: x for x in r.nodes}
         put(f"{stage}.reduce.0", n["MVAU_r"], n["Thr_r"]); put(f"{stage}.conv.0", n["MVAU_m"], n["Thr_m"]); put(f"{stage}.expand.0", n["MVAU_e"], n["Thr_e"])
         xf[f"{stage}.skip_pad"] = (n["MVAU_s"].pe, n["MVAU_s"].simd, "auto")
@@ -192,7 +194,7 @@ def _run_block(stage: str, geom: dict, bits: int, F_k: int, compute_fifos: bool,
         xf[f"{stage}.out_act"] = (n["Thr_out"].pe, 1, THR_RAM_STYLE)
     elif kind == "init":
         c = geom["initial.conv"]
-        r = model_int_bottleneck(c.cin, c.cin + c.cout, bits, c.hin, c.win, F=F_k, bits_map=bits_map)
+        r = model_int_bottleneck(c.cin, c.cin + c.cout, bits, c.hin, c.win, F=F_k, pool_impl=pool_impl, bits_map=bits_map)
         n = {x.name: x for x in r.nodes}
         put("initial.conv", n["MVAU_c"], n["Thr_c"])
         xf["initial.input_quant"] = (n["Thr_in"].pe, 1, THR_RAM_STYLE)
@@ -658,7 +660,7 @@ def main() -> int:
     result = assemble(a, ctx, F, keep_blocks=True)
     final_F_top = F
     if cap is not None and result["_diagnostics"]["latency_first_out_cycles"] > cap:
-        lo, hi = 81_920, F       # hi violates the cap; lo = the init maxpool floor (not foldable). Find the largest per-node budget in [lo, hi) that holds
+        lo, hi = 81_920, F       # hi violates the cap; lo = a starting guess (the loop below raises it until every block's own floor -- the StreamingMaxPool, 212,992 at 256x256 -- is met). Find the largest per-node budget in [lo, hi) that holds
         while True:
             try:
                 best = assemble(a, ctx, lo, keep_blocks=True)

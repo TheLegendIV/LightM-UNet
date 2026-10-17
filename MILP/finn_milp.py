@@ -26,7 +26,10 @@ import argparse
 import csv
 import importlib
 import json
+import os
+import shutil
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -38,7 +41,7 @@ from block_utils import enumerate_blocks, path_to_block_map  # noqa: E402
 from finn_cost_model import (  # noqa: E402
     IMPL_STYLE_HLS, IMPL_STYLE_RTL, RAM_STYLE_AUTO, RAM_STYLE_BLOCK, RAM_STYLE_ULTRA, LayerGeometry,
     THR_DEFAULT_IN_BITS, calibrated_bram18k, calibrated_lut, divisors, layer_cost_pe_simd, max_pe, max_simd, threshold_node_cost,
-    FOLDABLE_STREAM_KINDS, STREAM_NODE_KINDS, stream_node_cost,
+    FOLDABLE_STREAM_KINDS, STREAM_NODE_KINDS, stream_node_cost, pool_swg_cost,
 )
 from layer_topology import (  # noqa: E402
     ACT_SUFFIX, CONCAT_SUFFIX, OUT_ACT_SUFFIX, SKIP_PAD_SUFFIX, SKIP_QUANT_SUFFIX, compute_dataflow_graph,
@@ -67,11 +70,22 @@ MIN_STALL_EPS = 0.001  # --min-stall: relative slack of pass 1's optimal total s
 VARIANT_RTL_DSP_NOACT1 = "rtl_dsp_noact1"  # standalone Thresholding_rtl after an MVAU_rtl; SWU line buffer in LUTRAM (FINN's default `ram_style="distributed"`)
 VARIANT_RTL_DSP_NOACT1_SWU_BLOCK = "rtl_dsp_noact1_swu_block"  # same, with the SWU line buffer in BRAM (`ram_style="block"`); offered to every layer that has a window (SWU_BRAM)
 SWU_BRAM = True  # every layer with a window may place its SWU line buffer in BRAM (default since 2026-10-15; PROVISIONAL: FINN's own estimator, no real "block" SWU data)
+VARIANT_POOL_SWG = "pool_swg"  # a MaxPool2d lowered to FINN's `Pool` route (InferPool): depthwise SWG (SIMD = PE, line buffer in LUTRAM) + Pool_hls (PE | C); the MaxPool2d's other option is StreamingMaxPool_hls
+POOL_IMPL = "choose"  # CLI --pool-impl: "streaming" = StreamingMaxPool_hls only (the pre-2026-10-16 model), "swg_pool" = InferPool only, "choose" = the MILP picks per pool (and its PE)
+POOL_IMPL_CHOICES = ("streaming", "swg_pool", "choose")
+POOL_IMPL_SCOPE = "initial"  # CLI --pool-impl-scope: which pools may use InferPool. "initial" = the initial block's 1-channel pool only (all the FINN flow lowers today: finn_infer_pool_initial.py;
+                             # the down blocks' pools stay StreamingMaxPool_hls), "all" = every pool (priced and exported, but the bridge cannot build the down blocks' InferPool yet)
+POOL_IMPL_SCOPES = ("initial", "all")
+
+
+def pool_impl_of(variant: str) -> str:
+    """The implementation a MaxPool2d fold's variant stands for (the sentinel fold keeps the conv variant name, so existing JSONs stay valid)."""
+    return "swg_pool" if variant == VARIANT_POOL_SWG else "streaming"
 
 
 def _variant_cost_kwargs(variant: str, force_dsp: bool) -> dict:
     """variant -> (impl_style, force_dsp, no_activation) for layer_cost_pe_simd."""
-    if variant in (VARIANT_RTL_DSP_NOACT1, VARIANT_RTL_DSP_NOACT1_SWU_BLOCK):
+    if variant in (VARIANT_RTL_DSP_NOACT1, VARIANT_RTL_DSP_NOACT1_SWU_BLOCK, VARIANT_POOL_SWG):
         return {"impl_style": IMPL_STYLE_RTL, "force_dsp": force_dsp, "no_activation": True}
     raise ValueError(f"unknown resource variant {variant!r}")
 
@@ -344,9 +358,8 @@ def extra_node_options(node: ExtraNode, force_dsp: bool) -> list[tuple[tuple, di
                     in_bits = bits + 2 if kind in TIED_BIT_KINDS else THR_DEFAULT_IN_BITS
                     options.append((key, threshold_node_cost(g, bits, pe, ram_style=ram_style, in_bits=in_bits)))
     elif kind in FOLDABLE_STREAM_KINDS:
-        # LabelSelect_hls is not pipelined across pixels (HLS interval 12 cycles at PE 1; the real S12 partition 7 ran at ~10 cycles/pixel), so its
-        # PE is never traded for area: the argmax always reads all labels in one word.
-        for pe in ([g.cout] if kind == "argmax" else divisors(g.cout)):
+        # LabelSelect_hls costs 2 cycles per fold and pixel (not pipelined across pixels), so the PE is a real trade-off again: every divisor of the labels is offered
+        for pe in divisors(g.cout):
             options.append(((g.name, pe, 1, "none", "stream", 0, 0), stream_node_cost(kind, g, pe)))
     elif kind in STREAM_NODE_KINDS:
         options.append(((g.name, 1, 1, "none", "stream", 0, 0), stream_node_cost(kind, g)))
@@ -375,9 +388,16 @@ def extra_node_options(node: ExtraNode, force_dsp: bool) -> list[tuple[tuple, di
 # ---- Search space and sensitivity helpers ----
 
 def candidate_folds(layer: LayerGeometry, swu_bram: bool = False) -> list[tuple[int, int, str, str]]:
-    """Every (PE, SIMD, thr_ram_style, variant). MaxPool2d: one fixed sentinel fold. swu_bram: layers with a window (kernel > 1x1) also get the BRAM-SWU variant."""
+    """Every (PE, SIMD, thr_ram_style, variant). MaxPool2d: the StreamingMaxPool sentinel fold (1, 1) and/or, per POOL_IMPL, one InferPool fold per PE | C (SIMD 1, variant VARIANT_POOL_SWG).
+    swu_bram: layers with a window (kernel > 1x1) also get the BRAM-SWU variant."""
     if layer.op_type == "MaxPool2d":
-        return [(1, 1, "block", VARIANT_RTL_DSP_NOACT1)]
+        impl = POOL_IMPL if (POOL_IMPL_SCOPE == "all" or layer.stage == "initial") else "streaming"
+        folds = []
+        if impl in ("streaming", "choose"):
+            folds.append((1, 1, "block", VARIANT_RTL_DSP_NOACT1))
+        if impl in ("swg_pool", "choose"):
+            folds.extend((pe, 1, "block", VARIANT_POOL_SWG) for pe in divisors(layer.cin))
+        return folds
     variants = [VARIANT_RTL_DSP_NOACT1]
     if swu_bram and (layer.kh > 1 or layer.kw > 1):
         variants.append(VARIANT_RTL_DSP_NOACT1_SWU_BLOCK)
@@ -476,10 +496,13 @@ def solve_joint_perlayer(
                 # which 179 landed 0 real BRAM (LUTRAM), not "block"'s
                 # always-nonzero prediction -- see finn_cost_model.py's
                 # _WM_BRAM_AUTO_MIN_WMEM). SWU buffer: distributed, or block (the SWU_BRAM variant, default).
-                cost = layer_cost_pe_simd(
-                    layer, w, a, pe, simd, RAM_STYLE_AUTO,
-                    swu_ram_style=_variant_swu_style(variant), thr_ram_style=ram_style, **variant_kwargs,
-                )
+                if layer.op_type == "MaxPool2d" and variant == VARIANT_POOL_SWG:
+                    cost = pool_swg_cost(layer, a, pe)
+                else:
+                    cost = layer_cost_pe_simd(
+                        layer, w, a, pe, simd, RAM_STYLE_AUTO,
+                        swu_ram_style=_variant_swu_style(variant), thr_ram_style=ram_style, **variant_kwargs,
+                    )
                 key = (layer.name, pe, simd, ram_style, variant, w, a)
                 layer_costs[key] = cost
                 raw_cycles[key] = cost["cycles"]
@@ -617,7 +640,9 @@ def solve_joint_perlayer(
         for key, var in z.items():
             node_opts.setdefault(key[0], []).append((raw_cycles[key], var))
         dsr_nodes = {g.name for g in geometries if g.op_type != "MaxPool2d" and len({c for _, c in layer_cycle_terms[g.name]}) > 1}
-        dsr_nodes |= {n.geom.name for n in extra_nodes if n.kind in ("argmax", "pad_mvau", FROZEN_DW_KIND) and len({c for _, c in layer_cycle_terms[n.geom.name]}) > 1}
+        # The argmax (LabelSelect_hls, 2 cycles/pixel at best) is NOT a DSR node: its floor is already above the final conv's, so "downstream no slower than upstream" cannot hold for it
+        # and would only force every conv in front of it slower; it is relayed through like the thresholds.
+        dsr_nodes |= {n.geom.name for n in extra_nodes if n.kind in ("pad_mvau", FROZEN_DW_KIND) and len({c for _, c in layer_cycle_terms[n.geom.name]}) > 1}
         classes_of: dict[str, dict] = {}
 
         def classes(n):
@@ -728,6 +753,17 @@ def solve_joint_perlayer(
 
     # ---- Solve and extract ----
     status = prob.solve(pulp.PULP_CBC_CMD(msg=0, timeLimit=time_limit, gapRel=gap_rel))
+
+    def solve_warm():
+        """Pass-2 solve with CBC warm-started from the current variable values (pass 1's solution is feasible for pass 2). pulp's warm start needs keepFiles=True on Windows, and keepFiles
+        writes into the cwd, so the solve runs in a scratch directory that is removed afterwards."""
+        cwd, scratch = os.getcwd(), tempfile.mkdtemp(prefix="cbc_warm_")
+        try:
+            os.chdir(scratch)
+            return prob.solve(pulp.PULP_CBC_CMD(msg=0, timeLimit=time_limit, gapRel=gap_rel, warmStart=True, keepFiles=True))
+        finally:
+            os.chdir(cwd)
+            shutil.rmtree(scratch, ignore_errors=True)
     status_name = pulp.LpStatus[status]
     if status_name not in ("Optimal", "Infeasible"):
         raise RuntimeError(f"per-layer ILP hit an unexpected solver status: {status_name!r}.")
@@ -737,7 +773,7 @@ def solve_joint_perlayer(
         cycles1 = pulp.value(frame_cycles)
         prob += frame_cycles <= cycles1 * (1 + max_fps_eps) + 1e-6, "max_fps_roof"
         prob.setObjective(resources_obj)                      # pass 2: cheapest fold among those within (1 + eps) of the fastest achievable frame time
-        status = prob.solve(pulp.PULP_CBC_CMD(msg=0, timeLimit=time_limit, gapRel=gap_rel))
+        status = solve_warm()      # warm start: pass 1's solution is feasible here, CBC starts from it
         status_name = pulp.LpStatus[status]
         if status_name != "Optimal":
             raise RuntimeError(f"--max-fps pass 2 is {status_name!r} although pass 1 was Optimal.")
@@ -746,7 +782,7 @@ def solve_joint_perlayer(
         stall1 = pulp.value(stall_total) or 0.0
         prob += stall_total <= stall1 * (1 + MIN_STALL_EPS) + 1e-6, "min_stall_roof"
         prob.setObjective(resources_obj)                      # pass 2: cheapest fold among those within (1 + eps) of the optimal total stall
-        status = prob.solve(pulp.PULP_CBC_CMD(msg=0, timeLimit=time_limit, gapRel=gap_rel))
+        status = solve_warm()
         status_name = pulp.LpStatus[status]
         if status_name != "Optimal":
             raise RuntimeError(f"--min-stall pass 2 is {status_name!r} although pass 1 was Optimal.")
@@ -757,7 +793,7 @@ def solve_joint_perlayer(
         bram1 = pulp.value(bram_total)
         prob += bram_total <= bram1 * (1 + MIN_BRAM_EPS) + 1e-6, "min_bram_roof"
         prob.setObjective(resources_obj)                      # pass 2: cheapest design among those within (1 + eps) of the fewest BRAM18
-        status = prob.solve(pulp.PULP_CBC_CMD(msg=0, timeLimit=time_limit, gapRel=gap_rel))
+        status = solve_warm()
         status_name = pulp.LpStatus[status]
         if status_name != "Optimal":
             raise RuntimeError(f"--min-bram pass 2 is {status_name!r} although pass 1 was Optimal.")
@@ -769,11 +805,18 @@ def solve_joint_perlayer(
         sens1 = pulp.value(SENSITIVITY_OBJ_SCALE * sensitivity_term)
         prob += SENSITIVITY_OBJ_SCALE * sensitivity_term <= sens1 * (1 + max_accuracy_eps) + 1e-6, "max_accuracy_roof"
         prob.setObjective(resources_obj)                      # pass 2: cheapest bits + fold among those within (1 + eps) of the best achievable accuracy proxy (bits are NOT pinned)
-        status = prob.solve(pulp.PULP_CBC_CMD(msg=0, timeLimit=time_limit, gapRel=gap_rel))
+        pass1_values = {v.name: v.varValue for v in prob.variables()}
+        status = solve_warm()
         status_name = pulp.LpStatus[status]
+        pass2_failed = None
         if status_name != "Optimal":
-            raise RuntimeError(f"accuracy-mode pass 2 is {status_name!r} although pass 1 was Optimal.")
-        max_accuracy_info = {"pass1_sensitivity_norm_mean": sens1 / SENSITIVITY_OBJ_SCALE, "eps": max_accuracy_eps}
+            # pass 2 found no point within the time limit (a tight accuracy roof leaves CBC no incumbent): keep pass 1's accuracy-optimal solution, resources not minimised
+            pass2_failed = status_name
+            print(f"WARNING: accuracy-mode pass 2 is {status_name!r} although pass 1 was Optimal -- keeping the pass-1 solution (accuracy-optimal, resources NOT minimised).")
+            for v in prob.variables():
+                v.varValue = pass1_values[v.name]
+            status_name = "Optimal"
+        max_accuracy_info = {"pass1_sensitivity_norm_mean": sens1 / SENSITIVITY_OBJ_SCALE, "eps": max_accuracy_eps, **({"pass2_failed": pass2_failed} if pass2_failed else {})}
 
     n_binary_vars = len(y) + len(z)
     n_constraints = (
@@ -833,6 +876,7 @@ def solve_joint_perlayer(
             "stage": layer.stage, "pe": pe, "simd": simd, "thr_ram_style": ram_style, "variant": variant, "swu_ram_style": _variant_swu_style(variant),
             "force_dsp": variant_kwargs["force_dsp"], "mvau_noAct": variant_kwargs["no_activation"],
             "weight_bits": w, "act_bits": a, **cost,
+            **({"pool_impl": pool_impl_of(variant)} if layer.op_type == "MaxPool2d" else {}),     # streaming = StreamingMaxPool_hls, swg_pool = depthwise SWG + Pool_hls (PE = `pe`)
         }
 
     for v in per_layer.values():
@@ -1198,9 +1242,17 @@ def main() -> None:
     parser.add_argument("--gap-rel", type=float, default=0.02, help="CBC relative optimality gap.")
     parser.add_argument("--pin-bits-file", type=Path, default=None,
                          help="TEST-ONLY: pin y to a layer_bits_*.json (skips the bit-choice search; folding is still solved).")
+    parser.add_argument("--pool-impl", choices=POOL_IMPL_CHOICES, default="choose",
+                         help="MaxPool implementation: streaming = StreamingMaxPool_hls only (not foldable, ~3.3 cycles/pixel at 1 channel), swg_pool = InferPool only (depthwise SWG + Pool_hls, "
+                              "PE | C), choose = the MILP picks per pool (default).")
+    parser.add_argument("--pool-impl-scope", choices=POOL_IMPL_SCOPES, default="initial",
+                         help="Which pools may use InferPool: initial = only the initial block's 1-channel pool (the only one the FINN flow lowers today; the down blocks' pools stay StreamingMaxPool_hls), "
+                              "all = every pool (priced and exported; the bridge cannot build the down blocks' InferPool yet).")
     parser.add_argument("--out-file", type=Path, required=True)
     args = parser.parse_args()
     args.dsr_pct = None if args.dsr_pct == DSR_OFF else args.dsr_pct
+    global POOL_IMPL, POOL_IMPL_SCOPE
+    POOL_IMPL, POOL_IMPL_SCOPE = args.pool_impl, args.pool_impl_scope
 
     load_config(args.config)
 

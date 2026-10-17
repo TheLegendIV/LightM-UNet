@@ -83,7 +83,7 @@ def explicit_for_block(stage: str, kind: str, per_layer: dict, extra: dict, prev
         if kind == "dn":
             f["skip_mvau"] = (extra[f"{stage}.skip_pad"]["pe"], extra[f"{stage}.skip_pad"]["simd"])
         if kind == "up" and f"{stage}{net_fold.DW_SUFFIX}" in per_layer:       # the frozen depthwise 3x3 conv (add_frozen_dw_fold.py): its fold, and skip_quant is the depthwise path's threshold Thr_k
-            f[f"{stage}{net_fold.DW_SUFFIX}"] = lyr(f"{stage}{net_fold.DW_SUFFIX}")[0]
+            f["skipdw"] = lyr(f"{stage}{net_fold.DW_SUFFIX}")[0]      # up_bottleneck's layer name of the depthwise conv (the key explicit_folds matches)
             f["Thr_k"] = xpe(f"{stage}.skip_quant")
     F = max([v["cycles"] for v in per_layer.values() if v["stage"] == stage] + [v["cycles"] for v in extra.values() if v["stage"] == stage])
     return f, int(F), warn
@@ -144,7 +144,11 @@ def build_blocks(d: dict, a, ctx) -> tuple[list, list[str]]:
             px = geom[f"{stage}.reduce.0"].hin * geom[f"{stage}.reduce.0"].win
             F = -(-F // px) * px
         bm = bits_map_for_block(stage, kind, a.sites, prev) if getattr(a, "sites", None) else None
-        r, lf, xf, _slowest, _fifos, _fw = net_fold.run_block(stage, geom, a.fallback_bits, F, prev_output=prev, explicit=folds, bits_map=bm)
+        pl = per_layer.get(f"{stage}.pool", {})
+        pool_impl = "swg_pool" if pl.get("pool_impl") == "swg_pool" or pl.get("variant") == "pool_swg" else "streaming"
+        if pool_impl == "swg_pool":
+            folds["Pool"] = pl["pe"]
+        r, lf, xf, _slowest, _fifos, _fw = net_fold.run_block(stage, geom, a.fallback_bits, F, prev_output=prev, explicit=folds, bits_map=bm, pool_impl=pool_impl)
         for name, (pe, simd, thr_pe, _cyc) in lf.items():
             m = per_layer[name]
             assert (pe, simd) == (m["pe"], m["simd"]) and (thr_pe is None or thr_pe == m.get("thr_pe")), (name, (pe, simd, thr_pe), (m["pe"], m["simd"], m.get("thr_pe")))
@@ -282,6 +286,11 @@ def keep_changes(base: dict, mod: dict, min_improvement: float) -> bool:
 _JOBS: list | None = None
 
 
+def _init_jobs(jobs):
+    global _JOBS
+    _JOBS = jobs
+
+
 def _chain_job(k: int) -> dict:
     blocks, depths, F, tol, interval = _JOBS[k]
     return _chain_once(blocks, depths, F, tol, interval, k + 1)[1]
@@ -290,15 +299,15 @@ def _chain_job(k: int) -> dict:
 def final_check(blocks_new: list, depths_new: list[int], blocks_orig: list, F: int, tol: float, changed: bool, workers: int = 2, log=print) -> tuple[dict, bool]:
     """The whole-net stage: ONE paced run of the pair stage's result (deadlock + target check; nothing is resized). With `changed`, the original MILP folding at depth 2 runs in parallel and the changes are
     kept only if keep_changes says so. Returns (chain report, changes kept)."""
-    global _JOBS
     interval = F / net_pairs.input_pixels(blocks_new[0][2])
     n_if = len(blocks_new) - 1
-    _JOBS = [(blocks_new, depths_new, F, tol, interval)] + ([(blocks_orig, [net_fifo.MIN_DEPTH] * n_if, F, tol, interval)] if changed else [])
-    if len(_JOBS) > 1 and workers > 1:
-        with Pool(len(_JOBS)) as pool:
-            infos = pool.map(_chain_job, range(len(_JOBS)))
+    jobs = [(blocks_new, depths_new, F, tol, interval)] + ([(blocks_orig, [net_fifo.MIN_DEPTH] * n_if, F, tol, interval)] if changed else [])
+    _init_jobs(jobs)
+    if len(jobs) > 1 and workers > 1:
+        with Pool(len(jobs), initializer=_init_jobs, initargs=(jobs,)) as pool:
+            infos = pool.map(_chain_job, range(len(jobs)))
     else:
-        infos = [_chain_job(k) for k in range(len(_JOBS))]
+        infos = [_chain_job(k) for k in range(len(jobs))]
     mod, base = infos[0], (infos[1] if changed else None)
     keep = keep_changes(base, mod, MIN_IMPROVEMENT) if changed else True
     final = mod if keep else base
@@ -350,7 +359,9 @@ def run(a) -> int:
     f_milp = {stage: r.params["F_milp"] for stage, _, r in blocks}
     print(f"{a.tag}: {len(blocks)} blocks built from the MILP folding ({len(warns)} warnings)", flush=True)
     tol = WARN_TOLERANCE
-    milp_cap = int(d["_diagnostics"]["max_node_cycles"])
+    diag = d["_diagnostics"]
+    mf = diag.get("max_fps")           # --max-fps solve: no cycle cap, pass 2 pins the frame time at pass 1's optimum x (1 + eps)
+    milp_cap = int(diag.get("max_node_cycles") or (mf["pass1_frame_cycles"] * (1 + mf["eps"]) if mf else diag["bottleneck_cycles"]))
     cache = a.out_dir / "blocks.pkl"
     if a.reuse_blocks and cache.exists():
         cached, cerrors = pickle.loads(cache.read_bytes())

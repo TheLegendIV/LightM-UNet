@@ -434,11 +434,13 @@ _DUPSTREAMS_LUT_PER_PE = 62.5
 _CONCAT_LUT = 107
 _UPSAMPLE_LUT = 184
 # LabelSelect (the network's final argmax over the output channels, one label per pixel): FINN reads PE channel values per cycle and keeps a running
-# (max value, index) pair, so a pixel takes ceil(labels / PE) cycles. NO real or HLS-estimate data exists yet: the LUT per PE lane below is a placeholder
-# (one accumulator-wide comparator + max register + index mux, ~20-bit logits) and is to be replaced by a FINN probe (see FINN_AGENT_HANDOFF.md).
-# The CYCLES are optimistic: LabelSelect_hls is not pipelined across pixels (HLS interval 12 at PE 1, i.e. ~10 cycles/pixel measured in the real S12 512 partition 7 rtlsim and on
-# the board), so finn_milp.py / analytical/fnl_block.py only offer PE = labels for it.
-_LABELSELECT_LUT_PER_PE = 64
+# (max value, index) pair, so a pixel takes ceil(labels / PE) folds. Measured 2026-10-16 (S12 512, 5 labels, rtlsim of partition 7 / board): LabelSelect_hls is NOT pipelined
+# across pixels and costs 2 cycles per fold: PE 1 (5 folds) 2,622,638 cycles = 10.0 cycles/pixel, PE 5 (1 fold) 525,485 cycles = 2.0 cycles/pixel (both within 0.05 % of
+# 2 * pixels * folds), and the board's steady-state interval of 525,930 cycles/frame confirms it is the slowest node of the whole network at PE 5.
+_LABELSELECT_CYCLES_PER_FOLD = 2
+# LUT: real post-synthesis LabelSelect_hls_0, PE 5 (S12 INT8 512, in the full-design partition synthesis): 226 LUT, 216 of them the 5 x ~17-bit input register slice, i.e. ~45 per PE lane
+# (ONE real point: the PE 1 value is extrapolated linearly).
+_LABELSELECT_LUT_PER_PE = 45.2
 # bias: the final layer's integer bias add, a FINN ChannelwiseOp (INT16 -> INT17 in the real build), one element-wise add per channel and pixel. NO real or HLS-estimate data (the node is not in the calibration CSVs):
 # priced like AddStreams, as analytical/fnl_block.py does -- PROVISIONAL.
 STREAM_NODE_KINDS = ("add", "dup", "concat", "upsample", "bias", "argmax")
@@ -448,9 +450,12 @@ FOLDABLE_STREAM_KINDS = ("add", "dup", "bias", "argmax")  # PE | channels (argma
 def stream_node_cost(kind: str, layer: LayerGeometry, pe: int = 1) -> dict:
     """Cycles (FINN v0.10.1 get_exp_cycles) and LUT of a stream node. `layer`
     carries the node's output shape; for "argmax" (LabelSelect) it carries the INPUT channel count (= the number of labels) in `cout` and the pixel grid."""
-    if kind in FOLDABLE_STREAM_KINDS:
+    if kind == "argmax":    # LabelSelect_hls: 2 cycles per fold and pixel (see _LABELSELECT_CYCLES_PER_FOLD)
+        cycles = layer.hout * layer.wout * _LABELSELECT_CYCLES_PER_FOLD * math.ceil(layer.cout / pe)
+        lut = pe * _LABELSELECT_LUT_PER_PE
+    elif kind in FOLDABLE_STREAM_KINDS:
         cycles = layer.hout * layer.wout * math.ceil(layer.cout / pe)
-        lut = pe * {"add": _ADDSTREAMS_LUT_PER_PE, "dup": _DUPSTREAMS_LUT_PER_PE, "bias": _ADDSTREAMS_LUT_PER_PE, "argmax": _LABELSELECT_LUT_PER_PE}[kind]
+        lut = pe * {"add": _ADDSTREAMS_LUT_PER_PE, "dup": _DUPSTREAMS_LUT_PER_PE, "bias": _ADDSTREAMS_LUT_PER_PE}[kind]
     elif kind in ("concat", "upsample"):
         cycles, lut = layer.hout * layer.wout, {"concat": _CONCAT_LUT, "upsample": _UPSAMPLE_LUT}[kind]
     else:
@@ -668,11 +673,15 @@ def conv_transpose_cost(
 
 _MAXPOOL_FIXED_LUT = 157.2
 _MAXPOOL_LUT_PER_CHANNEL = 26.66
+# StreamingMaxPool_hls loop nest (finn-hlslib): for yp / ky / xp / kx, with only the innermost kx loop (k iterations) pipelined at II = 1 and NOT flattened into its parents, so every
+# (yp, ky, xp) pays that loop's pipeline fill. Measured 2026-10-16: S12 512 INT8 partition 0 with the 1-channel 2x2 initial pool = 854,044 rtlsim cycles for 256 * 2 * 256 = 131,072
+# iterations = 6.5 cycles per iteration, i.e. kw + 4.5 (ONE geometry: k = 2, 1 channel; the word is all channels wide, so the loop count does not depend on them). FINN's own
+# get_exp_cycles, H * W * (1 + 1/k^2) = 1.25 cycles per input pixel, is 2.6x too low.
+_MAXPOOL_KX_LOOP_OVERHEAD = 4.5
 
 
 def maxpool_cost(layer: LayerGeometry, act_bits: int) -> dict:
-    """MaxPool2d: SWU + comparator array, no MVAU/weights. cycles are
-    input-pixel-driven (FINN's StreamingMaxPool.get_exp_cycles()), not hout*wout."""
+    """MaxPool2d as FINN's StreamingMaxPool_hls: comparator array, no MVAU/weights, not foldable. cycles follow its loop nest (see _MAXPOOL_KX_LOOP_OVERHEAD), not hout*wout."""
     A = act_bits
     M = 1
     k_eff = _k_eff(layer.kh, layer.dh)
@@ -682,13 +691,36 @@ def maxpool_cost(layer: LayerGeometry, act_bits: int) -> dict:
     swu_lut = M * _MAXPOOL_FIXED_LUT
     mp_lut = M * _MAXPOOL_LUT_PER_CHANNEL * layer.cin
     total_lut = swu_lut + mp_lut
-    cycles = math.ceil(M * layer.hin * layer.win * (1 + 1 / (layer.kh * layer.kw)))
+    cycles = math.ceil(M * layer.hout * layer.kh * layer.wout * (layer.kw + _MAXPOOL_KX_LOOP_OVERHEAD))
     return {
         "total_pe": 0, "total_simd_lanes": 0,
         "swu_bram18": swu_bram18, "wm_bram18": 0, "wm_uram18": 0,
         "swu_lut": swu_lut, "mvu_lut": 0, "mp_lut": mp_lut,
         "total_lut": total_lut, "mvu_dsp": 0, "total_dsp": 0,
         "cycles": cycles,
+    }
+
+
+# MaxPool as FINN's `Pool` route (InferPool): a depthwise ConvolutionInputGenerator_rtl (SIMD = PE) feeding Pool_hls (PE). Pool_hls is one flat II = 1 loop over its words, so its
+# cycles are (C * K^2 / PE) * OH * OW with PE | C (finn pool.py get_exp_cycles) -- no per-window overhead, unlike StreamingMaxPool_hls (measured: S12 512 INT8 partition 0, 1 channel,
+# 328,268 rtlsim cycles incl. fill, vs 854,044 with StreamingMaxPool). LUT: real post-synthesis Pool_hls_0 (1 channel, 8 bit, 2x2) = 123 LUT: 80 loop-control + 2 register slices
+# (22 + 15) + 6; modelled as a fixed part plus a part per stream bit (ONE real point; PE > 1 is extrapolated). The SWG is priced by the same _finn_swu as every conv's.
+_POOL_HLS_FIXED_LUT = 86.0
+_POOL_HLS_LUT_PER_PE_BIT = 4.6
+
+
+def pool_swg_cost(layer: LayerGeometry, act_bits: int, pe: int) -> dict:
+    """MaxPool2d as depthwise SWG + Pool_hls at PE | C. Same cost-dict layout as maxpool_cost; `cycles` is the slower of the two nodes (they run in a dataflow pipeline)."""
+    assert layer.cin % pe == 0, f"{layer.name}: Pool PE {pe} must divide the {layer.cin} channels"
+    swg_lut, swg_bram18, swg_uram18, swg_cycles = _finn_swu(layer, act_bits, pe, True, False)
+    pool_cycles = (layer.cin * layer.kh * layer.kw // pe) * layer.hout * layer.wout
+    pool_lut = _POOL_HLS_FIXED_LUT + _POOL_HLS_LUT_PER_PE_BIT * pe * act_bits
+    return {
+        "total_pe": pe, "total_simd_lanes": 0,
+        "swu_bram18": swg_bram18, "swu_uram18": swg_uram18, "wm_bram18": 0, "wm_uram18": 0,
+        "swu_lut": swg_lut, "mvu_lut": 0, "mp_lut": pool_lut,
+        "total_lut": swg_lut + pool_lut, "mvu_dsp": 0, "total_dsp": 0,
+        "cycles": max(pool_cycles, swg_cycles), "swg_cycles": swg_cycles, "pool_cycles": pool_cycles,
     }
 
 

@@ -2,7 +2,7 @@
 
 Reuses the node primitives, FIFOs, state recording and run loop of bottleneck_sim.py and adds the three node types the
 downsampling block needs:
-  MaxPoolNode   StreamingMaxPool: one input pixel (all channels) per cycle, one extra cycle per completed 2x2 window.
+  MaxPoolNode   StreamingMaxPool: 13 cycles per 2x2 window (4 pixel reads, the output word, 2 x 4 pipeline-fill idle cycles; measured, see the class).
   Swg2Node      sliding window of the strided 2x2 reduce conv (kernel 2, stride 2, no padding): a window is ready when its
                 bottom-right pixel arrived; the real stride-2 buffer holds (2W-2) pixels (finn_cost_model._finn_swu).
   ChanPadNode   FMPadding used as a CHANNEL pad: per pixel it passes G words through and then emits P zero words
@@ -26,14 +26,21 @@ from bottleneck import BLOCK_FIFO_DEPTH  # noqa: E402
 
 
 class MaxPoolNode:
-    """Input: one word (all channels) per input pixel, raster order. Output: one word per 2x2 window."""
+    """StreamingMaxPool_hls. Input: one word (all channels) per input pixel, raster order. Output: one word per 2x2 window.
+    Timing follows the measured loop nest (finn_cost_model._MAXPOOL_KX_LOOP_OVERHEAD): every (yp, ky, xp) iteration = 2 pixel reads + 4.5 cycles of pipeline fill, i.e. 13 cycles per window:
+    4 reads + 1 cycle for the output word + MAXPOOL_ITER_STALL = 4 idle cycles after each pixel pair (2 per window row, 2 rows)."""
+    MAXPOOL_ITER_STALL = 4
 
     def __init__(self, name, inp: Fifo, out: Fifo, h: int, w: int, frames: int = 1):
         self.name, self.inp, self.out, self.h, self.w, self.frames = name, inp, out, h, w, frames
         self.i = 0
         self.pending = None
+        self.stall = 0
 
     def step(self, t: int) -> int:
+        if self.stall > 0:
+            self.stall -= 1
+            return BUSY
         if self.pending is not None:
             if not self.out.space():
                 return BLOCKED
@@ -49,6 +56,8 @@ class MaxPoolNode:
         f, loc = divmod(self.i, self.h * self.w)
         r, c = divmod(loc, self.w)
         self.i += 1
+        if c % 2 == 1:
+            self.stall = self.MAXPOOL_ITER_STALL
         if r % 2 == 1 and c % 2 == 1:
             self.pending = f * (self.h // 2) * (self.w // 2) + (r // 2) * (self.w // 2) + c // 2
         return BUSY

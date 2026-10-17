@@ -60,10 +60,10 @@ class TestArgmaxNode(unittest.TestCase):
         g = self.node.geom
         self.assertEqual((g.cin, g.cout, g.hout, g.wout, g.stage, g.op_type), (5, 5, 256, 256, "final", "LabelSelect_hls"))
 
-    def test_only_the_full_label_parallelism_is_offered(self):
-        # LabelSelect_hls is not pipelined across pixels (~10 cycles/pixel at PE 1 in the real build), so the argmax is never folded
+    def test_every_label_divisor_is_offered_at_two_cycles_per_fold_and_pixel(self):
+        # LabelSelect_hls is not pipelined across pixels: 2 cycles per fold and pixel (measured), so the PE is a real trade-off (5 labels: PE 1 or 5)
         opts = {k[1]: c["cycles"] for k, c in finn_milp.extra_node_options(self.node, True)}
-        self.assertEqual(opts, {5: 256 * 256})
+        self.assertEqual(opts, {1: 2 * 5 * 256 * 256, 5: 2 * 256 * 256})
 
     def test_cost_grows_with_pe_and_has_no_memory(self):
         c1, c5 = (stream_node_cost("argmax", self.node.geom, pe) for pe in (1, 5))
@@ -98,7 +98,7 @@ class TestBiasNode(unittest.TestCase):
         self.assertEqual((opts[5]["wm_bram18"], opts[5]["total_dsp"]), (0, 0))
 
     def test_bias_is_relayed_through_by_the_dsr_not_a_dsr_node(self):
-        # DSR nodes are conv / MVAU layers, the pad-MVAU and the argmax: the argmax is compared with `final` through the bias
+        # DSR nodes are conv / MVAU layers and the pad-MVAU: the argmax (2 cycles/pixel at best) and the bias are relayed through
         self.assertNotIn(self.node.kind, ("argmax", "pad_mvau"))
 
 
@@ -128,7 +128,7 @@ class TestCliSolve(unittest.TestCase):
 
     def test_every_compute_edge_obeys_the_dsr_rule(self):
         nodes = {**self.result["per_layer"], **self.result["extra_nodes"]}
-        ops = {n for n in self.result["per_layer"] if not n.endswith(".pool")} | {n for n, v in self.result["extra_nodes"].items() if v["kind"] in ("argmax", "pad_mvau")}
+        ops = {n for n in self.result["per_layer"] if not n.endswith(".pool")} | {n for n, v in self.result["extra_nodes"].items() if v["kind"] in ("pad_mvau",)}
         edges = self.result["dataflow_graph"]["edges"]
         F, checked = 400000, 0
 
@@ -153,7 +153,7 @@ class TestCliSolve(unittest.TestCase):
     def test_argmax_is_a_priced_extra_node_with_a_fixed_cycle_value_in_the_diagnostics(self):
         a = self.result["extra_nodes"]["final.argmax"]
         self.assertIn(a["pe"], (1, 5))
-        self.assertEqual(a["cycles"], 5 * 256 * 256 // a["pe"])
+        self.assertEqual(a["cycles"], 2 * 5 * 256 * 256 // a["pe"])
         self.assertIn("final.argmax", self.result["_diagnostics"]["fixed_cycle_nodes"])
 
     def test_every_node_meets_the_250_fps_budget(self):

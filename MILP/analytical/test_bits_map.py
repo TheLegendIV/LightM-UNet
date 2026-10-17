@@ -23,7 +23,7 @@ import up_bottleneck  # noqa: E402
 REG = dict(cin=32, v=4, z=4, T=72, bits=4, height=32, width=32, k=3, dilation=8, stride=1)
 DN = dict(cin=16, cout=32, v=4, bits=4, height=64, width=64, T_out=72)
 UP = dict(cin=32, cout=16, v=4, bits=4, height=32, width=32, T_out=18)
-INT = dict(cin=1, cout=4, bits=4, height=256, width=256, F=81920)
+INT = dict(cin=1, cout=4, bits=4, height=256, width=256, F=212992)
 FNL = dict(cin=4, cout=5, bits=4, height=128, width=128, F=73728)
 
 
