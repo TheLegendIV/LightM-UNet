@@ -1,0 +1,9 @@
+Overriding CANDIDATE_BITS to (8,) (from --candidate-bits).
+Predecessor map: 86/88 layers have a real, traced predecessor (the rest are the network's own first layer(s), with no real predecessor to fall back to anything but self-sensitivity).
+Extra dataflow nodes: 148 {'input_quant': 1, 'concat': 1, 'act': 1, 'upsample': 2, 'out_act': 27, 'residual_add': 27, 'skip_quant': 27, 'add': 27, 'pool_quant': 1, 'bias': 1, 'argmax': 1, 'dup': 28, 'pad_mvau': 2, 'frozen_dw': 2}.
+Note: ['down1.pool', 'down2.pool', 'initial.pool'] have no sensitivity entry (MaxPool2d, no weight, never HAWQ-measured) -- given a fixed raw sensitivity of 0.0 for every (w,a), see module docstring.
+Traced 88 layers (per-layer granularity, no block grouping). candidate_bits=(8,) -> 1 (w,a) pairs. y: 88 binaries, z: 6640 binaries (6728 total). Solving (time_limit=300s, gap_rel=0.001)...
+--target-fps 200.0 @ 100.0MHz -> every node <= 500000 cycles (hard constraint).
+Wrote MILP\artifacts\S12_512_ablation_v2\cap50_fps200\uniform_int8\layer_bits_folding_uniform_int8.json
+ILP status: Infeasible
+No joint per-layer (bits, folding) assignment satisfies the requested hard budget(s) -- see MILP\artifacts\S12_512_ablation_v2\cap50_fps200\uniform_int8\layer_bits_folding_uniform_int8.json's own _diagnostics.note.
