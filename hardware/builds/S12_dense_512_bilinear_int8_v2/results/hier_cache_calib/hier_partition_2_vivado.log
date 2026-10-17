@@ -1,0 +1,48 @@
+
+****** Vivado v2022.2 (64-bit)
+  **** SW Build 3671981 on Fri Oct 14 04:59:54 MDT 2022
+  **** IP Build 3669848 on Fri Oct 14 08:30:02 MDT 2022
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+
+source /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_v2_milpfold_8way_20261016_234515/hier_cache_calib/hier_partition_2.tcl
+# open_checkpoint /home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_512_bilinear_int8_v2/GenericPartition_2/synth_out_of_context_a11cbv9l/results_GenericPartition_2_wrapper/vivadocompile/vivadocompile.runs/impl_1/GenericPartition_2_wrapper_routed.dcp
+Command: open_checkpoint /home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_512_bilinear_int8_v2/GenericPartition_2/synth_out_of_context_a11cbv9l/results_GenericPartition_2_wrapper/vivadocompile/vivadocompile.runs/impl_1/GenericPartition_2_wrapper_routed.dcp
+
+Starting open_checkpoint Task
+
+Time (s): cpu = 00:00:00.03 ; elapsed = 00:00:00.03 . Memory (MB): peak = 1256.746 ; gain = 0.000 ; free physical = 69734 ; free virtual = 93574
+INFO: [Device 21-403] Loading part xczu7ev-ffvc1156-2-e
+Netlist sorting complete. Time (s): cpu = 00:00:00.37 ; elapsed = 00:00:00.37 . Memory (MB): peak = 2310.746 ; gain = 0.000 ; free physical = 68910 ; free virtual = 92776
+INFO: [Netlist 29-17] Analyzing 10978 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 3 CPU seconds
+INFO: [Project 1-479] Netlist was created with Vivado 2022.2
+INFO: [Project 1-570] Preparing netlist for logic optimization
+INFO: [Timing 38-478] Restoring timing data from binary archive.
+INFO: [Timing 38-479] Binary timing data restore complete.
+INFO: [Project 1-856] Restoring constraints from binary archive.
+INFO: [Project 1-853] Binary constraint restore complete.
+Reading XDEF placement.
+Reading placer database...
+Reading XDEF routing.
+Read XDEF Files: Time (s): cpu = 00:00:06 ; elapsed = 00:00:06 . Memory (MB): peak = 2980.551 ; gain = 62.938 ; free physical = 67574 ; free virtual = 91441
+Restored from archive | CPU: 6.410000 secs | Memory: 66.113060 MB |
+Finished XDEF File Restore: Time (s): cpu = 00:00:06 ; elapsed = 00:00:06 . Memory (MB): peak = 2980.551 ; gain = 62.938 ; free physical = 67574 ; free virtual = 91441
+Netlist sorting complete. Time (s): cpu = 00:00:00 ; elapsed = 00:00:00 . Memory (MB): peak = 3373.035 ; gain = 0.000 ; free physical = 67220 ; free virtual = 91087
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 1314 instances were transformed.
+  DSP48E2 => DSP48E2 (inverted pins: OPMODE[5], OPMODE[2], OPMODE[0], RSTD, RSTM, RSTP) (DSP_ALU, DSP_A_B_DATA, DSP_C_DATA, DSP_MULTIPLIER, DSP_M_DATA, DSP_OUTPUT, DSP_PREADD, DSP_PREADD_DATA): 25 instances
+  LUT6_2 => LUT6_2 (LUT5, LUT6): 15 instances
+  RAM128X1S => RAM128X1S (MUXF7, RAMS64E(x2)): 160 instances
+  RAM32M16 => RAM32M16 (RAMD32(x14), RAMS32(x2)): 20 instances
+  RAM32X1S => RAM32X1S (RAMS32): 240 instances
+  RAM64M8 => RAM64M8 (RAMD64E(x8)): 307 instances
+  RAM64X1D => RAM64X1D (RAMD64E(x2)): 307 instances
+  RAM64X1S => RAM64X1S (RAMS64E): 240 instances
+
+INFO: [Project 1-604] Checkpoint was created with Vivado v2022.2 (64-bit) build 3671981
+OpenCheckpoint Checksum | Checksum: 13e2bf052
+----- Checksum: PlaceDB: 219ab387 ShapeSum: 6fae658c RouteDB: ace2d73f 
+open_checkpoint: Time (s): cpu = 00:00:42 ; elapsed = 00:00:44 . Memory (MB): peak = 3373.035 ; gain = 2116.289 ; free physical = 67220 ; free virtual = 91087
+# report_utilization -hierarchical -hierarchical_depth 4 -file /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_v2_milpfold_8way_20261016_234515/hier_cache_calib/hier_partition_2.rpt
+# exit
+INFO: [Common 17-206] Exiting Vivado at Sat Oct 17 15:01:34 2026...

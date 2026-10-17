@@ -69,6 +69,11 @@ STREAM_TYPES = tuple(STREAM_KIND_BY_OP_TYPE)
 # gap as the stream nodes above, just noticed later.
 DWC_TYPES = ("StreamingDataWidthConverter_hls", "StreamingDataWidthConverter_rtl")
 FMPADDING_TYPES = ("FMPadding_hls", "FMPadding_rtl", "FMPadding_Pixel_hls")
+# InferPool's Pool_hls, the final bias ChannelwiseOp and the LabelSelect argmax. Existing columns are reused (no schema change): Pool: NumChannels = Channels, ConvKernelDim_* = KernelSize,
+# IFMDim_* = InputSize; LabelSelect: NumChannels = Labels.
+POOL_TYPES = ("Pool_hls",)
+CHANNELWISE_TYPES = ("ChannelwiseOp_hls",)
+LABELSELECT_TYPES = ("LabelSelect_hls",)
 
 HEADER = [
     "partition", "node_name", "op_type", "node_kind",
@@ -242,6 +247,18 @@ def build_row(partition, node, hier):
             "Stride_w": dim2(a.get("Stride"))[1] if op_type == "FMPadding_Pixel_hls" else None,
             "numInputVectors": a.get("numInputVectors"),
         })
+    elif op_type in POOL_TYPES:
+        kdim, ins = dim2(a.get("KernelSize")), dim2(a.get("InputSize"))
+        row.update({
+            "node_kind": "Pool", "PE": a.get("PE"), "NumChannels": a.get("Channels"),
+            "ConvKernelDim_h": kdim[0], "ConvKernelDim_w": kdim[1], "IFMDim_h": ins[0], "IFMDim_w": ins[1],
+            "dataType": a.get("inputDataType"), "bits": dtype_bits(a.get("inputDataType")),
+        })
+    elif op_type in CHANNELWISE_TYPES:
+        row.update({"node_kind": "ChannelwiseOp", "PE": a.get("PE"), "NumChannels": a.get("NumChannels")})
+    elif op_type in LABELSELECT_TYPES:
+        row.update({"node_kind": "LabelSelect", "PE": a.get("PE"), "NumChannels": a.get("Labels"),
+                    "dataType": a.get("inputDataType"), "bits": dtype_bits(a.get("inputDataType"))})
     else:
         row["node_kind"] = op_type
 

@@ -1,0 +1,3 @@
+open_checkpoint /home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_512_bilinear_int8_v2/GenericPartition_0/synth_out_of_context_dewdf68z/results_GenericPartition_0_wrapper/vivadocompile/vivadocompile.runs/impl_1/GenericPartition_0_wrapper_routed.dcp
+report_utilization -hierarchical -hierarchical_depth 4 -file /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_v2_milpfold_8way_20261016_234515/hier_cache_calib/hier_partition_0.rpt
+exit

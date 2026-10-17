@@ -29,6 +29,8 @@ OP_TYPES = (
     # DWC and FMPadding -- also previously excluded, same reason as above
     "StreamingDataWidthConverter_hls", "StreamingDataWidthConverter_rtl",
     "FMPadding_hls", "FMPadding_rtl", "FMPadding_Pixel_hls",
+    # InferPool's Pool_hls (initial pool of the INT8 v2 build), the final bias ChannelwiseOp and the LabelSelect argmax: the MILP's pool_swg / bias / argmax cost models are calibrated on these
+    "Pool_hls", "ChannelwiseOp_hls", "LabelSelect_hls",
 )
 
 # union of every nodeattr key any of the above op types might expose
@@ -53,6 +55,8 @@ ATTR_KEYS = (
     # real Thresholding row checked so far has real_LUTRAM==0 regardless), only
     # future regenerated dumps (a v5, or w8_16_v2/_512 once synthesized).
     "depth_trigger_bram", "depth_trigger_uram",
+    # Pool_hls (Channels / KernelSize / InputSize / Function), LabelSelect_hls (Labels)
+    "Labels", "KernelSize", "InputSize", "Function",
 )
 
 

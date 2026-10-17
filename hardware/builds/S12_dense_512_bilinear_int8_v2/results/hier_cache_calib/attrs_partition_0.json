@@ -1,0 +1,595 @@
+[
+  {
+    "node_name": "GenericPartition_0_StreamingFIFO_rtl_0",
+    "op_type": "StreamingFIFO_rtl",
+    "attrs": {
+      "ram_style": "auto",
+      "depth": 2,
+      "impl_style": "rtl",
+      "dataType": "UINT8",
+      "folded_shape": [
+        1,
+        512,
+        512,
+        1,
+        1
+      ]
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_Thresholding_rtl_0",
+    "op_type": "Thresholding_rtl",
+    "attrs": {
+      "PE": 1,
+      "weightDataType": "UINT8",
+      "inputDataType": "UINT8",
+      "outputDataType": "INT8",
+      "runtime_writeable_weights": 0,
+      "NumChannels": 1,
+      "numSteps": 255,
+      "numInputVectors": [
+        1,
+        512,
+        512
+      ],
+      "depth_trigger_bram": 1024,
+      "depth_trigger_uram": 0
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_StreamingFIFO_rtl_1",
+    "op_type": "StreamingFIFO_rtl",
+    "attrs": {
+      "ram_style": "auto",
+      "depth": 2,
+      "impl_style": "rtl",
+      "dataType": "INT8",
+      "folded_shape": [
+        1,
+        512,
+        512,
+        1,
+        1
+      ]
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_DuplicateStreams_hls_0",
+    "op_type": "DuplicateStreams_hls",
+    "attrs": {
+      "PE": 1,
+      "inputDataType": "INT8",
+      "NumChannels": 1,
+      "numInputVectors": [
+        1,
+        512,
+        512
+      ]
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_StreamingFIFO_rtl_2",
+    "op_type": "StreamingFIFO_rtl",
+    "attrs": {
+      "ram_style": "auto",
+      "depth": 2,
+      "impl_style": "rtl",
+      "dataType": "INT8",
+      "folded_shape": [
+        1,
+        512,
+        512,
+        1,
+        1
+      ]
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_StreamingFIFO_rtl_3",
+    "op_type": "StreamingFIFO_rtl",
+    "attrs": {
+      "ram_style": "auto",
+      "depth": 512,
+      "impl_style": "vivado",
+      "dataType": "INT8",
+      "folded_shape": [
+        1,
+        512,
+        512,
+        1,
+        1
+      ]
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_StreamingFIFO_rtl_4",
+    "op_type": "StreamingFIFO_rtl",
+    "attrs": {
+      "ram_style": "auto",
+      "depth": 4,
+      "impl_style": "rtl",
+      "dataType": "INT8",
+      "folded_shape": [
+        1,
+        512,
+        512,
+        1,
+        1
+      ]
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_Thresholding_rtl_1",
+    "op_type": "Thresholding_rtl",
+    "attrs": {
+      "PE": 1,
+      "weightDataType": "INT8",
+      "inputDataType": "INT8",
+      "outputDataType": "INT8",
+      "runtime_writeable_weights": 0,
+      "NumChannels": 1,
+      "numSteps": 255,
+      "numInputVectors": [
+        1,
+        512,
+        512
+      ],
+      "depth_trigger_bram": 1024,
+      "depth_trigger_uram": 0
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_FMPadding_rtl_0",
+    "op_type": "FMPadding_rtl",
+    "attrs": {
+      "SIMD": 1,
+      "inputDataType": "INT8",
+      "NumChannels": 1,
+      "ImgDim": [
+        512,
+        512
+      ],
+      "Padding": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "numInputVectors": 1
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_StreamingFIFO_rtl_5",
+    "op_type": "StreamingFIFO_rtl",
+    "attrs": {
+      "ram_style": "auto",
+      "depth": 2,
+      "impl_style": "rtl",
+      "dataType": "INT8",
+      "folded_shape": [
+        1,
+        512,
+        512,
+        1,
+        1
+      ]
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_StreamingFIFO_rtl_6",
+    "op_type": "StreamingFIFO_rtl",
+    "attrs": {
+      "ram_style": "auto",
+      "depth": 2,
+      "impl_style": "rtl",
+      "dataType": "INT8",
+      "folded_shape": [
+        1,
+        514,
+        514,
+        1,
+        1
+      ]
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_ConvolutionInputGenerator_rtl_0",
+    "op_type": "ConvolutionInputGenerator_rtl",
+    "attrs": {
+      "SIMD": 1,
+      "inputDataType": "INT8",
+      "outputDataType": "INT8",
+      "ram_style": "distributed",
+      "IFMChannels": 1,
+      "IFMDim": [
+        512,
+        512
+      ],
+      "OFMDim": [
+        256,
+        256
+      ],
+      "ConvKernelDim": [
+        2,
+        2
+      ],
+      "Stride": [
+        2,
+        2
+      ],
+      "Dilation": [
+        1,
+        1
+      ],
+      "depthwise": 1,
+      "parallel_window": 0
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_ConvolutionInputGenerator_rtl_1",
+    "op_type": "ConvolutionInputGenerator_rtl",
+    "attrs": {
+      "SIMD": 1,
+      "inputDataType": "INT8",
+      "outputDataType": "INT8",
+      "ram_style": "distributed",
+      "IFMChannels": 1,
+      "IFMDim": [
+        514,
+        514
+      ],
+      "OFMDim": [
+        256,
+        256
+      ],
+      "ConvKernelDim": [
+        3,
+        3
+      ],
+      "Stride": [
+        2,
+        2
+      ],
+      "Dilation": [
+        1,
+        1
+      ],
+      "depthwise": 0,
+      "parallel_window": 1
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_StreamingFIFO_rtl_7",
+    "op_type": "StreamingFIFO_rtl",
+    "attrs": {
+      "ram_style": "auto",
+      "depth": 2,
+      "impl_style": "rtl",
+      "dataType": "INT8",
+      "folded_shape": [
+        1,
+        256,
+        256,
+        4,
+        1
+      ]
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_StreamingFIFO_rtl_8",
+    "op_type": "StreamingFIFO_rtl",
+    "attrs": {
+      "ram_style": "auto",
+      "depth": 2,
+      "impl_style": "rtl",
+      "dataType": "INT8",
+      "folded_shape": [
+        1,
+        256,
+        256,
+        1,
+        9
+      ]
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_Pool_hls_0",
+    "op_type": "Pool_hls",
+    "attrs": {
+      "PE": 1,
+      "Channels": 1,
+      "KernelSize": [
+        2,
+        2
+      ],
+      "Function": "MaxPool"
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_StreamingDataWidthConverter_rtl_0",
+    "op_type": "StreamingDataWidthConverter_rtl",
+    "attrs": {
+      "dataType": "INT8",
+      "shape": [
+        1,
+        256,
+        256,
+        9
+      ],
+      "inWidth": 72,
+      "outWidth": 24
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_StreamingFIFO_rtl_9",
+    "op_type": "StreamingFIFO_rtl",
+    "attrs": {
+      "ram_style": "auto",
+      "depth": 2,
+      "impl_style": "rtl",
+      "dataType": "INT8",
+      "folded_shape": [
+        1,
+        256,
+        256,
+        1,
+        1
+      ]
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_StreamingFIFO_rtl_10",
+    "op_type": "StreamingFIFO_rtl",
+    "attrs": {
+      "ram_style": "auto",
+      "depth": 2,
+      "impl_style": "rtl",
+      "dataType": "INT8",
+      "folded_shape": [
+        1,
+        256,
+        256,
+        3,
+        3
+      ]
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_MVAU_rtl_0",
+    "op_type": "MVAU_rtl",
+    "attrs": {
+      "MH": 3,
+      "MW": 9,
+      "PE": 3,
+      "SIMD": 3,
+      "weightDataType": "INT8",
+      "inputDataType": "INT8",
+      "outputDataType": "INT18",
+      "accDataType": "INT18",
+      "resType": "dsp",
+      "ram_style": "auto",
+      "mem_mode": "internal_decoupled",
+      "runtime_writeable_weights": 0,
+      "numInputVectors": [
+        1,
+        256,
+        256
+      ]
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_StreamingFIFO_rtl_11",
+    "op_type": "StreamingFIFO_rtl",
+    "attrs": {
+      "ram_style": "auto",
+      "depth": 2,
+      "impl_style": "rtl",
+      "dataType": "INT18",
+      "folded_shape": [
+        1,
+        256,
+        256,
+        1,
+        3
+      ]
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_StreamingDataWidthConverter_rtl_1",
+    "op_type": "StreamingDataWidthConverter_rtl",
+    "attrs": {
+      "dataType": "INT18",
+      "shape": [
+        1,
+        256,
+        256,
+        3
+      ],
+      "inWidth": 54,
+      "outWidth": 18
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_StreamingFIFO_rtl_12",
+    "op_type": "StreamingFIFO_rtl",
+    "attrs": {
+      "ram_style": "auto",
+      "depth": 2,
+      "impl_style": "rtl",
+      "dataType": "INT18",
+      "folded_shape": [
+        1,
+        256,
+        256,
+        3,
+        1
+      ]
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_Thresholding_rtl_2",
+    "op_type": "Thresholding_rtl",
+    "attrs": {
+      "PE": 1,
+      "weightDataType": "INT18",
+      "inputDataType": "INT18",
+      "outputDataType": "INT8",
+      "runtime_writeable_weights": 0,
+      "NumChannels": 3,
+      "numSteps": 255,
+      "numInputVectors": [
+        1,
+        256,
+        256
+      ],
+      "depth_trigger_bram": 1024,
+      "depth_trigger_uram": 0
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_StreamingFIFO_rtl_13",
+    "op_type": "StreamingFIFO_rtl",
+    "attrs": {
+      "ram_style": "auto",
+      "depth": 180,
+      "impl_style": "rtl",
+      "dataType": "INT8",
+      "folded_shape": [
+        1,
+        256,
+        256,
+        3,
+        1
+      ]
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_StreamingDataWidthConverter_rtl_2",
+    "op_type": "StreamingDataWidthConverter_rtl",
+    "attrs": {
+      "dataType": "INT8",
+      "shape": [
+        1,
+        256,
+        256,
+        3
+      ],
+      "inWidth": 8,
+      "outWidth": 24
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_StreamingFIFO_rtl_14",
+    "op_type": "StreamingFIFO_rtl",
+    "attrs": {
+      "ram_style": "auto",
+      "depth": 2,
+      "impl_style": "rtl",
+      "dataType": "INT8",
+      "folded_shape": [
+        1,
+        256,
+        256,
+        1,
+        3
+      ]
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_StreamingConcat_hls_0",
+    "op_type": "StreamingConcat_hls",
+    "attrs": {
+      "inputDataType": "INT8",
+      "numInputVectors": [
+        1,
+        256,
+        256
+      ]
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_StreamingFIFO_rtl_15",
+    "op_type": "StreamingFIFO_rtl",
+    "attrs": {
+      "ram_style": "auto",
+      "depth": 2,
+      "impl_style": "rtl",
+      "dataType": "INT8",
+      "folded_shape": [
+        1,
+        256,
+        256,
+        4
+      ]
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_StreamingDataWidthConverter_rtl_3",
+    "op_type": "StreamingDataWidthConverter_rtl",
+    "attrs": {
+      "dataType": "INT8",
+      "shape": [
+        1,
+        256,
+        256,
+        4
+      ],
+      "inWidth": 32,
+      "outWidth": 8
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_StreamingFIFO_rtl_16",
+    "op_type": "StreamingFIFO_rtl",
+    "attrs": {
+      "ram_style": "auto",
+      "depth": 2,
+      "impl_style": "rtl",
+      "dataType": "INT8",
+      "folded_shape": [
+        1,
+        256,
+        256,
+        4,
+        1
+      ]
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_Thresholding_rtl_3",
+    "op_type": "Thresholding_rtl",
+    "attrs": {
+      "PE": 1,
+      "weightDataType": "INT9",
+      "inputDataType": "INT8",
+      "outputDataType": "UINT8",
+      "runtime_writeable_weights": 0,
+      "NumChannels": 4,
+      "numSteps": 255,
+      "numInputVectors": [
+        1,
+        256,
+        256
+      ],
+      "depth_trigger_bram": 1024,
+      "depth_trigger_uram": 0
+    }
+  },
+  {
+    "node_name": "GenericPartition_0_StreamingFIFO_rtl_17",
+    "op_type": "StreamingFIFO_rtl",
+    "attrs": {
+      "ram_style": "auto",
+      "depth": 2,
+      "impl_style": "rtl",
+      "dataType": "UINT8",
+      "folded_shape": [
+        1,
+        256,
+        256,
+        4,
+        1
+      ]
+    }
+  }
+]
