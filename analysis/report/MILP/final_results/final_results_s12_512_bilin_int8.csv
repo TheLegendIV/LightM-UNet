@@ -1,0 +1,4 @@
+row,precision,platform,model,n_images,dice,dice_binary,dice_LAD,dice_RCA,dice_LCX,dice_LM
+FP32 reference,FP32,GPU (PyTorch),nnUNetTrainerENet_12_dense_relu_warmstart150ep,300,0.7954,0.7282,0.6715,0.9130,0.8087,0.7886
+INT8 QAT reference,INT8 (W8A8),"GPU (PyTorch, Brevitas fake-quant)",nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_bilinear_upsample_256_perlayer_12_dense_relu_warmstart150ep_bilinear_uniform_int8_perlayer_ft15ep (checkpoint_best),300,0.7930,0.7261,0.6664,0.9074,0.8058,0.7925
+HW INT8,INT8 (W8A8),ZCU7EV board (S12_512_bilin_int8_maxfps),s12_512_bilinear_int8_maxfps,300,0.7943,0.7268,0.6737,0.9139,0.7997,0.7898

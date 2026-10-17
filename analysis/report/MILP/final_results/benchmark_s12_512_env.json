@@ -1,0 +1,122 @@
+{
+  "cuda:fp32_default": {
+    "platform": "NVIDIA GeForce RTX 2050",
+    "torch": "2.0.1",
+    "cuda": "11.7",
+    "cudnn": 8500,
+    "cudnn_allow_tf32": true,
+    "matmul_allow_tf32": false,
+    "cudnn_benchmark_warm": true,
+    "torch_threads": 8,
+    "cpu": "12th Gen Intel(R) Core(TM) i7-1260P",
+    "gpu_driver_maxsmclk_powerlimit": "537.70, 2100 MHz, [N/A]",
+    "python": "3.10.11",
+    "timestamp": "2026-10-16T17:07:27",
+    "warm_runs_s": [
+      2.5884384765625,
+      1.944374267578125,
+      2.1190400390625,
+      1.9056834716796875,
+      1.924969482421875
+    ],
+    "warm_runs_wall_s": [
+      2.5886963199882302,
+      1.944530656997813,
+      2.119208973017521,
+      1.905819229024928,
+      1.9251178019912913
+    ],
+    "batch_size": 1,
+    "warmup": 10
+  },
+  "cpu:fp32": {
+    "platform": "12th Gen Intel(R) Core(TM) i7-1260P",
+    "torch": "2.0.1",
+    "cuda": "11.7",
+    "cudnn": 8500,
+    "cudnn_allow_tf32": true,
+    "matmul_allow_tf32": false,
+    "cudnn_benchmark_warm": true,
+    "torch_threads": 8,
+    "cpu": "12th Gen Intel(R) Core(TM) i7-1260P",
+    "gpu_driver_maxsmclk_powerlimit": null,
+    "python": "3.10.11",
+    "timestamp": "2026-10-16T16:58:14",
+    "warm_runs_s": [
+      15.528191927005537,
+      16.036540592991514,
+      15.46140704798745,
+      15.348661297990475,
+      15.424985019024462
+    ],
+    "warm_runs_wall_s": [
+      15.528191927005537,
+      16.036540592991514,
+      15.46140704798745,
+      15.348661297990475,
+      15.424985019024462
+    ],
+    "batch_size": 1,
+    "warmup": 10
+  },
+  "cuda:fp32_strict": {
+    "platform": "NVIDIA GeForce RTX 2050",
+    "torch": "2.0.1",
+    "cuda": "11.7",
+    "cudnn": 8500,
+    "cudnn_allow_tf32": false,
+    "matmul_allow_tf32": false,
+    "cudnn_benchmark_warm": true,
+    "torch_threads": 8,
+    "cpu": "12th Gen Intel(R) Core(TM) i7-1260P",
+    "gpu_driver_maxsmclk_powerlimit": "537.70, 2100 MHz, [N/A]",
+    "python": "3.10.11",
+    "timestamp": "2026-10-16T16:52:49",
+    "warm_runs_s": [
+      2.427701171875,
+      2.46194482421875,
+      3.529527099609375,
+      3.326146484375,
+      3.499640869140625
+    ],
+    "warm_runs_wall_s": [
+      2.4279106419999152,
+      2.462135481997393,
+      3.5297173529979773,
+      3.3263449530059006,
+      3.50001776200952
+    ],
+    "batch_size": 1,
+    "warmup": 10
+  },
+  "cuda:fp16_autocast": {
+    "platform": "NVIDIA GeForce RTX 2050",
+    "torch": "2.0.1",
+    "cuda": "11.7",
+    "cudnn": 8500,
+    "cudnn_allow_tf32": true,
+    "matmul_allow_tf32": false,
+    "cudnn_benchmark_warm": true,
+    "torch_threads": 8,
+    "cpu": "12th Gen Intel(R) Core(TM) i7-1260P",
+    "gpu_driver_maxsmclk_powerlimit": "537.70, 2100 MHz, [N/A]",
+    "python": "3.10.11",
+    "timestamp": "2026-10-16T16:54:40",
+    "warm_runs_s": [
+      3.610629150390625,
+      3.654331298828125,
+      4.630236328125,
+      4.51605419921875,
+      4.5064111328125
+    ],
+    "warm_runs_wall_s": [
+      3.610868071002187,
+      3.6545668610197026,
+      4.630489367002156,
+      4.51626940999995,
+      4.506679327983875
+    ],
+    "batch_size": 1,
+    "warmup": 10
+  }
+}
