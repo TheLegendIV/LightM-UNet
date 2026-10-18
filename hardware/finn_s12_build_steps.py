@@ -1087,6 +1087,13 @@ def step_force_fifo_depths_from_milp(model, fifo_plan: dict, min_depth: int = 2,
             if true_pr_role and true_cn_role and true_pr_role != "dwc" and true_cn_role != "dwc":
                 f = wanted.get((true_pr_role, true_cn_role))
                 dwc_bridge = f is not None
+        if f is None and pr_role and pr_role in wanted_by_producer and cons is not None and cons.op_type.startswith("StreamingDataWidthConverter"):
+            # the block behind the DWC has no resolved roles at all (partition 7's 'final' front end: FMPadding_Pixel / DWC / window generator -- only final.mvau_f is mapped), so the MILP's
+            # inter-block spec (e.g. regular5.0.out_act -> final, which the FIFO simulation grows to 512 words) could never pair against a consumer role and stayed at the stock depth 2.
+            # Same convention as for a partition's last FIFO: an inter-block FIFO belongs to the block that emits it, so match by producer role alone.
+            if _role_name_of(_real_consumer_skip_dwc(model, n), role_of_node) is None:
+                f = wanted_by_producer[pr_role]
+                producer_only = True
         virtual_dwc = False
         if f is None and pr_role and cn_role and not pr_role.endswith(".dwc") and not cn_role.endswith(".dwc"):
             # net_fold.py's per-block sim always models an explicit DWC stage between certain role pairs; FINN's

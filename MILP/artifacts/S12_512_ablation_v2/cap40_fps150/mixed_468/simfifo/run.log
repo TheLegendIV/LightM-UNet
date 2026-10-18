@@ -1,0 +1,14 @@
+Wrote C:\Users\320303~1\AppData\Local\Temp\tmpback9u6z\sites.json (85 weight sites, 110 act sites).
+mixed468_cap40_simfifo: up blocks built WITH the frozen depthwise conv (up4.main_up.1, up5.main_up.1)
+mixed468_cap40_simfifo: 29 blocks built from the MILP folding (0 warnings)
+simulating 29 blocks (24 distinct shapes), 6 workers
+block-pair stage: producer source PACED at the MILP target 666666 frame cycles, a pair is flagged when > 5% above max(target, own periods); interface FIFO x4 steps, then the producer's output chain; caps from the MILP
+  pair scan: 28 pairs x (depth 2, unbounded) in 1101 s
+  FLAGGED regular5.0 -> final: depth-2 period 818174 (22.73% over 666666), unbounded 666666 (0.0%), peak 432 words
+    interface depth 512 REJECTED: would break ['lut', 'bram']
+whole-net stage: one paced run; deadlock + target check, warnings only
+  whole net (changed design): deadlock=False period=823729 (23.56% vs the MILP target 666666) [1736 s]
+  pair stage: 1 of 28 pairs needed action; 0 folding change(s) kept
+  WARNING (rate, not a failure): whole-net period 823729 is +23.56% over the MILP target 666666 (tolerance 5%); deadlock-free. Unresolved pairs: none; slowest blocks (bottleneck candidates, own period in cycles): initial (593924), stage3.6 (592418), stage3.2 (592418)
+mixed468_cap40_simfifo: wrote MILP\artifacts\S12_512_ablation_v2\cap40_fps150\mixed_468\simfifo\layer_bits_folding_mixed468_cap40_simfifo.json
+  blocks deadlocking alone: 0, chain deadlock-free: True, within tolerance: False, intra FIFO BRAM18 156.0 (MILP) -> 157 (sim)
