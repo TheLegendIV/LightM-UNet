@@ -3,6 +3,7 @@
 Sources: hardware/builds/S12_512_ablation_v2/<solve>/<arm>/{8way,p7fix}/report/ooc_synth_partition_<i>.json (MILP builds) and
 finn_auto/cap40_fps150/uniform_int6/report (FINN auto-fold + FINN FIFO autosize; partition 7 is post-synthesis only, it cannot be placed).
 The INT4 / INT6 builds use the partition 7 rebuild that lands the 512-deep inter-block FIFO (partitions 0-6 from the 8-way build).
+DSP is the REAL DSP48E2 count from real_dsp_per_partition.json (collect_real_dsp.py): the `DSP` field of FINN's OOC reports is always 0.
 Run:  python analysis/report/MILP/constrained_builds/build_synth_utilization_csv.py
 """
 import csv
@@ -12,6 +13,8 @@ import os
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
 B = os.path.join(REPO, "hardware", "builds", "S12_512_ablation_v2")
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "synth_utilization.csv")
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "real_dsp_per_partition.json")) as _f:
+    REAL_DSP = json.load(_f)
 
 # build id, precision, folding, arm folder, partition-7 override folder (or None), notes
 # INT4 / INT6: partitions 0-6 from the 8-way build, partition 7 from the rebuild that lands the 512-deep inter-block FIFO. The original
@@ -49,7 +52,7 @@ for bid, prec, folding, arm, p7_arm, notes in BUILDS:
         else:
             d = load(arm, i)
             src = "finn_auto" if folding == "finn_auto" else "8way"
-        parts.append((i, src, d))
+        parts.append((i, src, dict(d, DSP=float(REAL_DSP[bid][str(i)]), DSP_ooc_report=d.get("DSP", 0.0))))
     total = {c: 0.0 for c in ("LUT", "LUTRAM", "FF", "DSP", "BRAM_18K", "BRAM_36K", "URAM", "Carry")}
     fmax = []
     for i, src, d in parts:
@@ -58,6 +61,7 @@ for bid, prec, folding, arm, p7_arm, notes in BUILDS:
         for c in COLS:
             row[c] = d.get(c, "")
         row["BRAM18_equiv"] = d["BRAM_18K"] + 2 * d["BRAM_36K"]
+        row["DSP_ooc_report"] = d["DSP_ooc_report"]
         rows.append(row)
         for c in total:
             total[c] += d.get(c, 0.0)
@@ -65,12 +69,13 @@ for bid, prec, folding, arm, p7_arm, notes in BUILDS:
             fmax.append(d["fmax_mhz"])
     tot = {"build": bid, "precision": prec, "folding": folding, "target_fps": 150, "partition": "total", "source": "sum",
            "synth_only": any(d.get("synth_only", False) for _, _, d in parts), "notes": notes, **total,
-           "WNS": "", "fmax_mhz": min(fmax), "BRAM18_equiv": total["BRAM_18K"] + 2 * total["BRAM_36K"]}
+           "WNS": "", "fmax_mhz": min(fmax), "BRAM18_equiv": total["BRAM_18K"] + 2 * total["BRAM_36K"],
+           "DSP_ooc_report": sum(d["DSP_ooc_report"] for _, _, d in parts)}
     if len(fmax) < 8:
         tot["notes"] += f"; fmax_mhz = min over the {len(fmax)} partitions with timing"
     rows.append(tot)
 
-fields = ["build", "precision", "folding", "target_fps", "partition", "source", "synth_only"] + COLS[:8] + ["BRAM18_equiv", "WNS", "fmax_mhz", "notes"]
+fields = ["build", "precision", "folding", "target_fps", "partition", "source", "synth_only"] + COLS[:8] + ["BRAM18_equiv", "WNS", "fmax_mhz", "DSP_ooc_report", "notes"]
 with open(OUT, "w", newline="") as f:
     w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
     w.writeheader()
@@ -79,4 +84,4 @@ with open(OUT, "w", newline="") as f:
 print(f"wrote {OUT} ({len(rows)} rows)")
 for r in rows:
     if r["partition"] == "total":
-        print(f"{r['build']:22s} LUT {r['LUT']:9.0f} FF {r['FF']:9.0f} BRAM18eq {r['BRAM18_equiv']:7.0f} fmax {r['fmax_mhz']:.1f}")
+        print(f"{r['build']:22s} LUT {r['LUT']:9.0f} FF {r['FF']:9.0f} DSP {r['DSP']:5.0f} BRAM18eq {r['BRAM18_equiv']:7.0f} fmax {r['fmax_mhz']:.1f}")

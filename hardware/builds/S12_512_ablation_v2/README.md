@@ -21,14 +21,16 @@ Only reports, configs and logs are kept (no `intermediate_models`, no IP / bitst
 | `cap40_fps150/mixed_468` | `S12_dense_512_bilinear_mixed468_cap40_v1` | 150 FPS | 0.4 | max accuracy, bits 4/6/8 |
 | `relaxed/uniform_int8` | `S12_dense_512_bilinear_int8_relaxed_v1` | **100 FPS** | 1.0 | min-resources; not the 150 FPS target |
 
-## Results (OOC synthesis of the 8 partitions, 100 MHz target; DSP column reads 0 in OOC reports)
+## Results (OOC synthesis of the 8 partitions, 100 MHz target)
 
-| Arm | LUT | FF | BRAM18 + BRAM36 | Worst-partition Fmax (MHz) | FINN est. FPS @100 MHz | Combined rtlsim (cycles, 1 image) |
-|---|---|---|---|---|---|---|
-| INT4 | 79,788 | 70,240 | 37 + 32 | 194.1 | 169.2 | 2,278,947 |
-| INT6 | 96,651 | 102,248 | 45 + 80 | 190.2 | 169.2 | 2,267,093 |
-| Mixed 4/6/8 | 109,472 | 116,681 | 67 + 96 | 182.2 | 169.2 | 2,239,227 |
-| INT8 relaxed (100 FPS) | 194,295 | 142,050 | 57 + 73 | 130.7 | 127.2 | 2,462,919 |
+DSP is the real DSP48E2 count (`| DSPs |` row of each partition's Vivado `report_utilization`, via `hardware/utils/dump_real_dsp_utilization.py`). The `DSP` field in the `ooc_synth_*.json` files of the `report/` folders is always 0 (broken Tcl filter) and was not corrected in place; per-partition real values for the constrained builds are in `analysis/report/MILP/constrained_builds/real_dsp_per_partition.json`.
+
+| Arm | LUT | FF | DSP | BRAM18 + BRAM36 | Worst-partition Fmax (MHz) | FINN est. FPS @100 MHz | Combined rtlsim (cycles, 1 image) |
+|---|---|---|---|---|---|---|---|
+| INT4 | 79,788 | 70,240 | 166 | 37 + 32 | 194.1 | 169.2 | 2,278,947 |
+| INT6 | 96,651 | 102,248 | 167 | 45 + 80 | 190.2 | 169.2 | 2,267,093 |
+| Mixed 4/6/8 | 109,472 | 116,681 | 280 | 67 + 96 | 182.2 | 169.2 | 2,239,227 |
+| INT8 relaxed (100 FPS) | 194,295 | 142,050 | 183 | 57 + 73 | 130.7 | 127.2 | 2,462,919 |
 
 All partitions of all four builds pass the per-partition rtlsim without deadlock. The board PL clock is 187.48 MHz.
 
@@ -50,7 +52,7 @@ Partitions 0-6 built normally. **Partition 7 could not be placed**: FINN's FIFO 
 | 7 (synth only) | 31,636 | 12,797 | 1 | 1,300 | - | incomplete (261,892/262,144 beats) |
 | **Sum** | **160,201** | **114,502** | **433** | **2,166** | **162.3 (partitions 0-6)** | |
 
-Compared with the MILP-folded INT6 build of the same network and target (96.7k LUT, 45 BRAM18 + 80 BRAM36 = 205 BRAM18eq, Fmax 190.2 MHz, all partitions place and pass rtlsim): the FINN-native design needs 160.2k LUT and **4,765 BRAM18eq (7.6x the device's 624)**, so it cannot be implemented on the ZCU7EV. The BRAM comes almost entirely from FINN's autosized FIFOs (about 120 BRAM36 per partition in 0-6 and 1,300 in partition 7).
+Compared with the MILP-folded INT6 build of the same network and target (96.7k LUT, 167 DSP, 45 BRAM18 + 80 BRAM36 = 205 BRAM18eq, Fmax 190.2 MHz, all partitions place and pass rtlsim): the FINN-native design needs 160.2k LUT, 270 DSP (real count; partition 7's 27 from the synthesis report) and **4,765 BRAM18eq (7.6x the device's 624)**, so it cannot be implemented on the ZCU7EV. The BRAM comes almost entirely from FINN's autosized FIFOs (about 120 BRAM36 per partition in 0-6 and 1,300 in partition 7).
 
 Files: `report/` (per-partition `ooc_synth_*`, `rtlsim_*`, `ooc_synth_and_timing_per_partition.json` with the all-8 aggregate), `auto_folding_config.json`, `final_hw_config.json`, `preamble.log`, `build.log`, `finish_p7.log`.
 
