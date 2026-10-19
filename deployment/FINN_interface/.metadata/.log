@@ -28277,3 +28277,21 @@ java.lang.Error
 	at org.eclipse.tcf.core.AbstractChannel$1$1.run(AbstractChannel.java:371)
 	at org.eclipse.tcf.EventQueue.run(EventQueue.java:98)
 	at java.base/java.lang.Thread.run(Thread.java:829)
+
+!ENTRY com.xilinx.sdk.utils 0 0 2026-10-19 11:16:41.991
+!MESSAGE XSCT Command: [platform read {C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/platform.spr}], Thread: Worker-176: Reading platform
+
+!ENTRY com.xilinx.sdk.utils 0 0 2026-10-19 11:17:07.987
+!MESSAGE XSCT command with result: [platform read {C:/DEV/repos/LightM-UNet/deployment/FINN_interface/zcu106_s12/platform.spr}], Result: [null, ]. Thread: Worker-176: Reading platform
+
+!ENTRY com.xilinx.sdk.utils 1 0 2026-10-19 11:18:16.044
+!MESSAGE Opening file dialog using preferences. Current path: null, Local preference: scw_hwspec_file_selection, Group preference: null
+
+!ENTRY com.xilinx.sdk.utils 1 0 2026-10-19 11:18:16.045
+!MESSAGE Preference loaded using local preference: C:\DEV\repos\LightM-UNet\deployment\xsa
+
+!ENTRY com.xilinx.sdk.utils 0 0 2026-10-19 11:19:03.575
+!MESSAGE XSCT Command: [platform config -updatehw {C:/DEV/repos/LightM-UNet/deployment/xsa/s12_512_bilin_int8_v2.xsa}], Thread: Worker-176: Updating hardware platform
+
+!ENTRY com.xilinx.sdk.utils 0 0 2026-10-19 11:20:07.198
+!MESSAGE XSCT command with result: [platform config -updatehw {C:/DEV/repos/LightM-UNet/deployment/xsa/s12_512_bilin_int8_v2.xsa}], Result: [null, ]. Thread: Worker-176: Updating hardware platform

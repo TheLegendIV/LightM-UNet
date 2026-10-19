@@ -1,0 +1,4657 @@
+{
+  "role_of_node": {
+    "MVAU_rtl_0": "stage3.1.mvau_r",
+    "Thresholding_rtl_2": "stage3.1.thr_r",
+    "DuplicateStreams_hls_0": "stage3.1.dup",
+    "MVAU_rtl_1": "stage3.1.mvau_m",
+    "Thresholding_rtl_3": "stage3.1.thr_m",
+    "ConvolutionInputGenerator_rtl_0": "stage3.1.swg",
+    "FMPadding_rtl_0": "stage3.1.fmpad",
+    "MVAU_rtl_2": "stage3.1.mvau_e",
+    "Thresholding_rtl_4": "stage3.1.thr_e",
+    "MVAU_rtl_3": "stage3.2.mvau_r",
+    "Thresholding_rtl_7": "stage3.2.thr_r",
+    "DuplicateStreams_hls_1": "stage3.2.dup",
+    "MVAU_rtl_4": "stage3.2.mvau_m",
+    "Thresholding_rtl_8": "stage3.2.thr_m",
+    "ConvolutionInputGenerator_rtl_1": "stage3.2.swg",
+    "FMPadding_rtl_1": "stage3.2.fmpad",
+    "MVAU_rtl_5": "stage3.2.mvau_e",
+    "Thresholding_rtl_9": "stage3.2.thr_e",
+    "MVAU_rtl_6": "stage3.3.mvau_r",
+    "Thresholding_rtl_12": "stage3.3.thr_r",
+    "DuplicateStreams_hls_2": "stage3.3.dup",
+    "MVAU_rtl_7": "stage3.3.mvau_m",
+    "Thresholding_rtl_13": "stage3.3.thr_m",
+    "ConvolutionInputGenerator_rtl_2": "stage3.3.swg",
+    "FMPadding_rtl_2": "stage3.3.fmpad",
+    "MVAU_rtl_8": "stage3.3.mvau_e",
+    "Thresholding_rtl_14": "stage3.3.thr_e",
+    "MVAU_rtl_9": "stage3.4.mvau_r",
+    "Thresholding_rtl_17": "stage3.4.thr_r",
+    "DuplicateStreams_hls_3": "stage3.4.dup",
+    "MVAU_rtl_10": "stage3.4.mvau_m",
+    "Thresholding_rtl_18": "stage3.4.thr_m",
+    "ConvolutionInputGenerator_rtl_3": "stage3.4.swg",
+    "FMPadding_rtl_3": "stage3.4.fmpad",
+    "MVAU_rtl_11": "stage3.4.mvau_e",
+    "Thresholding_rtl_19": "stage3.4.thr_e",
+    "MVAU_rtl_12": "stage3.5.mvau_r",
+    "Thresholding_rtl_22": "stage3.5.thr_r",
+    "DuplicateStreams_hls_4": "stage3.5.dup",
+    "MVAU_rtl_13": "stage3.5.mvau_m",
+    "Thresholding_rtl_23": "stage3.5.thr_m",
+    "ConvolutionInputGenerator_rtl_4": "stage3.5.swg",
+    "FMPadding_rtl_4": "stage3.5.fmpad",
+    "MVAU_rtl_14": "stage3.5.mvau_e",
+    "Thresholding_rtl_24": "stage3.5.thr_e",
+    "Thresholding_rtl_0": "stage3.0.out_act",
+    "Thresholding_rtl_5": "stage3.1.out_act",
+    "Thresholding_rtl_1": "stage3.1.thr_k",
+    "Thresholding_rtl_10": "stage3.2.out_act",
+    "Thresholding_rtl_6": "stage3.2.thr_k",
+    "Thresholding_rtl_15": "stage3.3.out_act",
+    "Thresholding_rtl_11": "stage3.3.thr_k",
+    "Thresholding_rtl_20": "stage3.4.out_act",
+    "Thresholding_rtl_16": "stage3.4.thr_k",
+    "Thresholding_rtl_21": "stage3.5.thr_k",
+    "AddStreams_hls_0": "stage3.1.add",
+    "AddStreams_hls_1": "stage3.2.add",
+    "AddStreams_hls_2": "stage3.3.add",
+    "AddStreams_hls_3": "stage3.4.add",
+    "AddStreams_hls_4": "stage3.5.add"
+  },
+  "wanted": {
+    "stage3.1.dup=>stage3.1.mvau_r": {
+      "stage": "stage3.1",
+      "name": "stage3.1.Dup->main",
+      "producer": "stage3.1.dup",
+      "consumer": "stage3.1.mvau_r",
+      "producer_node": "Dup",
+      "consumer_node": "MVAU_r",
+      "producer_milp": "stage3.0.out_act.dup#dup",
+      "consumer_milp": "stage3.1.reduce.0#mvau",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.1.dup=>stage3.1.thr_k": {
+      "stage": "stage3.1",
+      "name": "stage3.1.Dup->skip",
+      "producer": "stage3.1.dup",
+      "consumer": "stage3.1.thr_s",
+      "producer_node": "Dup",
+      "consumer_node": "Thr_s",
+      "producer_milp": "stage3.0.out_act.dup#dup",
+      "consumer_milp": "stage3.1.skip_quant#thr",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.1.dup=>stage3.1.skip_quant": {
+      "stage": "stage3.1",
+      "name": "stage3.1.Dup->skip",
+      "producer": "stage3.1.dup",
+      "consumer": "stage3.1.thr_s",
+      "producer_node": "Dup",
+      "consumer_node": "Thr_s",
+      "producer_milp": "stage3.0.out_act.dup#dup",
+      "consumer_milp": "stage3.1.skip_quant#thr",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.1.dup=>stage3.1.thr_s": {
+      "stage": "stage3.1",
+      "name": "stage3.1.Dup->skip",
+      "producer": "stage3.1.dup",
+      "consumer": "stage3.1.thr_s",
+      "producer_node": "Dup",
+      "consumer_node": "Thr_s",
+      "producer_milp": "stage3.0.out_act.dup#dup",
+      "consumer_milp": "stage3.1.skip_quant#thr",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.1.mvau_r=>stage3.1.dwc": {
+      "stage": "stage3.1",
+      "name": "stage3.1.MVAU_r->out",
+      "producer": "stage3.1.mvau_r",
+      "consumer": "stage3.1.dwc",
+      "producer_node": "MVAU_r",
+      "consumer_node": "DWC(MVAU_r->Thr_r)",
+      "producer_milp": "stage3.1.reduce.0#mvau",
+      "consumer_milp": "stage3.1.dwc#DWC(MVAU_r->Thr_r)",
+      "depth": 2,
+      "width_bits": 36,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 42,
+      "milp_depth": null
+    },
+    "stage3.1.thr_r=>stage3.1.dwc": {
+      "stage": "stage3.1",
+      "name": "stage3.1.Thr_r->out",
+      "producer": "stage3.1.thr_r",
+      "consumer": "stage3.1.dwc",
+      "producer_node": "Thr_r",
+      "consumer_node": "DWC(Thr_r->FMPad)",
+      "producer_milp": "stage3.1.reduce.0#thr",
+      "consumer_milp": "stage3.1.dwc#DWC(Thr_r->FMPad)",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.1.dwc=>stage3.1.thr_r": {
+      "stage": "stage3.1",
+      "name": "stage3.1.MVAU_r->DWC->Thr_r",
+      "producer": "stage3.1.dwc",
+      "consumer": "stage3.1.thr_r",
+      "producer_node": "DWC(MVAU_r->Thr_r)",
+      "consumer_node": "Thr_r",
+      "producer_milp": "stage3.1.dwc#DWC(MVAU_r->Thr_r)",
+      "consumer_milp": "stage3.1.reduce.0#thr",
+      "depth": 2,
+      "width_bits": 18,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 24,
+      "milp_depth": null
+    },
+    "stage3.1.dwc=>stage3.1.fmpad": {
+      "stage": "stage3.1",
+      "name": "stage3.1.Thr_r->DWC->FMPad",
+      "producer": "stage3.1.dwc",
+      "consumer": "stage3.1.fmpad",
+      "producer_node": "DWC(Thr_r->FMPad)",
+      "consumer_node": "FMPad",
+      "producer_milp": "stage3.1.dwc#DWC(Thr_r->FMPad)",
+      "consumer_milp": "stage3.1.conv#fmpad",
+      "depth": 1046,
+      "width_bits": 12,
+      "max_occupancy": 1046,
+      "is_skip": false,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 1,
+      "mem_lut": 123,
+      "milp_depth": 1046
+    },
+    "stage3.1.fmpad=>stage3.1.swg_m": {
+      "stage": "stage3.1",
+      "name": "stage3.1.FMPad->out",
+      "producer": "stage3.1.fmpad",
+      "consumer": "stage3.1.swg",
+      "producer_node": "FMPad",
+      "consumer_node": "SWG_m",
+      "producer_milp": "stage3.1.conv#fmpad",
+      "consumer_milp": "stage3.1.conv#swg",
+      "depth": 2,
+      "width_bits": 12,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 18,
+      "milp_depth": null
+    },
+    "stage3.1.fmpad=>stage3.1.swg": {
+      "stage": "stage3.1",
+      "name": "stage3.1.FMPad->out",
+      "producer": "stage3.1.fmpad",
+      "consumer": "stage3.1.swg",
+      "producer_node": "FMPad",
+      "consumer_node": "SWG_m",
+      "producer_milp": "stage3.1.conv#fmpad",
+      "consumer_milp": "stage3.1.conv#swg",
+      "depth": 2,
+      "width_bits": 12,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 18,
+      "milp_depth": null
+    },
+    "stage3.1.swg_m=>stage3.1.mvau_m": {
+      "stage": "stage3.1",
+      "name": "stage3.1.SWG_m->out",
+      "producer": "stage3.1.swg",
+      "consumer": "stage3.1.mvau_m",
+      "producer_node": "SWG_m",
+      "consumer_node": "MVAU_m",
+      "producer_milp": "stage3.1.conv#swg",
+      "consumer_milp": "stage3.1.conv#mvau",
+      "depth": 2,
+      "width_bits": 12,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 18,
+      "milp_depth": null
+    },
+    "stage3.1.swg=>stage3.1.mvau_m": {
+      "stage": "stage3.1",
+      "name": "stage3.1.SWG_m->out",
+      "producer": "stage3.1.swg",
+      "consumer": "stage3.1.mvau_m",
+      "producer_node": "SWG_m",
+      "consumer_node": "MVAU_m",
+      "producer_milp": "stage3.1.conv#swg",
+      "consumer_milp": "stage3.1.conv#mvau",
+      "depth": 2,
+      "width_bits": 12,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 18,
+      "milp_depth": null
+    },
+    "stage3.1.mvau_m=>stage3.1.dwc": {
+      "stage": "stage3.1",
+      "name": "stage3.1.MVAU_m->out",
+      "producer": "stage3.1.mvau_m",
+      "consumer": "stage3.1.dwc",
+      "producer_node": "MVAU_m",
+      "consumer_node": "DWC(MVAU_m->Thr_m)",
+      "producer_milp": "stage3.1.conv#mvau",
+      "consumer_milp": "stage3.1.dwc#DWC(MVAU_m->Thr_m)",
+      "depth": 2,
+      "width_bits": 38,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 44,
+      "milp_depth": null
+    },
+    "stage3.1.dwc=>stage3.1.thr_m": {
+      "stage": "stage3.1",
+      "name": "stage3.1.MVAU_m->DWC->Thr_m",
+      "producer": "stage3.1.dwc",
+      "consumer": "stage3.1.thr_m",
+      "producer_node": "DWC(MVAU_m->Thr_m)",
+      "consumer_node": "Thr_m",
+      "producer_milp": "stage3.1.dwc#DWC(MVAU_m->Thr_m)",
+      "consumer_milp": "stage3.1.conv#thr",
+      "depth": 2,
+      "width_bits": 19,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 25,
+      "milp_depth": null
+    },
+    "stage3.1.thr_m=>stage3.1.mvau_e": {
+      "stage": "stage3.1",
+      "name": "stage3.1.Thr_m->out",
+      "producer": "stage3.1.thr_m",
+      "consumer": "stage3.1.mvau_e",
+      "producer_node": "Thr_m",
+      "consumer_node": "MVAU_e",
+      "producer_milp": "stage3.1.conv#thr",
+      "consumer_milp": "stage3.1.expand.0#mvau",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.1.mvau_e=>stage3.1.dwc": {
+      "stage": "stage3.1",
+      "name": "stage3.1.MVAU_e->out",
+      "producer": "stage3.1.mvau_e",
+      "consumer": "stage3.1.dwc",
+      "producer_node": "MVAU_e",
+      "consumer_node": "DWC(MVAU_e->Thr_e)",
+      "producer_milp": "stage3.1.expand.0#mvau",
+      "consumer_milp": "stage3.1.dwc#DWC(MVAU_e->Thr_e)",
+      "depth": 2,
+      "width_bits": 32,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 38,
+      "milp_depth": null
+    },
+    "stage3.1.dwc=>stage3.1.thr_e": {
+      "stage": "stage3.1",
+      "name": "stage3.1.MVAU_e->DWC->Thr_e",
+      "producer": "stage3.1.dwc",
+      "consumer": "stage3.1.thr_e",
+      "producer_node": "DWC(MVAU_e->Thr_e)",
+      "consumer_node": "Thr_e",
+      "producer_milp": "stage3.1.dwc#DWC(MVAU_e->Thr_e)",
+      "consumer_milp": "stage3.1.expand.0#thr",
+      "depth": 2,
+      "width_bits": 16,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 22,
+      "milp_depth": null
+    },
+    "stage3.1.thr_e=>stage3.1.add": {
+      "stage": "stage3.1",
+      "name": "stage3.1.Thr_e->out",
+      "producer": "stage3.1.thr_e",
+      "consumer": "stage3.1.add",
+      "producer_node": "Thr_e",
+      "consumer_node": "Add",
+      "producer_milp": "stage3.1.expand.0#thr",
+      "consumer_milp": "stage3.1.add#add",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.1.thr_k=>stage3.1.add": {
+      "stage": "stage3.1",
+      "name": "stage3.1.skip_FIFO",
+      "producer": "stage3.1.thr_s",
+      "consumer": "stage3.1.add",
+      "producer_node": "Thr_s",
+      "consumer_node": "Add",
+      "producer_milp": "stage3.1.skip_quant#thr",
+      "consumer_milp": "stage3.1.add#add",
+      "depth": 8870,
+      "width_bits": 6,
+      "max_occupancy": 8864,
+      "is_skip": true,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 4,
+      "mem_lut": 166,
+      "milp_depth": 9088
+    },
+    "stage3.1.skip_quant=>stage3.1.add": {
+      "stage": "stage3.1",
+      "name": "stage3.1.skip_FIFO",
+      "producer": "stage3.1.thr_s",
+      "consumer": "stage3.1.add",
+      "producer_node": "Thr_s",
+      "consumer_node": "Add",
+      "producer_milp": "stage3.1.skip_quant#thr",
+      "consumer_milp": "stage3.1.add#add",
+      "depth": 8870,
+      "width_bits": 6,
+      "max_occupancy": 8864,
+      "is_skip": true,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 4,
+      "mem_lut": 166,
+      "milp_depth": 9088
+    },
+    "stage3.1.thr_s=>stage3.1.add": {
+      "stage": "stage3.1",
+      "name": "stage3.1.skip_FIFO",
+      "producer": "stage3.1.thr_s",
+      "consumer": "stage3.1.add",
+      "producer_node": "Thr_s",
+      "consumer_node": "Add",
+      "producer_milp": "stage3.1.skip_quant#thr",
+      "consumer_milp": "stage3.1.add#add",
+      "depth": 8870,
+      "width_bits": 6,
+      "max_occupancy": 8864,
+      "is_skip": true,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 4,
+      "mem_lut": 166,
+      "milp_depth": 9088
+    },
+    "stage3.1.add=>stage3.1.residual_add": {
+      "stage": "stage3.1",
+      "name": "stage3.1.Add->out",
+      "producer": "stage3.1.add",
+      "consumer": "stage3.1.thr_out",
+      "producer_node": "Add",
+      "consumer_node": "Thr_out",
+      "producer_milp": "stage3.1.add#add",
+      "consumer_milp": "stage3.1.out_act#thr",
+      "depth": 2,
+      "width_bits": 7,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 13,
+      "milp_depth": null
+    },
+    "stage3.1.add=>stage3.1.thr_out": {
+      "stage": "stage3.1",
+      "name": "stage3.1.Add->out",
+      "producer": "stage3.1.add",
+      "consumer": "stage3.1.thr_out",
+      "producer_node": "Add",
+      "consumer_node": "Thr_out",
+      "producer_milp": "stage3.1.add#add",
+      "consumer_milp": "stage3.1.out_act#thr",
+      "depth": 2,
+      "width_bits": 7,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 13,
+      "milp_depth": null
+    },
+    "stage3.1.add=>stage3.1.out_act": {
+      "stage": "stage3.1",
+      "name": "stage3.1.Add->out",
+      "producer": "stage3.1.add",
+      "consumer": "stage3.1.thr_out",
+      "producer_node": "Add",
+      "consumer_node": "Thr_out",
+      "producer_milp": "stage3.1.add#add",
+      "consumer_milp": "stage3.1.out_act#thr",
+      "depth": 2,
+      "width_bits": 7,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 13,
+      "milp_depth": null
+    },
+    "stage3.2.dup=>stage3.2.mvau_r": {
+      "stage": "stage3.2",
+      "name": "stage3.2.Dup->main",
+      "producer": "stage3.2.dup",
+      "consumer": "stage3.2.mvau_r",
+      "producer_node": "Dup",
+      "consumer_node": "MVAU_r",
+      "producer_milp": "stage3.1.out_act.dup#dup",
+      "consumer_milp": "stage3.2.reduce.0#mvau",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.2.dup=>stage3.2.thr_k": {
+      "stage": "stage3.2",
+      "name": "stage3.2.Dup->skip",
+      "producer": "stage3.2.dup",
+      "consumer": "stage3.2.thr_s",
+      "producer_node": "Dup",
+      "consumer_node": "Thr_s",
+      "producer_milp": "stage3.1.out_act.dup#dup",
+      "consumer_milp": "stage3.2.skip_quant#thr",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.2.dup=>stage3.2.skip_quant": {
+      "stage": "stage3.2",
+      "name": "stage3.2.Dup->skip",
+      "producer": "stage3.2.dup",
+      "consumer": "stage3.2.thr_s",
+      "producer_node": "Dup",
+      "consumer_node": "Thr_s",
+      "producer_milp": "stage3.1.out_act.dup#dup",
+      "consumer_milp": "stage3.2.skip_quant#thr",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.2.dup=>stage3.2.thr_s": {
+      "stage": "stage3.2",
+      "name": "stage3.2.Dup->skip",
+      "producer": "stage3.2.dup",
+      "consumer": "stage3.2.thr_s",
+      "producer_node": "Dup",
+      "consumer_node": "Thr_s",
+      "producer_milp": "stage3.1.out_act.dup#dup",
+      "consumer_milp": "stage3.2.skip_quant#thr",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.2.mvau_r=>stage3.2.dwc": {
+      "stage": "stage3.2",
+      "name": "stage3.2.MVAU_r->out",
+      "producer": "stage3.2.mvau_r",
+      "consumer": "stage3.2.dwc",
+      "producer_node": "MVAU_r",
+      "consumer_node": "DWC(MVAU_r->Thr_r)",
+      "producer_milp": "stage3.2.reduce.0#mvau",
+      "consumer_milp": "stage3.2.dwc#DWC(MVAU_r->Thr_r)",
+      "depth": 2,
+      "width_bits": 36,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 42,
+      "milp_depth": null
+    },
+    "stage3.2.thr_r=>stage3.2.dwc": {
+      "stage": "stage3.2",
+      "name": "stage3.2.Thr_r->out",
+      "producer": "stage3.2.thr_r",
+      "consumer": "stage3.2.dwc",
+      "producer_node": "Thr_r",
+      "consumer_node": "DWC(Thr_r->FMPad)",
+      "producer_milp": "stage3.2.reduce.0#thr",
+      "consumer_milp": "stage3.2.dwc#DWC(Thr_r->FMPad)",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.2.dwc=>stage3.2.thr_r": {
+      "stage": "stage3.2",
+      "name": "stage3.2.MVAU_r->DWC->Thr_r",
+      "producer": "stage3.2.dwc",
+      "consumer": "stage3.2.thr_r",
+      "producer_node": "DWC(MVAU_r->Thr_r)",
+      "consumer_node": "Thr_r",
+      "producer_milp": "stage3.2.dwc#DWC(MVAU_r->Thr_r)",
+      "consumer_milp": "stage3.2.reduce.0#thr",
+      "depth": 2,
+      "width_bits": 18,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 24,
+      "milp_depth": null
+    },
+    "stage3.2.dwc=>stage3.2.fmpad": {
+      "stage": "stage3.2",
+      "name": "stage3.2.Thr_r->DWC->FMPad",
+      "producer": "stage3.2.dwc",
+      "consumer": "stage3.2.fmpad",
+      "producer_node": "DWC(Thr_r->FMPad)",
+      "consumer_node": "FMPad",
+      "producer_milp": "stage3.2.dwc#DWC(Thr_r->FMPad)",
+      "consumer_milp": "stage3.2.conv#fmpad",
+      "depth": 2086,
+      "width_bits": 12,
+      "max_occupancy": 2086,
+      "is_skip": false,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 2,
+      "mem_lut": 145,
+      "milp_depth": 2086
+    },
+    "stage3.2.fmpad=>stage3.2.swg": {
+      "stage": "stage3.2",
+      "name": "stage3.2.FMPad->out",
+      "producer": "stage3.2.fmpad",
+      "consumer": "stage3.2.swg",
+      "producer_node": "FMPad",
+      "consumer_node": "SWG_m",
+      "producer_milp": "stage3.2.conv#fmpad",
+      "consumer_milp": "stage3.2.conv#swg",
+      "depth": 2,
+      "width_bits": 12,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 18,
+      "milp_depth": null
+    },
+    "stage3.2.fmpad=>stage3.2.swg_m": {
+      "stage": "stage3.2",
+      "name": "stage3.2.FMPad->out",
+      "producer": "stage3.2.fmpad",
+      "consumer": "stage3.2.swg",
+      "producer_node": "FMPad",
+      "consumer_node": "SWG_m",
+      "producer_milp": "stage3.2.conv#fmpad",
+      "consumer_milp": "stage3.2.conv#swg",
+      "depth": 2,
+      "width_bits": 12,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 18,
+      "milp_depth": null
+    },
+    "stage3.2.swg=>stage3.2.mvau_m": {
+      "stage": "stage3.2",
+      "name": "stage3.2.SWG_m->out",
+      "producer": "stage3.2.swg",
+      "consumer": "stage3.2.mvau_m",
+      "producer_node": "SWG_m",
+      "consumer_node": "MVAU_m",
+      "producer_milp": "stage3.2.conv#swg",
+      "consumer_milp": "stage3.2.conv#mvau",
+      "depth": 2,
+      "width_bits": 12,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 18,
+      "milp_depth": null
+    },
+    "stage3.2.swg_m=>stage3.2.mvau_m": {
+      "stage": "stage3.2",
+      "name": "stage3.2.SWG_m->out",
+      "producer": "stage3.2.swg",
+      "consumer": "stage3.2.mvau_m",
+      "producer_node": "SWG_m",
+      "consumer_node": "MVAU_m",
+      "producer_milp": "stage3.2.conv#swg",
+      "consumer_milp": "stage3.2.conv#mvau",
+      "depth": 2,
+      "width_bits": 12,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 18,
+      "milp_depth": null
+    },
+    "stage3.2.mvau_m=>stage3.2.dwc": {
+      "stage": "stage3.2",
+      "name": "stage3.2.MVAU_m->out",
+      "producer": "stage3.2.mvau_m",
+      "consumer": "stage3.2.dwc",
+      "producer_node": "MVAU_m",
+      "consumer_node": "DWC(MVAU_m->Thr_m)",
+      "producer_milp": "stage3.2.conv#mvau",
+      "consumer_milp": "stage3.2.dwc#DWC(MVAU_m->Thr_m)",
+      "depth": 2,
+      "width_bits": 38,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 44,
+      "milp_depth": null
+    },
+    "stage3.2.dwc=>stage3.2.thr_m": {
+      "stage": "stage3.2",
+      "name": "stage3.2.MVAU_m->DWC->Thr_m",
+      "producer": "stage3.2.dwc",
+      "consumer": "stage3.2.thr_m",
+      "producer_node": "DWC(MVAU_m->Thr_m)",
+      "consumer_node": "Thr_m",
+      "producer_milp": "stage3.2.dwc#DWC(MVAU_m->Thr_m)",
+      "consumer_milp": "stage3.2.conv#thr",
+      "depth": 2,
+      "width_bits": 19,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 25,
+      "milp_depth": null
+    },
+    "stage3.2.thr_m=>stage3.2.mvau_e": {
+      "stage": "stage3.2",
+      "name": "stage3.2.Thr_m->out",
+      "producer": "stage3.2.thr_m",
+      "consumer": "stage3.2.mvau_e",
+      "producer_node": "Thr_m",
+      "consumer_node": "MVAU_e",
+      "producer_milp": "stage3.2.conv#thr",
+      "consumer_milp": "stage3.2.expand.0#mvau",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.2.mvau_e=>stage3.2.dwc": {
+      "stage": "stage3.2",
+      "name": "stage3.2.MVAU_e->out",
+      "producer": "stage3.2.mvau_e",
+      "consumer": "stage3.2.dwc",
+      "producer_node": "MVAU_e",
+      "consumer_node": "DWC(MVAU_e->Thr_e)",
+      "producer_milp": "stage3.2.expand.0#mvau",
+      "consumer_milp": "stage3.2.dwc#DWC(MVAU_e->Thr_e)",
+      "depth": 2,
+      "width_bits": 32,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 38,
+      "milp_depth": null
+    },
+    "stage3.2.dwc=>stage3.2.thr_e": {
+      "stage": "stage3.2",
+      "name": "stage3.2.MVAU_e->DWC->Thr_e",
+      "producer": "stage3.2.dwc",
+      "consumer": "stage3.2.thr_e",
+      "producer_node": "DWC(MVAU_e->Thr_e)",
+      "consumer_node": "Thr_e",
+      "producer_milp": "stage3.2.dwc#DWC(MVAU_e->Thr_e)",
+      "consumer_milp": "stage3.2.expand.0#thr",
+      "depth": 2,
+      "width_bits": 16,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 22,
+      "milp_depth": null
+    },
+    "stage3.2.thr_e=>stage3.2.add": {
+      "stage": "stage3.2",
+      "name": "stage3.2.Thr_e->out",
+      "producer": "stage3.2.thr_e",
+      "consumer": "stage3.2.add",
+      "producer_node": "Thr_e",
+      "consumer_node": "Add",
+      "producer_milp": "stage3.2.expand.0#thr",
+      "consumer_milp": "stage3.2.add#add",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.2.thr_k=>stage3.2.add": {
+      "stage": "stage3.2",
+      "name": "stage3.2.skip_FIFO",
+      "producer": "stage3.2.thr_s",
+      "consumer": "stage3.2.add",
+      "producer_node": "Thr_s",
+      "consumer_node": "Add",
+      "producer_milp": "stage3.2.skip_quant#thr",
+      "consumer_milp": "stage3.2.add#add",
+      "depth": 17630,
+      "width_bits": 6,
+      "max_occupancy": 17630,
+      "is_skip": true,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 7,
+      "mem_lut": 178,
+      "milp_depth": 18112
+    },
+    "stage3.2.skip_quant=>stage3.2.add": {
+      "stage": "stage3.2",
+      "name": "stage3.2.skip_FIFO",
+      "producer": "stage3.2.thr_s",
+      "consumer": "stage3.2.add",
+      "producer_node": "Thr_s",
+      "consumer_node": "Add",
+      "producer_milp": "stage3.2.skip_quant#thr",
+      "consumer_milp": "stage3.2.add#add",
+      "depth": 17630,
+      "width_bits": 6,
+      "max_occupancy": 17630,
+      "is_skip": true,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 7,
+      "mem_lut": 178,
+      "milp_depth": 18112
+    },
+    "stage3.2.thr_s=>stage3.2.add": {
+      "stage": "stage3.2",
+      "name": "stage3.2.skip_FIFO",
+      "producer": "stage3.2.thr_s",
+      "consumer": "stage3.2.add",
+      "producer_node": "Thr_s",
+      "consumer_node": "Add",
+      "producer_milp": "stage3.2.skip_quant#thr",
+      "consumer_milp": "stage3.2.add#add",
+      "depth": 17630,
+      "width_bits": 6,
+      "max_occupancy": 17630,
+      "is_skip": true,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 7,
+      "mem_lut": 178,
+      "milp_depth": 18112
+    },
+    "stage3.2.add=>stage3.2.out_act": {
+      "stage": "stage3.2",
+      "name": "stage3.2.Add->out",
+      "producer": "stage3.2.add",
+      "consumer": "stage3.2.thr_out",
+      "producer_node": "Add",
+      "consumer_node": "Thr_out",
+      "producer_milp": "stage3.2.add#add",
+      "consumer_milp": "stage3.2.out_act#thr",
+      "depth": 2,
+      "width_bits": 7,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 13,
+      "milp_depth": null
+    },
+    "stage3.2.add=>stage3.2.thr_out": {
+      "stage": "stage3.2",
+      "name": "stage3.2.Add->out",
+      "producer": "stage3.2.add",
+      "consumer": "stage3.2.thr_out",
+      "producer_node": "Add",
+      "consumer_node": "Thr_out",
+      "producer_milp": "stage3.2.add#add",
+      "consumer_milp": "stage3.2.out_act#thr",
+      "depth": 2,
+      "width_bits": 7,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 13,
+      "milp_depth": null
+    },
+    "stage3.2.add=>stage3.2.residual_add": {
+      "stage": "stage3.2",
+      "name": "stage3.2.Add->out",
+      "producer": "stage3.2.add",
+      "consumer": "stage3.2.thr_out",
+      "producer_node": "Add",
+      "consumer_node": "Thr_out",
+      "producer_milp": "stage3.2.add#add",
+      "consumer_milp": "stage3.2.out_act#thr",
+      "depth": 2,
+      "width_bits": 7,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 13,
+      "milp_depth": null
+    },
+    "stage3.3.dup=>stage3.3.mvau_r": {
+      "stage": "stage3.3",
+      "name": "stage3.3.Dup->main",
+      "producer": "stage3.3.dup",
+      "consumer": "stage3.3.mvau_r",
+      "producer_node": "Dup",
+      "consumer_node": "MVAU_r",
+      "producer_milp": "stage3.2.out_act.dup#dup",
+      "consumer_milp": "stage3.3.reduce.0#mvau",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.3.dup=>stage3.3.thr_k": {
+      "stage": "stage3.3",
+      "name": "stage3.3.Dup->skip",
+      "producer": "stage3.3.dup",
+      "consumer": "stage3.3.thr_s",
+      "producer_node": "Dup",
+      "consumer_node": "Thr_s",
+      "producer_milp": "stage3.2.out_act.dup#dup",
+      "consumer_milp": "stage3.3.skip_quant#thr",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.3.dup=>stage3.3.thr_s": {
+      "stage": "stage3.3",
+      "name": "stage3.3.Dup->skip",
+      "producer": "stage3.3.dup",
+      "consumer": "stage3.3.thr_s",
+      "producer_node": "Dup",
+      "consumer_node": "Thr_s",
+      "producer_milp": "stage3.2.out_act.dup#dup",
+      "consumer_milp": "stage3.3.skip_quant#thr",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.3.dup=>stage3.3.skip_quant": {
+      "stage": "stage3.3",
+      "name": "stage3.3.Dup->skip",
+      "producer": "stage3.3.dup",
+      "consumer": "stage3.3.thr_s",
+      "producer_node": "Dup",
+      "consumer_node": "Thr_s",
+      "producer_milp": "stage3.2.out_act.dup#dup",
+      "consumer_milp": "stage3.3.skip_quant#thr",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.3.mvau_r=>stage3.3.dwc": {
+      "stage": "stage3.3",
+      "name": "stage3.3.MVAU_r->out",
+      "producer": "stage3.3.mvau_r",
+      "consumer": "stage3.3.dwc",
+      "producer_node": "MVAU_r",
+      "consumer_node": "DWC(MVAU_r->Thr_r)",
+      "producer_milp": "stage3.3.reduce.0#mvau",
+      "consumer_milp": "stage3.3.dwc#DWC(MVAU_r->Thr_r)",
+      "depth": 2,
+      "width_bits": 36,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 42,
+      "milp_depth": null
+    },
+    "stage3.3.thr_r=>stage3.3.fmpad": {
+      "stage": "stage3.3",
+      "name": "stage3.3.Thr_r->out",
+      "producer": "stage3.3.thr_r",
+      "consumer": "stage3.3.fmpad",
+      "producer_node": "Thr_r",
+      "consumer_node": "FMPad",
+      "producer_milp": "stage3.3.reduce.0#thr",
+      "consumer_milp": "stage3.3.conv#fmpad",
+      "depth": 8330,
+      "width_bits": 6,
+      "max_occupancy": 8330,
+      "is_skip": false,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 3,
+      "mem_lut": 165,
+      "milp_depth": 8330
+    },
+    "stage3.3.dwc=>stage3.3.thr_r": {
+      "stage": "stage3.3",
+      "name": "stage3.3.MVAU_r->DWC->Thr_r",
+      "producer": "stage3.3.dwc",
+      "consumer": "stage3.3.thr_r",
+      "producer_node": "DWC(MVAU_r->Thr_r)",
+      "consumer_node": "Thr_r",
+      "producer_milp": "stage3.3.dwc#DWC(MVAU_r->Thr_r)",
+      "consumer_milp": "stage3.3.reduce.0#thr",
+      "depth": 2,
+      "width_bits": 18,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 24,
+      "milp_depth": null
+    },
+    "stage3.3.fmpad=>stage3.3.swg": {
+      "stage": "stage3.3",
+      "name": "stage3.3.FMPad->out",
+      "producer": "stage3.3.fmpad",
+      "consumer": "stage3.3.swg",
+      "producer_node": "FMPad",
+      "consumer_node": "SWG_m",
+      "producer_milp": "stage3.3.conv#fmpad",
+      "consumer_milp": "stage3.3.conv#swg",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.3.fmpad=>stage3.3.swg_m": {
+      "stage": "stage3.3",
+      "name": "stage3.3.FMPad->out",
+      "producer": "stage3.3.fmpad",
+      "consumer": "stage3.3.swg",
+      "producer_node": "FMPad",
+      "consumer_node": "SWG_m",
+      "producer_milp": "stage3.3.conv#fmpad",
+      "consumer_milp": "stage3.3.conv#swg",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.3.swg=>stage3.3.mvau_m": {
+      "stage": "stage3.3",
+      "name": "stage3.3.SWG_m->out",
+      "producer": "stage3.3.swg",
+      "consumer": "stage3.3.mvau_m",
+      "producer_node": "SWG_m",
+      "consumer_node": "MVAU_m",
+      "producer_milp": "stage3.3.conv#swg",
+      "consumer_milp": "stage3.3.conv#mvau",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.3.swg_m=>stage3.3.mvau_m": {
+      "stage": "stage3.3",
+      "name": "stage3.3.SWG_m->out",
+      "producer": "stage3.3.swg",
+      "consumer": "stage3.3.mvau_m",
+      "producer_node": "SWG_m",
+      "consumer_node": "MVAU_m",
+      "producer_milp": "stage3.3.conv#swg",
+      "consumer_milp": "stage3.3.conv#mvau",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.3.mvau_m=>stage3.3.dwc": {
+      "stage": "stage3.3",
+      "name": "stage3.3.MVAU_m->out",
+      "producer": "stage3.3.mvau_m",
+      "consumer": "stage3.3.dwc",
+      "producer_node": "MVAU_m",
+      "consumer_node": "DWC(MVAU_m->Thr_m)",
+      "producer_milp": "stage3.3.conv#mvau",
+      "consumer_milp": "stage3.3.dwc#DWC(MVAU_m->Thr_m)",
+      "depth": 2,
+      "width_bits": 76,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 82,
+      "milp_depth": null
+    },
+    "stage3.3.dwc=>stage3.3.thr_m": {
+      "stage": "stage3.3",
+      "name": "stage3.3.MVAU_m->DWC->Thr_m",
+      "producer": "stage3.3.dwc",
+      "consumer": "stage3.3.thr_m",
+      "producer_node": "DWC(MVAU_m->Thr_m)",
+      "consumer_node": "Thr_m",
+      "producer_milp": "stage3.3.dwc#DWC(MVAU_m->Thr_m)",
+      "consumer_milp": "stage3.3.conv#thr",
+      "depth": 2,
+      "width_bits": 19,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 25,
+      "milp_depth": null
+    },
+    "stage3.3.thr_m=>stage3.3.mvau_e": {
+      "stage": "stage3.3",
+      "name": "stage3.3.Thr_m->out",
+      "producer": "stage3.3.thr_m",
+      "consumer": "stage3.3.mvau_e",
+      "producer_node": "Thr_m",
+      "consumer_node": "MVAU_e",
+      "producer_milp": "stage3.3.conv#thr",
+      "consumer_milp": "stage3.3.expand.0#mvau",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.3.mvau_e=>stage3.3.dwc": {
+      "stage": "stage3.3",
+      "name": "stage3.3.MVAU_e->out",
+      "producer": "stage3.3.mvau_e",
+      "consumer": "stage3.3.dwc",
+      "producer_node": "MVAU_e",
+      "consumer_node": "DWC(MVAU_e->Thr_e)",
+      "producer_milp": "stage3.3.expand.0#mvau",
+      "consumer_milp": "stage3.3.dwc#DWC(MVAU_e->Thr_e)",
+      "depth": 2,
+      "width_bits": 32,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 38,
+      "milp_depth": null
+    },
+    "stage3.3.dwc=>stage3.3.thr_e": {
+      "stage": "stage3.3",
+      "name": "stage3.3.MVAU_e->DWC->Thr_e",
+      "producer": "stage3.3.dwc",
+      "consumer": "stage3.3.thr_e",
+      "producer_node": "DWC(MVAU_e->Thr_e)",
+      "consumer_node": "Thr_e",
+      "producer_milp": "stage3.3.dwc#DWC(MVAU_e->Thr_e)",
+      "consumer_milp": "stage3.3.expand.0#thr",
+      "depth": 2,
+      "width_bits": 16,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 22,
+      "milp_depth": null
+    },
+    "stage3.3.thr_e=>stage3.3.add": {
+      "stage": "stage3.3",
+      "name": "stage3.3.Thr_e->out",
+      "producer": "stage3.3.thr_e",
+      "consumer": "stage3.3.add",
+      "producer_node": "Thr_e",
+      "consumer_node": "Add",
+      "producer_milp": "stage3.3.expand.0#thr",
+      "consumer_milp": "stage3.3.add#add",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.3.thr_k=>stage3.3.add": {
+      "stage": "stage3.3",
+      "name": "stage3.3.skip_FIFO",
+      "producer": "stage3.3.thr_s",
+      "consumer": "stage3.3.add",
+      "producer_node": "Thr_s",
+      "consumer_node": "Add",
+      "producer_milp": "stage3.3.skip_quant#thr",
+      "consumer_milp": "stage3.3.add#add",
+      "depth": 37530,
+      "width_bits": 6,
+      "max_occupancy": 37530,
+      "is_skip": true,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 15,
+      "mem_lut": 265,
+      "milp_depth": 36160
+    },
+    "stage3.3.thr_s=>stage3.3.add": {
+      "stage": "stage3.3",
+      "name": "stage3.3.skip_FIFO",
+      "producer": "stage3.3.thr_s",
+      "consumer": "stage3.3.add",
+      "producer_node": "Thr_s",
+      "consumer_node": "Add",
+      "producer_milp": "stage3.3.skip_quant#thr",
+      "consumer_milp": "stage3.3.add#add",
+      "depth": 37530,
+      "width_bits": 6,
+      "max_occupancy": 37530,
+      "is_skip": true,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 15,
+      "mem_lut": 265,
+      "milp_depth": 36160
+    },
+    "stage3.3.skip_quant=>stage3.3.add": {
+      "stage": "stage3.3",
+      "name": "stage3.3.skip_FIFO",
+      "producer": "stage3.3.thr_s",
+      "consumer": "stage3.3.add",
+      "producer_node": "Thr_s",
+      "consumer_node": "Add",
+      "producer_milp": "stage3.3.skip_quant#thr",
+      "consumer_milp": "stage3.3.add#add",
+      "depth": 37530,
+      "width_bits": 6,
+      "max_occupancy": 37530,
+      "is_skip": true,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 15,
+      "mem_lut": 265,
+      "milp_depth": 36160
+    },
+    "stage3.3.add=>stage3.3.residual_add": {
+      "stage": "stage3.3",
+      "name": "stage3.3.Add->out",
+      "producer": "stage3.3.add",
+      "consumer": "stage3.3.thr_out",
+      "producer_node": "Add",
+      "consumer_node": "Thr_out",
+      "producer_milp": "stage3.3.add#add",
+      "consumer_milp": "stage3.3.out_act#thr",
+      "depth": 2,
+      "width_bits": 7,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 13,
+      "milp_depth": null
+    },
+    "stage3.3.add=>stage3.3.thr_out": {
+      "stage": "stage3.3",
+      "name": "stage3.3.Add->out",
+      "producer": "stage3.3.add",
+      "consumer": "stage3.3.thr_out",
+      "producer_node": "Add",
+      "consumer_node": "Thr_out",
+      "producer_milp": "stage3.3.add#add",
+      "consumer_milp": "stage3.3.out_act#thr",
+      "depth": 2,
+      "width_bits": 7,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 13,
+      "milp_depth": null
+    },
+    "stage3.3.add=>stage3.3.out_act": {
+      "stage": "stage3.3",
+      "name": "stage3.3.Add->out",
+      "producer": "stage3.3.add",
+      "consumer": "stage3.3.thr_out",
+      "producer_node": "Add",
+      "consumer_node": "Thr_out",
+      "producer_milp": "stage3.3.add#add",
+      "consumer_milp": "stage3.3.out_act#thr",
+      "depth": 2,
+      "width_bits": 7,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 13,
+      "milp_depth": null
+    },
+    "stage3.4.dup=>stage3.4.mvau_r": {
+      "stage": "stage3.4",
+      "name": "stage3.4.Dup->main",
+      "producer": "stage3.4.dup",
+      "consumer": "stage3.4.mvau_r",
+      "producer_node": "Dup",
+      "consumer_node": "MVAU_r",
+      "producer_milp": "stage3.3.out_act.dup#dup",
+      "consumer_milp": "stage3.4.reduce.0#mvau",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.4.dup=>stage3.4.dwc": {
+      "stage": "stage3.4",
+      "name": "stage3.4.Dup->skip",
+      "producer": "stage3.4.dup",
+      "consumer": "stage3.4.dwc",
+      "producer_node": "Dup",
+      "consumer_node": "DWC(Dup->Thr_s)",
+      "producer_milp": "stage3.3.out_act.dup#dup",
+      "consumer_milp": "stage3.4.dwc#DWC(Dup->Thr_s)",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.4.mvau_r=>stage3.4.dwc": {
+      "stage": "stage3.4",
+      "name": "stage3.4.MVAU_r->out",
+      "producer": "stage3.4.mvau_r",
+      "consumer": "stage3.4.dwc",
+      "producer_node": "MVAU_r",
+      "consumer_node": "DWC(MVAU_r->Thr_r)",
+      "producer_milp": "stage3.4.reduce.0#mvau",
+      "consumer_milp": "stage3.4.dwc#DWC(MVAU_r->Thr_r)",
+      "depth": 2,
+      "width_bits": 36,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 42,
+      "milp_depth": null
+    },
+    "stage3.4.thr_r=>stage3.4.dwc": {
+      "stage": "stage3.4",
+      "name": "stage3.4.Thr_r->out",
+      "producer": "stage3.4.thr_r",
+      "consumer": "stage3.4.dwc",
+      "producer_node": "Thr_r",
+      "consumer_node": "DWC(Thr_r->FMPad)",
+      "producer_milp": "stage3.4.reduce.0#thr",
+      "consumer_milp": "stage3.4.dwc#DWC(Thr_r->FMPad)",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.4.dwc=>stage3.4.thr_r": {
+      "stage": "stage3.4",
+      "name": "stage3.4.MVAU_r->DWC->Thr_r",
+      "producer": "stage3.4.dwc",
+      "consumer": "stage3.4.thr_r",
+      "producer_node": "DWC(MVAU_r->Thr_r)",
+      "consumer_node": "Thr_r",
+      "producer_milp": "stage3.4.dwc#DWC(MVAU_r->Thr_r)",
+      "consumer_milp": "stage3.4.reduce.0#thr",
+      "depth": 2,
+      "width_bits": 18,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 24,
+      "milp_depth": null
+    },
+    "stage3.4.dwc=>stage3.4.fmpad": {
+      "stage": "stage3.4",
+      "name": "stage3.4.Thr_r->DWC->FMPad",
+      "producer": "stage3.4.dwc",
+      "consumer": "stage3.4.fmpad",
+      "producer_node": "DWC(Thr_r->FMPad)",
+      "consumer_node": "FMPad",
+      "producer_milp": "stage3.4.dwc#DWC(Thr_r->FMPad)",
+      "consumer_milp": "stage3.4.conv#fmpad",
+      "depth": 526,
+      "width_bits": 12,
+      "max_occupancy": 526,
+      "is_skip": false,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 1,
+      "mem_lut": 117,
+      "milp_depth": 526
+    },
+    "stage3.4.fmpad=>stage3.4.swg": {
+      "stage": "stage3.4",
+      "name": "stage3.4.FMPad->out",
+      "producer": "stage3.4.fmpad",
+      "consumer": "stage3.4.swg",
+      "producer_node": "FMPad",
+      "consumer_node": "SWG_m",
+      "producer_milp": "stage3.4.conv#fmpad",
+      "consumer_milp": "stage3.4.conv#swg",
+      "depth": 2,
+      "width_bits": 12,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 18,
+      "milp_depth": null
+    },
+    "stage3.4.fmpad=>stage3.4.swg_m": {
+      "stage": "stage3.4",
+      "name": "stage3.4.FMPad->out",
+      "producer": "stage3.4.fmpad",
+      "consumer": "stage3.4.swg",
+      "producer_node": "FMPad",
+      "consumer_node": "SWG_m",
+      "producer_milp": "stage3.4.conv#fmpad",
+      "consumer_milp": "stage3.4.conv#swg",
+      "depth": 2,
+      "width_bits": 12,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 18,
+      "milp_depth": null
+    },
+    "stage3.4.swg=>stage3.4.mvau_m": {
+      "stage": "stage3.4",
+      "name": "stage3.4.SWG_m->out",
+      "producer": "stage3.4.swg",
+      "consumer": "stage3.4.mvau_m",
+      "producer_node": "SWG_m",
+      "consumer_node": "MVAU_m",
+      "producer_milp": "stage3.4.conv#swg",
+      "consumer_milp": "stage3.4.conv#mvau",
+      "depth": 2,
+      "width_bits": 12,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 18,
+      "milp_depth": null
+    },
+    "stage3.4.swg_m=>stage3.4.mvau_m": {
+      "stage": "stage3.4",
+      "name": "stage3.4.SWG_m->out",
+      "producer": "stage3.4.swg",
+      "consumer": "stage3.4.mvau_m",
+      "producer_node": "SWG_m",
+      "consumer_node": "MVAU_m",
+      "producer_milp": "stage3.4.conv#swg",
+      "consumer_milp": "stage3.4.conv#mvau",
+      "depth": 2,
+      "width_bits": 12,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 18,
+      "milp_depth": null
+    },
+    "stage3.4.mvau_m=>stage3.4.dwc": {
+      "stage": "stage3.4",
+      "name": "stage3.4.MVAU_m->out",
+      "producer": "stage3.4.mvau_m",
+      "consumer": "stage3.4.dwc",
+      "producer_node": "MVAU_m",
+      "consumer_node": "DWC(MVAU_m->Thr_m)",
+      "producer_milp": "stage3.4.conv#mvau",
+      "consumer_milp": "stage3.4.dwc#DWC(MVAU_m->Thr_m)",
+      "depth": 2,
+      "width_bits": 38,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 44,
+      "milp_depth": null
+    },
+    "stage3.4.dwc=>stage3.4.thr_m": {
+      "stage": "stage3.4",
+      "name": "stage3.4.MVAU_m->DWC->Thr_m",
+      "producer": "stage3.4.dwc",
+      "consumer": "stage3.4.thr_m",
+      "producer_node": "DWC(MVAU_m->Thr_m)",
+      "consumer_node": "Thr_m",
+      "producer_milp": "stage3.4.dwc#DWC(MVAU_m->Thr_m)",
+      "consumer_milp": "stage3.4.conv#thr",
+      "depth": 2,
+      "width_bits": 19,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 25,
+      "milp_depth": null
+    },
+    "stage3.4.thr_m=>stage3.4.mvau_e": {
+      "stage": "stage3.4",
+      "name": "stage3.4.Thr_m->out",
+      "producer": "stage3.4.thr_m",
+      "consumer": "stage3.4.mvau_e",
+      "producer_node": "Thr_m",
+      "consumer_node": "MVAU_e",
+      "producer_milp": "stage3.4.conv#thr",
+      "consumer_milp": "stage3.4.expand.0#mvau",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.4.mvau_e=>stage3.4.dwc": {
+      "stage": "stage3.4",
+      "name": "stage3.4.MVAU_e->out",
+      "producer": "stage3.4.mvau_e",
+      "consumer": "stage3.4.dwc",
+      "producer_node": "MVAU_e",
+      "consumer_node": "DWC(MVAU_e->Thr_e)",
+      "producer_milp": "stage3.4.expand.0#mvau",
+      "consumer_milp": "stage3.4.dwc#DWC(MVAU_e->Thr_e)",
+      "depth": 2,
+      "width_bits": 32,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 38,
+      "milp_depth": null
+    },
+    "stage3.4.dwc=>stage3.4.thr_e": {
+      "stage": "stage3.4",
+      "name": "stage3.4.MVAU_e->DWC->Thr_e",
+      "producer": "stage3.4.dwc",
+      "consumer": "stage3.4.thr_e",
+      "producer_node": "DWC(MVAU_e->Thr_e)",
+      "consumer_node": "Thr_e",
+      "producer_milp": "stage3.4.dwc#DWC(MVAU_e->Thr_e)",
+      "consumer_milp": "stage3.4.expand.0#thr",
+      "depth": 2,
+      "width_bits": 16,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 22,
+      "milp_depth": null
+    },
+    "stage3.4.thr_e=>stage3.4.add": {
+      "stage": "stage3.4",
+      "name": "stage3.4.Thr_e->out",
+      "producer": "stage3.4.thr_e",
+      "consumer": "stage3.4.add",
+      "producer_node": "Thr_e",
+      "consumer_node": "Add",
+      "producer_milp": "stage3.4.expand.0#thr",
+      "consumer_milp": "stage3.4.add#add",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.4.dwc=>stage3.4.skip_quant": {
+      "stage": "stage3.4",
+      "name": "stage3.4.Dup->DWC->Thr_s",
+      "producer": "stage3.4.dwc",
+      "consumer": "stage3.4.thr_s",
+      "producer_node": "DWC(Dup->Thr_s)",
+      "consumer_node": "Thr_s",
+      "producer_milp": "stage3.4.dwc#DWC(Dup->Thr_s)",
+      "consumer_milp": "stage3.4.skip_quant#thr",
+      "depth": 2,
+      "width_bits": 12,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 18,
+      "milp_depth": null
+    },
+    "stage3.4.dwc=>stage3.4.thr_k": {
+      "stage": "stage3.4",
+      "name": "stage3.4.Dup->DWC->Thr_s",
+      "producer": "stage3.4.dwc",
+      "consumer": "stage3.4.thr_s",
+      "producer_node": "DWC(Dup->Thr_s)",
+      "consumer_node": "Thr_s",
+      "producer_milp": "stage3.4.dwc#DWC(Dup->Thr_s)",
+      "consumer_milp": "stage3.4.skip_quant#thr",
+      "depth": 2,
+      "width_bits": 12,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 18,
+      "milp_depth": null
+    },
+    "stage3.4.dwc=>stage3.4.thr_s": {
+      "stage": "stage3.4",
+      "name": "stage3.4.Dup->DWC->Thr_s",
+      "producer": "stage3.4.dwc",
+      "consumer": "stage3.4.thr_s",
+      "producer_node": "DWC(Dup->Thr_s)",
+      "consumer_node": "Thr_s",
+      "producer_milp": "stage3.4.dwc#DWC(Dup->Thr_s)",
+      "consumer_milp": "stage3.4.skip_quant#thr",
+      "depth": 2,
+      "width_bits": 12,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 18,
+      "milp_depth": null
+    },
+    "stage3.4.skip_quant=>stage3.4.dwc": {
+      "stage": "stage3.4",
+      "name": "stage3.4.skip_FIFO",
+      "producer": "stage3.4.thr_s",
+      "consumer": "stage3.4.dwc",
+      "producer_node": "Thr_s",
+      "consumer_node": "DWC(skipFIFO->Add)",
+      "producer_milp": "stage3.4.skip_quant#thr",
+      "consumer_milp": "stage3.4.dwc#DWC(skipFIFO->Add)",
+      "depth": 2232,
+      "width_bits": 12,
+      "max_occupancy": 2227,
+      "is_skip": true,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 2,
+      "mem_lut": 204,
+      "milp_depth": null
+    },
+    "stage3.4.thr_k=>stage3.4.dwc": {
+      "stage": "stage3.4",
+      "name": "stage3.4.skip_FIFO",
+      "producer": "stage3.4.thr_s",
+      "consumer": "stage3.4.dwc",
+      "producer_node": "Thr_s",
+      "consumer_node": "DWC(skipFIFO->Add)",
+      "producer_milp": "stage3.4.skip_quant#thr",
+      "consumer_milp": "stage3.4.dwc#DWC(skipFIFO->Add)",
+      "depth": 2232,
+      "width_bits": 12,
+      "max_occupancy": 2227,
+      "is_skip": true,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 2,
+      "mem_lut": 204,
+      "milp_depth": null
+    },
+    "stage3.4.thr_s=>stage3.4.dwc": {
+      "stage": "stage3.4",
+      "name": "stage3.4.skip_FIFO",
+      "producer": "stage3.4.thr_s",
+      "consumer": "stage3.4.dwc",
+      "producer_node": "Thr_s",
+      "consumer_node": "DWC(skipFIFO->Add)",
+      "producer_milp": "stage3.4.skip_quant#thr",
+      "consumer_milp": "stage3.4.dwc#DWC(skipFIFO->Add)",
+      "depth": 2232,
+      "width_bits": 12,
+      "max_occupancy": 2227,
+      "is_skip": true,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 2,
+      "mem_lut": 204,
+      "milp_depth": null
+    },
+    "stage3.4.dwc=>stage3.4.add": {
+      "stage": "stage3.4",
+      "name": "stage3.4.skipFIFO->DWC->Add",
+      "producer": "stage3.4.dwc",
+      "consumer": "stage3.4.add",
+      "producer_node": "DWC(skipFIFO->Add)",
+      "consumer_node": "Add",
+      "producer_milp": "stage3.4.dwc#DWC(skipFIFO->Add)",
+      "consumer_milp": "stage3.4.add#add",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.4.add=>stage3.4.residual_add": {
+      "stage": "stage3.4",
+      "name": "stage3.4.Add->out",
+      "producer": "stage3.4.add",
+      "consumer": "stage3.4.thr_out",
+      "producer_node": "Add",
+      "consumer_node": "Thr_out",
+      "producer_milp": "stage3.4.add#add",
+      "consumer_milp": "stage3.4.out_act#thr",
+      "depth": 2,
+      "width_bits": 7,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 13,
+      "milp_depth": null
+    },
+    "stage3.4.add=>stage3.4.out_act": {
+      "stage": "stage3.4",
+      "name": "stage3.4.Add->out",
+      "producer": "stage3.4.add",
+      "consumer": "stage3.4.thr_out",
+      "producer_node": "Add",
+      "consumer_node": "Thr_out",
+      "producer_milp": "stage3.4.add#add",
+      "consumer_milp": "stage3.4.out_act#thr",
+      "depth": 2,
+      "width_bits": 7,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 13,
+      "milp_depth": null
+    },
+    "stage3.4.add=>stage3.4.thr_out": {
+      "stage": "stage3.4",
+      "name": "stage3.4.Add->out",
+      "producer": "stage3.4.add",
+      "consumer": "stage3.4.thr_out",
+      "producer_node": "Add",
+      "consumer_node": "Thr_out",
+      "producer_milp": "stage3.4.add#add",
+      "consumer_milp": "stage3.4.out_act#thr",
+      "depth": 2,
+      "width_bits": 7,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 13,
+      "milp_depth": null
+    },
+    "stage3.5.dup=>stage3.5.mvau_r": {
+      "stage": "stage3.5",
+      "name": "stage3.5.Dup->main",
+      "producer": "stage3.5.dup",
+      "consumer": "stage3.5.mvau_r",
+      "producer_node": "Dup",
+      "consumer_node": "MVAU_r",
+      "producer_milp": "stage3.4.out_act.dup#dup",
+      "consumer_milp": "stage3.5.reduce.0#mvau",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.5.dup=>stage3.5.thr_s": {
+      "stage": "stage3.5",
+      "name": "stage3.5.Dup->skip",
+      "producer": "stage3.5.dup",
+      "consumer": "stage3.5.thr_s",
+      "producer_node": "Dup",
+      "consumer_node": "Thr_s",
+      "producer_milp": "stage3.4.out_act.dup#dup",
+      "consumer_milp": "stage3.5.skip_quant#thr",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.5.dup=>stage3.5.skip_quant": {
+      "stage": "stage3.5",
+      "name": "stage3.5.Dup->skip",
+      "producer": "stage3.5.dup",
+      "consumer": "stage3.5.thr_s",
+      "producer_node": "Dup",
+      "consumer_node": "Thr_s",
+      "producer_milp": "stage3.4.out_act.dup#dup",
+      "consumer_milp": "stage3.5.skip_quant#thr",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.5.dup=>stage3.5.thr_k": {
+      "stage": "stage3.5",
+      "name": "stage3.5.Dup->skip",
+      "producer": "stage3.5.dup",
+      "consumer": "stage3.5.thr_s",
+      "producer_node": "Dup",
+      "consumer_node": "Thr_s",
+      "producer_milp": "stage3.4.out_act.dup#dup",
+      "consumer_milp": "stage3.5.skip_quant#thr",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.5.mvau_r=>stage3.5.dwc": {
+      "stage": "stage3.5",
+      "name": "stage3.5.MVAU_r->out",
+      "producer": "stage3.5.mvau_r",
+      "consumer": "stage3.5.dwc",
+      "producer_node": "MVAU_r",
+      "consumer_node": "DWC(MVAU_r->Thr_r)",
+      "producer_milp": "stage3.5.reduce.0#mvau",
+      "consumer_milp": "stage3.5.dwc#DWC(MVAU_r->Thr_r)",
+      "depth": 2,
+      "width_bits": 36,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 42,
+      "milp_depth": null
+    },
+    "stage3.5.thr_r=>stage3.5.dwc": {
+      "stage": "stage3.5",
+      "name": "stage3.5.Thr_r->out",
+      "producer": "stage3.5.thr_r",
+      "consumer": "stage3.5.dwc",
+      "producer_node": "Thr_r",
+      "consumer_node": "DWC(Thr_r->FMPad)",
+      "producer_milp": "stage3.5.reduce.0#thr",
+      "consumer_milp": "stage3.5.dwc#DWC(Thr_r->FMPad)",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.5.dwc=>stage3.5.thr_r": {
+      "stage": "stage3.5",
+      "name": "stage3.5.MVAU_r->DWC->Thr_r",
+      "producer": "stage3.5.dwc",
+      "consumer": "stage3.5.thr_r",
+      "producer_node": "DWC(MVAU_r->Thr_r)",
+      "consumer_node": "Thr_r",
+      "producer_milp": "stage3.5.dwc#DWC(MVAU_r->Thr_r)",
+      "consumer_milp": "stage3.5.reduce.0#thr",
+      "depth": 2,
+      "width_bits": 18,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 24,
+      "milp_depth": null
+    },
+    "stage3.5.dwc=>stage3.5.fmpad": {
+      "stage": "stage3.5",
+      "name": "stage3.5.Thr_r->DWC->FMPad",
+      "producer": "stage3.5.dwc",
+      "consumer": "stage3.5.fmpad",
+      "producer_node": "DWC(Thr_r->FMPad)",
+      "consumer_node": "FMPad",
+      "producer_milp": "stage3.5.dwc#DWC(Thr_r->FMPad)",
+      "consumer_milp": "stage3.5.conv#fmpad",
+      "depth": 1046,
+      "width_bits": 12,
+      "max_occupancy": 1046,
+      "is_skip": false,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 1,
+      "mem_lut": 123,
+      "milp_depth": 1046
+    },
+    "stage3.5.fmpad=>stage3.5.swg": {
+      "stage": "stage3.5",
+      "name": "stage3.5.FMPad->out",
+      "producer": "stage3.5.fmpad",
+      "consumer": "stage3.5.swg",
+      "producer_node": "FMPad",
+      "consumer_node": "SWG_m",
+      "producer_milp": "stage3.5.conv#fmpad",
+      "consumer_milp": "stage3.5.conv#swg",
+      "depth": 2,
+      "width_bits": 12,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 18,
+      "milp_depth": null
+    },
+    "stage3.5.fmpad=>stage3.5.swg_m": {
+      "stage": "stage3.5",
+      "name": "stage3.5.FMPad->out",
+      "producer": "stage3.5.fmpad",
+      "consumer": "stage3.5.swg",
+      "producer_node": "FMPad",
+      "consumer_node": "SWG_m",
+      "producer_milp": "stage3.5.conv#fmpad",
+      "consumer_milp": "stage3.5.conv#swg",
+      "depth": 2,
+      "width_bits": 12,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 18,
+      "milp_depth": null
+    },
+    "stage3.5.swg=>stage3.5.mvau_m": {
+      "stage": "stage3.5",
+      "name": "stage3.5.SWG_m->out",
+      "producer": "stage3.5.swg",
+      "consumer": "stage3.5.mvau_m",
+      "producer_node": "SWG_m",
+      "consumer_node": "MVAU_m",
+      "producer_milp": "stage3.5.conv#swg",
+      "consumer_milp": "stage3.5.conv#mvau",
+      "depth": 2,
+      "width_bits": 12,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 18,
+      "milp_depth": null
+    },
+    "stage3.5.swg_m=>stage3.5.mvau_m": {
+      "stage": "stage3.5",
+      "name": "stage3.5.SWG_m->out",
+      "producer": "stage3.5.swg",
+      "consumer": "stage3.5.mvau_m",
+      "producer_node": "SWG_m",
+      "consumer_node": "MVAU_m",
+      "producer_milp": "stage3.5.conv#swg",
+      "consumer_milp": "stage3.5.conv#mvau",
+      "depth": 2,
+      "width_bits": 12,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 18,
+      "milp_depth": null
+    },
+    "stage3.5.mvau_m=>stage3.5.dwc": {
+      "stage": "stage3.5",
+      "name": "stage3.5.MVAU_m->out",
+      "producer": "stage3.5.mvau_m",
+      "consumer": "stage3.5.dwc",
+      "producer_node": "MVAU_m",
+      "consumer_node": "DWC(MVAU_m->Thr_m)",
+      "producer_milp": "stage3.5.conv#mvau",
+      "consumer_milp": "stage3.5.dwc#DWC(MVAU_m->Thr_m)",
+      "depth": 2,
+      "width_bits": 38,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 44,
+      "milp_depth": null
+    },
+    "stage3.5.dwc=>stage3.5.thr_m": {
+      "stage": "stage3.5",
+      "name": "stage3.5.MVAU_m->DWC->Thr_m",
+      "producer": "stage3.5.dwc",
+      "consumer": "stage3.5.thr_m",
+      "producer_node": "DWC(MVAU_m->Thr_m)",
+      "consumer_node": "Thr_m",
+      "producer_milp": "stage3.5.dwc#DWC(MVAU_m->Thr_m)",
+      "consumer_milp": "stage3.5.conv#thr",
+      "depth": 2,
+      "width_bits": 19,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 25,
+      "milp_depth": null
+    },
+    "stage3.5.thr_m=>stage3.5.mvau_e": {
+      "stage": "stage3.5",
+      "name": "stage3.5.Thr_m->out",
+      "producer": "stage3.5.thr_m",
+      "consumer": "stage3.5.mvau_e",
+      "producer_node": "Thr_m",
+      "consumer_node": "MVAU_e",
+      "producer_milp": "stage3.5.conv#thr",
+      "consumer_milp": "stage3.5.expand.0#mvau",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 2,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.5.mvau_e=>stage3.5.dwc": {
+      "stage": "stage3.5",
+      "name": "stage3.5.MVAU_e->out",
+      "producer": "stage3.5.mvau_e",
+      "consumer": "stage3.5.dwc",
+      "producer_node": "MVAU_e",
+      "consumer_node": "DWC(MVAU_e->Thr_e)",
+      "producer_milp": "stage3.5.expand.0#mvau",
+      "consumer_milp": "stage3.5.dwc#DWC(MVAU_e->Thr_e)",
+      "depth": 2,
+      "width_bits": 32,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 38,
+      "milp_depth": null
+    },
+    "stage3.5.dwc=>stage3.5.thr_e": {
+      "stage": "stage3.5",
+      "name": "stage3.5.MVAU_e->DWC->Thr_e",
+      "producer": "stage3.5.dwc",
+      "consumer": "stage3.5.thr_e",
+      "producer_node": "DWC(MVAU_e->Thr_e)",
+      "consumer_node": "Thr_e",
+      "producer_milp": "stage3.5.dwc#DWC(MVAU_e->Thr_e)",
+      "consumer_milp": "stage3.5.expand.0#thr",
+      "depth": 2,
+      "width_bits": 16,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 22,
+      "milp_depth": null
+    },
+    "stage3.5.thr_e=>stage3.5.add": {
+      "stage": "stage3.5",
+      "name": "stage3.5.Thr_e->out",
+      "producer": "stage3.5.thr_e",
+      "consumer": "stage3.5.add",
+      "producer_node": "Thr_e",
+      "consumer_node": "Add",
+      "producer_milp": "stage3.5.expand.0#thr",
+      "consumer_milp": "stage3.5.add#add",
+      "depth": 2,
+      "width_bits": 6,
+      "max_occupancy": 1,
+      "is_skip": false,
+      "mem": "srl",
+      "finn_impl": "rtl",
+      "mem_bram18": 0,
+      "mem_lut": 12,
+      "milp_depth": null
+    },
+    "stage3.5.thr_s=>stage3.5.add": {
+      "stage": "stage3.5",
+      "name": "stage3.5.skip_FIFO",
+      "producer": "stage3.5.thr_s",
+      "consumer": "stage3.5.add",
+      "producer_node": "Thr_s",
+      "consumer_node": "Add",
+      "producer_milp": "stage3.5.skip_quant#thr",
+      "consumer_milp": "stage3.5.add#add",
+      "depth": 8870,
+      "width_bits": 6,
+      "max_occupancy": 8864,
+      "is_skip": true,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 4,
+      "mem_lut": 166,
+      "milp_depth": 9088
+    },
+    "stage3.5.skip_quant=>stage3.5.add": {
+      "stage": "stage3.5",
+      "name": "stage3.5.skip_FIFO",
+      "producer": "stage3.5.thr_s",
+      "consumer": "stage3.5.add",
+      "producer_node": "Thr_s",
+      "consumer_node": "Add",
+      "producer_milp": "stage3.5.skip_quant#thr",
+      "consumer_milp": "stage3.5.add#add",
+      "depth": 8870,
+      "width_bits": 6,
+      "max_occupancy": 8864,
+      "is_skip": true,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 4,
+      "mem_lut": 166,
+      "milp_depth": 9088
+    },
+    "stage3.5.thr_k=>stage3.5.add": {
+      "stage": "stage3.5",
+      "name": "stage3.5.skip_FIFO",
+      "producer": "stage3.5.thr_s",
+      "consumer": "stage3.5.add",
+      "producer_node": "Thr_s",
+      "consumer_node": "Add",
+      "producer_milp": "stage3.5.skip_quant#thr",
+      "consumer_milp": "stage3.5.add#add",
+      "depth": 8870,
+      "width_bits": 6,
+      "max_occupancy": 8864,
+      "is_skip": true,
+      "mem": "bram",
+      "finn_impl": "vivado/block",
+      "mem_bram18": 4,
+      "mem_lut": 166,
+      "milp_depth": 9088
+    }
+  },
+  "wanted_by_producer": {
+    "stage3.0.out_act": {
+      "name": "stage3.0.out_act->stage3.0.out_act.dup",
+      "producer": "stage3.0.out_act",
+      "consumer": "stage3.0.out_act.dup",
+      "src_block": "stage3.0",
+      "dst_block": "stage3.1",
+      "width_bits": 6,
+      "mem": "srl",
+      "depth": 2,
+      "depth_alloc": 2,
+      "bram18": 0,
+      "lut": 12,
+      "uram18": 0,
+      "sizing": "fixed",
+      "efficiency": 0.031
+    },
+    "stage3.0.residual_add": {
+      "name": "stage3.0.out_act->stage3.0.out_act.dup",
+      "producer": "stage3.0.out_act",
+      "consumer": "stage3.0.out_act.dup",
+      "src_block": "stage3.0",
+      "dst_block": "stage3.1",
+      "width_bits": 6,
+      "mem": "srl",
+      "depth": 2,
+      "depth_alloc": 2,
+      "bram18": 0,
+      "lut": 12,
+      "uram18": 0,
+      "sizing": "fixed",
+      "efficiency": 0.031
+    },
+    "stage3.0.thr_out": {
+      "name": "stage3.0.out_act->stage3.0.out_act.dup",
+      "producer": "stage3.0.out_act",
+      "consumer": "stage3.0.out_act.dup",
+      "src_block": "stage3.0",
+      "dst_block": "stage3.1",
+      "width_bits": 6,
+      "mem": "srl",
+      "depth": 2,
+      "depth_alloc": 2,
+      "bram18": 0,
+      "lut": 12,
+      "uram18": 0,
+      "sizing": "fixed",
+      "efficiency": 0.031
+    },
+    "stage3.1.residual_add": {
+      "name": "stage3.1.out_act->stage3.1.out_act.dup",
+      "producer": "stage3.1.out_act",
+      "consumer": "stage3.1.out_act.dup",
+      "src_block": "stage3.1",
+      "dst_block": "stage3.2",
+      "width_bits": 6,
+      "mem": "srl",
+      "depth": 2,
+      "depth_alloc": 2,
+      "bram18": 0,
+      "lut": 12,
+      "uram18": 0,
+      "sizing": "fixed",
+      "efficiency": 0.031
+    },
+    "stage3.1.thr_out": {
+      "name": "stage3.1.out_act->stage3.1.out_act.dup",
+      "producer": "stage3.1.out_act",
+      "consumer": "stage3.1.out_act.dup",
+      "src_block": "stage3.1",
+      "dst_block": "stage3.2",
+      "width_bits": 6,
+      "mem": "srl",
+      "depth": 2,
+      "depth_alloc": 2,
+      "bram18": 0,
+      "lut": 12,
+      "uram18": 0,
+      "sizing": "fixed",
+      "efficiency": 0.031
+    },
+    "stage3.1.out_act": {
+      "name": "stage3.1.out_act->stage3.1.out_act.dup",
+      "producer": "stage3.1.out_act",
+      "consumer": "stage3.1.out_act.dup",
+      "src_block": "stage3.1",
+      "dst_block": "stage3.2",
+      "width_bits": 6,
+      "mem": "srl",
+      "depth": 2,
+      "depth_alloc": 2,
+      "bram18": 0,
+      "lut": 12,
+      "uram18": 0,
+      "sizing": "fixed",
+      "efficiency": 0.031
+    },
+    "stage3.2.out_act": {
+      "name": "stage3.2.out_act->stage3.2.out_act.dup",
+      "producer": "stage3.2.out_act",
+      "consumer": "stage3.2.out_act.dup",
+      "src_block": "stage3.2",
+      "dst_block": "stage3.3",
+      "width_bits": 6,
+      "mem": "srl",
+      "depth": 2,
+      "depth_alloc": 2,
+      "bram18": 0,
+      "lut": 12,
+      "uram18": 0,
+      "sizing": "fixed",
+      "efficiency": 0.031
+    },
+    "stage3.2.thr_out": {
+      "name": "stage3.2.out_act->stage3.2.out_act.dup",
+      "producer": "stage3.2.out_act",
+      "consumer": "stage3.2.out_act.dup",
+      "src_block": "stage3.2",
+      "dst_block": "stage3.3",
+      "width_bits": 6,
+      "mem": "srl",
+      "depth": 2,
+      "depth_alloc": 2,
+      "bram18": 0,
+      "lut": 12,
+      "uram18": 0,
+      "sizing": "fixed",
+      "efficiency": 0.031
+    },
+    "stage3.2.residual_add": {
+      "name": "stage3.2.out_act->stage3.2.out_act.dup",
+      "producer": "stage3.2.out_act",
+      "consumer": "stage3.2.out_act.dup",
+      "src_block": "stage3.2",
+      "dst_block": "stage3.3",
+      "width_bits": 6,
+      "mem": "srl",
+      "depth": 2,
+      "depth_alloc": 2,
+      "bram18": 0,
+      "lut": 12,
+      "uram18": 0,
+      "sizing": "fixed",
+      "efficiency": 0.031
+    },
+    "stage3.3.residual_add": {
+      "name": "stage3.3.out_act->stage3.3.out_act.dup",
+      "producer": "stage3.3.out_act",
+      "consumer": "stage3.3.out_act.dup",
+      "src_block": "stage3.3",
+      "dst_block": "stage3.4",
+      "width_bits": 6,
+      "mem": "srl",
+      "depth": 2,
+      "depth_alloc": 2,
+      "bram18": 0,
+      "lut": 12,
+      "uram18": 0,
+      "sizing": "fixed",
+      "efficiency": 0.031
+    },
+    "stage3.3.thr_out": {
+      "name": "stage3.3.out_act->stage3.3.out_act.dup",
+      "producer": "stage3.3.out_act",
+      "consumer": "stage3.3.out_act.dup",
+      "src_block": "stage3.3",
+      "dst_block": "stage3.4",
+      "width_bits": 6,
+      "mem": "srl",
+      "depth": 2,
+      "depth_alloc": 2,
+      "bram18": 0,
+      "lut": 12,
+      "uram18": 0,
+      "sizing": "fixed",
+      "efficiency": 0.031
+    },
+    "stage3.3.out_act": {
+      "name": "stage3.3.out_act->stage3.3.out_act.dup",
+      "producer": "stage3.3.out_act",
+      "consumer": "stage3.3.out_act.dup",
+      "src_block": "stage3.3",
+      "dst_block": "stage3.4",
+      "width_bits": 6,
+      "mem": "srl",
+      "depth": 2,
+      "depth_alloc": 2,
+      "bram18": 0,
+      "lut": 12,
+      "uram18": 0,
+      "sizing": "fixed",
+      "efficiency": 0.031
+    },
+    "stage3.4.residual_add": {
+      "name": "stage3.4.out_act->stage3.4.out_act.dup",
+      "producer": "stage3.4.out_act",
+      "consumer": "stage3.4.out_act.dup",
+      "src_block": "stage3.4",
+      "dst_block": "stage3.5",
+      "width_bits": 6,
+      "mem": "srl",
+      "depth": 2,
+      "depth_alloc": 2,
+      "bram18": 0,
+      "lut": 12,
+      "uram18": 0,
+      "sizing": "fixed",
+      "efficiency": 0.031
+    },
+    "stage3.4.out_act": {
+      "name": "stage3.4.out_act->stage3.4.out_act.dup",
+      "producer": "stage3.4.out_act",
+      "consumer": "stage3.4.out_act.dup",
+      "src_block": "stage3.4",
+      "dst_block": "stage3.5",
+      "width_bits": 6,
+      "mem": "srl",
+      "depth": 2,
+      "depth_alloc": 2,
+      "bram18": 0,
+      "lut": 12,
+      "uram18": 0,
+      "sizing": "fixed",
+      "efficiency": 0.031
+    },
+    "stage3.4.thr_out": {
+      "name": "stage3.4.out_act->stage3.4.out_act.dup",
+      "producer": "stage3.4.out_act",
+      "consumer": "stage3.4.out_act.dup",
+      "src_block": "stage3.4",
+      "dst_block": "stage3.5",
+      "width_bits": 6,
+      "mem": "srl",
+      "depth": 2,
+      "depth_alloc": 2,
+      "bram18": 0,
+      "lut": 12,
+      "uram18": 0,
+      "sizing": "fixed",
+      "efficiency": 0.031
+    }
+  },
+  "unresolved": [
+    [
+      "initial.thr_in",
+      "initial.dup"
+    ],
+    [
+      "initial.dup",
+      "initial.fmpad"
+    ],
+    [
+      "initial.dup",
+      "initial.thr_m"
+    ],
+    [
+      "initial.fmpad",
+      "initial.swg"
+    ],
+    [
+      "initial.swg",
+      "initial.mvau_c"
+    ],
+    [
+      "initial.mvau_c",
+      "initial.dwc"
+    ],
+    [
+      "initial.dwc",
+      "initial.thr_c"
+    ],
+    [
+      "initial.thr_c",
+      "initial.dwc"
+    ],
+    [
+      "initial.thr_m",
+      "initial.swg_p"
+    ],
+    [
+      "initial.pool",
+      "initial.concat"
+    ],
+    [
+      "initial.swg_p",
+      "initial.pool"
+    ],
+    [
+      "initial.dwc",
+      "initial.concat"
+    ],
+    [
+      "initial.concat",
+      "initial.dwc"
+    ],
+    [
+      "initial.dwc",
+      "initial.thr_act"
+    ],
+    [
+      "down1.dup",
+      "down1.swg_r"
+    ],
+    [
+      "down1.dup",
+      "down1.dwc"
+    ],
+    [
+      "down1.swg_r",
+      "down1.mvau_r"
+    ],
+    [
+      "down1.mvau_r",
+      "down1.dwc"
+    ],
+    [
+      "down1.dwc",
+      "down1.thr_r"
+    ],
+    [
+      "down1.thr_r",
+      "down1.dwc"
+    ],
+    [
+      "down1.dwc",
+      "down1.fmpad"
+    ],
+    [
+      "down1.fmpad",
+      "down1.swg_m"
+    ],
+    [
+      "down1.swg_m",
+      "down1.mvau_m"
+    ],
+    [
+      "down1.mvau_m",
+      "down1.dwc"
+    ],
+    [
+      "down1.dwc",
+      "down1.thr_m"
+    ],
+    [
+      "down1.thr_m",
+      "down1.mvau_e"
+    ],
+    [
+      "down1.mvau_e",
+      "down1.dwc"
+    ],
+    [
+      "down1.dwc",
+      "down1.thr_e"
+    ],
+    [
+      "down1.thr_e",
+      "down1.add"
+    ],
+    [
+      "down1.dwc",
+      "down1.maxpool"
+    ],
+    [
+      "down1.maxpool",
+      "down1.dwc"
+    ],
+    [
+      "down1.thr_s",
+      "down1.dwc"
+    ],
+    [
+      "down1.dwc",
+      "down1.mvau_s"
+    ],
+    [
+      "down1.mvau_s",
+      "down1.thr_s"
+    ],
+    [
+      "down1.dwc",
+      "down1.add"
+    ],
+    [
+      "down1.add",
+      "down1.thr_out"
+    ],
+    [
+      "regular1.0.dup",
+      "regular1.0.mvau_r"
+    ],
+    [
+      "regular1.0.dup",
+      "regular1.0.thr_s"
+    ],
+    [
+      "regular1.0.mvau_r",
+      "regular1.0.dwc"
+    ],
+    [
+      "regular1.0.thr_r",
+      "regular1.0.dwc"
+    ],
+    [
+      "regular1.0.dwc",
+      "regular1.0.thr_r"
+    ],
+    [
+      "regular1.0.dwc",
+      "regular1.0.fmpad"
+    ],
+    [
+      "regular1.0.fmpad",
+      "regular1.0.swg"
+    ],
+    [
+      "regular1.0.swg",
+      "regular1.0.mvau_m"
+    ],
+    [
+      "regular1.0.mvau_m",
+      "regular1.0.dwc"
+    ],
+    [
+      "regular1.0.dwc",
+      "regular1.0.thr_m"
+    ],
+    [
+      "regular1.0.thr_m",
+      "regular1.0.mvau_e"
+    ],
+    [
+      "regular1.0.mvau_e",
+      "regular1.0.dwc"
+    ],
+    [
+      "regular1.0.dwc",
+      "regular1.0.thr_e"
+    ],
+    [
+      "regular1.0.thr_e",
+      "regular1.0.add"
+    ],
+    [
+      "regular1.0.thr_s",
+      "regular1.0.add"
+    ],
+    [
+      "regular1.0.add",
+      "regular1.0.thr_out"
+    ],
+    [
+      "regular1.1.dup",
+      "regular1.1.mvau_r"
+    ],
+    [
+      "regular1.1.dup",
+      "regular1.1.thr_s"
+    ],
+    [
+      "regular1.1.mvau_r",
+      "regular1.1.dwc"
+    ],
+    [
+      "regular1.1.thr_r",
+      "regular1.1.dwc"
+    ],
+    [
+      "regular1.1.dwc",
+      "regular1.1.thr_r"
+    ],
+    [
+      "regular1.1.dwc",
+      "regular1.1.fmpad"
+    ],
+    [
+      "regular1.1.fmpad",
+      "regular1.1.swg"
+    ],
+    [
+      "regular1.1.swg",
+      "regular1.1.mvau_m"
+    ],
+    [
+      "regular1.1.mvau_m",
+      "regular1.1.dwc"
+    ],
+    [
+      "regular1.1.dwc",
+      "regular1.1.thr_m"
+    ],
+    [
+      "regular1.1.thr_m",
+      "regular1.1.mvau_e"
+    ],
+    [
+      "regular1.1.mvau_e",
+      "regular1.1.dwc"
+    ],
+    [
+      "regular1.1.dwc",
+      "regular1.1.thr_e"
+    ],
+    [
+      "regular1.1.thr_e",
+      "regular1.1.add"
+    ],
+    [
+      "regular1.1.thr_s",
+      "regular1.1.add"
+    ],
+    [
+      "regular1.1.add",
+      "regular1.1.thr_out"
+    ],
+    [
+      "regular1.2.dup",
+      "regular1.2.mvau_r"
+    ],
+    [
+      "regular1.2.dup",
+      "regular1.2.thr_s"
+    ],
+    [
+      "regular1.2.mvau_r",
+      "regular1.2.dwc"
+    ],
+    [
+      "regular1.2.thr_r",
+      "regular1.2.dwc"
+    ],
+    [
+      "regular1.2.dwc",
+      "regular1.2.thr_r"
+    ],
+    [
+      "regular1.2.dwc",
+      "regular1.2.fmpad"
+    ],
+    [
+      "regular1.2.fmpad",
+      "regular1.2.swg"
+    ],
+    [
+      "regular1.2.swg",
+      "regular1.2.mvau_m"
+    ],
+    [
+      "regular1.2.mvau_m",
+      "regular1.2.dwc"
+    ],
+    [
+      "regular1.2.dwc",
+      "regular1.2.thr_m"
+    ],
+    [
+      "regular1.2.thr_m",
+      "regular1.2.mvau_e"
+    ],
+    [
+      "regular1.2.mvau_e",
+      "regular1.2.dwc"
+    ],
+    [
+      "regular1.2.dwc",
+      "regular1.2.thr_e"
+    ],
+    [
+      "regular1.2.thr_e",
+      "regular1.2.add"
+    ],
+    [
+      "regular1.2.thr_s",
+      "regular1.2.add"
+    ],
+    [
+      "regular1.2.add",
+      "regular1.2.thr_out"
+    ],
+    [
+      "regular1.3.dup",
+      "regular1.3.mvau_r"
+    ],
+    [
+      "regular1.3.dup",
+      "regular1.3.thr_s"
+    ],
+    [
+      "regular1.3.mvau_r",
+      "regular1.3.dwc"
+    ],
+    [
+      "regular1.3.thr_r",
+      "regular1.3.dwc"
+    ],
+    [
+      "regular1.3.dwc",
+      "regular1.3.thr_r"
+    ],
+    [
+      "regular1.3.dwc",
+      "regular1.3.fmpad"
+    ],
+    [
+      "regular1.3.fmpad",
+      "regular1.3.swg"
+    ],
+    [
+      "regular1.3.swg",
+      "regular1.3.mvau_m"
+    ],
+    [
+      "regular1.3.mvau_m",
+      "regular1.3.dwc"
+    ],
+    [
+      "regular1.3.dwc",
+      "regular1.3.thr_m"
+    ],
+    [
+      "regular1.3.thr_m",
+      "regular1.3.mvau_e"
+    ],
+    [
+      "regular1.3.mvau_e",
+      "regular1.3.dwc"
+    ],
+    [
+      "regular1.3.dwc",
+      "regular1.3.thr_e"
+    ],
+    [
+      "regular1.3.thr_e",
+      "regular1.3.add"
+    ],
+    [
+      "regular1.3.thr_s",
+      "regular1.3.add"
+    ],
+    [
+      "regular1.3.add",
+      "regular1.3.thr_out"
+    ],
+    [
+      "down2.dup",
+      "down2.dwc"
+    ],
+    [
+      "down2.dup",
+      "down2.dwc"
+    ],
+    [
+      "down2.dwc",
+      "down2.swg_r"
+    ],
+    [
+      "down2.swg_r",
+      "down2.mvau_r"
+    ],
+    [
+      "down2.mvau_r",
+      "down2.dwc"
+    ],
+    [
+      "down2.dwc",
+      "down2.thr_r"
+    ],
+    [
+      "down2.thr_r",
+      "down2.dwc"
+    ],
+    [
+      "down2.dwc",
+      "down2.fmpad"
+    ],
+    [
+      "down2.fmpad",
+      "down2.swg_m"
+    ],
+    [
+      "down2.swg_m",
+      "down2.mvau_m"
+    ],
+    [
+      "down2.mvau_m",
+      "down2.dwc"
+    ],
+    [
+      "down2.dwc",
+      "down2.thr_m"
+    ],
+    [
+      "down2.thr_m",
+      "down2.mvau_e"
+    ],
+    [
+      "down2.mvau_e",
+      "down2.dwc"
+    ],
+    [
+      "down2.dwc",
+      "down2.thr_e"
+    ],
+    [
+      "down2.thr_e",
+      "down2.add"
+    ],
+    [
+      "down2.dwc",
+      "down2.maxpool"
+    ],
+    [
+      "down2.maxpool",
+      "down2.dwc"
+    ],
+    [
+      "down2.thr_s",
+      "down2.dwc"
+    ],
+    [
+      "down2.dwc",
+      "down2.mvau_s"
+    ],
+    [
+      "down2.mvau_s",
+      "down2.thr_s"
+    ],
+    [
+      "down2.dwc",
+      "down2.add"
+    ],
+    [
+      "down2.add",
+      "down2.thr_out"
+    ],
+    [
+      "stage2.0.dup",
+      "stage2.0.mvau_r"
+    ],
+    [
+      "stage2.0.dup",
+      "stage2.0.dwc"
+    ],
+    [
+      "stage2.0.mvau_r",
+      "stage2.0.dwc"
+    ],
+    [
+      "stage2.0.thr_r",
+      "stage2.0.dwc"
+    ],
+    [
+      "stage2.0.dwc",
+      "stage2.0.thr_r"
+    ],
+    [
+      "stage2.0.dwc",
+      "stage2.0.fmpad"
+    ],
+    [
+      "stage2.0.fmpad",
+      "stage2.0.swg"
+    ],
+    [
+      "stage2.0.swg",
+      "stage2.0.mvau_m"
+    ],
+    [
+      "stage2.0.mvau_m",
+      "stage2.0.dwc"
+    ],
+    [
+      "stage2.0.dwc",
+      "stage2.0.thr_m"
+    ],
+    [
+      "stage2.0.thr_m",
+      "stage2.0.mvau_e"
+    ],
+    [
+      "stage2.0.mvau_e",
+      "stage2.0.dwc"
+    ],
+    [
+      "stage2.0.dwc",
+      "stage2.0.thr_e"
+    ],
+    [
+      "stage2.0.thr_e",
+      "stage2.0.add"
+    ],
+    [
+      "stage2.0.dwc",
+      "stage2.0.thr_s"
+    ],
+    [
+      "stage2.0.thr_s",
+      "stage2.0.dwc"
+    ],
+    [
+      "stage2.0.dwc",
+      "stage2.0.add"
+    ],
+    [
+      "stage2.0.add",
+      "stage2.0.thr_out"
+    ],
+    [
+      "stage2.1.dup",
+      "stage2.1.mvau_r"
+    ],
+    [
+      "stage2.1.dup",
+      "stage2.1.thr_s"
+    ],
+    [
+      "stage2.1.mvau_r",
+      "stage2.1.dwc"
+    ],
+    [
+      "stage2.1.thr_r",
+      "stage2.1.dwc"
+    ],
+    [
+      "stage2.1.dwc",
+      "stage2.1.thr_r"
+    ],
+    [
+      "stage2.1.dwc",
+      "stage2.1.fmpad"
+    ],
+    [
+      "stage2.1.fmpad",
+      "stage2.1.swg"
+    ],
+    [
+      "stage2.1.swg",
+      "stage2.1.mvau_m"
+    ],
+    [
+      "stage2.1.mvau_m",
+      "stage2.1.dwc"
+    ],
+    [
+      "stage2.1.dwc",
+      "stage2.1.thr_m"
+    ],
+    [
+      "stage2.1.thr_m",
+      "stage2.1.mvau_e"
+    ],
+    [
+      "stage2.1.mvau_e",
+      "stage2.1.dwc"
+    ],
+    [
+      "stage2.1.dwc",
+      "stage2.1.thr_e"
+    ],
+    [
+      "stage2.1.thr_e",
+      "stage2.1.add"
+    ],
+    [
+      "stage2.1.thr_s",
+      "stage2.1.add"
+    ],
+    [
+      "stage2.1.add",
+      "stage2.1.thr_out"
+    ],
+    [
+      "stage2.2.dup",
+      "stage2.2.mvau_r"
+    ],
+    [
+      "stage2.2.dup",
+      "stage2.2.thr_s"
+    ],
+    [
+      "stage2.2.mvau_r",
+      "stage2.2.dwc"
+    ],
+    [
+      "stage2.2.thr_r",
+      "stage2.2.dwc"
+    ],
+    [
+      "stage2.2.dwc",
+      "stage2.2.thr_r"
+    ],
+    [
+      "stage2.2.dwc",
+      "stage2.2.fmpad"
+    ],
+    [
+      "stage2.2.fmpad",
+      "stage2.2.swg"
+    ],
+    [
+      "stage2.2.swg",
+      "stage2.2.mvau_m"
+    ],
+    [
+      "stage2.2.mvau_m",
+      "stage2.2.dwc"
+    ],
+    [
+      "stage2.2.dwc",
+      "stage2.2.thr_m"
+    ],
+    [
+      "stage2.2.thr_m",
+      "stage2.2.mvau_e"
+    ],
+    [
+      "stage2.2.mvau_e",
+      "stage2.2.dwc"
+    ],
+    [
+      "stage2.2.dwc",
+      "stage2.2.thr_e"
+    ],
+    [
+      "stage2.2.thr_e",
+      "stage2.2.add"
+    ],
+    [
+      "stage2.2.thr_s",
+      "stage2.2.add"
+    ],
+    [
+      "stage2.2.add",
+      "stage2.2.thr_out"
+    ],
+    [
+      "stage2.3.dup",
+      "stage2.3.mvau_r"
+    ],
+    [
+      "stage2.3.dup",
+      "stage2.3.thr_s"
+    ],
+    [
+      "stage2.3.mvau_r",
+      "stage2.3.dwc"
+    ],
+    [
+      "stage2.3.thr_r",
+      "stage2.3.fmpad"
+    ],
+    [
+      "stage2.3.dwc",
+      "stage2.3.thr_r"
+    ],
+    [
+      "stage2.3.fmpad",
+      "stage2.3.swg"
+    ],
+    [
+      "stage2.3.swg",
+      "stage2.3.mvau_m"
+    ],
+    [
+      "stage2.3.mvau_m",
+      "stage2.3.dwc"
+    ],
+    [
+      "stage2.3.dwc",
+      "stage2.3.thr_m"
+    ],
+    [
+      "stage2.3.thr_m",
+      "stage2.3.mvau_e"
+    ],
+    [
+      "stage2.3.mvau_e",
+      "stage2.3.dwc"
+    ],
+    [
+      "stage2.3.dwc",
+      "stage2.3.thr_e"
+    ],
+    [
+      "stage2.3.thr_e",
+      "stage2.3.add"
+    ],
+    [
+      "stage2.3.thr_s",
+      "stage2.3.add"
+    ],
+    [
+      "stage2.3.add",
+      "stage2.3.thr_out"
+    ],
+    [
+      "stage2.4.dup",
+      "stage2.4.mvau_r"
+    ],
+    [
+      "stage2.4.dup",
+      "stage2.4.dwc"
+    ],
+    [
+      "stage2.4.mvau_r",
+      "stage2.4.dwc"
+    ],
+    [
+      "stage2.4.thr_r",
+      "stage2.4.dwc"
+    ],
+    [
+      "stage2.4.dwc",
+      "stage2.4.thr_r"
+    ],
+    [
+      "stage2.4.dwc",
+      "stage2.4.fmpad"
+    ],
+    [
+      "stage2.4.fmpad",
+      "stage2.4.swg"
+    ],
+    [
+      "stage2.4.swg",
+      "stage2.4.mvau_m"
+    ],
+    [
+      "stage2.4.mvau_m",
+      "stage2.4.dwc"
+    ],
+    [
+      "stage2.4.dwc",
+      "stage2.4.thr_m"
+    ],
+    [
+      "stage2.4.thr_m",
+      "stage2.4.mvau_e"
+    ],
+    [
+      "stage2.4.mvau_e",
+      "stage2.4.dwc"
+    ],
+    [
+      "stage2.4.dwc",
+      "stage2.4.thr_e"
+    ],
+    [
+      "stage2.4.thr_e",
+      "stage2.4.add"
+    ],
+    [
+      "stage2.4.dwc",
+      "stage2.4.thr_s"
+    ],
+    [
+      "stage2.4.thr_s",
+      "stage2.4.dwc"
+    ],
+    [
+      "stage2.4.dwc",
+      "stage2.4.add"
+    ],
+    [
+      "stage2.4.add",
+      "stage2.4.thr_out"
+    ],
+    [
+      "stage2.5.dup",
+      "stage2.5.mvau_r"
+    ],
+    [
+      "stage2.5.dup",
+      "stage2.5.thr_s"
+    ],
+    [
+      "stage2.5.mvau_r",
+      "stage2.5.dwc"
+    ],
+    [
+      "stage2.5.thr_r",
+      "stage2.5.dwc"
+    ],
+    [
+      "stage2.5.dwc",
+      "stage2.5.thr_r"
+    ],
+    [
+      "stage2.5.dwc",
+      "stage2.5.fmpad"
+    ],
+    [
+      "stage2.5.fmpad",
+      "stage2.5.swg"
+    ],
+    [
+      "stage2.5.swg",
+      "stage2.5.mvau_m"
+    ],
+    [
+      "stage2.5.mvau_m",
+      "stage2.5.dwc"
+    ],
+    [
+      "stage2.5.dwc",
+      "stage2.5.thr_m"
+    ],
+    [
+      "stage2.5.thr_m",
+      "stage2.5.mvau_e"
+    ],
+    [
+      "stage2.5.mvau_e",
+      "stage2.5.dwc"
+    ],
+    [
+      "stage2.5.dwc",
+      "stage2.5.thr_e"
+    ],
+    [
+      "stage2.5.thr_e",
+      "stage2.5.add"
+    ],
+    [
+      "stage2.5.thr_s",
+      "stage2.5.add"
+    ],
+    [
+      "stage2.5.add",
+      "stage2.5.thr_out"
+    ],
+    [
+      "stage2.6.dup",
+      "stage2.6.mvau_r"
+    ],
+    [
+      "stage2.6.dup",
+      "stage2.6.thr_s"
+    ],
+    [
+      "stage2.6.mvau_r",
+      "stage2.6.dwc"
+    ],
+    [
+      "stage2.6.thr_r",
+      "stage2.6.dwc"
+    ],
+    [
+      "stage2.6.dwc",
+      "stage2.6.thr_r"
+    ],
+    [
+      "stage2.6.dwc",
+      "stage2.6.fmpad"
+    ],
+    [
+      "stage2.6.fmpad",
+      "stage2.6.swg"
+    ],
+    [
+      "stage2.6.swg",
+      "stage2.6.mvau_m"
+    ],
+    [
+      "stage2.6.mvau_m",
+      "stage2.6.dwc"
+    ],
+    [
+      "stage2.6.dwc",
+      "stage2.6.thr_m"
+    ],
+    [
+      "stage2.6.thr_m",
+      "stage2.6.mvau_e"
+    ],
+    [
+      "stage2.6.mvau_e",
+      "stage2.6.dwc"
+    ],
+    [
+      "stage2.6.dwc",
+      "stage2.6.thr_e"
+    ],
+    [
+      "stage2.6.thr_e",
+      "stage2.6.add"
+    ],
+    [
+      "stage2.6.thr_s",
+      "stage2.6.add"
+    ],
+    [
+      "stage2.6.add",
+      "stage2.6.thr_out"
+    ],
+    [
+      "stage2.7.dup",
+      "stage2.7.mvau_r"
+    ],
+    [
+      "stage2.7.dup",
+      "stage2.7.thr_s"
+    ],
+    [
+      "stage2.7.mvau_r",
+      "stage2.7.dwc"
+    ],
+    [
+      "stage2.7.thr_r",
+      "stage2.7.fmpad"
+    ],
+    [
+      "stage2.7.dwc",
+      "stage2.7.thr_r"
+    ],
+    [
+      "stage2.7.fmpad",
+      "stage2.7.swg"
+    ],
+    [
+      "stage2.7.swg",
+      "stage2.7.mvau_m"
+    ],
+    [
+      "stage2.7.mvau_m",
+      "stage2.7.dwc"
+    ],
+    [
+      "stage2.7.dwc",
+      "stage2.7.thr_m"
+    ],
+    [
+      "stage2.7.thr_m",
+      "stage2.7.mvau_e"
+    ],
+    [
+      "stage2.7.mvau_e",
+      "stage2.7.dwc"
+    ],
+    [
+      "stage2.7.dwc",
+      "stage2.7.thr_e"
+    ],
+    [
+      "stage2.7.thr_e",
+      "stage2.7.add"
+    ],
+    [
+      "stage2.7.thr_s",
+      "stage2.7.add"
+    ],
+    [
+      "stage2.7.add",
+      "stage2.7.thr_out"
+    ],
+    [
+      "stage3.0.dup",
+      "stage3.0.mvau_r"
+    ],
+    [
+      "stage3.0.dup",
+      "stage3.0.dwc"
+    ],
+    [
+      "stage3.0.mvau_r",
+      "stage3.0.dwc"
+    ],
+    [
+      "stage3.0.thr_r",
+      "stage3.0.dwc"
+    ],
+    [
+      "stage3.0.dwc",
+      "stage3.0.thr_r"
+    ],
+    [
+      "stage3.0.dwc",
+      "stage3.0.fmpad"
+    ],
+    [
+      "stage3.0.fmpad",
+      "stage3.0.swg"
+    ],
+    [
+      "stage3.0.swg",
+      "stage3.0.mvau_m"
+    ],
+    [
+      "stage3.0.mvau_m",
+      "stage3.0.dwc"
+    ],
+    [
+      "stage3.0.dwc",
+      "stage3.0.thr_m"
+    ],
+    [
+      "stage3.0.thr_m",
+      "stage3.0.mvau_e"
+    ],
+    [
+      "stage3.0.mvau_e",
+      "stage3.0.dwc"
+    ],
+    [
+      "stage3.0.dwc",
+      "stage3.0.thr_e"
+    ],
+    [
+      "stage3.0.thr_e",
+      "stage3.0.add"
+    ],
+    [
+      "stage3.0.dwc",
+      "stage3.0.thr_s"
+    ],
+    [
+      "stage3.0.thr_s",
+      "stage3.0.dwc"
+    ],
+    [
+      "stage3.0.dwc",
+      "stage3.0.add"
+    ],
+    [
+      "stage3.0.add",
+      "stage3.0.thr_out"
+    ],
+    [
+      "stage3.5.add",
+      "stage3.5.thr_out"
+    ],
+    [
+      "stage3.6.dup",
+      "stage3.6.mvau_r"
+    ],
+    [
+      "stage3.6.dup",
+      "stage3.6.thr_s"
+    ],
+    [
+      "stage3.6.mvau_r",
+      "stage3.6.dwc"
+    ],
+    [
+      "stage3.6.thr_r",
+      "stage3.6.dwc"
+    ],
+    [
+      "stage3.6.dwc",
+      "stage3.6.thr_r"
+    ],
+    [
+      "stage3.6.dwc",
+      "stage3.6.fmpad"
+    ],
+    [
+      "stage3.6.fmpad",
+      "stage3.6.swg"
+    ],
+    [
+      "stage3.6.swg",
+      "stage3.6.mvau_m"
+    ],
+    [
+      "stage3.6.mvau_m",
+      "stage3.6.dwc"
+    ],
+    [
+      "stage3.6.dwc",
+      "stage3.6.thr_m"
+    ],
+    [
+      "stage3.6.thr_m",
+      "stage3.6.mvau_e"
+    ],
+    [
+      "stage3.6.mvau_e",
+      "stage3.6.dwc"
+    ],
+    [
+      "stage3.6.dwc",
+      "stage3.6.thr_e"
+    ],
+    [
+      "stage3.6.thr_e",
+      "stage3.6.add"
+    ],
+    [
+      "stage3.6.thr_s",
+      "stage3.6.add"
+    ],
+    [
+      "stage3.6.add",
+      "stage3.6.thr_out"
+    ],
+    [
+      "stage3.7.dup",
+      "stage3.7.mvau_r"
+    ],
+    [
+      "stage3.7.dup",
+      "stage3.7.thr_s"
+    ],
+    [
+      "stage3.7.mvau_r",
+      "stage3.7.dwc"
+    ],
+    [
+      "stage3.7.thr_r",
+      "stage3.7.fmpad"
+    ],
+    [
+      "stage3.7.dwc",
+      "stage3.7.thr_r"
+    ],
+    [
+      "stage3.7.fmpad",
+      "stage3.7.swg"
+    ],
+    [
+      "stage3.7.swg",
+      "stage3.7.mvau_m"
+    ],
+    [
+      "stage3.7.mvau_m",
+      "stage3.7.dwc"
+    ],
+    [
+      "stage3.7.dwc",
+      "stage3.7.thr_m"
+    ],
+    [
+      "stage3.7.thr_m",
+      "stage3.7.mvau_e"
+    ],
+    [
+      "stage3.7.mvau_e",
+      "stage3.7.dwc"
+    ],
+    [
+      "stage3.7.dwc",
+      "stage3.7.thr_e"
+    ],
+    [
+      "stage3.7.thr_e",
+      "stage3.7.add"
+    ],
+    [
+      "stage3.7.thr_s",
+      "stage3.7.add"
+    ],
+    [
+      "stage3.7.add",
+      "stage3.7.thr_out"
+    ],
+    [
+      "up4.dup",
+      "up4.dwc"
+    ],
+    [
+      "up4.dup",
+      "up4.mvau_r"
+    ],
+    [
+      "up4.dwc",
+      "up4.mvau_p"
+    ],
+    [
+      "up4.mvau_p",
+      "up4.dwc"
+    ],
+    [
+      "up4.dwc",
+      "up4.thr_p"
+    ],
+    [
+      "up4.thr_p",
+      "up4.dwc"
+    ],
+    [
+      "up4.dwc",
+      "up4.upnn"
+    ],
+    [
+      "up4.upnn",
+      "up4.dwc"
+    ],
+    [
+      "up4.thr_k",
+      "up4.dwc"
+    ],
+    [
+      "up4.dwc",
+      "up4.fmpad_k"
+    ],
+    [
+      "up4.fmpad_k",
+      "up4.swg_k"
+    ],
+    [
+      "up4.swg_k",
+      "up4.mvau_k"
+    ],
+    [
+      "up4.mvau_k",
+      "up4.dwc"
+    ],
+    [
+      "up4.dwc",
+      "up4.thr_k"
+    ],
+    [
+      "up4.mvau_r",
+      "up4.dwc"
+    ],
+    [
+      "up4.dwc",
+      "up4.thr_r"
+    ],
+    [
+      "up4.thr_r",
+      "up4.dwc"
+    ],
+    [
+      "up4.dwc",
+      "up4.fmpadpix"
+    ],
+    [
+      "up4.fmpadpix",
+      "up4.fmpad_u"
+    ],
+    [
+      "up4.fmpad_u",
+      "up4.swg_u"
+    ],
+    [
+      "up4.swg_u",
+      "up4.mvau_u"
+    ],
+    [
+      "up4.mvau_u",
+      "up4.dwc"
+    ],
+    [
+      "up4.dwc",
+      "up4.thr_u"
+    ],
+    [
+      "up4.thr_u",
+      "up4.dwc"
+    ],
+    [
+      "up4.dwc",
+      "up4.mvau_e"
+    ],
+    [
+      "up4.mvau_e",
+      "up4.dwc"
+    ],
+    [
+      "up4.dwc",
+      "up4.thr_e"
+    ],
+    [
+      "up4.thr_e",
+      "up4.add"
+    ],
+    [
+      "up4.dwc",
+      "up4.add"
+    ],
+    [
+      "up4.add",
+      "up4.thr_out"
+    ],
+    [
+      "regular4.0.dup",
+      "regular4.0.mvau_r"
+    ],
+    [
+      "regular4.0.dup",
+      "regular4.0.thr_s"
+    ],
+    [
+      "regular4.0.mvau_r",
+      "regular4.0.dwc"
+    ],
+    [
+      "regular4.0.thr_r",
+      "regular4.0.dwc"
+    ],
+    [
+      "regular4.0.dwc",
+      "regular4.0.thr_r"
+    ],
+    [
+      "regular4.0.dwc",
+      "regular4.0.fmpad"
+    ],
+    [
+      "regular4.0.fmpad",
+      "regular4.0.swg"
+    ],
+    [
+      "regular4.0.swg",
+      "regular4.0.mvau_m"
+    ],
+    [
+      "regular4.0.mvau_m",
+      "regular4.0.dwc"
+    ],
+    [
+      "regular4.0.dwc",
+      "regular4.0.thr_m"
+    ],
+    [
+      "regular4.0.thr_m",
+      "regular4.0.mvau_e"
+    ],
+    [
+      "regular4.0.mvau_e",
+      "regular4.0.dwc"
+    ],
+    [
+      "regular4.0.dwc",
+      "regular4.0.thr_e"
+    ],
+    [
+      "regular4.0.thr_e",
+      "regular4.0.add"
+    ],
+    [
+      "regular4.0.thr_s",
+      "regular4.0.add"
+    ],
+    [
+      "regular4.0.add",
+      "regular4.0.thr_out"
+    ],
+    [
+      "regular4.1.dup",
+      "regular4.1.mvau_r"
+    ],
+    [
+      "regular4.1.dup",
+      "regular4.1.thr_s"
+    ],
+    [
+      "regular4.1.mvau_r",
+      "regular4.1.dwc"
+    ],
+    [
+      "regular4.1.thr_r",
+      "regular4.1.dwc"
+    ],
+    [
+      "regular4.1.dwc",
+      "regular4.1.thr_r"
+    ],
+    [
+      "regular4.1.dwc",
+      "regular4.1.fmpad"
+    ],
+    [
+      "regular4.1.fmpad",
+      "regular4.1.swg"
+    ],
+    [
+      "regular4.1.swg",
+      "regular4.1.mvau_m"
+    ],
+    [
+      "regular4.1.mvau_m",
+      "regular4.1.dwc"
+    ],
+    [
+      "regular4.1.dwc",
+      "regular4.1.thr_m"
+    ],
+    [
+      "regular4.1.thr_m",
+      "regular4.1.mvau_e"
+    ],
+    [
+      "regular4.1.mvau_e",
+      "regular4.1.dwc"
+    ],
+    [
+      "regular4.1.dwc",
+      "regular4.1.thr_e"
+    ],
+    [
+      "regular4.1.thr_e",
+      "regular4.1.add"
+    ],
+    [
+      "regular4.1.thr_s",
+      "regular4.1.add"
+    ],
+    [
+      "regular4.1.add",
+      "regular4.1.thr_out"
+    ],
+    [
+      "up5.dup",
+      "up5.mvau_p"
+    ],
+    [
+      "up5.dup",
+      "up5.mvau_r"
+    ],
+    [
+      "up5.mvau_p",
+      "up5.dwc"
+    ],
+    [
+      "up5.dwc",
+      "up5.thr_p"
+    ],
+    [
+      "up5.thr_p",
+      "up5.dwc"
+    ],
+    [
+      "up5.dwc",
+      "up5.upnn"
+    ],
+    [
+      "up5.upnn",
+      "up5.dwc"
+    ],
+    [
+      "up5.thr_k",
+      "up5.add"
+    ],
+    [
+      "up5.dwc",
+      "up5.fmpad_k"
+    ],
+    [
+      "up5.fmpad_k",
+      "up5.swg_k"
+    ],
+    [
+      "up5.swg_k",
+      "up5.mvau_k"
+    ],
+    [
+      "up5.mvau_k",
+      "up5.thr_k"
+    ],
+    [
+      "up5.mvau_r",
+      "up5.dwc"
+    ],
+    [
+      "up5.dwc",
+      "up5.thr_r"
+    ],
+    [
+      "up5.thr_r",
+      "up5.dwc"
+    ],
+    [
+      "up5.dwc",
+      "up5.fmpadpix"
+    ],
+    [
+      "up5.fmpadpix",
+      "up5.fmpad_u"
+    ],
+    [
+      "up5.fmpad_u",
+      "up5.swg_u"
+    ],
+    [
+      "up5.swg_u",
+      "up5.mvau_u"
+    ],
+    [
+      "up5.mvau_u",
+      "up5.dwc"
+    ],
+    [
+      "up5.dwc",
+      "up5.thr_u"
+    ],
+    [
+      "up5.thr_u",
+      "up5.mvau_e"
+    ],
+    [
+      "up5.mvau_e",
+      "up5.dwc"
+    ],
+    [
+      "up5.dwc",
+      "up5.thr_e"
+    ],
+    [
+      "up5.thr_e",
+      "up5.add"
+    ],
+    [
+      "up5.add",
+      "up5.thr_out"
+    ],
+    [
+      "regular5.0.dup",
+      "regular5.0.mvau_r"
+    ],
+    [
+      "regular5.0.dup",
+      "regular5.0.thr_s"
+    ],
+    [
+      "regular5.0.mvau_r",
+      "regular5.0.thr_r"
+    ],
+    [
+      "regular5.0.thr_r",
+      "regular5.0.fmpad"
+    ],
+    [
+      "regular5.0.fmpad",
+      "regular5.0.swg"
+    ],
+    [
+      "regular5.0.swg",
+      "regular5.0.mvau_m"
+    ],
+    [
+      "regular5.0.mvau_m",
+      "regular5.0.thr_m"
+    ],
+    [
+      "regular5.0.thr_m",
+      "regular5.0.mvau_e"
+    ],
+    [
+      "regular5.0.mvau_e",
+      "regular5.0.thr_e"
+    ],
+    [
+      "regular5.0.thr_e",
+      "regular5.0.add"
+    ],
+    [
+      "regular5.0.thr_s",
+      "regular5.0.add"
+    ],
+    [
+      "regular5.0.add",
+      "regular5.0.thr_out"
+    ],
+    [
+      "final.fmpadpix",
+      "final.fmpad_u"
+    ],
+    [
+      "final.fmpad_u",
+      "final.swg_u"
+    ],
+    [
+      "final.swg_u",
+      "final.dwc"
+    ],
+    [
+      "final.dwc",
+      "final.mvau_f"
+    ],
+    [
+      "final.mvau_f",
+      "final.bias"
+    ],
+    [
+      "final.bias",
+      "final.label_select"
+    ],
+    [
+      "regular5.0.out_act",
+      "final"
+    ],
+    [
+      "initial.act",
+      "initial.act.dup"
+    ],
+    [
+      "down1.out_act",
+      "down1.out_act.dup"
+    ],
+    [
+      "regular1.0.out_act",
+      "regular1.0.out_act.dup"
+    ],
+    [
+      "regular1.1.out_act",
+      "regular1.1.out_act.dup"
+    ],
+    [
+      "regular1.2.out_act",
+      "regular1.2.out_act.dup"
+    ],
+    [
+      "regular1.3.out_act",
+      "regular1.3.out_act.dup"
+    ],
+    [
+      "down2.out_act",
+      "down2.out_act.dup"
+    ],
+    [
+      "stage2.0.out_act",
+      "stage2.0.out_act.dup"
+    ],
+    [
+      "stage2.1.out_act",
+      "stage2.1.out_act.dup"
+    ],
+    [
+      "stage2.2.out_act",
+      "stage2.2.out_act.dup"
+    ],
+    [
+      "stage2.3.out_act",
+      "stage2.3.out_act.dup"
+    ],
+    [
+      "stage2.4.out_act",
+      "stage2.4.out_act.dup"
+    ],
+    [
+      "stage2.5.out_act",
+      "stage2.5.out_act.dup"
+    ],
+    [
+      "stage2.6.out_act",
+      "stage2.6.out_act.dup"
+    ],
+    [
+      "stage2.7.out_act",
+      "stage2.7.out_act.dup"
+    ],
+    [
+      "stage3.5.out_act",
+      "stage3.5.out_act.dup"
+    ],
+    [
+      "stage3.6.out_act",
+      "stage3.6.out_act.dup"
+    ],
+    [
+      "stage3.7.out_act",
+      "stage3.7.out_act.dup"
+    ],
+    [
+      "up4.out_act",
+      "up4.out_act.dup"
+    ],
+    [
+      "regular4.0.out_act",
+      "regular4.0.out_act.dup"
+    ],
+    [
+      "regular4.1.out_act",
+      "regular4.1.out_act.dup"
+    ],
+    [
+      "up5.out_act",
+      "up5.out_act.dup"
+    ]
+  ],
+  "node_sig": {
+    "MVAU_rtl_0": [
+      "MVAU",
+      [
+        8,
+        32
+      ]
+    ],
+    "Thresholding_rtl_2": [
+      "Thresholding",
+      [
+        8
+      ]
+    ],
+    "DuplicateStreams_hls_0": [
+      "DuplicateStreams",
+      [
+        32
+      ]
+    ],
+    "MVAU_rtl_1": [
+      "MVAU",
+      [
+        8,
+        72
+      ]
+    ],
+    "Thresholding_rtl_3": [
+      "Thresholding",
+      [
+        8
+      ]
+    ],
+    "ConvolutionInputGenerator_rtl_0": [
+      "ConvolutionInputGenerator",
+      [
+        8
+      ]
+    ],
+    "FMPadding_rtl_0": [
+      "FMPadding",
+      [
+        8
+      ]
+    ],
+    "MVAU_rtl_2": [
+      "MVAU",
+      [
+        32,
+        8
+      ]
+    ],
+    "Thresholding_rtl_4": [
+      "Thresholding",
+      [
+        32
+      ]
+    ],
+    "MVAU_rtl_3": [
+      "MVAU",
+      [
+        8,
+        32
+      ]
+    ],
+    "Thresholding_rtl_7": [
+      "Thresholding",
+      [
+        8
+      ]
+    ],
+    "DuplicateStreams_hls_1": [
+      "DuplicateStreams",
+      [
+        32
+      ]
+    ],
+    "MVAU_rtl_4": [
+      "MVAU",
+      [
+        8,
+        72
+      ]
+    ],
+    "Thresholding_rtl_8": [
+      "Thresholding",
+      [
+        8
+      ]
+    ],
+    "ConvolutionInputGenerator_rtl_1": [
+      "ConvolutionInputGenerator",
+      [
+        8
+      ]
+    ],
+    "FMPadding_rtl_1": [
+      "FMPadding",
+      [
+        8
+      ]
+    ],
+    "MVAU_rtl_5": [
+      "MVAU",
+      [
+        32,
+        8
+      ]
+    ],
+    "Thresholding_rtl_9": [
+      "Thresholding",
+      [
+        32
+      ]
+    ],
+    "MVAU_rtl_6": [
+      "MVAU",
+      [
+        8,
+        32
+      ]
+    ],
+    "Thresholding_rtl_12": [
+      "Thresholding",
+      [
+        8
+      ]
+    ],
+    "DuplicateStreams_hls_2": [
+      "DuplicateStreams",
+      [
+        32
+      ]
+    ],
+    "MVAU_rtl_7": [
+      "MVAU",
+      [
+        8,
+        72
+      ]
+    ],
+    "Thresholding_rtl_13": [
+      "Thresholding",
+      [
+        8
+      ]
+    ],
+    "ConvolutionInputGenerator_rtl_2": [
+      "ConvolutionInputGenerator",
+      [
+        8
+      ]
+    ],
+    "FMPadding_rtl_2": [
+      "FMPadding",
+      [
+        8
+      ]
+    ],
+    "MVAU_rtl_8": [
+      "MVAU",
+      [
+        32,
+        8
+      ]
+    ],
+    "Thresholding_rtl_14": [
+      "Thresholding",
+      [
+        32
+      ]
+    ],
+    "MVAU_rtl_9": [
+      "MVAU",
+      [
+        8,
+        32
+      ]
+    ],
+    "Thresholding_rtl_17": [
+      "Thresholding",
+      [
+        8
+      ]
+    ],
+    "DuplicateStreams_hls_3": [
+      "DuplicateStreams",
+      [
+        32
+      ]
+    ],
+    "MVAU_rtl_10": [
+      "MVAU",
+      [
+        8,
+        72
+      ]
+    ],
+    "Thresholding_rtl_18": [
+      "Thresholding",
+      [
+        8
+      ]
+    ],
+    "ConvolutionInputGenerator_rtl_3": [
+      "ConvolutionInputGenerator",
+      [
+        8
+      ]
+    ],
+    "FMPadding_rtl_3": [
+      "FMPadding",
+      [
+        8
+      ]
+    ],
+    "MVAU_rtl_11": [
+      "MVAU",
+      [
+        32,
+        8
+      ]
+    ],
+    "Thresholding_rtl_19": [
+      "Thresholding",
+      [
+        32
+      ]
+    ],
+    "MVAU_rtl_12": [
+      "MVAU",
+      [
+        8,
+        32
+      ]
+    ],
+    "Thresholding_rtl_22": [
+      "Thresholding",
+      [
+        8
+      ]
+    ],
+    "DuplicateStreams_hls_4": [
+      "DuplicateStreams",
+      [
+        32
+      ]
+    ],
+    "MVAU_rtl_13": [
+      "MVAU",
+      [
+        8,
+        72
+      ]
+    ],
+    "Thresholding_rtl_23": [
+      "Thresholding",
+      [
+        8
+      ]
+    ],
+    "ConvolutionInputGenerator_rtl_4": [
+      "ConvolutionInputGenerator",
+      [
+        8
+      ]
+    ],
+    "FMPadding_rtl_4": [
+      "FMPadding",
+      [
+        8
+      ]
+    ],
+    "MVAU_rtl_14": [
+      "MVAU",
+      [
+        32,
+        8
+      ]
+    ],
+    "Thresholding_rtl_24": [
+      "Thresholding",
+      [
+        32
+      ]
+    ],
+    "Thresholding_rtl_0": [
+      "Thresholding",
+      [
+        32
+      ]
+    ],
+    "Thresholding_rtl_5": [
+      "Thresholding",
+      [
+        32
+      ]
+    ],
+    "Thresholding_rtl_1": [
+      "Thresholding",
+      [
+        32
+      ]
+    ],
+    "Thresholding_rtl_10": [
+      "Thresholding",
+      [
+        32
+      ]
+    ],
+    "Thresholding_rtl_6": [
+      "Thresholding",
+      [
+        32
+      ]
+    ],
+    "Thresholding_rtl_15": [
+      "Thresholding",
+      [
+        32
+      ]
+    ],
+    "Thresholding_rtl_11": [
+      "Thresholding",
+      [
+        32
+      ]
+    ],
+    "Thresholding_rtl_20": [
+      "Thresholding",
+      [
+        32
+      ]
+    ],
+    "Thresholding_rtl_16": [
+      "Thresholding",
+      [
+        32
+      ]
+    ],
+    "Thresholding_rtl_21": [
+      "Thresholding",
+      [
+        32
+      ]
+    ],
+    "AddStreams_hls_0": [
+      "AddStreams",
+      [
+        32
+      ]
+    ],
+    "AddStreams_hls_1": [
+      "AddStreams",
+      [
+        32
+      ]
+    ],
+    "AddStreams_hls_2": [
+      "AddStreams",
+      [
+        32
+      ]
+    ],
+    "AddStreams_hls_3": [
+      "AddStreams",
+      [
+        32
+      ]
+    ],
+    "AddStreams_hls_4": [
+      "AddStreams",
+      [
+        32
+      ]
+    ]
+  }
+}

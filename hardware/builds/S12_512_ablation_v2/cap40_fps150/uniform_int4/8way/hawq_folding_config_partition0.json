@@ -1,0 +1,27 @@
+{
+  "Defaults": {},
+  "MVAU_rtl_0": {
+    "PE": 3,
+    "SIMD": 1
+  },
+  "ConvolutionInputGenerator_rtl_0": {
+    "SIMD": 1,
+    "parallel_window": 0
+  },
+  "FMPadding_rtl_0": {
+    "SIMD": 1
+  },
+  "Thresholding_rtl_2": {
+    "PE": 1,
+    "depth_trigger_bram": 999999
+  },
+  "Thresholding_rtl_0": {
+    "depth_trigger_bram": 999999
+  },
+  "Thresholding_rtl_1": {
+    "depth_trigger_bram": 999999
+  },
+  "Thresholding_rtl_3": {
+    "depth_trigger_bram": 999999
+  }
+}
