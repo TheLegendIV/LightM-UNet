@@ -1,0 +1,6 @@
+scheme,label,bits,milp_solve,n_images,dice,dice_vs_fp32,dice_binary,dice_LAD,dice_RCA,dice_LCX,dice_LM,cldice,n_components,epochs,qat_run
+fp32,FP32 reference,FP32,,300,0.7954,+0.0000,0.7282,0.6715,0.9130,0.8087,0.7886,0.8054,7.0,107,nnUNetTrainerENet_12_dense_relu_warmstart150ep
+int4,INT4,uniform 4/4,cap40_fps150/uniform_int4,300,0.6433,-0.1521,0.6382,0.5725,0.7880,0.5518,0.6609,0.6434,14.2,15,nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_bilinear_upsample_256_perlayer_12_dense_relu_warmstart150ep_bilinear_uniform_int4_perlayer_ft15ep
+int6,INT6,uniform 6/6,cap40_fps150/uniform_int6,300,0.7712,-0.0242,0.7187,0.6367,0.8879,0.7804,0.7801,0.7746,22.3,15,nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_bilinear_upsample_256_perlayer_12_dense_relu_warmstart150ep_bilinear_uniform_int6_perlayer_ft15ep
+int8,INT8,uniform 8/8,relaxed_fps150/uniform_int8 (cap40 infeasible),300,0.7930,-0.0024,0.7261,0.6664,0.9074,0.8058,0.7925,0.8021,8.9,15,nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_bilinear_upsample_256_perlayer_12_dense_relu_warmstart150ep_bilinear_uniform_int8_perlayer_ft15ep
+mixed468,mixed 4/6/8,mixed 4/6/8,cap40_fps150/mixed_468,300,0.7843,-0.0111,0.7252,0.6591,0.8968,0.7941,0.7872,0.7916,8.9,15,nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_bilinear_upsample_perlayer_12_dense_relu_warmstart150ep_bilinear_ablation_v2_cap40_fps150_mixed468_perlayer_ft15ep
