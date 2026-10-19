@@ -1,0 +1,70 @@
+
+****** Vivado v2022.2 (64-bit)
+  **** SW Build 3671981 on Fri Oct 14 04:59:54 MDT 2022
+  **** IP Build 3669848 on Fri Oct 14 08:30:02 MDT 2022
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+
+source /tmp/util_from_dcp.tcl
+# set dcp [lindex $argv 0]
+# set out [lindex $argv 1]
+# open_checkpoint $dcp
+Command: open_checkpoint /home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_512_bilinear_int6_cap40_finnauto_v1/GenericPartition_7/synth_out_of_context_lad48pe7/results_GenericPartition_7_wrapper/vivadocompile/vivadocompile.runs/impl_1/GenericPartition_7_wrapper_opt.dcp
+
+Starting open_checkpoint Task
+
+Time (s): cpu = 00:00:00.03 ; elapsed = 00:00:00.05 . Memory (MB): peak = 1319.270 ; gain = 0.000 ; free physical = 57037 ; free virtual = 89906
+INFO: [Device 21-403] Loading part xczu7ev-ffvc1156-2-e
+Netlist sorting complete. Time (s): cpu = 00:00:00.5 ; elapsed = 00:00:00.5 . Memory (MB): peak = 2310.699 ; gain = 0.000 ; free physical = 56272 ; free virtual = 89141
+INFO: [Netlist 29-17] Analyzing 4762 Unisim elements for replacement
+INFO: [Netlist 29-28] Unisim Transformation completed in 14 CPU seconds
+INFO: [Project 1-479] Netlist was created with Vivado 2022.2
+INFO: [Project 1-570] Preparing netlist for logic optimization
+INFO: [Timing 38-478] Restoring timing data from binary archive.
+INFO: [Timing 38-479] Binary timing data restore complete.
+INFO: [Project 1-856] Restoring constraints from binary archive.
+INFO: [Project 1-853] Binary constraint restore complete.
+Netlist sorting complete. Time (s): cpu = 00:00:00.01 ; elapsed = 00:00:00.01 . Memory (MB): peak = 3000.598 ; gain = 0.000 ; free physical = 56010 ; free virtual = 88881
+INFO: [Project 1-111] Unisim Transformation Summary:
+  A total of 1701 instances were transformed.
+  DSP48E2 => DSP48E2 (DSP_ALU, DSP_A_B_DATA, DSP_C_DATA, DSP_MULTIPLIER, DSP_M_DATA, DSP_OUTPUT, DSP_PREADD, DSP_PREADD_DATA): 1 instance 
+  DSP48E2 => DSP48E2 (inverted pins: OPMODE[5], OPMODE[2], OPMODE[0], RSTD, RSTM, RSTP) (DSP_ALU, DSP_A_B_DATA, DSP_C_DATA, DSP_MULTIPLIER, DSP_M_DATA, DSP_OUTPUT, DSP_PREADD, DSP_PREADD_DATA): 26 instances
+  LUT6_2 => LUT6_2 (LUT5, LUT6): 12 instances
+  RAM16X1S => RAM32X1S (RAMS32): 84 instances
+  RAM32M => RAM32M (RAMD32(x6), RAMS32(x2)): 1 instance 
+  RAM64M => RAM64M (RAMD64E(x4)): 8 instances
+  RAM64M8 => RAM64M8 (RAMD64E(x8)): 1569 instances
+
+INFO: [Project 1-604] Checkpoint was created with Vivado v2022.2 (64-bit) build 3671981
+OpenCheckpoint Checksum | Checksum: 63acda2c
+----- Checksum: PlaceDB: 00000000 ShapeSum: 63acda2c RouteDB: 00000000 
+open_checkpoint: Time (s): cpu = 00:00:53 ; elapsed = 00:00:58 . Memory (MB): peak = 3000.598 ; gain = 1681.328 ; free physical = 56010 ; free virtual = 88881
+# set util [report_utilization -return_string]
+# set util_lut [exec echo $util | grep LUT | head -n 1 | cut -d| -f3 | tr -d " "]
+# set util_lutram [exec echo $util | grep LUT | head -n 3 | tail -1 | cut -d| -f3 | tr -d " "]
+# set util_ff [llength [get_cells -hier -filter {PRIMITIVE_TYPE =~ *.F*E*}]]
+WARNING: [Vivado 12-180] No cells matched 'get_cells -hier -filter {PRIMITIVE_GROUP == DSP}'.
+# set util_dsp [llength [get_cells -hier -filter {PRIMITIVE_GROUP == DSP}]]
+# set util_bram18 [llength [get_cells -hier -filter {PRIMITIVE_TYPE =~ *RAMB18*}]]
+# set util_bram36 [llength [get_cells -hier -filter {PRIMITIVE_TYPE =~ *RAMB36*}]]
+# set util_carry [llength [get_cells -hier -filter {PRIMITIVE_TYPE =~ *CARRY*}]]
+WARNING: [Vivado 12-180] No cells matched 'get_cells -hier -filter {PRIMITIVE_TYPE =~ *URAM*}'.
+# set util_uram [llength [get_cells -hier -filter {PRIMITIVE_TYPE =~ *URAM*}]]
+# set vivado_version [version -short]
+# set vivado_build_no [exec echo $util | grep Build | head -n 1 | cut -d\  -f9]
+# set util_bram [expr $util_bram18/2 + $util_bram36]
+# set fp [open $out w]
+# puts $fp "LUT=$util_lut"
+# puts $fp "LUTRAM=$util_lutram"
+# puts $fp "FF=$util_ff"
+# puts $fp "DSP=$util_dsp"
+# puts $fp "BRAM=$util_bram"
+# puts $fp "BRAM_18K=$util_bram18"
+# puts $fp "BRAM_36K=$util_bram36"
+# puts $fp "URAM=$util_uram"
+# puts $fp "Carry=$util_carry"
+# puts $fp "vivado_version=$vivado_version"
+# puts $fp "vivado_build_no=$vivado_build_no"
+# close $fp
+# puts "SYNTH-ONLY UTILIZATION: LUT $util_lut FF $util_ff BRAM18 $util_bram18 BRAM36 $util_bram36 URAM $util_uram"
+SYNTH-ONLY UTILIZATION: LUT 31636 FF 12797 BRAM18 1 BRAM36 1300 URAM 0
+INFO: [Common 17-206] Exiting Vivado at Mon Oct 19 20:41:43 2026...

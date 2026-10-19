@@ -1,0 +1,114 @@
+argmax: True
+Steps to run: ['step_qonnx_to_finn', 'step_enet_tidy', 'step_fuse_leaky_relu_to_threshold', 'step_enet_streamline', 'step_absorb_leftover_scale_before_matmul', 'step_fuse_forked_dequant_into_duplicate_threshold', 'step_dedup_forked_matmul_before_threshold', '_fixup_degenerate_signed_bias', 'step_compose_consecutive_thresholds', 'step_enet_convert_to_hw_rtl_mvau', 'step_insert_argmax_output', 'assign_stage_partition_ids_8way']
+MODEL_FILE= /home/thelegendiv/finn/notebooks/enet/quantEnet_S12_dense_512_bilinear_int6_cap40_v1_ft15ep_u8in.onnx
+OUTPUT_DIR= /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int6_cap40_finnauto_v1_preamble_20261019_084330
+Building dataflow accelerator from /home/thelegendiv/finn/notebooks/enet/quantEnet_S12_dense_512_bilinear_int6_cap40_v1_ft15ep_u8in.onnx
+Intermediate outputs will be generated in /home/thelegendiv/finn/notebooks/enet/finn_build_tmp
+Final outputs will be generated in /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int6_cap40_finnauto_v1_preamble_20261019_084330
+Build log is at /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int6_cap40_finnauto_v1_preamble_20261019_084330/build_dataflow.log
+Running step: step_qonnx_to_finn [1/12]
+Running step: step_enet_tidy [2/12]
+Running step: step_fuse_leaky_relu_to_threshold [3/12]
+Running step: step_enet_streamline [4/12]
+Running step: step_absorb_leftover_scale_before_matmul [5/12]
+Running step: step_fuse_forked_dequant_into_duplicate_threshold [6/12]
+Running step: step_dedup_forked_matmul_before_threshold [7/12]
+Running step: _fixup_degenerate_signed_bias [8/12]
+Running step: step_compose_consecutive_thresholds [9/12]
+Running step: step_enet_convert_to_hw_rtl_mvau [10/12]
+Running step: step_insert_argmax_output [11/12]
+Running step: assign_stage_partition_ids_8way [12/12]
+Completed successfully
+MVAU_0                         MVAU       noActivation=1 weightDataType=INT6
+MVAU_1                         MVAU       noActivation=1 weightDataType=INT6
+MVAU_2                         MVAU       noActivation=1 weightDataType=INT8
+MVAU_3                         MVAU       noActivation=1 weightDataType=INT6
+MVAU_4                         MVAU       noActivation=1 weightDataType=INT6
+MVAU_5                         MVAU       noActivation=1 weightDataType=INT6
+MVAU_6                         MVAU       noActivation=1 weightDataType=INT6
+MVAU_7                         MVAU       noActivation=1 weightDataType=INT6
+MVAU_8                         MVAU       noActivation=1 weightDataType=INT6
+MVAU_9                         MVAU       noActivation=1 weightDataType=INT6
+MVAU_10                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_11                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_12                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_13                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_14                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_15                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_16                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_17                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_18                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_19                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_20                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_21                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_22                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_23                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_24                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_25                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_26                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_27                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_28                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_29                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_30                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_31                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_32                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_33                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_34                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_35                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_36                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_37                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_38                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_39                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_40                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_41                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_42                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_43                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_44                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_45                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_46                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_47                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_48                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_49                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_50                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_51                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_52                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_53                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_54                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_55                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_56                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_57                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_58                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_59                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_60                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_61                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_62                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_63                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_64                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_65                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_66                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_67                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_68                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_69                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_70                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_71                        MVAU       noActivation=1 weightDataType=INT6
+VVAU_0                         VVAU       noActivation=1 weightDataType=INT8
+MVAU_72                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_73                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_74                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_75                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_76                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_77                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_78                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_79                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_80                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_81                        MVAU       noActivation=1 weightDataType=INT6
+VVAU_1                         VVAU       noActivation=1 weightDataType=INT8
+MVAU_82                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_83                        MVAU       noActivation=1 weightDataType=INT6
+VVAU_2                         VVAU       noActivation=1 weightDataType=INT6
+MVAU_84                        MVAU       noActivation=1 weightDataType=INT6
+MVAU_85                        MVAU       noActivation=1 weightDataType=INT6
+standalone Thresholding nodes: 141
+dangling-node check: 0 / 361 nodes dangling
+OUTPUT_DIR= /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int6_cap40_finnauto_v1_preamble_20261019_084330
+bridge skipped: no --folding-json given
