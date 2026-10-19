@@ -1,0 +1,814 @@
+pool route from the MILP: {'initial.pool': 'swg_pool', 'down1.pool': 'streaming', 'down2.pool': 'streaming'} -> INITIAL_POOL_ROUTE='infer_pool'
+argmax: True
+Steps to run: ['step_qonnx_to_finn', 'step_enet_tidy', 'step_fuse_leaky_relu_to_threshold', 'step_enet_streamline', 'step_absorb_leftover_scale_before_matmul', 'step_fuse_forked_dequant_into_duplicate_threshold', 'step_dedup_forked_matmul_before_threshold', '_fixup_degenerate_signed_bias', 'step_compose_consecutive_thresholds', 'step_enet_convert_to_hw_rtl_mvau', 'step_insert_argmax_output', 'assign_stage_partition_ids_8way']
+MODEL_FILE= /home/thelegendiv/finn/notebooks/enet/quantEnet_S12_dense_512_bilinear_int8_relaxed_v1_ft15ep_u8in.onnx
+OUTPUT_DIR= /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_preamble_20261019_175036
+Building dataflow accelerator from /home/thelegendiv/finn/notebooks/enet/quantEnet_S12_dense_512_bilinear_int8_relaxed_v1_ft15ep_u8in.onnx
+Intermediate outputs will be generated in /home/thelegendiv/finn/notebooks/enet/finn_build_tmp
+Final outputs will be generated in /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_preamble_20261019_175036
+Build log is at /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_preamble_20261019_175036/build_dataflow.log
+Running step: step_qonnx_to_finn [1/12]
+Running step: step_enet_tidy [2/12]
+Running step: step_fuse_leaky_relu_to_threshold [3/12]
+Running step: step_enet_streamline [4/12]
+Running step: step_absorb_leftover_scale_before_matmul [5/12]
+Running step: step_fuse_forked_dequant_into_duplicate_threshold [6/12]
+Running step: step_dedup_forked_matmul_before_threshold [7/12]
+Running step: _fixup_degenerate_signed_bias [8/12]
+Running step: step_compose_consecutive_thresholds [9/12]
+Running step: step_enet_convert_to_hw_rtl_mvau [10/12]
+Running step: step_insert_argmax_output [11/12]
+Running step: assign_stage_partition_ids_8way [12/12]
+Completed successfully
+MVAU_0                         MVAU       noActivation=1 weightDataType=INT8
+MVAU_1                         MVAU       noActivation=1 weightDataType=INT8
+MVAU_2                         MVAU       noActivation=1 weightDataType=INT8
+MVAU_3                         MVAU       noActivation=1 weightDataType=INT8
+MVAU_4                         MVAU       noActivation=1 weightDataType=INT8
+MVAU_5                         MVAU       noActivation=1 weightDataType=INT8
+MVAU_6                         MVAU       noActivation=1 weightDataType=INT8
+MVAU_7                         MVAU       noActivation=1 weightDataType=INT8
+MVAU_8                         MVAU       noActivation=1 weightDataType=INT8
+MVAU_9                         MVAU       noActivation=1 weightDataType=INT8
+MVAU_10                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_11                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_12                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_13                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_14                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_15                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_16                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_17                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_18                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_19                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_20                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_21                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_22                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_23                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_24                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_25                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_26                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_27                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_28                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_29                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_30                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_31                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_32                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_33                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_34                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_35                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_36                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_37                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_38                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_39                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_40                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_41                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_42                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_43                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_44                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_45                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_46                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_47                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_48                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_49                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_50                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_51                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_52                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_53                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_54                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_55                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_56                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_57                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_58                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_59                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_60                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_61                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_62                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_63                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_64                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_65                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_66                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_67                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_68                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_69                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_70                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_71                        MVAU       noActivation=1 weightDataType=INT8
+VVAU_0                         VVAU       noActivation=1 weightDataType=INT8
+MVAU_72                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_73                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_74                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_75                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_76                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_77                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_78                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_79                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_80                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_81                        MVAU       noActivation=1 weightDataType=INT8
+VVAU_1                         VVAU       noActivation=1 weightDataType=INT8
+MVAU_82                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_83                        MVAU       noActivation=1 weightDataType=INT8
+VVAU_2                         VVAU       noActivation=1 weightDataType=INT8
+MVAU_84                        MVAU       noActivation=1 weightDataType=INT8
+MVAU_85                        MVAU       noActivation=1 weightDataType=INT8
+standalone Thresholding nodes: 141
+dangling-node check: 0 / 362 nodes dangling
+OUTPUT_DIR= /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_preamble_20261019_175036
+BRIDGE: /usr/bin/python3 -u /home/thelegendiv/finn/notebooks/enet/finn_s12_build.py /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_preamble_20261019_175036 --tag S12_dense_512_bilinear_int8_fps150_v1 --conv-order quantEnet_S12_dense_512_bilinear_int8_relaxed_v1_conv_order.json --folding-json layer_bits_folding_S12_dense_512_bilinear_int8_fps150_v1.json --partitions all --fifo-check
+Tag: S12_dense_512_bilinear_int8_fps150_v1  partitions: [0, 1, 2, 3, 4, 5, 6, 7]  fold: milpfold
+Preamble: /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_preamble_20261019_175036
+Folding json: layer_bits_folding_S12_dense_512_bilinear_int8_fps150_v1.json
+Conv order: quantEnet_S12_dense_512_bilinear_int8_relaxed_v1_conv_order.json
+target_fps=250 mvau_wwidth_max=80
+OUTPUT_DIR=/home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952
+[step_create_dataflow_partition_multi] created 8 partitions
+[validate_partition_single_output] OK: all 8 partitions satisfy CreateStitchedIP's producer/consumer invariant
+[_shrink_boundary_past_open_fork] WARNING: no closing AddStreams found for an open fork spanning boundary 13 -- this fork apparently never closes via a literal AddStreams (not a boundary artifact), leaving boundary unchanged.
+[_shrink_boundary_past_dangling_fork_output] shrinking boundary 13 -> 12: last node DuplicateStreams_1 (DuplicateStreams) has 2 outputs escaping the partition (would collide during FIFO-insertion tensor renaming).
+[bridge] 8-way boundaries: {'down1_start': 12, 'down2_start': 89, 'q2_start': 149, 'q3_start': 197, 'q4_start': 257, 'up4_start': 300, 'up5_start': 343}
+[bridge] REALIGN: conv_order.json pos=3 ('down1.shortcut_proj') doesn't match node_idx=15 (MVAU_1)'s real weight layout (16, 4) -- swapping in pos=4 ('down1.reduce.0') instead.
+[bridge] REALIGN: conv_order.json pos=20 ('down2.shortcut_proj') doesn't match node_idx=78 (MVAU_17)'s real weight layout (64, 8) -- swapping in pos=21 ('down2.reduce.0') instead.
+[bridge] REALIGN: conv_order.json pos=73 ('up4.main_up.1') doesn't match node_idx=284 (MVAU_70)'s real weight layout (32, 8) -- swapping in pos=74 ('up4.reduce.0') instead.
+[bridge] REALIGN: conv_order.json pos=74 ('up4.main_up.1') doesn't match node_idx=293 (MVAU_71)'s real weight layout (32, 8) -- swapping in pos=75 ('up4.up.0') instead.
+[bridge] REALIGN: conv_order.json pos=84 ('up5.main_up.1') doesn't match node_idx=327 (MVAU_80)'s real weight layout (16, 4) -- swapping in pos=85 ('up5.reduce.0') instead.
+[bridge] REALIGN: conv_order.json pos=85 ('up5.main_up.1') doesn't match node_idx=336 (MVAU_81)'s real weight layout (16, 4) -- swapping in pos=86 ('up5.up.0') instead.
+[bridge p0] pool initial.pool: Pool (swg_pool)
+/home/thelegendiv/finn/src/finn/transformation/fpgadataflow/set_folding.py:221: UserWarning: SetFolding doesn't know how to handle op_type FMPadding_rtl
+  warnings.warn("SetFolding doesn't know how to handle op_type " + op_type)
+/home/thelegendiv/finn/src/finn/transformation/fpgadataflow/set_folding.py:221: UserWarning: SetFolding doesn't know how to handle op_type StreamingConcat_hls
+  warnings.warn("SetFolding doesn't know how to handle op_type " + op_type)
+[bridge p0] MVAU_rtl_0                     MVAU_rtl     initial.conv              [initial.conv] PE=3 SIMD=1
+[bridge p0] ConvolutionInputGenerator_rtl_0 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 1, 'parallel_window': 0}
+[bridge p0] Thresholding_rtl_2             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 1024}
+[bridge p0] Thresholding_rtl_0             Thresholding  (init initial.input_quant) ram_style=distributed depth_trigger_bram=999999
+[bridge p0] Thresholding_rtl_1             Thresholding  (init initial.pool_quant) ram_style=distributed depth_trigger_bram=999999
+[bridge p0] Thresholding_rtl_3             Thresholding  (init initial.act) ram_style=distributed depth_trigger_bram=999999
+[bridge p0] FIFO role bridge: 14 role(s) resolved; 17/519 FIFO spec(s) matched to a real node pair, 0 more matchable via producer-only inter-block convention (507 fully unresolved)
+[partition 0] saved bridged folding config (7 entries): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/hawq_folding_config_partition0.json
+[partition 0] saved FIFO plan (17 matched): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/fifo_plan_partition0.json
+[bridge p1] pool down1.shortcut_pool: StreamingMaxPool (streaming) -- MILP json has no pool_impl
+[bridge p1] pool down2.shortcut_pool: StreamingMaxPool (streaming) -- MILP json has no pool_impl
+/home/thelegendiv/finn/src/finn/transformation/fpgadataflow/set_folding.py:221: UserWarning: SetFolding doesn't know how to handle op_type StreamingMaxPool_hls
+  warnings.warn("SetFolding doesn't know how to handle op_type " + op_type)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/streamingmaxpool.py:139: UserWarning: Estimated latency for layer StreamingMaxPool_hls_0 can be lower than
+             actual latency!
+  warnings.warn(
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/streamingmaxpool.py:139: UserWarning: Estimated latency for layer StreamingMaxPool_hls_1 can be lower than
+             actual latency!
+  warnings.warn(
+[bridge p1] MVAU_rtl_0                     MVAU_rtl     down1.reduce.0            [down1.reduce.0] PE=2 SIMD=1
+[bridge p1] ConvolutionInputGenerator_rtl_0 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 1, 'parallel_window': 0, 'ram_style': 'block'}
+[bridge p1] Thresholding_rtl_1             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 1024}
+[bridge p1] MVAU_rtl_1                     MVAU_rtl     down1.shortcut_proj       [down1.skip_pad] PE=2 SIMD=1
+[bridge p1] MVAU_rtl_2                     MVAU_rtl     down1.conv.0              [down1.conv.0] PE=2 SIMD=2
+[bridge p1] ConvolutionInputGenerator_rtl_1 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p1] Thresholding_rtl_2             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 1024}
+[bridge p1] MVAU_rtl_3                     MVAU_rtl     down1.expand.0            [down1.expand.0] PE=2 SIMD=1
+[bridge p1] Thresholding_rtl_3             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p1] MVAU_rtl_4                     MVAU_rtl     regular1.0.reduce.0       [regular1.0.reduce.0] PE=2 SIMD=1
+[bridge p1] Thresholding_rtl_6             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 1024}
+[bridge p1] MVAU_rtl_5                     MVAU_rtl     regular1.0.conv           [regular1.0.conv] PE=2 SIMD=2
+[bridge p1] ConvolutionInputGenerator_rtl_2 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p1] Thresholding_rtl_7             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 1024}
+[bridge p1] MVAU_rtl_6                     MVAU_rtl     regular1.0.expand.0       [regular1.0.expand.0] PE=2 SIMD=1
+[bridge p1] Thresholding_rtl_8             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p1] MVAU_rtl_7                     MVAU_rtl     regular1.1.reduce.0       [regular1.1.reduce.0] PE=2 SIMD=1
+[bridge p1] Thresholding_rtl_11            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 1024}
+[bridge p1] MVAU_rtl_8                     MVAU_rtl     regular1.1.conv           [regular1.1.conv] PE=2 SIMD=2
+[bridge p1] ConvolutionInputGenerator_rtl_3 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p1] Thresholding_rtl_12            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 1024}
+[bridge p1] MVAU_rtl_9                     MVAU_rtl     regular1.1.expand.0       [regular1.1.expand.0] PE=2 SIMD=1
+[bridge p1] Thresholding_rtl_13            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p1] MVAU_rtl_10                    MVAU_rtl     regular1.2.reduce.0       [regular1.2.reduce.0] PE=2 SIMD=1
+[bridge p1] Thresholding_rtl_16            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 1024}
+[bridge p1] MVAU_rtl_11                    MVAU_rtl     regular1.2.conv           [regular1.2.conv] PE=2 SIMD=2
+[bridge p1] ConvolutionInputGenerator_rtl_4 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p1] Thresholding_rtl_17            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 1024}
+[bridge p1] MVAU_rtl_12                    MVAU_rtl     regular1.2.expand.0       [regular1.2.expand.0] PE=2 SIMD=1
+[bridge p1] Thresholding_rtl_18            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p1] MVAU_rtl_13                    MVAU_rtl     regular1.3.reduce.0       [regular1.3.reduce.0] PE=2 SIMD=1
+[bridge p1] Thresholding_rtl_21            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 1024}
+[bridge p1] MVAU_rtl_14                    MVAU_rtl     regular1.3.conv           [regular1.3.conv] PE=2 SIMD=2
+[bridge p1] ConvolutionInputGenerator_rtl_5 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p1] Thresholding_rtl_22            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 1024}
+[bridge p1] MVAU_rtl_15                    MVAU_rtl     regular1.3.expand.0       [regular1.3.expand.0] PE=2 SIMD=1
+[bridge p1] Thresholding_rtl_23            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p1] MVAU_rtl_16                    MVAU_rtl     down2.reduce.0            [down2.reduce.0] PE=2 SIMD=2
+[bridge p1] ConvolutionInputGenerator_rtl_6 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0, 'ram_style': 'block'}
+[bridge p1] Thresholding_rtl_26            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p1] MVAU_rtl_17                    MVAU_rtl     down2.shortcut_proj       [down2.skip_pad] PE=2 SIMD=2
+[bridge p1] MVAU_rtl_18                    MVAU_rtl     down2.conv.0              [down2.conv.0] PE=2 SIMD=2
+[bridge p1] ConvolutionInputGenerator_rtl_7 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p1] Thresholding_rtl_27            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p1] MVAU_rtl_19                    MVAU_rtl     down2.expand.0            [down2.expand.0] PE=2 SIMD=1
+[bridge p1] Thresholding_rtl_28            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p1] Thresholding_rtl_4             Thresholding  (join residual_add) down1 ram_style=distributed depth_trigger_bram=999999
+[bridge p1] Thresholding_rtl_0             Thresholding  (join skip_quant) down1 ram_style=distributed depth_trigger_bram=999999
+[bridge p1] Thresholding_rtl_9             Thresholding  (join residual_add) regular1.0 ram_style=distributed depth_trigger_bram=999999
+[bridge p1] Thresholding_rtl_5             Thresholding  (join skip_quant) regular1.0 ram_style=distributed depth_trigger_bram=999999
+[bridge p1] Thresholding_rtl_14            Thresholding  (join residual_add) regular1.1 ram_style=distributed depth_trigger_bram=999999
+[bridge p1] Thresholding_rtl_10            Thresholding  (join skip_quant) regular1.1 ram_style=distributed depth_trigger_bram=999999
+[bridge p1] Thresholding_rtl_19            Thresholding  (join residual_add) regular1.2 ram_style=distributed depth_trigger_bram=999999
+[bridge p1] Thresholding_rtl_15            Thresholding  (join skip_quant) regular1.2 ram_style=distributed depth_trigger_bram=999999
+[bridge p1] Thresholding_rtl_24            Thresholding  (join residual_add) regular1.3 ram_style=distributed depth_trigger_bram=999999
+[bridge p1] Thresholding_rtl_20            Thresholding  (join skip_quant) regular1.3 ram_style=distributed depth_trigger_bram=999999
+[bridge p1] Thresholding_rtl_25            Thresholding  (join skip_quant) down2 ram_style=distributed depth_trigger_bram=999999
+[bridge p1] pinned depth_trigger_bram on 11 residual-join Thresholding node(s)
+[bridge p1] AddStreams_hls_0               AddStreams_hls (add) down1 PE=1
+[bridge p1] AddStreams_hls_1               AddStreams_hls (add) regular1.0 PE=1
+[bridge p1] AddStreams_hls_2               AddStreams_hls (add) regular1.1 PE=1
+[bridge p1] AddStreams_hls_3               AddStreams_hls (add) regular1.2 PE=1
+[bridge p1] AddStreams_hls_4               AddStreams_hls (add) regular1.3 PE=1
+[bridge p1] AddStreams_hls_5               AddStreams_hls (add) down2 PE=1
+[bridge p1] FIFO role bridge: 105 role(s) resolved; 153/519 FIFO spec(s) matched to a real node pair, 15 more matchable via producer-only inter-block convention (406 fully unresolved)
+[partition 1] saved bridged folding config (69 entries): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/hawq_folding_config_partition1.json
+[partition 1] saved FIFO plan (153 matched): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/fifo_plan_partition1.json
+[bridge p2] MVAU_rtl_0                     MVAU_rtl     stage2.0.reduce.0         [stage2.0.reduce.0] PE=2 SIMD=1
+[bridge p2] Thresholding_rtl_2             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p2] MVAU_rtl_1                     MVAU_rtl     stage2.0.conv             [stage2.0.conv] PE=2 SIMD=2
+[bridge p2] ConvolutionInputGenerator_rtl_0 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p2] Thresholding_rtl_3             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p2] MVAU_rtl_2                     MVAU_rtl     stage2.0.expand.0         [stage2.0.expand.0] PE=2 SIMD=1
+[bridge p2] Thresholding_rtl_4             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p2] MVAU_rtl_3                     MVAU_rtl     stage2.1.reduce.0         [stage2.1.reduce.0] PE=2 SIMD=1
+[bridge p2] Thresholding_rtl_7             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p2] MVAU_rtl_4                     MVAU_rtl     stage2.1.conv             [stage2.1.conv] PE=2 SIMD=2
+[bridge p2] ConvolutionInputGenerator_rtl_1 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p2] Thresholding_rtl_8             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p2] MVAU_rtl_5                     MVAU_rtl     stage2.1.expand.0         [stage2.1.expand.0] PE=2 SIMD=1
+[bridge p2] Thresholding_rtl_9             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p2] MVAU_rtl_6                     MVAU_rtl     stage2.2.reduce.0         [stage2.2.reduce.0] PE=2 SIMD=1
+[bridge p2] Thresholding_rtl_12            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p2] MVAU_rtl_7                     MVAU_rtl     stage2.2.conv             [stage2.2.conv] PE=2 SIMD=2
+[bridge p2] ConvolutionInputGenerator_rtl_2 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p2] Thresholding_rtl_13            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p2] MVAU_rtl_8                     MVAU_rtl     stage2.2.expand.0         [stage2.2.expand.0] PE=2 SIMD=1
+[bridge p2] Thresholding_rtl_14            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p2] MVAU_rtl_9                     MVAU_rtl     stage2.3.reduce.0         [stage2.3.reduce.0] PE=2 SIMD=1
+[bridge p2] Thresholding_rtl_17            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p2] MVAU_rtl_10                    MVAU_rtl     stage2.3.conv             [stage2.3.conv] PE=2 SIMD=2
+[bridge p2] ConvolutionInputGenerator_rtl_3 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p2] Thresholding_rtl_18            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p2] MVAU_rtl_11                    MVAU_rtl     stage2.3.expand.0         [stage2.3.expand.0] PE=2 SIMD=1
+[bridge p2] Thresholding_rtl_19            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p2] MVAU_rtl_12                    MVAU_rtl     stage2.4.reduce.0         [stage2.4.reduce.0] PE=2 SIMD=1
+[bridge p2] Thresholding_rtl_22            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p2] MVAU_rtl_13                    MVAU_rtl     stage2.4.conv             [stage2.4.conv] PE=2 SIMD=2
+[bridge p2] ConvolutionInputGenerator_rtl_4 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p2] Thresholding_rtl_23            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p2] MVAU_rtl_14                    MVAU_rtl     stage2.4.expand.0         [stage2.4.expand.0] PE=2 SIMD=1
+[bridge p2] Thresholding_rtl_24            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p2] Thresholding_rtl_0             Thresholding  (join residual_add) down2 ram_style=distributed depth_trigger_bram=999999
+[bridge p2] Thresholding_rtl_5             Thresholding  (join residual_add) stage2.0 ram_style=distributed depth_trigger_bram=999999
+[bridge p2] Thresholding_rtl_1             Thresholding  (join skip_quant) stage2.0 ram_style=distributed depth_trigger_bram=999999
+[bridge p2] Thresholding_rtl_10            Thresholding  (join residual_add) stage2.1 ram_style=distributed depth_trigger_bram=999999
+[bridge p2] Thresholding_rtl_6             Thresholding  (join skip_quant) stage2.1 ram_style=distributed depth_trigger_bram=999999
+[bridge p2] Thresholding_rtl_15            Thresholding  (join residual_add) stage2.2 ram_style=distributed depth_trigger_bram=999999
+[bridge p2] Thresholding_rtl_11            Thresholding  (join skip_quant) stage2.2 ram_style=distributed depth_trigger_bram=999999
+[bridge p2] Thresholding_rtl_20            Thresholding  (join residual_add) stage2.3 ram_style=distributed depth_trigger_bram=999999
+[bridge p2] Thresholding_rtl_16            Thresholding  (join skip_quant) stage2.3 ram_style=distributed depth_trigger_bram=999999
+[bridge p2] Thresholding_rtl_21            Thresholding  (join skip_quant) stage2.4 ram_style=distributed depth_trigger_bram=999999
+[bridge p2] pinned depth_trigger_bram on 10 residual-join Thresholding node(s)
+[bridge p2] AddStreams_hls_0               AddStreams_hls (add) stage2.0 PE=1
+[bridge p2] AddStreams_hls_1               AddStreams_hls (add) stage2.1 PE=1
+[bridge p2] AddStreams_hls_2               AddStreams_hls (add) stage2.2 PE=1
+[bridge p2] AddStreams_hls_3               AddStreams_hls (add) stage2.3 PE=1
+[bridge p2] AddStreams_hls_4               AddStreams_hls (add) stage2.4 PE=1
+[bridge p2] FIFO role bridge: 85 role(s) resolved; 121/519 FIFO spec(s) matched to a real node pair, 15 more matchable via producer-only inter-block convention (431 fully unresolved)
+[partition 2] saved bridged folding config (55 entries): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/hawq_folding_config_partition2.json
+[partition 2] saved FIFO plan (121 matched): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/fifo_plan_partition2.json
+[bridge p3] MVAU_rtl_0                     MVAU_rtl     stage2.5.reduce.0         [stage2.5.reduce.0] PE=2 SIMD=1
+[bridge p3] Thresholding_rtl_2             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p3] MVAU_rtl_1                     MVAU_rtl     stage2.5.conv             [stage2.5.conv] PE=2 SIMD=2
+[bridge p3] ConvolutionInputGenerator_rtl_0 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p3] Thresholding_rtl_3             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p3] MVAU_rtl_2                     MVAU_rtl     stage2.5.expand.0         [stage2.5.expand.0] PE=2 SIMD=1
+[bridge p3] Thresholding_rtl_4             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p3] MVAU_rtl_3                     MVAU_rtl     stage2.6.reduce.0         [stage2.6.reduce.0] PE=2 SIMD=1
+[bridge p3] Thresholding_rtl_7             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p3] MVAU_rtl_4                     MVAU_rtl     stage2.6.conv             [stage2.6.conv] PE=2 SIMD=2
+[bridge p3] ConvolutionInputGenerator_rtl_1 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p3] Thresholding_rtl_8             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p3] MVAU_rtl_5                     MVAU_rtl     stage2.6.expand.0         [stage2.6.expand.0] PE=2 SIMD=1
+[bridge p3] Thresholding_rtl_9             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p3] MVAU_rtl_6                     MVAU_rtl     stage2.7.reduce.0         [stage2.7.reduce.0] PE=2 SIMD=1
+[bridge p3] Thresholding_rtl_12            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p3] MVAU_rtl_7                     MVAU_rtl     stage2.7.conv             [stage2.7.conv] PE=2 SIMD=2
+[bridge p3] ConvolutionInputGenerator_rtl_2 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p3] Thresholding_rtl_13            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p3] MVAU_rtl_8                     MVAU_rtl     stage2.7.expand.0         [stage2.7.expand.0] PE=2 SIMD=1
+[bridge p3] Thresholding_rtl_14            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p3] MVAU_rtl_9                     MVAU_rtl     stage3.0.reduce.0         [stage3.0.reduce.0] PE=2 SIMD=1
+[bridge p3] Thresholding_rtl_17            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p3] MVAU_rtl_10                    MVAU_rtl     stage3.0.conv             [stage3.0.conv] PE=2 SIMD=2
+[bridge p3] ConvolutionInputGenerator_rtl_3 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p3] Thresholding_rtl_18            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p3] MVAU_rtl_11                    MVAU_rtl     stage3.0.expand.0         [stage3.0.expand.0] PE=2 SIMD=1
+[bridge p3] Thresholding_rtl_19            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p3] Thresholding_rtl_0             Thresholding  (join residual_add) stage2.4 ram_style=distributed depth_trigger_bram=999999
+[bridge p3] Thresholding_rtl_5             Thresholding  (join residual_add) stage2.5 ram_style=distributed depth_trigger_bram=999999
+[bridge p3] Thresholding_rtl_1             Thresholding  (join skip_quant) stage2.5 ram_style=distributed depth_trigger_bram=999999
+[bridge p3] Thresholding_rtl_10            Thresholding  (join residual_add) stage2.6 ram_style=distributed depth_trigger_bram=999999
+[bridge p3] Thresholding_rtl_6             Thresholding  (join skip_quant) stage2.6 ram_style=distributed depth_trigger_bram=999999
+[bridge p3] Thresholding_rtl_15            Thresholding  (join residual_add) stage2.7 ram_style=distributed depth_trigger_bram=999999
+[bridge p3] Thresholding_rtl_11            Thresholding  (join skip_quant) stage2.7 ram_style=distributed depth_trigger_bram=999999
+[bridge p3] Thresholding_rtl_16            Thresholding  (join skip_quant) stage3.0 ram_style=distributed depth_trigger_bram=999999
+[bridge p3] pinned depth_trigger_bram on 8 residual-join Thresholding node(s)
+[bridge p3] AddStreams_hls_0               AddStreams_hls (add) stage2.5 PE=1
+[bridge p3] AddStreams_hls_1               AddStreams_hls (add) stage2.6 PE=1
+[bridge p3] AddStreams_hls_2               AddStreams_hls (add) stage2.7 PE=1
+[bridge p3] AddStreams_hls_3               AddStreams_hls (add) stage3.0 PE=1
+[bridge p3] FIFO role bridge: 68 role(s) resolved; 95/519 FIFO spec(s) matched to a real node pair, 12 more matchable via producer-only inter-block convention (450 fully unresolved)
+[partition 3] saved bridged folding config (44 entries): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/hawq_folding_config_partition3.json
+[partition 3] saved FIFO plan (95 matched): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/fifo_plan_partition3.json
+[bridge p4] MVAU_rtl_0                     MVAU_rtl     stage3.1.reduce.0         [stage3.1.reduce.0] PE=2 SIMD=1
+[bridge p4] Thresholding_rtl_2             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p4] MVAU_rtl_1                     MVAU_rtl     stage3.1.conv             [stage3.1.conv] PE=2 SIMD=2
+[bridge p4] ConvolutionInputGenerator_rtl_0 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p4] Thresholding_rtl_3             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p4] MVAU_rtl_2                     MVAU_rtl     stage3.1.expand.0         [stage3.1.expand.0] PE=2 SIMD=1
+[bridge p4] Thresholding_rtl_4             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p4] MVAU_rtl_3                     MVAU_rtl     stage3.2.reduce.0         [stage3.2.reduce.0] PE=2 SIMD=1
+[bridge p4] Thresholding_rtl_7             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p4] MVAU_rtl_4                     MVAU_rtl     stage3.2.conv             [stage3.2.conv] PE=2 SIMD=2
+[bridge p4] ConvolutionInputGenerator_rtl_1 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p4] Thresholding_rtl_8             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p4] MVAU_rtl_5                     MVAU_rtl     stage3.2.expand.0         [stage3.2.expand.0] PE=2 SIMD=1
+[bridge p4] Thresholding_rtl_9             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p4] MVAU_rtl_6                     MVAU_rtl     stage3.3.reduce.0         [stage3.3.reduce.0] PE=2 SIMD=1
+[bridge p4] Thresholding_rtl_12            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p4] MVAU_rtl_7                     MVAU_rtl     stage3.3.conv             [stage3.3.conv] PE=2 SIMD=2
+[bridge p4] ConvolutionInputGenerator_rtl_2 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p4] Thresholding_rtl_13            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p4] MVAU_rtl_8                     MVAU_rtl     stage3.3.expand.0         [stage3.3.expand.0] PE=2 SIMD=1
+[bridge p4] Thresholding_rtl_14            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p4] MVAU_rtl_9                     MVAU_rtl     stage3.4.reduce.0         [stage3.4.reduce.0] PE=2 SIMD=1
+[bridge p4] Thresholding_rtl_17            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p4] MVAU_rtl_10                    MVAU_rtl     stage3.4.conv             [stage3.4.conv] PE=2 SIMD=2
+[bridge p4] ConvolutionInputGenerator_rtl_3 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p4] Thresholding_rtl_18            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p4] MVAU_rtl_11                    MVAU_rtl     stage3.4.expand.0         [stage3.4.expand.0] PE=2 SIMD=1
+[bridge p4] Thresholding_rtl_19            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p4] MVAU_rtl_12                    MVAU_rtl     stage3.5.reduce.0         [stage3.5.reduce.0] PE=2 SIMD=1
+[bridge p4] Thresholding_rtl_22            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p4] MVAU_rtl_13                    MVAU_rtl     stage3.5.conv             [stage3.5.conv] PE=2 SIMD=2
+[bridge p4] ConvolutionInputGenerator_rtl_4 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p4] Thresholding_rtl_23            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p4] MVAU_rtl_14                    MVAU_rtl     stage3.5.expand.0         [stage3.5.expand.0] PE=2 SIMD=1
+[bridge p4] Thresholding_rtl_24            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p4] Thresholding_rtl_0             Thresholding  (join residual_add) stage3.0 ram_style=distributed depth_trigger_bram=999999
+[bridge p4] Thresholding_rtl_5             Thresholding  (join residual_add) stage3.1 ram_style=distributed depth_trigger_bram=999999
+[bridge p4] Thresholding_rtl_1             Thresholding  (join skip_quant) stage3.1 ram_style=distributed depth_trigger_bram=999999
+[bridge p4] Thresholding_rtl_10            Thresholding  (join residual_add) stage3.2 ram_style=distributed depth_trigger_bram=999999
+[bridge p4] Thresholding_rtl_6             Thresholding  (join skip_quant) stage3.2 ram_style=distributed depth_trigger_bram=999999
+[bridge p4] Thresholding_rtl_15            Thresholding  (join residual_add) stage3.3 ram_style=distributed depth_trigger_bram=999999
+[bridge p4] Thresholding_rtl_11            Thresholding  (join skip_quant) stage3.3 ram_style=distributed depth_trigger_bram=999999
+[bridge p4] Thresholding_rtl_20            Thresholding  (join residual_add) stage3.4 ram_style=distributed depth_trigger_bram=999999
+[bridge p4] Thresholding_rtl_16            Thresholding  (join skip_quant) stage3.4 ram_style=distributed depth_trigger_bram=999999
+[bridge p4] Thresholding_rtl_21            Thresholding  (join skip_quant) stage3.5 ram_style=distributed depth_trigger_bram=999999
+[bridge p4] pinned depth_trigger_bram on 10 residual-join Thresholding node(s)
+[bridge p4] AddStreams_hls_0               AddStreams_hls (add) stage3.1 PE=1
+[bridge p4] AddStreams_hls_1               AddStreams_hls (add) stage3.2 PE=1
+[bridge p4] AddStreams_hls_2               AddStreams_hls (add) stage3.3 PE=1
+[bridge p4] AddStreams_hls_3               AddStreams_hls (add) stage3.4 PE=1
+[bridge p4] AddStreams_hls_4               AddStreams_hls (add) stage3.5 PE=1
+[bridge p4] FIFO role bridge: 85 role(s) resolved; 119/519 FIFO spec(s) matched to a real node pair, 15 more matchable via producer-only inter-block convention (433 fully unresolved)
+[partition 4] saved bridged folding config (55 entries): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/hawq_folding_config_partition4.json
+[partition 4] saved FIFO plan (119 matched): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/fifo_plan_partition4.json
+/home/thelegendiv/finn/src/finn/transformation/fpgadataflow/set_folding.py:221: UserWarning: SetFolding doesn't know how to handle op_type UpsampleNearestNeighbour_hls
+  warnings.warn("SetFolding doesn't know how to handle op_type " + op_type)
+[bridge p5] MVAU_rtl_0                     MVAU_rtl     stage3.6.reduce.0         [stage3.6.reduce.0] PE=2 SIMD=1
+[bridge p5] Thresholding_rtl_2             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p5] MVAU_rtl_1                     MVAU_rtl     stage3.6.conv             [stage3.6.conv] PE=2 SIMD=2
+[bridge p5] ConvolutionInputGenerator_rtl_0 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p5] Thresholding_rtl_3             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p5] MVAU_rtl_2                     MVAU_rtl     stage3.6.expand.0         [stage3.6.expand.0] PE=2 SIMD=1
+[bridge p5] Thresholding_rtl_4             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p5] MVAU_rtl_3                     MVAU_rtl     stage3.7.reduce.0         [stage3.7.reduce.0] PE=2 SIMD=1
+[bridge p5] Thresholding_rtl_7             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p5] MVAU_rtl_4                     MVAU_rtl     stage3.7.conv             [stage3.7.conv] PE=2 SIMD=2
+[bridge p5] ConvolutionInputGenerator_rtl_1 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p5] Thresholding_rtl_8             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p5] MVAU_rtl_5                     MVAU_rtl     stage3.7.expand.0         [stage3.7.expand.0] PE=2 SIMD=1
+[bridge p5] Thresholding_rtl_9             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p5] MVAU_rtl_6                     MVAU_rtl     up4.main_proj.0           [up4.main_proj.0] PE=2 SIMD=2
+[bridge p5] Thresholding_rtl_12            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p5] MVAU_rtl_7                     MVAU_rtl     up4.reduce.0              [up4.reduce.0] PE=2 SIMD=1
+[bridge p5] Thresholding_rtl_11            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p5] MVAU_rtl_8                     MVAU_rtl     up4.up.0                  [up4.up.0] PE=2 SIMD=4
+[bridge p5] ConvolutionInputGenerator_rtl_2 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 4, 'parallel_window': 0}
+[bridge p5] Thresholding_rtl_14            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p5] VVAU_hls_0                     VVAU_hls     up4.main_up.1             [up4.main_up.1] PE=1 SIMD=9
+[bridge p5] ConvolutionInputGenerator_rtl_3 ConvolutionInputGenerator_rtl (dw SWU) {'SIMD': 1, 'parallel_window': 1}
+[bridge p5] Thresholding_rtl_13            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p5] MVAU_rtl_9                     MVAU_rtl     up4.expand.0              [up4.expand.0] PE=2 SIMD=2
+[bridge p5] Thresholding_rtl_15            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p5] Thresholding_rtl_0             Thresholding  (join residual_add) stage3.5 ram_style=distributed depth_trigger_bram=999999
+[bridge p5] Thresholding_rtl_5             Thresholding  (join residual_add) stage3.6 ram_style=distributed depth_trigger_bram=999999
+[bridge p5] Thresholding_rtl_1             Thresholding  (join skip_quant) stage3.6 ram_style=distributed depth_trigger_bram=999999
+[bridge p5] Thresholding_rtl_10            Thresholding  (join residual_add) stage3.7 ram_style=distributed depth_trigger_bram=999999
+[bridge p5] Thresholding_rtl_6             Thresholding  (join skip_quant) stage3.7 ram_style=distributed depth_trigger_bram=999999
+[bridge p5] pinned depth_trigger_bram on 5 residual-join Thresholding node(s)
+[bridge p5] AddStreams_hls_0               AddStreams_hls (add) stage3.6 PE=1
+[bridge p5] AddStreams_hls_1               AddStreams_hls (add) stage3.7 PE=1
+[bridge p5] AddStreams_hls_2               AddStreams_hls (add) up4 PE=1
+[bridge p5] FIFO role bridge: 57 role(s) resolved; 79/519 FIFO spec(s) matched to a real node pair, 9 more matchable via producer-only inter-block convention (457 fully unresolved)
+[partition 5] saved bridged folding config (39 entries): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/hawq_folding_config_partition5.json
+[partition 5] saved FIFO plan (79 matched): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/fifo_plan_partition5.json
+[bridge p6] MVAU_rtl_0                     MVAU_rtl     regular4.0.reduce.0       [regular4.0.reduce.0] PE=2 SIMD=1
+[bridge p6] Thresholding_rtl_2             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 1024}
+[bridge p6] MVAU_rtl_1                     MVAU_rtl     regular4.0.conv           [regular4.0.conv] PE=2 SIMD=2
+[bridge p6] ConvolutionInputGenerator_rtl_0 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p6] Thresholding_rtl_3             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 1024}
+[bridge p6] MVAU_rtl_2                     MVAU_rtl     regular4.0.expand.0       [regular4.0.expand.0] PE=2 SIMD=1
+[bridge p6] Thresholding_rtl_4             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p6] MVAU_rtl_3                     MVAU_rtl     regular4.1.reduce.0       [regular4.1.reduce.0] PE=2 SIMD=1
+[bridge p6] Thresholding_rtl_7             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 1024}
+[bridge p6] MVAU_rtl_4                     MVAU_rtl     regular4.1.conv           [regular4.1.conv] PE=2 SIMD=2
+[bridge p6] ConvolutionInputGenerator_rtl_1 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 2, 'parallel_window': 0}
+[bridge p6] Thresholding_rtl_8             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 1024}
+[bridge p6] MVAU_rtl_5                     MVAU_rtl     regular4.1.expand.0       [regular4.1.expand.0] PE=2 SIMD=1
+[bridge p6] Thresholding_rtl_9             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p6] MVAU_rtl_6                     MVAU_rtl     up5.main_proj.0           [up5.main_proj.0] PE=2 SIMD=1
+[bridge p6] Thresholding_rtl_12            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 1024}
+[bridge p6] MVAU_rtl_7                     MVAU_rtl     up5.reduce.0              [up5.reduce.0] PE=2 SIMD=1
+[bridge p6] Thresholding_rtl_11            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 1024}
+[bridge p6] MVAU_rtl_8                     MVAU_rtl     up5.up.0                  [up5.up.0] PE=2 SIMD=4
+[bridge p6] ConvolutionInputGenerator_rtl_2 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 4, 'parallel_window': 0}
+[bridge p6] Thresholding_rtl_14            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 1024}
+[bridge p6] VVAU_hls_0                     VVAU_hls     up5.main_up.1             [up5.main_up.1] PE=1 SIMD=9
+[bridge p6] ConvolutionInputGenerator_rtl_3 ConvolutionInputGenerator_rtl (dw SWU) {'SIMD': 1, 'parallel_window': 1}
+[bridge p6] Thresholding_rtl_13            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 999999}
+[bridge p6] MVAU_rtl_9                     MVAU_rtl     up5.expand.0              [up5.expand.0] PE=2 SIMD=1
+[bridge p6] Thresholding_rtl_15            Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 1024}
+[bridge p6] Thresholding_rtl_0             Thresholding  (join residual_add) up4 ram_style=distributed depth_trigger_bram=999999
+[bridge p6] Thresholding_rtl_5             Thresholding  (join residual_add) regular4.0 ram_style=distributed depth_trigger_bram=999999
+[bridge p6] Thresholding_rtl_1             Thresholding  (join skip_quant) regular4.0 ram_style=distributed depth_trigger_bram=999999
+[bridge p6] Thresholding_rtl_10            Thresholding  (join residual_add) regular4.1 ram_style=distributed depth_trigger_bram=999999
+[bridge p6] Thresholding_rtl_6             Thresholding  (join skip_quant) regular4.1 ram_style=distributed depth_trigger_bram=999999
+[bridge p6] pinned depth_trigger_bram on 5 residual-join Thresholding node(s)
+[bridge p6] AddStreams_hls_0               AddStreams_hls (add) regular4.0 PE=1
+[bridge p6] AddStreams_hls_1               AddStreams_hls (add) regular4.1 PE=1
+[bridge p6] AddStreams_hls_2               AddStreams_hls (add) up5 PE=1
+[bridge p6] FIFO role bridge: 57 role(s) resolved; 77/519 FIFO spec(s) matched to a real node pair, 9 more matchable via producer-only inter-block convention (459 fully unresolved)
+[partition 6] saved bridged folding config (39 entries): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/hawq_folding_config_partition6.json
+[partition 6] saved FIFO plan (77 matched): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/fifo_plan_partition6.json
+/home/thelegendiv/finn/src/finn/transformation/fpgadataflow/set_folding.py:233: UserWarning: Node MVAU_rtl_2 is bottleneck with 524288 cycles, running second pass
+  warnings.warn(
+[bridge p7] MVAU_rtl_0                     MVAU_rtl     regular5.0.reduce.0       [regular5.0.reduce.0] PE=1 SIMD=1
+[bridge p7] Thresholding_rtl_2             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 1024}
+[bridge p7] VVAU_hls_0                     VVAU_hls     regular5.0.conv           [regular5.0.conv] PE=1 SIMD=1
+[bridge p7] ConvolutionInputGenerator_rtl_0 ConvolutionInputGenerator_rtl (dw SWU) {'SIMD': 1, 'parallel_window': 0}
+[bridge p7] Thresholding_rtl_3             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 1024}
+[bridge p7] MVAU_rtl_1                     MVAU_rtl     regular5.0.expand.0       [regular5.0.expand.0] PE=1 SIMD=1
+[bridge p7] Thresholding_rtl_4             Thresholding_rtl (thr_pe) {'PE': 1, 'depth_trigger_bram': 1024}
+[bridge p7] MVAU_rtl_2                     MVAU_rtl     final                     [final] PE=5 SIMD=8
+[bridge p7] ChannelwiseOp_hls_0            ChannelwiseOp_hls (final bias) {'PE': 5}
+[bridge p7] LabelSelect_hls_0              LabelSelect_hls (final argmax) {'PE': 5}
+[bridge p7] ConvolutionInputGenerator_rtl_1 ConvolutionInputGenerator_rtl (SWU) {'SIMD': 4, 'parallel_window': 1}
+[bridge p7] Thresholding_rtl_0             Thresholding  (join residual_add) up5 ram_style=distributed depth_trigger_bram=999999
+[bridge p7] Thresholding_rtl_5             Thresholding  (join residual_add) regular5.0 ram_style=distributed depth_trigger_bram=999999
+[bridge p7] Thresholding_rtl_1             Thresholding  (join skip_quant) regular5.0 ram_style=distributed depth_trigger_bram=999999
+[bridge p7] pinned depth_trigger_bram on 3 residual-join Thresholding node(s)
+[bridge p7] AddStreams_hls_0               AddStreams_hls (add) regular5.0 PE=1
+[bridge p7] FIFO role bridge: 21 role(s) resolved; 21/519 FIFO spec(s) matched to a real node pair, 6 more matchable via producer-only inter-block convention (504 fully unresolved)
+[partition 7] saved bridged folding config (18 entries): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/hawq_folding_config_partition7.json
+[partition 7] saved FIFO plan (21 matched): /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/fifo_plan_partition7.json
+/home/thelegendiv/finn/deps/qonnx/src/qonnx/transformation/general.py:354: UserWarning: 
+No HW configuration for nodes: DuplicateStreams_hls_0, ConvolutionInputGenerator_rtl_1, Pool_hls_0, StreamingConcat_hls_0
+  warnings.warn("\nNo HW configuration for nodes: " + ", ".join(missing_configurations))
+[partition 0] folding landed: 7 entries checked, 0 error(s)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_2: INT32 -> INT18 
+  warnings.warn(warn_str)
+[partition 0] RTL weights signed: 1 node(s) checked, 0 error(s)
+[step_force_dsp] forced resType=dsp on 1 MVAU/VVAU node(s)
+[force fifo depths from MILP] forced 12/16 StreamingFIFO node(s) (0 via virtual-DWC collapse, 0 via walk-past-DWC bridge, 0 via producer-only inter-block convention, 0 via thr_r/thr_s role swap); 4 left unassigned (kept stock_depth)
+[force fifo depths from MILP] 4 unassigned FIFO(s) -- producer -> consumer (stock_depth):
+    StreamingFIFO_rtl_0          None                                     -> Thresholding_rtl_0(Thresholding_rtl)     stock_depth=2
+    StreamingFIFO_rtl_7          ConvolutionInputGenerator_rtl_1(ConvolutionInputGenerator_rtl) -> Pool_hls_0(Pool_hls)                     stock_depth=2
+    StreamingFIFO_rtl_8          Pool_hls_0(Pool_hls)                     -> StreamingConcat_hls_0(StreamingConcat_hls) stock_depth=2
+    StreamingFIFO_rtl_15         Thresholding_rtl_3(Thresholding_rtl)     -> None                                     stock_depth=2
+[partition 0] fifos landed: 12/16 forced, 2 interior left at stock depth (info), 0 depth mismatch(es)
+[partition 0] saved FIFO-autosize checkpoint: /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/intermediate_models/supported_op_partitions/partition_0_postfifo_autosize.onnx
+partition 0 done
+/home/thelegendiv/finn/deps/qonnx/src/qonnx/transformation/general.py:354: UserWarning: 
+No HW configuration for nodes: DuplicateStreams_hls_0, DuplicateStreams_hls_1, DuplicateStreams_hls_2, DuplicateStreams_hls_3
+  warnings.warn("\nNo HW configuration for nodes: " + ", ".join(missing_configurations))
+[partition 3] folding landed: 44 entries checked, 0 error(s)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_2: INT32 -> INT19 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/deps/qonnx/src/qonnx/transformation/general.py:354: UserWarning: 
+No HW configuration for nodes: DuplicateStreams_hls_0, DuplicateStreams_hls_1, DuplicateStreams_hls_2, DuplicateStreams_hls_3, DuplicateStreams_hls_4
+  warnings.warn("\nNo HW configuration for nodes: " + ", ".join(missing_configurations))
+[partition 2] folding landed: 55 entries checked, 0 error(s)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_2: INT32 -> INT19 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_3: INT32 -> INT19 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/deps/qonnx/src/qonnx/transformation/general.py:354: UserWarning: 
+No HW configuration for nodes: DuplicateStreams_hls_0, StreamingMaxPool_hls_0, DuplicateStreams_hls_1, DuplicateStreams_hls_2, DuplicateStreams_hls_3, DuplicateStreams_hls_4, DuplicateStreams_hls_5, StreamingMaxPool_hls_1
+  warnings.warn("\nNo HW configuration for nodes: " + ", ".join(missing_configurations))
+[partition 1] folding landed: 69 entries checked, 0 error(s)
+[force_signed_rtl_weight_dtype] MVAU_rtl_1: UINT7 -> INT8 (w_min=0.0, w_max=127.0)
+[force_signed_rtl_weight_dtype] MVAU_rtl_17: UINT7 -> INT8 (w_min=0.0, w_max=127.0)
+[force_signed_rtl_weight_dtype] widened 2 RTL weight node(s) to a signed type
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_1: INT32 -> INT18 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/deps/qonnx/src/qonnx/transformation/general.py:354: UserWarning: 
+No HW configuration for nodes: DuplicateStreams_hls_0, DuplicateStreams_hls_1, DuplicateStreams_hls_2, DuplicateStreams_hls_3, DuplicateStreams_hls_4
+  warnings.warn("\nNo HW configuration for nodes: " + ", ".join(missing_configurations))
+[partition 4] folding landed: 55 entries checked, 0 error(s)
+[standalone-threshold acc widen] MVAU_rtl_2: acc range [-73440.0, 65280.0] too narrow for Thresholding_rtl_4's thresholds [-158509.0, 166475.0] -- set accDataType=outputDataType=INT19
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_4: INT32 -> INT19 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_3: INT32 -> INT20 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] MVAU_rtl_1: acc range [0.0, 32385.0] too narrow for Thresholding_rtl_0's thresholds [-30415.0, 30178.0] -- set accDataType=outputDataType=INT16
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_0: INT32 -> INT16 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_2: INT32 -> INT19 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_7: INT32 -> INT19 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] MVAU_rtl_2: acc range [-54060.0, 46410.0] too narrow for Thresholding_rtl_4's thresholds [-102718.0, 108382.0] -- set accDataType=outputDataType=INT18
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_4: INT32 -> INT18 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_3: INT32 -> INT20 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_8: INT32 -> INT20 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_2: INT32 -> INT19 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_7: INT32 -> INT19 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] MVAU_rtl_2: acc range [-64260.0, 71655.0] too narrow for Thresholding_rtl_4's thresholds [-140229.0, 138821.0] -- set accDataType=outputDataType=INT19
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_4: INT32 -> INT19 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] MVAU_rtl_5: acc range [-80580.0, 71910.0] too narrow for Thresholding_rtl_9's thresholds [-264590.0, 258996.0] -- set accDataType=outputDataType=INT20
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_9: INT32 -> INT20 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] MVAU_rtl_3: acc range [-40545.0, 56100.0] too narrow for Thresholding_rtl_3's thresholds [-57108.0, 49608.0] -- set accDataType=outputDataType=INT17
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_3: INT32 -> INT17 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_7: INT32 -> INT19 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_8: INT32 -> INT20 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_12: INT32 -> INT19 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_6: INT32 -> INT19 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] MVAU_rtl_5: acc range [-86190.0, 71145.0] too narrow for Thresholding_rtl_9's thresholds [-210709.0, 211784.0] -- set accDataType=outputDataType=INT19
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_8: INT32 -> INT20 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_9: INT32 -> INT19 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_13: INT32 -> INT20 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] MVAU_rtl_8: acc range [-87465.0, 77010.0] too narrow for Thresholding_rtl_14's thresholds [-187999.0, 186202.0] -- set accDataType=outputDataType=INT19
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_14: INT32 -> INT19 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] MVAU_rtl_5: acc range [-55080.0, 42840.0] too narrow for Thresholding_rtl_9's thresholds [-225759.0, 229269.0] -- set accDataType=outputDataType=INT19
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_9: INT32 -> INT19 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_7: INT32 -> INT19 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_12: INT32 -> INT19 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_17: INT32 -> INT19 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_12: INT32 -> INT19 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] MVAU_rtl_6: acc range [-57885.0, 40290.0] too narrow for Thresholding_rtl_8's thresholds [-80959.0, 83021.0] -- set accDataType=outputDataType=INT18
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_8: INT32 -> INT18 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_18: INT32 -> INT20 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_13: INT32 -> INT19 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] MVAU_rtl_11: acc range [-67065.0, 61965.0] too narrow for Thresholding_rtl_19's thresholds [-97181.0, 95034.0] -- set accDataType=outputDataType=INT18
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_19: INT32 -> INT18 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] MVAU_rtl_8: acc range [-62985.0, 71910.0] too narrow for Thresholding_rtl_14's thresholds [-131017.0, 130048.0] -- set accDataType=outputDataType=INT18
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_13: INT32 -> INT20 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_14: INT32 -> INT18 
+  warnings.warn(warn_str)
+[step_minimize_bit_width_standalone_thresh_aware] widened 4 MVAU/VVAU node(s)
+[partition 3] RTL weights signed: 12 node(s) checked, 0 error(s)
+[step_force_dsp] forced resType=dsp on 12 MVAU/VVAU node(s)
+[standalone-threshold acc widen] MVAU_rtl_8: acc range [-67320.0, 62985.0] too narrow for Thresholding_rtl_14's thresholds [-332690.0, 325689.0] -- set accDataType=outputDataType=INT20
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_14: INT32 -> INT20 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_11: INT32 -> INT19 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_17: INT32 -> INT19 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_17: INT32 -> INT19 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_18: INT32 -> INT20 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_12: INT32 -> INT19 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] MVAU_rtl_11: acc range [-67575.0, 61455.0] too narrow for Thresholding_rtl_19's thresholds [-184122.0, 180362.0] -- set accDataType=outputDataType=INT19
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_19: INT32 -> INT19 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_18: INT32 -> INT20 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] MVAU_rtl_9: acc range [-56865.0, 49980.0] too narrow for Thresholding_rtl_13's thresholds [-72163.0, 68420.0] -- set accDataType=outputDataType=INT18
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_13: INT32 -> INT18 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] MVAU_rtl_11: acc range [-124950.0, 74715.0] too narrow for Thresholding_rtl_19's thresholds [-415240.0, 413716.0] -- set accDataType=outputDataType=INT20
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_19: INT32 -> INT20 
+  warnings.warn(warn_str)
+[force fifo depths from MILP] forced 65/71 StreamingFIFO node(s) (0 via virtual-DWC collapse, 0 via walk-past-DWC bridge, 0 via producer-only inter-block convention, 0 via thr_r/thr_s role swap); 6 left unassigned (kept stock_depth)
+[force fifo depths from MILP] 6 unassigned FIFO(s) -- producer -> consumer (stock_depth):
+    StreamingFIFO_rtl_0          None                                     -> Thresholding_rtl_0(Thresholding_rtl)     stock_depth=2
+    StreamingFIFO_rtl_1          Thresholding_rtl_0(Thresholding_rtl)     -> DuplicateStreams_hls_0(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_18         Thresholding_rtl_5(Thresholding_rtl)     -> DuplicateStreams_hls_1(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_35         Thresholding_rtl_10(Thresholding_rtl)    -> DuplicateStreams_hls_2(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_52         Thresholding_rtl_15(Thresholding_rtl)    -> DuplicateStreams_hls_3(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_70         AddStreams_hls_3(AddStreams_hls)         -> None                                     stock_depth=2
+[partition 3] fifos landed: 65/71 forced, 4 interior left at stock depth (info), 0 depth mismatch(es)
+[partition 3] saved FIFO-autosize checkpoint: /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/intermediate_models/supported_op_partitions/partition_3_postfifo_autosize.onnx
+partition 3 done
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_22: INT32 -> INT19 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_22: INT32 -> INT19 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_16: INT32 -> INT19 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/deps/qonnx/src/qonnx/transformation/general.py:354: UserWarning: 
+No HW configuration for nodes: DuplicateStreams_hls_0, DuplicateStreams_hls_1, DuplicateStreams_hls_2, UpsampleNearestNeighbour_hls_0
+  warnings.warn("\nNo HW configuration for nodes: " + ", ".join(missing_configurations))
+[partition 5] folding landed: 39 entries checked, 0 error(s)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_23: INT32 -> INT20 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] MVAU_rtl_14: acc range [-70890.0, 68850.0] too narrow for Thresholding_rtl_24's thresholds [-179270.0, 180618.0] -- set accDataType=outputDataType=INT19
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_23: INT32 -> INT20 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_24: INT32 -> INT19 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_17: INT32 -> INT19 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_3: INT32 -> INT20 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] MVAU_rtl_2: acc range [-60435.0, 61965.0] too narrow for Thresholding_rtl_4's thresholds [-513893.0, 512725.0] -- set accDataType=outputDataType=INT20
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_4: INT32 -> INT20 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] MVAU_rtl_14: acc range [-79305.0, 60690.0] too narrow for Thresholding_rtl_24's thresholds [-199527.0, 192223.0] -- set accDataType=outputDataType=INT19
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_24: INT32 -> INT19 
+  warnings.warn(warn_str)
+[step_minimize_bit_width_standalone_thresh_aware] widened 5 MVAU/VVAU node(s)
+[partition 2] RTL weights signed: 15 node(s) checked, 0 error(s)
+[step_force_dsp] forced resType=dsp on 15 MVAU/VVAU node(s)
+[standalone-threshold acc widen] MVAU_rtl_12: acc range [-43095.0, 54060.0] too narrow for Thresholding_rtl_18's thresholds [-123717.0, 127756.0] -- set accDataType=outputDataType=INT18
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_18: INT32 -> INT18 
+  warnings.warn(warn_str)
+[step_minimize_bit_width_standalone_thresh_aware] widened 5 MVAU/VVAU node(s)
+[partition 4] RTL weights signed: 15 node(s) checked, 0 error(s)
+[step_force_dsp] forced resType=dsp on 15 MVAU/VVAU node(s)
+[standalone-threshold acc widen] MVAU_rtl_5: acc range [-44115.0, 57375.0] too narrow for Thresholding_rtl_9's thresholds [-262949.0, 262558.0] -- set accDataType=outputDataType=INT20
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_21: INT32 -> INT18 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_11: INT32 -> INT19 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_22: INT32 -> INT20 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_13: INT32 -> INT17 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] MVAU_rtl_9: acc range [-84660.0, 73950.0] too narrow for Thresholding_rtl_15's thresholds [-88695.0, 89196.0] -- set accDataType=outputDataType=INT18
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_15: INT32 -> INT18 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] MVAU_rtl_15: acc range [-50745.0, 39270.0] too narrow for Thresholding_rtl_23's thresholds [-152033.0, 143446.0] -- set accDataType=outputDataType=INT19
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_23: INT32 -> INT19 
+  warnings.warn(warn_str)
+[step_minimize_bit_width_standalone_thresh_aware] widened 3 MVAU/VVAU node(s)
+[partition 5] RTL weights signed: 10 node(s) checked, 0 error(s)
+[step_force_dsp] forced resType=dsp on 11 MVAU/VVAU node(s)
+[force fifo depths from MILP] forced 83/90 StreamingFIFO node(s) (0 via virtual-DWC collapse, 0 via walk-past-DWC bridge, 0 via producer-only inter-block convention, 0 via thr_r/thr_s role swap); 7 left unassigned (kept stock_depth)
+[force fifo depths from MILP] 7 unassigned FIFO(s) -- producer -> consumer (stock_depth):
+    StreamingFIFO_rtl_0          None                                     -> Thresholding_rtl_0(Thresholding_rtl)     stock_depth=2
+    StreamingFIFO_rtl_1          Thresholding_rtl_0(Thresholding_rtl)     -> DuplicateStreams_hls_0(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_20         Thresholding_rtl_5(Thresholding_rtl)     -> DuplicateStreams_hls_1(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_37         Thresholding_rtl_10(Thresholding_rtl)    -> DuplicateStreams_hls_2(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_54         Thresholding_rtl_15(Thresholding_rtl)    -> DuplicateStreams_hls_3(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_71         Thresholding_rtl_20(Thresholding_rtl)    -> DuplicateStreams_hls_4(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_89         AddStreams_hls_4(AddStreams_hls)         -> None                                     stock_depth=2
+[partition 2] fifos landed: 83/90 forced, 5 interior left at stock depth (info), 0 depth mismatch(es)
+[partition 2] saved FIFO-autosize checkpoint: /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/intermediate_models/supported_op_partitions/partition_2_postfifo_autosize.onnx
+partition 2 done
+[force fifo depths from MILP] forced 81/88 StreamingFIFO node(s) (0 via virtual-DWC collapse, 0 via walk-past-DWC bridge, 0 via producer-only inter-block convention, 0 via thr_r/thr_s role swap); 7 left unassigned (kept stock_depth)
+[force fifo depths from MILP] 7 unassigned FIFO(s) -- producer -> consumer (stock_depth):
+    StreamingFIFO_rtl_0          None                                     -> Thresholding_rtl_0(Thresholding_rtl)     stock_depth=2
+    StreamingFIFO_rtl_1          Thresholding_rtl_0(Thresholding_rtl)     -> DuplicateStreams_hls_0(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_18         Thresholding_rtl_5(Thresholding_rtl)     -> DuplicateStreams_hls_1(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_35         Thresholding_rtl_10(Thresholding_rtl)    -> DuplicateStreams_hls_2(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_52         Thresholding_rtl_15(Thresholding_rtl)    -> DuplicateStreams_hls_3(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_71         Thresholding_rtl_20(Thresholding_rtl)    -> DuplicateStreams_hls_4(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_87         AddStreams_hls_4(AddStreams_hls)         -> None                                     stock_depth=2
+[partition 4] fifos landed: 81/88 forced, 5 interior left at stock depth (info), 0 depth mismatch(es)
+[partition 4] saved FIFO-autosize checkpoint: /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/intermediate_models/supported_op_partitions/partition_4_postfifo_autosize.onnx
+partition 4 done
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_26: INT32 -> INT20 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] MVAU_rtl_17: acc range [0.0, 32385.0] too narrow for Thresholding_rtl_25's thresholds [-23595.0, 23411.0] -- set accDataType=outputDataType=INT16
+/home/thelegendiv/finn/deps/qonnx/src/qonnx/transformation/general.py:354: UserWarning: 
+No HW configuration for nodes: DuplicateStreams_hls_0
+  warnings.warn("\nNo HW configuration for nodes: " + ", ".join(missing_configurations))
+[partition 7] folding landed: 18 entries checked, 0 error(s)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_2: INT32 -> INT17 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/deps/qonnx/src/qonnx/transformation/general.py:354: UserWarning: 
+No HW configuration for nodes: DuplicateStreams_hls_0, DuplicateStreams_hls_1, DuplicateStreams_hls_2, UpsampleNearestNeighbour_hls_0
+  warnings.warn("\nNo HW configuration for nodes: " + ", ".join(missing_configurations))
+[partition 6] folding landed: 39 entries checked, 0 error(s)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_25: INT32 -> INT16 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] VVAU_hls_0: acc range [-12495.0, 32385.0] too narrow for Thresholding_rtl_3's thresholds [-299862.0, 5004.0] -- set accDataType=outputDataType=INT20
+[standalone-threshold acc widen] MVAU_rtl_1: acc range [-31110.0, 32385.0] too narrow for Thresholding_rtl_4's thresholds [-41588.0, 55393.0] -- set accDataType=outputDataType=INT17
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_4: INT32 -> INT17 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_2: INT32 -> INT18 
+  warnings.warn(warn_str)
+[step_minimize_bit_width_standalone_thresh_aware] widened 2 MVAU/VVAU node(s)
+[partition 7] RTL weights signed: 3 node(s) checked, 0 error(s)
+[step_force_dsp] forced resType=dsp on 4 MVAU/VVAU node(s)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_3: INT32 -> INT19 
+  warnings.warn(warn_str)
+[force fifo depths from MILP] forced 59/64 StreamingFIFO node(s) (0 via virtual-DWC collapse, 0 via walk-past-DWC bridge, 0 via producer-only inter-block convention, 0 via thr_r/thr_s role swap); 5 left unassigned (kept stock_depth)
+[force fifo depths from MILP] 5 unassigned FIFO(s) -- producer -> consumer (stock_depth):
+    StreamingFIFO_rtl_0          None                                     -> Thresholding_rtl_0(Thresholding_rtl)     stock_depth=2
+    StreamingFIFO_rtl_1          Thresholding_rtl_0(Thresholding_rtl)     -> DuplicateStreams_hls_0(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_18         Thresholding_rtl_5(Thresholding_rtl)     -> DuplicateStreams_hls_1(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_35         Thresholding_rtl_10(Thresholding_rtl)    -> DuplicateStreams_hls_2(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_63         AddStreams_hls_2(AddStreams_hls)         -> None                                     stock_depth=2
+[partition 5] fifos landed: 59/64 forced, 3 interior left at stock depth (info), 0 depth mismatch(es)
+[partition 5] saved FIFO-autosize checkpoint: /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/intermediate_models/supported_op_partitions/partition_5_postfifo_autosize.onnx
+partition 5 done
+[standalone-threshold acc widen] MVAU_rtl_2: acc range [-55335.0, 33915.0] too narrow for Thresholding_rtl_4's thresholds [-297439.0, 281192.0] -- set accDataType=outputDataType=INT20
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_4: INT32 -> INT20 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_27: INT32 -> INT20 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_7: INT32 -> INT18 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] MVAU_rtl_19: acc range [-65790.0, 80325.0] too narrow for Thresholding_rtl_28's thresholds [-171213.0, 170411.0] -- set accDataType=outputDataType=INT19
+[force fifo depths from MILP] forced 14/23 StreamingFIFO node(s) (0 via virtual-DWC collapse, 0 via walk-past-DWC bridge, 1 via producer-only inter-block convention, 0 via thr_r/thr_s role swap); 9 left unassigned (kept stock_depth)
+[force fifo depths from MILP] 9 unassigned FIFO(s) -- producer -> consumer (stock_depth):
+    StreamingFIFO_rtl_0          None                                     -> Thresholding_rtl_0(Thresholding_rtl)     stock_depth=2
+    StreamingFIFO_rtl_1          Thresholding_rtl_0(Thresholding_rtl)     -> DuplicateStreams_hls_0(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_15         StreamingDataWidthConverter_rtl_0(StreamingDataWidthConverter_rtl) -> FMPadding_Pixel_hls_0(FMPadding_Pixel_hls) stock_depth=2
+    StreamingFIFO_rtl_16         FMPadding_Pixel_hls_0(FMPadding_Pixel_hls) -> FMPadding_rtl_1(FMPadding_rtl)           stock_depth=2
+    StreamingFIFO_rtl_17         FMPadding_rtl_1(FMPadding_rtl)           -> ConvolutionInputGenerator_rtl_1(ConvolutionInputGenerator_rtl) stock_depth=2
+    StreamingFIFO_rtl_18         ConvolutionInputGenerator_rtl_1(ConvolutionInputGenerator_rtl) -> StreamingDataWidthConverter_rtl_1(StreamingDataWidthConverter_rtl) stock_depth=2
+    StreamingFIFO_rtl_20         MVAU_rtl_2(MVAU_rtl)                     -> ChannelwiseOp_hls_0(ChannelwiseOp_hls)   stock_depth=2
+    StreamingFIFO_rtl_21         ChannelwiseOp_hls_0(ChannelwiseOp_hls)   -> LabelSelect_hls_0(LabelSelect_hls)       stock_depth=2
+    StreamingFIFO_rtl_22         LabelSelect_hls_0(LabelSelect_hls)       -> None                                     stock_depth=2
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_28: INT32 -> INT19 
+  warnings.warn(warn_str)
+[partition 7] fifos landed: 14/23 forced, 7 interior left at stock depth (info), 0 depth mismatch(es)
+[partition 7] saved FIFO-autosize checkpoint: /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/intermediate_models/supported_op_partitions/partition_7_postfifo_autosize.onnx
+partition 7 done
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_8: INT32 -> INT19 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] MVAU_rtl_5: acc range [-46665.0, 32895.0] too narrow for Thresholding_rtl_9's thresholds [-2838965.0, 2828696.0] -- set accDataType=outputDataType=INT23
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_9: INT32 -> INT23 
+  warnings.warn(warn_str)
+[step_minimize_bit_width_standalone_thresh_aware] widened 8 MVAU/VVAU node(s)
+[partition 1] RTL weights signed: 20 node(s) checked, 0 error(s)
+[step_force_dsp] forced resType=dsp on 20 MVAU/VVAU node(s)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_12: INT32 -> INT18 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_11: INT32 -> INT18 
+  warnings.warn(warn_str)
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_13: INT32 -> INT17 
+  warnings.warn(warn_str)
+[standalone-threshold acc widen] MVAU_rtl_9: acc range [-50745.0, 36210.0] too narrow for Thresholding_rtl_15's thresholds [-130527.0, 128283.0] -- set accDataType=outputDataType=INT18
+/home/thelegendiv/finn/src/finn/custom_op/fpgadataflow/thresholding.py:84: UserWarning: inputDataType changing for Thresholding_rtl_15: INT32 -> INT18 
+  warnings.warn(warn_str)
+[step_minimize_bit_width_standalone_thresh_aware] widened 3 MVAU/VVAU node(s)
+[partition 6] RTL weights signed: 10 node(s) checked, 0 error(s)
+[step_force_dsp] forced resType=dsp on 11 MVAU/VVAU node(s)
+[force fifo depths from MILP] forced 57/62 StreamingFIFO node(s) (0 via virtual-DWC collapse, 0 via walk-past-DWC bridge, 0 via producer-only inter-block convention, 0 via thr_r/thr_s role swap); 5 left unassigned (kept stock_depth)
+[force fifo depths from MILP] 5 unassigned FIFO(s) -- producer -> consumer (stock_depth):
+    StreamingFIFO_rtl_0          None                                     -> Thresholding_rtl_0(Thresholding_rtl)     stock_depth=2
+    StreamingFIFO_rtl_1          Thresholding_rtl_0(Thresholding_rtl)     -> DuplicateStreams_hls_0(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_18         Thresholding_rtl_5(Thresholding_rtl)     -> DuplicateStreams_hls_1(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_35         Thresholding_rtl_10(Thresholding_rtl)    -> DuplicateStreams_hls_2(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_61         AddStreams_hls_2(AddStreams_hls)         -> None                                     stock_depth=2
+[partition 6] fifos landed: 57/62 forced, 3 interior left at stock depth (info), 0 depth mismatch(es)
+[partition 6] saved FIFO-autosize checkpoint: /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/intermediate_models/supported_op_partitions/partition_6_postfifo_autosize.onnx
+partition 6 done
+[force fifo depths from MILP] forced 108/115 StreamingFIFO node(s) (0 via virtual-DWC collapse, 0 via walk-past-DWC bridge, 0 via producer-only inter-block convention, 0 via thr_r/thr_s role swap); 7 left unassigned (kept stock_depth)
+[force fifo depths from MILP] 7 unassigned FIFO(s) -- producer -> consumer (stock_depth):
+    StreamingFIFO_rtl_0          None                                     -> DuplicateStreams_hls_0(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_23         Thresholding_rtl_4(Thresholding_rtl)     -> DuplicateStreams_hls_1(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_40         Thresholding_rtl_9(Thresholding_rtl)     -> DuplicateStreams_hls_2(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_57         Thresholding_rtl_14(Thresholding_rtl)    -> DuplicateStreams_hls_3(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_74         Thresholding_rtl_19(Thresholding_rtl)    -> DuplicateStreams_hls_4(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_91         Thresholding_rtl_24(Thresholding_rtl)    -> DuplicateStreams_hls_5(DuplicateStreams_hls) stock_depth=2
+    StreamingFIFO_rtl_114        AddStreams_hls_5(AddStreams_hls)         -> None                                     stock_depth=2
+[partition 1] fifos landed: 108/115 forced, 5 interior left at stock depth (info), 0 depth mismatch(es)
+[partition 1] saved FIFO-autosize checkpoint: /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952/intermediate_models/supported_op_partitions/partition_1_postfifo_autosize.onnx
+partition 1 done
+FIFO check done. Reports in /home/thelegendiv/finn/notebooks/enet/finn_deployment_outputs/S12_dense_512_bilinear_int8_fps150_v1_milpfold_8way_20261019_175952
+BRIDGE EXIT=0

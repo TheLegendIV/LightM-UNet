@@ -20,13 +20,15 @@ with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "real_dsp_per
 # INT4 / INT6: partitions 0-6 from the 8-way build, partition 7 from the rebuild that lands the 512-deep inter-block FIFO. The original
 # 8-way partition 7 kept that FIFO at depth 2 (not what the MILP / FIFO simulation specified) and is therefore not listed.
 BUILDS = [
-    ("int4_cap40", "INT4", "milp", "cap40_fps150/uniform_int4", "cap40_fps150/uniform_int4/p7fix",
-     "partitions 0-6 from the 8-way build, partition 7 rebuilt with the inter-block FIFO fix"),
-    ("int6_cap40", "INT6", "milp", "cap40_fps150/uniform_int6", "cap40_fps150/uniform_int6/p7fix",
-     "partitions 0-6 from the 8-way build, partition 7 rebuilt with the inter-block FIFO fix"),
-    ("mixed468_cap40", "mixed 4/6/8", "milp", "cap40_fps150/mixed_468", None, "inter-block FIFO left at depth 2 (0.4 caps rejected the grown FIFO)"),
-    ("int6_cap40_finnauto", "INT6", "finn_auto", "finn_auto/cap40_fps150/uniform_int6", None,
+    ("int4_cap40", "INT4", "milp", 150, "cap40_fps150/uniform_int4", "cap40_fps150/uniform_int4/p7fix",
+     "caps 0.4; partitions 0-6 from the 8-way build, partition 7 rebuilt with the inter-block FIFO fix"),
+    ("int6_cap40", "INT6", "milp", 150, "cap40_fps150/uniform_int6", "cap40_fps150/uniform_int6/p7fix",
+     "caps 0.4; partitions 0-6 from the 8-way build, partition 7 rebuilt with the inter-block FIFO fix"),
+    ("mixed468_cap40", "mixed 4/6/8", "milp", 150, "cap40_fps150/mixed_468", None, "caps 0.4; inter-block FIFO left at depth 2 (the 0.4 caps rejected the grown FIFO)"),
+    ("int6_cap40_finnauto", "INT6", "finn_auto", 150, "finn_auto/cap40_fps150/uniform_int6", None,
      "FINN auto-fold + FINN rtlsim FIFO autosize; partition 7 is post-synthesis only (placement fails, UTLZ-1), no timing for it"),
+    ("int8_caps100_fps150", "INT8", "milp", 150, "relaxed_fps150/uniform_int8", None,
+     "caps 1.0 (INT8 is infeasible at 0.4 caps); built with the fixed bridge, 512-deep inter-block FIFO landed; Fmax < 187.5 MHz board clock"),
 ]
 COLS = ["LUT", "LUTRAM", "FF", "DSP", "BRAM_18K", "BRAM_36K", "URAM", "Carry", "WNS", "fmax_mhz"]
 
@@ -43,7 +45,7 @@ def load(arm: str, i: int, kind: str = "8way") -> dict:
 
 
 rows = []
-for bid, prec, folding, arm, p7_arm, notes in BUILDS:
+for bid, prec, folding, fps, arm, p7_arm, notes in BUILDS:
     parts = []
     for i in range(8):
         if i == 7 and p7_arm:
@@ -56,7 +58,7 @@ for bid, prec, folding, arm, p7_arm, notes in BUILDS:
     total = {c: 0.0 for c in ("LUT", "LUTRAM", "FF", "DSP", "BRAM_18K", "BRAM_36K", "URAM", "Carry")}
     fmax = []
     for i, src, d in parts:
-        row = {"build": bid, "precision": prec, "folding": folding, "target_fps": 150, "partition": i, "source": src,
+        row = {"build": bid, "precision": prec, "folding": folding, "target_fps": fps, "partition": i, "source": src,
                "synth_only": bool(d.get("synth_only", False)), "notes": ""}
         for c in COLS:
             row[c] = d.get(c, "")
@@ -67,7 +69,7 @@ for bid, prec, folding, arm, p7_arm, notes in BUILDS:
             total[c] += d.get(c, 0.0)
         if d.get("fmax_mhz") is not None:
             fmax.append(d["fmax_mhz"])
-    tot = {"build": bid, "precision": prec, "folding": folding, "target_fps": 150, "partition": "total", "source": "sum",
+    tot = {"build": bid, "precision": prec, "folding": folding, "target_fps": fps, "partition": "total", "source": "sum",
            "synth_only": any(d.get("synth_only", False) for _, _, d in parts), "notes": notes, **total,
            "WNS": "", "fmax_mhz": min(fmax), "BRAM18_equiv": total["BRAM_18K"] + 2 * total["BRAM_36K"],
            "DSP_ooc_report": sum(d["DSP_ooc_report"] for _, _, d in parts)}

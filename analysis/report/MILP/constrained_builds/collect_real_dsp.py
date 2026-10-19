@@ -31,6 +31,7 @@ def merge(base, p7=None):
 int4, int4_7 = load("int4_cap40_v1"), load("int4_cap40_v1_p7fix")
 int6, int6_7 = load("int6_cap40_v1"), load("int6_cap40_v1_p7fix")
 mixed, fauto = load("mixed468_cap40_v1"), load("int6_cap40_finnauto_v1")
+int8_150 = load("int8_fps150_v1")
 fauto = merge(fauto)
 assert fauto[7] is None
 fauto[7] = 27  # synth_1 report, see docstring
@@ -40,6 +41,7 @@ out = {
     "int6_cap40": merge(int6, int6_7["partition_7"]),
     "mixed468_cap40": merge(mixed),
     "int6_cap40_finnauto": fauto,
+    "int8_caps100_fps150": merge(int8_150),
 }
 for k, v in out.items():
     if not k.startswith("_"):

@@ -20,10 +20,11 @@ Only reports, configs and logs are kept (no `intermediate_models`, no IP / bitst
 | `cap40_fps150/uniform_int6` | `S12_dense_512_bilinear_int6_cap40_v1` | 150 FPS | 0.4 | min-resources |
 | `cap40_fps150/mixed_468` | `S12_dense_512_bilinear_mixed468_cap40_v1` | 150 FPS | 0.4 | max accuracy, bits 4/6/8 |
 | `relaxed/uniform_int8` | `S12_dense_512_bilinear_int8_relaxed_v1` | **100 FPS** | 1.0 | min-resources; not the 150 FPS target |
+| `relaxed_fps150/uniform_int8` | `S12_dense_512_bilinear_int8_fps150_v1` | 150 FPS | **1.0** | min-resources; INT8 is infeasible at 0.4 caps, see below |
 
 ## Results (OOC synthesis of the 8 partitions, 100 MHz target)
 
-DSP is the real DSP48E2 count (`| DSPs |` row of each partition's Vivado `report_utilization`, via `hardware/utils/dump_real_dsp_utilization.py`). The `DSP` field in the `ooc_synth_*.json` files of the `report/` folders is always 0 (broken Tcl filter) and was not corrected in place; per-partition real values for the constrained builds are in `analysis/report/MILP/constrained_builds/real_dsp_per_partition.json`.
+DSP is the real DSP48E2 count (`| DSPs |` row of each partition's Vivado `report_utilization`, via `hardware/utils/dump_real_dsp_utilization.py`). The `DSP` field in the `ooc_synth_*.json` files of the `report/` folders is always 0 (broken Tcl filter) and was not corrected in place; per-partition real values for the constrained builds are in `analysis/report/MILP/constrained_builds/real_dsp_per_partition.json` (INT8 fps150: `relaxed_fps150/uniform_int8/real_dsp_per_partition.json`).
 
 | Arm | LUT | FF | DSP | BRAM18 + BRAM36 | Worst-partition Fmax (MHz) | FINN est. FPS @100 MHz | Combined rtlsim (cycles, 1 image) |
 |---|---|---|---|---|---|---|---|
@@ -31,8 +32,9 @@ DSP is the real DSP48E2 count (`| DSPs |` row of each partition's Vivado `report
 | INT6 | 96,651 | 102,248 | 167 | 45 + 80 | 190.2 | 169.2 | 2,267,093 |
 | Mixed 4/6/8 | 109,472 | 116,681 | 280 | 67 + 96 | 182.2 | 169.2 | 2,239,227 |
 | INT8 relaxed (100 FPS) | 194,295 | 142,050 | 183 | 57 + 73 | 130.7 | 127.2 | 2,462,919 |
+| INT8 at 150 FPS (caps 1.0) | 195,146 | 144,661 | 167 | 45 + 73 | **126.8** (partition 3) | 169.2 | 2,073,758 |
 
-All partitions of all four builds pass the per-partition rtlsim without deadlock. The board PL clock is 187.48 MHz.
+All partitions of all five builds pass the per-partition rtlsim without deadlock; the INT8 fps150 combined rtlsim completes (262,144 / 262,144 output beats) and its partition 7 (592,041 cycles) has the 512-deep inter-block FIFO landed (built with the fixed bridge). The INT8 fps150 design (195k LUT = 85% of the device, MILP model predicted 147k) has a worst-partition Fmax of 126.8 MHz, below the 187.48 MHz board PL clock. The board PL clock is 187.48 MHz.
 
 ## FINN-native build: `finn_auto/cap40_fps150/uniform_int6`
 
