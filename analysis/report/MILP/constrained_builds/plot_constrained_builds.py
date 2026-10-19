@@ -2,8 +2,9 @@
 
   s12_512_constrained_lut.png    Dice vs LUT %
   s12_512_constrained_bram.png   Dice vs BRAM18K %
-  s12_512_constrained_dsp.png    Dice vs DSP %  (modelled only, see below)
-  s12_512_constrained_combined.png  Dice vs the equal-weight mean of the LUT %, BRAM18K % and DSP %  (modelled only until the real DSP counts exist)
+  s12_512_constrained_dsp.png    Dice vs DSP %
+  s12_512_constrained_combined.png  Dice vs the equal-weight mean of the LUT %, BRAM18K % and DSP %
+  s12_512_constrained_ff.png     Dice vs FF % (real synthesis only: the ILP does not model flip-flops; 460,800 FF in the XCZU7EV; no cap line for now)
 
 Per scheme (INT4, INT6, INT8, mixed 4/6/8; the FINN auto-fold INT6 build is not shown), two markers joined by a line:
   modelled (circle)  the FINAL modelled design: the ILP folding after the FIFO simulation, i.e. `_diagnostics.total_lut_with_all_fifos / total_bram18k_with_all_fifos / total_dsp` of
@@ -11,7 +12,7 @@ Per scheme (INT4, INT6, INT8, mixed 4/6/8; the FINN auto-fold INT6 build is not 
   real (square)      the out-of-context synthesis total of the 8 partitions (synth_utilization.csv, `total` rows; BRAM = BRAM18 + 2 x BRAM36).
   Percent of the XCZU7EV (230,400 LUT / 624 BRAM18 / 1,728 DSP). The 40% cap line is the resource cap the cap40_fps150 solves are held to (LUT / BRAM / DSP each).
   INT8 does not fit the 0.4 caps at 150 FPS (cap40_fps150/uniform_int8 is infeasible), so its modelled point is the relaxed_fps150/uniform_int8 solve (red); its build is not finished, so its real
-  cost is blank. OOC synthesis reports DSP as 0, so the DSP figure has no real points.
+  cost is blank. Real DSP = the DSP48E2 count of synth_utilization.csv (real_dsp_per_partition.json; the DSP field of FINN's OOC reports itself is always 0).
 Dice: dice_scores.csv (QAT evaluation, FP32 reference dotted). Also written: modelled_vs_real_cost.csv (every number plotted, plus the raw MILP estimate before the FIFO simulation).
 
 Usage:
@@ -32,7 +33,7 @@ from plot_forcedsp_lut70_alpha_sweep import INK, SECONDARY_INK, SURFACE, ALPHA_C
 from plot_uniform_vs_ilp_overlay import UNIFORM_COLOR  # noqa: E402
 
 ARTIFACTS = REPO_ROOT / "MILP" / "artifacts" / "S12_512_ablation_v2"
-BUDGET = {"lut": 230400.0, "bram": 624.0, "dsp": 1728.0}        # XCZU7EV: LUT, BRAM18, DSP
+BUDGET = {"lut": 230400.0, "bram": 624.0, "dsp": 1728.0, "ff": 460800.0}        # XCZU7EV: LUT, BRAM18, DSP, FF
 CAP_PCT = 40.0
 INFEASIBLE_COLOR = "#c0392b"
 MIXED_COLOR = ALPHA_COLORS.get(0.25)
@@ -44,8 +45,8 @@ SCHEMES = {
     "int8": ("INT8", "relaxed_fps150/uniform_int8", "layer_bits_folding_int8_fps150_simfifo.json", None),
     "mixed468": ("Mixed 4/6/8", "cap40_fps150/mixed_468", "layer_bits_folding_mixed468_cap40_simfifo.json", "mixed468_cap40"),
 }
-RESOURCES = {"lut": "LUT Consumption (%)", "bram": "BRAM18K Consumption (%)", "dsp": "DSP Consumption (%)", "combined": "Mean of LUT, BRAM18K, DSP Consumption (%)"}
-TITLE_WORD = {"lut": "LUT", "bram": "BRAM18K", "dsp": "DSP", "combined": "Combined"}
+RESOURCES = {"lut": "LUT Consumption (%)", "bram": "BRAM18K Consumption (%)", "dsp": "DSP Consumption (%)", "combined": "Mean of LUT, BRAM18K, DSP Consumption (%)", "ff": "FF Consumption (%)"}
+TITLE_WORD = {"lut": "LUT", "bram": "BRAM18K", "dsp": "DSP", "combined": "Combined", "ff": "FF"}
 
 
 def load_costs() -> dict:
@@ -60,17 +61,19 @@ def load_costs() -> dict:
         c = {"label": label, "solve": solve,
              "model_lut": d["total_lut_with_all_fifos"], "model_bram": d["total_bram18k_with_all_fifos"] + d.get("total_uram18", 0.0), "model_dsp": float(d["total_dsp"]),
              "milp_lut_pct": float(milp["lut_pct_of_budget"]), "milp_bram_pct": float(milp["bram_pct_of_budget"]), "milp_dsp_pct": float(milp["dsp_pct_of_budget"]),
-             "real_lut": None, "real_bram": None, "real_dsp": None}
+             "real_lut": None, "real_bram": None, "real_dsp": None, "real_ff": None, "model_ff": None}      # the ILP does not model flip-flops: FF has real points only
         if build and build in synth:
             c["real_lut"] = float(synth[build]["LUT"])
             c["real_bram"] = float(synth[build]["BRAM18_equiv"])
+            c["real_dsp"] = float(synth[build]["DSP"])
+            c["real_ff"] = float(synth[build]["FF"])
         out[key] = c
     return out
 
 
 def write_cost_csv(costs: dict, path: Path) -> None:
     cols = ["scheme", "milp_solve", "milp_lut_pct", "milp_bram_pct", "milp_dsp_pct", "model_lut", "model_lut_pct", "real_lut", "real_lut_pct", "model_bram18", "model_bram_pct", "real_bram18eq",
-            "real_bram_pct", "model_dsp", "model_dsp_pct", "real_dsp"]
+            "real_bram_pct", "model_dsp", "model_dsp_pct", "real_dsp", "real_dsp_pct", "real_ff", "real_ff_pct"]
     pct = lambda v, k: "" if v is None else f"{100 * v / BUDGET[k]:.2f}"  # noqa: E731
     num = lambda v: "" if v is None else f"{v:.0f}"                         # noqa: E731
     with open(path, "w", newline="") as f:
@@ -80,7 +83,7 @@ def write_cost_csv(costs: dict, path: Path) -> None:
             w.writerow([c["label"], c["solve"], f"{c['milp_lut_pct']:.2f}", f"{c['milp_bram_pct']:.2f}", f"{c['milp_dsp_pct']:.2f}",
                         num(c["model_lut"]), pct(c["model_lut"], "lut"), num(c["real_lut"]), pct(c["real_lut"], "lut"),
                         num(c["model_bram"]), pct(c["model_bram"], "bram"), num(c["real_bram"]), pct(c["real_bram"], "bram"),
-                        num(c["model_dsp"]), pct(c["model_dsp"], "dsp"), ""])
+                        num(c["model_dsp"]), pct(c["model_dsp"], "dsp"), num(c["real_dsp"]), pct(c["real_dsp"], "dsp"), num(c["real_ff"]), pct(c["real_ff"], "ff")])
 
 
 def load_dice() -> tuple[dict, float]:
@@ -105,35 +108,39 @@ def plot_one(resource: str, costs: dict, dice: dict, fp32: float, out_path: Path
     fig, ax = plt.subplots(figsize=(7.5, 5.8), facecolor=SURFACE)
     _style_axes(ax)
     ax.axhline(fp32, color=INK, linestyle=":", linewidth=1.2, zorder=1, label=f"FP32 baseline ({fp32:.4f})")
-    if resource != "combined":      # the cap is per resource; a cap line on the mean would be misleading (INT8 has a low mean but exceeds the LUT cap)
+    if resource != "ff":            # every capped resource has the same 40% cap, so it also bounds the mean; FF has no cap for now
         ax.axvline(CAP_PCT, color=INK, linewidth=1.2, alpha=0.6, zorder=1, label="40% resource cap")
-    any_real = False
+    any_real = any_model = False
     for key, c in costs.items():
         model_pct, real_pct = pct(c, "model", resource), pct(c, "real", resource)
         color = MIXED_COLOR if key == "mixed468" else (INFEASIBLE_COLOR if key == "int8" else UNIFORM_COLOR)   # INT8 does not fit the 40% caps
+        if model_pct is None and real_pct is None:      # nothing to plot (INT8 real cost is blank; FF has no model)
+            continue
         if real_pct is not None:
             any_real = True
-            ax.plot([model_pct, real_pct], [dice[key]] * 2, color=color, linewidth=1.2, linestyle="--", alpha=0.7, zorder=3)
+            if model_pct is not None:
+                ax.plot([model_pct, real_pct], [dice[key]] * 2, color=color, linewidth=1.2, linestyle="--", alpha=0.7, zorder=3)
             ax.scatter([real_pct], [dice[key]], color=color, s=120, marker="s", edgecolor=SURFACE, linewidth=1.4, zorder=5)
-        ax.scatter([model_pct], [dice[key]], color=color, s=130, marker="o", edgecolor=SURFACE, linewidth=1.4, zorder=6)
-        ax.annotate(c["label"], (model_pct, dice[key]), xytext=(8, 9), textcoords="offset points", ha="left", color=color, fontsize=10, fontweight="bold")
+        if model_pct is not None:
+            any_model = True
+            ax.scatter([model_pct], [dice[key]], color=color, s=130, marker="o", edgecolor=SURFACE, linewidth=1.4, zorder=6)
+        x_label = model_pct if model_pct is not None else real_pct
+        ax.annotate(c["label"], (x_label, dice[key]), xytext=(8, -20) if (key == "mixed468" and resource == "combined") else (8, 9), textcoords="offset points", ha="left", color=color, fontsize=10, fontweight="bold")
     ax.set_xlabel(RESOURCES[resource], color=INK, fontsize=11, fontweight="bold")
     ax.set_ylabel("Dice", color=INK, fontsize=11, fontweight="bold")
     ax.set_title(f"Dice vs. {TITLE_WORD[resource]} Consumption", color=INK, fontsize=12, fontweight="bold")
     lo, hi = ax.get_xlim()
-    ax.set_xlim(max(0, lo), max(hi, CAP_PCT + 3) if resource != "combined" else hi)
+    ax.set_xlim(max(0, lo), max(hi, CAP_PCT + 3))
     ax.set_ylim(top=0.8)
     for t in ax.get_xticklabels() + ax.get_yticklabels():
         t.set_fontweight("bold")
     handles, labels = ax.get_legend_handles_labels()
-    handles.append(Line2D([], [], marker="o", color="none", markerfacecolor=SECONDARY_INK, markersize=9))
-    labels.append("Modelled (ILP + FIFO sim)")
+    if any_model:
+        handles.append(Line2D([], [], marker="o", color="none", markerfacecolor=SECONDARY_INK, markersize=9))
+        labels.append("Modelled (ILP + FIFO sim)")
     if any_real:
         handles.append(Line2D([], [], marker="s", color="none", markerfacecolor=SECONDARY_INK, markersize=9))
         labels.append("Real (OOC synthesis)")
-    if resource == "combined":
-        handles.append(Line2D([], [], marker="o", color="none", markerfacecolor=INFEASIBLE_COLOR, markersize=9))
-        labels.append("Exceeds 40% LUT cap")
     leg = ax.legend(handles, labels, loc="best", frameon=True, facecolor=SURFACE, edgecolor="#c3c2b7", fontsize=9, labelcolor=SECONDARY_INK)
     for t in leg.get_texts():
         t.set_fontweight("bold")
