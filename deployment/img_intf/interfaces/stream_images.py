@@ -17,7 +17,7 @@ block on TCP backpressure (server ring full) while results keep draining.
 
 Usage (repo root):
   python deployment/img_intf/interfaces/stream_images.py [--ip 192.168.0.111] [--port 7]
-         [--frames N] [--name s12_512_bilinear_mixed68] [--no-save] IMAGE_OR_DIR ...
+         [--frames N | --loop] [--rate FPS] [--name s12_512_bilinear_mixed68] [--no-save] IMAGE_OR_DIR ...
 
 Inputs are headerless u8 .raw files (payload size), PNGs (preprocessed with
 the --input-profile, default --name) or directories of those. The list is
@@ -25,6 +25,14 @@ cycled until --frames frames were sent (default: one pass). Each frame is
 loaded/preprocessed just before it is sent (the next one is prefetched while
 the current one is on the wire) and every result is written to
 output/<name>/raw/<input stem>.raw as soon as it is received.
+
+--loop cycles the inputs without end: Ctrl-C (or closing the --show window) stops the sender, the
+frames already in flight are received, the stop handshake is done and the usual report is printed
+(a second Ctrl-C aborts). Results / overlays are overwritten per input stem instead of being
+numbered per pass, so the output folder stays bounded.
+
+--rate FPS paces the source like a camera: frame k is sent at start + k/FPS (a stall behind a full server
+ring does not cause a catch-up burst afterwards). Without it the client sends as fast as the board accepts.
 
 --overlay saves each result blended over its input image as output/<name>/overlay/<stem>_overlay.png
 (--alpha sets the opacity); --show displays the same blend live in a window. For .raw inputs the
@@ -38,6 +46,7 @@ import os
 import socket
 import struct
 import sys
+import threading
 import time
 from typing import Awaitable, Callable, List, Optional, Sequence, Union
 
@@ -131,13 +140,24 @@ class AsyncImageStreamer:
         log: Callable[[str], None] = print,
         sndbuf: Optional[int] = None,
         read_hw_trailer: bool = False,
+        loop_forever: bool = False,
+        stop_event: Optional[threading.Event] = None,
+        rate_fps: Optional[float] = None,
     ):
         if not frames:
             raise ValueError("no frames to send")
+        if loop_forever and num_frames is not None:
+            raise ValueError("loop_forever and num_frames are mutually exclusive")
+        if rate_fps is not None and rate_fps <= 0:
+            raise ValueError("rate_fps must be positive")
+        self.rate_fps = rate_fps  # None: send as fast as the server accepts
         self.ip = ip
         self.port = port
         self.frames = list(frames)
-        self.num_frames = len(self.frames) if num_frames is None else num_frames
+        self.loop_forever = loop_forever
+        self.stop_event = stop_event if stop_event is not None else threading.Event()
+        # None while looping forever: the count is only known once the sender stopped (see _send_frames)
+        self.num_frames = None if loop_forever else (len(self.frames) if num_frames is None else num_frames)
         self.payload_length = payload_length
         self.on_result = on_result
         self.rcvbuf = rcvbuf
@@ -154,6 +174,8 @@ class AsyncImageStreamer:
         self._prep_start: dict = {}  # frame index -> perf_counter() when its loader (preprocessing) started
         self._prep_s: dict = {}      # frame index -> loader duration in s
         self._last_stall_log = float("-inf")
+        self._total: Optional[int] = None  # number of frames of the session; set in _run
+        self._total_known: Optional[asyncio.Event] = None
 
     def _frame_bytes(self, index: int) -> bytes:
         src = self.frames[index % len(self.frames)]
@@ -181,7 +203,7 @@ class AsyncImageStreamer:
         if not isinstance(src, str):
             return f"frame_{index:06d}.raw"
         stem = os.path.splitext(os.path.basename(src))[0]
-        cycle = index // n
+        cycle = 0 if self.loop_forever else index // n  # looping forever overwrites the latest result per input
         return f"{stem}.raw" if cycle == 0 else f"{stem}_{cycle:04d}.raw"
 
     def _save(self, index: int, data: bytes):
@@ -200,27 +222,70 @@ class AsyncImageStreamer:
     async def _send_frames(self, writer: asyncio.StreamWriter, send_times: List[float],
                            result: StreamResult):
         loop = asyncio.get_event_loop()
-        nxt = self._prefetch(loop, 0)
-        for i in range(self.num_frames):
-            data = await nxt
-            if i + 1 < self.num_frames:
-                nxt = self._prefetch(loop, i + 1)  # overlaps with the send below
-            send_times.append(time.perf_counter())
-            writer.write(struct.pack("!B", MARKER_IMAGE))
-            writer.write(data)
-            t = time.perf_counter()
-            await writer.drain()  # blocks while the server's ring/TCP window is full
-            waited = time.perf_counter() - t
-            if waited > self.stall_warn_s:
-                self._note_stall(i, waited, result)
+        sent = 0
+        period = 1.0 / self.rate_fps if self.rate_fps else 0.0
+        next_due = time.perf_counter()
+        if self._more(0):
+            nxt = self._prefetch(loop, 0)
+            while True:
+                data = await nxt
+                if self._more(sent + 1):
+                    nxt = self._prefetch(loop, sent + 1)  # overlaps with the send below
+                if period:  # paced source: frame k is due at start + k*period; after a stall (backpressure) it resumes at the pace, no catch-up burst
+                    delay = next_due - time.perf_counter()
+                    if delay > 0:
+                        await asyncio.sleep(delay)
+                    next_due = max(next_due + period, time.perf_counter())
+                send_times.append(time.perf_counter())
+                writer.write(struct.pack("!B", MARKER_IMAGE))
+                writer.write(data)
+                t = time.perf_counter()
+                await writer.drain()  # blocks while the server's ring/TCP window is full
+                waited = time.perf_counter() - t
+                if waited > self.stall_warn_s:
+                    self._note_stall(sent, waited, result)
+                sent += 1
+                if not self._more(sent):
+                    break
+        self._total = sent
+        self._total_known.set()
         writer.write(struct.pack("!B", MARKER_STOP))
         await writer.drain()
+
+    def _more(self, n: int) -> bool:
+        """Whether frame number `n` (0-based) is to be sent."""
+        if self.loop_forever:
+            return not self.stop_event.is_set()
+        return n < self.num_frames
+
+    async def _next_result(self, reader: asyncio.StreamReader, i: int) -> Optional[bytes]:
+        """Result frame `i`, or None once the sender ended the session after exactly `i` frames."""
+        if self._total is not None:
+            return await reader.readexactly(self.output_bytes) if i < self._total else None
+        read = asyncio.ensure_future(reader.readexactly(self.output_bytes))
+        known = asyncio.ensure_future(self._total_known.wait())
+        try:
+            await asyncio.wait({read, known}, return_when=asyncio.FIRST_COMPLETED)
+            if read.done():
+                return read.result()
+            if i < self._total:
+                return await read
+            read.cancel()  # readexactly leaves the stream buffer untouched when cancelled
+            return None
+        except BaseException:
+            read.cancel()
+            raise
+        finally:
+            known.cancel()
 
     async def _receive_results(self, reader: asyncio.StreamReader,
                                send_times: List[float], result: StreamResult):
         loop = asyncio.get_event_loop()
-        for i in range(self.num_frames):
-            data = await reader.readexactly(self.output_bytes)
+        i = 0
+        while True:
+            data = await self._next_result(reader, i)
+            if data is None:
+                break
             now = time.perf_counter()
             result.latencies_s.append(now - send_times[i])
             result.done_times.append(now)
@@ -231,6 +296,7 @@ class AsyncImageStreamer:
                 ret = self.on_result(i, data)
                 if inspect.isawaitable(ret):
                     await ret
+            i += 1
         ack = await reader.readexactly(3)
         if ack != b"ACK":
             raise ConnectionError(f"expected stop ACK, got {ack!r}")
@@ -267,6 +333,10 @@ class AsyncImageStreamer:
                 raise ConnectionError(f"bad header ACK: {reply!r}")
             self.output_bytes = struct.unpack("!I", reply[3:])[0]
 
+            self._total = self.num_frames  # None while looping forever: set by the sender when it stops
+            self._total_known = asyncio.Event()
+            if self._total is not None:
+                self._total_known.set()
             send_times: List[float] = []
             result.send_times = send_times
             result.prep_start, result.prep_s = self._prep_start, self._prep_s
@@ -346,7 +416,7 @@ def _show_live(q, title: str, total: int) -> None:
             photo = ImageTk.PhotoImage(Image.fromarray(rgb))
             view.configure(image=photo)
             view.image = photo  # keep a reference
-            state["text"] = f"{name}  ({i + 1}/{total})"
+            state["text"] = f"{name}  ({i + 1}/{total})" if total else f"{name}  (frame {i + 1})"
         status.configure(text=f"{state['text']}{'  - done' if state['done'] else ''}\n{legend}")
         if not state["done"]:
             root.after(5, poll)
@@ -479,6 +549,11 @@ def main():
     ap.add_argument("--ip", default="192.168.0.111")
     ap.add_argument("--port", type=int, default=7)
     ap.add_argument("--frames", type=int, default=None, help="frames to send (inputs are cycled); default one pass")
+    ap.add_argument("--rate", type=float, default=None, metavar="FPS",
+                    help="pace the PC->board source to this many frames per second (default: as fast as the board accepts)")
+    ap.add_argument("--loop", action="store_true",
+                    help="cycle the inputs until Ctrl-C (or the --show window is closed), then stop cleanly and report; "
+                         "returned maps / overlays then overwrite the latest result per input instead of adding files")
     ap.add_argument("--name", default="s12_512_bilinear_int8_maxfps", help="output/<name>/stream destination and default input profile")
     ap.add_argument("--input-profile", help="input scale profile in utils/input_profiles.json (default: --name)")
     ap.add_argument("--no-save", action="store_true", help="do not write returned class maps")
@@ -488,6 +563,19 @@ def main():
     ap.add_argument("--mp4", help="encode the blended results into this mp4 file")
     ap.add_argument("--fps", type=float, default=30.0, help="frame rate of the --mp4 video")
     a = ap.parse_args()
+    if a.loop and a.frames is not None:
+        ap.error("--loop and --frames are mutually exclusive")
+    stop = threading.Event()
+    if a.loop:
+        import signal
+
+        def on_sigint(signum, frame):
+            if stop.is_set():
+                raise KeyboardInterrupt  # second Ctrl-C: give up waiting for the stop handshake
+            print("\n[INFO] Ctrl-C: finishing the frames in flight ...", flush=True)
+            stop.set()
+
+        signal.signal(signal.SIGINT, on_sigint)
 
     sources = _collect_inputs(a.inputs)
     profile = a.input_profile or a.name
@@ -529,6 +617,7 @@ def main():
 
     from concurrent.futures import ThreadPoolExecutor
     renderer = ThreadPoolExecutor(1)  # keeps blending/PNG writing off the receive loop, in order
+    RENDER_BACKLOG = 8                # --loop only: frames waiting for the renderer before the receiver is throttled
 
     jobs = []
     render_s: dict = {}     # frame index -> postprocessing (blend/save/video/viewer) duration
@@ -541,8 +630,11 @@ def main():
         render_done[i] = time.perf_counter()
         render_s[i] = render_done[i] - t
 
-    def on_result(i: int, data: bytes) -> None:
+    async def on_result(i: int, data: bytes) -> None:
         jobs.append(renderer.submit(render_timed, i, data))
+        if a.loop and len(jobs) > RENDER_BACKLOG:
+            # endless run: a renderer slower than the stream must slow the receiver (and, via TCP, the board) instead of queueing frames forever
+            await asyncio.wrap_future(jobs.pop(0))
 
     def finish_render(res: StreamResult) -> None:
         renderer.shutdown(wait=True)
@@ -560,7 +652,7 @@ def main():
         width=IMAGE_W, height=IMAGE_H,
         loader=load, output_dir=None if a.no_save else out_dir,
         on_result=on_result if (a.overlay or a.show or a.mp4) else None,
-        read_hw_trailer=True,
+        read_hw_trailer=True, loop_forever=a.loop, stop_event=stop, rate_fps=a.rate,
     )
     saved = None if a.no_save else out_dir
     metrics_path = None if a.no_save else os.path.join(os.path.dirname(out_dir), "stream_metrics.json")
@@ -572,7 +664,6 @@ def main():
         return
 
     import queue
-    import threading
     live = queue.Queue()
     box = {}
 
@@ -588,6 +679,10 @@ def main():
 
     threading.Thread(target=worker, daemon=True).start()
     _show_live(live, f"{a.name} - class overlay", streamer.num_frames)
+    if a.loop:  # closing the window ends the loop; wait for the stop handshake so the report is complete
+        stop.set()
+        while "res" not in box and "err" not in box:
+            time.sleep(0.05)
     if "err" in box:
         raise box["err"]
     if "res" in box:

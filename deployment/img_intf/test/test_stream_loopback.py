@@ -123,6 +123,105 @@ class StreamLoopbackTest(unittest.TestCase):
                 with open(os.path.join(out_dir, stem + ".raw"), "rb") as f:
                     self.assertEqual(f.read(), process_frame(frames[stem + ".png"]))
 
+    def test_paced_source(self):
+        """rate_fps spaces the sends: N frames need ~(N-1)/rate, and the frames stay correct and in order."""
+        payload, n, rate = 4096, 12, 50.0
+        frames = make_frames(n, payload)
+
+        async def go():
+            srv = StreamSimServer("127.0.0.1", 0, RING_SLOTS, 0.0, payload)
+            await srv.start()
+            try:
+                res = await AsyncImageStreamer("127.0.0.1", srv.port, frames, payload_length=payload,
+                                               timeout_s=30, rate_fps=rate).run()
+            finally:
+                await srv.close()
+            return srv, res
+
+        srv, res = asyncio.run(go())
+        self.assertIsNone(srv.error)
+        self.assertEqual(res.frames, n)
+        gaps = [b - a for a, b in zip(res.send_times, res.send_times[1:])]
+        self.assertGreaterEqual(res.send_times[-1] - res.send_times[0], (n - 1) / rate * 0.95)
+        self.assertLess(res.send_times[-1] - res.send_times[0], (n - 1) / rate * 1.5)
+        self.assertEqual(len(gaps), n - 1)
+
+    def test_loop_forever_stops_cleanly(self):
+        """loop_forever cycles the inputs until stop_event is set; every frame in flight is still received
+        in order, the stop handshake completes and the server saw exactly as many frames in as out."""
+        import threading
+        payload = 4096
+        frames = make_frames(3, payload)
+        stop = threading.Event()
+        received = []
+
+        def on_result(i, data):
+            received.append(data)
+            if i == 20:
+                stop.set()
+
+        async def go():
+            srv = StreamSimServer("127.0.0.1", 0, RING_SLOTS, 0.001, payload)
+            await srv.start()
+            try:
+                res = await AsyncImageStreamer("127.0.0.1", srv.port, frames, payload_length=payload,
+                                               on_result=on_result, timeout_s=30,
+                                               loop_forever=True, stop_event=stop).run()
+            finally:
+                await srv.close()
+            return srv, res
+
+        srv, res = asyncio.run(go())
+        self.assertIsNone(srv.error)
+        self.assertGreater(res.frames, 20)
+        self.assertEqual(len(received), res.frames)
+        self.assertEqual((srv.frames_in, srv.frames_out), (res.frames, res.frames))
+        for i, data in enumerate(received):
+            self.assertEqual(data, process_frame(frames[i % 3]), f"frame {i}")
+
+    def test_loop_forever_stopped_before_first_frame(self):
+        import threading
+        stop = threading.Event()
+        stop.set()
+
+        async def go():
+            srv = StreamSimServer("127.0.0.1", 0, RING_SLOTS, 0.0, 4096)
+            await srv.start()
+            try:
+                res = await AsyncImageStreamer("127.0.0.1", srv.port, make_frames(2, 4096), payload_length=4096,
+                                               timeout_s=30, loop_forever=True, stop_event=stop).run()
+            finally:
+                await srv.close()
+            return srv, res
+
+        srv, res = asyncio.run(go())
+        self.assertIsNone(srv.error)
+        self.assertEqual((res.frames, srv.frames_in), (0, 0))
+
+    def test_loop_forever_output_names_overwrite(self):
+        import threading
+        payload = 4096
+        names = ["a.png", "b.png"]
+        frames = dict(zip(names, make_frames(2, payload)))
+        stop = threading.Event()
+
+        async def go(out_dir):
+            srv = StreamSimServer("127.0.0.1", 0, RING_SLOTS, 0.0, payload)
+            await srv.start()
+            try:
+                return await AsyncImageStreamer(
+                    "127.0.0.1", srv.port, names, payload_length=payload, loader=frames.__getitem__,
+                    output_dir=out_dir, on_result=lambda i, d: stop.set() if i == 6 else None,
+                    timeout_s=30, loop_forever=True, stop_event=stop).run()
+            finally:
+                await srv.close()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = os.path.join(tmp, "raw")
+            res = asyncio.run(go(out_dir))
+            self.assertGreater(res.frames, 6)
+            self.assertEqual(sorted(os.listdir(out_dir)), ["a.raw", "b.raw"])
+
     def test_two_sequential_sessions(self):
         """Server accepts a second session after a clean STOP."""
         frames = make_frames(3, 4096)
