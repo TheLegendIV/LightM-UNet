@@ -11,8 +11,8 @@ Per scheme (INT4, INT6, INT8, mixed 4/6/8; the FINN auto-fold INT6 build is not 
                      <solve>/<arm>/simfifo/layer_bits_folding_*_simfifo.json (the sim-sized FIFOs are included, so this is what was built);
   real (square)      the out-of-context synthesis total of the 8 partitions (synth_utilization.csv, `total` rows; BRAM = BRAM18 + 2 x BRAM36).
   Percent of the XCZU7EV (230,400 LUT / 624 BRAM18 / 1,728 DSP). The 40% cap line is the resource cap the cap40_fps150 solves are held to (LUT / BRAM / DSP each).
-  INT8 does not fit the 0.4 caps at 150 FPS (cap40_fps150/uniform_int8 is infeasible), so its modelled point is the relaxed_fps150/uniform_int8 solve (red); its build is not finished, so its real
-  cost is blank. Real DSP = the DSP48E2 count of synth_utilization.csv (real_dsp_per_partition.json; the DSP field of FINN's OOC reports itself is always 0).
+  INT8 does not fit the 0.4 caps at 150 FPS (cap40_fps150/uniform_int8 is infeasible), so its modelled point is the relaxed_fps150/uniform_int8 solve (red); its real cost is the int8_caps100_fps150 build.
+  Real DSP = the DSP48E2 count of synth_utilization.csv (real_dsp_per_partition.json; the DSP field of FINN's OOC reports itself is always 0).
 Dice: dice_scores.csv (QAT evaluation, FP32 reference dotted). Also written: modelled_vs_real_cost.csv (every number plotted, plus the raw MILP estimate before the FIFO simulation).
 
 Usage:
@@ -42,7 +42,7 @@ MIXED_COLOR = ALPHA_COLORS.get(0.25)
 SCHEMES = {
     "int4": ("INT4", "cap40_fps150/uniform_int4", "layer_bits_folding_int4_cap40_simfifo.json", "int4_cap40"),
     "int6": ("INT6", "cap40_fps150/uniform_int6", "layer_bits_folding_int6_cap40_simfifo.json", "int6_cap40"),
-    "int8": ("INT8", "relaxed_fps150/uniform_int8", "layer_bits_folding_int8_fps150_simfifo.json", None),
+    "int8": ("INT8", "relaxed_fps150/uniform_int8", "layer_bits_folding_int8_fps150_simfifo.json", "int8_caps100_fps150"),
     "mixed468": ("Mixed 4/6/8", "cap40_fps150/mixed_468", "layer_bits_folding_mixed468_cap40_simfifo.json", "mixed468_cap40"),
 }
 RESOURCES = {"lut": "LUT Consumption (%)", "bram": "BRAM18K Consumption (%)", "dsp": "DSP Consumption (%)", "combined": "Mean of LUT, BRAM18K, DSP Consumption (%)", "ff": "FF Consumption (%)"}
