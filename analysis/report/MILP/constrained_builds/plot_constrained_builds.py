@@ -4,6 +4,7 @@
   s12_512_constrained_bram.png   Dice vs BRAM18K %
   s12_512_constrained_dsp.png    Dice vs DSP %
   s12_512_constrained_combined.png  Dice vs the equal-weight mean of the LUT %, BRAM18K % and DSP %
+  s12_512_constrained_estimated.png  (light-blue hatched "Infeasible" region right of the cap) Dice vs modelled LUT (open circle) / BRAM18K (x) / DSP (+) %, three markers per scheme on one horizontal line, no real points
   s12_512_constrained_ff.png     Dice vs FF % (real synthesis only: the ILP does not model flip-flops; 460,800 FF in the XCZU7EV; no cap line for now)
 
 Per scheme (INT4, INT6, INT8, mixed 4/6/8; the FINN auto-fold INT6 build is not shown), two markers joined by a line:
@@ -38,6 +39,8 @@ from plot_uniform_vs_ilp_overlay import UNIFORM_COLOR  # noqa: E402
 ARTIFACTS = REPO_ROOT / "MILP" / "artifacts" / "S12_512_ablation_v2"
 BUDGET = {"lut": 230400.0, "bram": 624.0, "dsp": 1728.0, "ff": 460800.0, "uram": 96.0}        # XCZU7EV: LUT, BRAM18, DSP, FF, URAM288
 CAP_PCT = 40.0
+INFEASIBLE_BG, INFEASIBLE_HATCH = "#cfe3f5", "#9a9a9a"      # shaded region beyond the resource cap
+MARK_SIZE, MARK_WIDTH = 11, 1.3      # estimated-resource plot: same size and thin stroke for every marker
 INFEASIBLE_COLOR = "#c0392b"
 MIXED_COLOR = ALPHA_COLORS.get(0.25)
 
@@ -46,7 +49,7 @@ SCHEMES = {
     "int4": ("INT4", "cap40_fps150/uniform_int4", "layer_bits_folding_int4_cap40_simfifo.json", "int4_cap40"),
     "int6": ("INT6", "cap40_fps150/uniform_int6", "layer_bits_folding_int6_cap40_simfifo.json", "int6_cap40"),
     "int8": ("INT8", "relaxed_fps150/uniform_int8", "layer_bits_folding_int8_fps150_simfifo.json", "int8_caps100_fps150"),
-    "mixed468": ("Mixed 4/6/8", "cap40_fps150/mixed_468", "layer_bits_folding_mixed468_cap40_simfifo.json", "mixed468_cap40"),
+    "mixed468": ("Mixed", "cap40_fps150/mixed_468", "layer_bits_folding_mixed468_cap40_simfifo.json", "mixed468_cap40"),
 }
 RESOURCES = {"lut": "LUT Consumption (%)", "bram": "BRAM18K Consumption (%)", "dsp": "DSP Consumption (%)", "combined": "Mean of LUT, BRAM18K, DSP Consumption (%)", "ff": "FF Consumption (%)"}
 TITLE_WORD = {"lut": "LUT", "bram": "BRAM18K", "dsp": "DSP", "combined": "Combined", "ff": "FF"}
@@ -161,6 +164,54 @@ def plot_one(resource: str, costs: dict, dice: dict, fp32: float, out_path: Path
     print(f"Wrote {out_path}")
 
 
+def plot_estimated(costs: dict, dice: dict, fp32: float, out_path: Path) -> None:
+    """Dice vs resource: per scheme, three markers (open circle LUT, x BRAM18K, + DSP) on a horizontal line at the scheme's Dice: the modelled (ILP + FIFO sim) % of the device. No real synthesis points."""
+    import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
+
+    marks = {"lut": ("o", "LUT"), "bram": ("x", "BRAM18K"), "dsp": ("+", "DSP")}     # open markers, so overlapping estimates stay visible
+    plt.rcParams["hatch.linewidth"] = 0.5       # thin hatch lines
+    fig, ax = plt.subplots(figsize=(7.5, 5.8), facecolor=SURFACE)
+    _style_axes(ax)
+    ax.axhline(fp32, color=INK, linestyle=":", linewidth=1.2, zorder=1, label=f"FP32 baseline ({fp32:.4f})")
+    ax.axvline(CAP_PCT, color=INK, linewidth=1.2, alpha=0.6, zorder=1, label="40% resource cap")
+    keys = list(costs)
+    for key in keys:
+        y = dice[key]
+        c = costs[key]
+        color = MIXED_COLOR if key == "mixed468" else (INFEASIBLE_COLOR if key == "int8" else UNIFORM_COLOR)
+        xs = {r: pct(c, "model", r) for r in marks}
+        ax.plot([min(xs.values()), max(xs.values())], [y, y], color=color, linewidth=1.2, alpha=0.6, zorder=3)
+        for z, (r, (m, _)) in enumerate(marks.items()):
+            ax.plot([xs[r]], [y], marker=m, markersize=MARK_SIZE, markerfacecolor="none", markeredgecolor=color, markeredgewidth=MARK_WIDTH, linestyle="none", zorder=5 + z)
+        if key == "mixed468":        # sits just under the INT8 line and above the INT6 line, so its label goes right of its markers
+            ax.annotate(c["label"], (max(xs.values()), y), xytext=(14, 0), textcoords="offset points", ha="left", va="center", color=color, fontsize=10, fontweight="bold")
+        else:
+            ax.annotate(c["label"], (min(xs.values()), y), xytext=(0, 12), textcoords="offset points", ha="left", color=color, fontsize=10, fontweight="bold")
+    ax.set_xlabel("Estimated Resource Consumption (%)", color=INK, fontsize=11, fontweight="bold")
+    ax.set_ylabel("Dice", color=INK, fontsize=11, fontweight="bold")
+    ax.set_title("Dice vs. Estimated Resource Consumption", color=INK, fontsize=12, fontweight="bold")
+    lo, hi = ax.get_xlim()
+    ax.set_xlim(max(0, lo), max(hi, CAP_PCT + 3))
+    ax.set_ylim(top=0.82)
+    x_right = ax.get_xlim()[1]
+    ax.axvspan(CAP_PCT, x_right, facecolor=INFEASIBLE_BG, edgecolor=INFEASIBLE_HATCH, hatch="/////", linewidth=0, alpha=0.5, zorder=0, label="Infeasible")     # right of the cap: light blue, fine grey diagonal hatch
+    ax.set_xlim(max(0, lo), x_right)
+    for t in ax.get_xticklabels() + ax.get_yticklabels():
+        t.set_fontweight("bold")
+    handles, labels = ax.get_legend_handles_labels()
+    for m, name in marks.values():
+        handles.append(Line2D([], [], marker=m, color="none", markerfacecolor="none", markeredgecolor=SECONDARY_INK, markeredgewidth=MARK_WIDTH, markersize=MARK_SIZE))
+        labels.append(name)
+    leg = ax.legend(handles, labels, loc="lower right", frameon=True, facecolor=SURFACE, edgecolor="#c3c2b7", fontsize=7.5, markerscale=0.75, borderpad=0.5, labelspacing=0.35, labelcolor=SECONDARY_INK)
+    for t in leg.get_texts():
+        t.set_fontweight("bold")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=SURFACE)
+    plt.close(fig)
+    print(f"Wrote {out_path}")
+
+
 def main() -> int:
     costs = load_costs()
     write_cost_csv(costs, HERE / "modelled_vs_real_cost.csv")
@@ -168,6 +219,7 @@ def main() -> int:
     dice, fp32 = load_dice()
     for resource in RESOURCES:
         plot_one(resource, costs, dice, fp32, HERE / f"s12_512_constrained_{resource}.png")
+    plot_estimated(costs, dice, fp32, HERE / "s12_512_constrained_estimated.png")
     for key, c in costs.items():
         print(f"combined modelled {c['label']}: {pct(c, 'model', 'combined'):.2f}%  real: {pct(c, 'real', 'combined')}")
     return 0
