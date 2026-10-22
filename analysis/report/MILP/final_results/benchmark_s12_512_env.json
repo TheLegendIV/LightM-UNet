@@ -118,5 +118,87 @@
     ],
     "batch_size": 1,
     "warmup": 10
+  },
+  "cpu:int8_ort": {
+    "platform": "12th Gen Intel(R) Core(TM) i7-1260P",
+    "checkpoint": "nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_bilinear_upsample_256_perlayer_12_dense_relu_warmstart150ep_bilinear_uniform_int8_perlayer_ft15ep",
+    "input": "uint8 levels as float32, profile s12_512_bilinear_int8_maxfps",
+    "warm_runs_s": [
+      3.147049110964872,
+      3.202695084037259,
+      3.13260052195983,
+      3.1237134099937975,
+      3.026568627974484
+    ],
+    "warmup": 10,
+    "batch_size": 1,
+    "timestamp": "2026-10-22T20:44:37",
+    "runtime": "onnxruntime 1.23.2",
+    "threads": 0,
+    "providers": [
+      "CPUExecutionProvider"
+    ],
+    "energy": {
+      "energy_dyn_j_per_image_mean": 0.37058522886940315,
+      "energy_dyn_j_per_image_std": 0.017433828298956993,
+      "energy_dyn_j_per_image_runs": [
+        0.34045150886817394,
+        0.3734688663023748,
+        0.3738332918631479,
+        0.38321815860165137,
+        0.3819543187116677
+      ],
+      "energy_j_per_image_runs": [
+        0.46132314041256905,
+        0.49647760403342545,
+        0.4941498647847523,
+        0.5030954188543061,
+        0.49819840138157206
+      ],
+      "power_idle_before_w": 12.695014366941344,
+      "power_idle_after_w": 10.34962410675599,
+      "idle_window_s": 30.02771782875061,
+      "energy_source": "Windows Energy Meter RAPL_Package0_PKG (CPU package incl. iGPU, no DRAM / wall)"
+    }
+  },
+  "cuda:int8_trt": {
+    "platform": "NVIDIA GeForce RTX 2050",
+    "checkpoint": "nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_bilinear_upsample_256_perlayer_12_dense_relu_warmstart150ep_bilinear_uniform_int8_perlayer_ft15ep",
+    "input": "uint8 levels as float32, profile s12_512_bilinear_int8_maxfps",
+    "warm_runs_s": [
+      0.8027320556640625,
+      0.8149166259765624,
+      0.8176207275390625,
+      0.8178626098632813,
+      0.8196649169921875
+    ],
+    "warmup": 10,
+    "batch_size": 1,
+    "timestamp": "2026-10-22T20:50:04",
+    "runtime": "TensorRT 10.3.0",
+    "builder_flags": "INT8 + FP16",
+    "engine_layers": 154,
+    "energy": {
+      "energy_dyn_j_per_image_mean": 0.07578959829649742,
+      "energy_dyn_j_per_image_std": 0.006556261760767656,
+      "energy_dyn_j_per_image_runs": [
+        0.06776911075217695,
+        0.07421276996983538,
+        0.07481421314287957,
+        0.07616263600546609,
+        0.0859892616121291
+      ],
+      "energy_j_per_image_runs": [
+        0.08003000000006674,
+        0.08664999999998448,
+        0.08729000000001785,
+        0.0886433333333116,
+        0.09849666666666357
+      ],
+      "power_idle_before_w": 4.364885230588666,
+      "power_idle_after_w": 4.7821200673748985,
+      "idle_window_s": 30.03080105781555,
+      "energy_source": "NVML nvmlDeviceGetTotalEnergyConsumption (RTX 2050 board energy)"
+    }
   }
 }

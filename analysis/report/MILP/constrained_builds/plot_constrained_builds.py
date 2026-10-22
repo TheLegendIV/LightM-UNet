@@ -13,10 +13,13 @@ Per scheme (INT4, INT6, INT8, mixed 4/6/8; the FINN auto-fold INT6 build is not 
   Percent of the XCZU7EV (230,400 LUT / 624 BRAM18 / 1,728 DSP). The 40% cap line is the resource cap the cap40_fps150 solves are held to (LUT / BRAM / DSP each).
   INT8 does not fit the 0.4 caps at 150 FPS (cap40_fps150/uniform_int8 is infeasible), so its modelled point is the relaxed_fps150/uniform_int8 solve (red); its real cost is the int8_caps100_fps150 build.
   Real DSP = the DSP48E2 count of synth_utilization.csv (real_dsp_per_partition.json; the DSP field of FINN's OOC reports itself is always 0).
-Dice: dice_scores.csv (QAT evaluation, FP32 reference dotted). Also written: modelled_vs_real_cost.csv (every number plotted, plus the raw MILP estimate before the FIFO simulation).
+Dice: dice_scores.csv (QAT evaluation, FP32 reference dotted). Also written: modelled_vs_real_cost.csv (every number plotted, plus the raw MILP estimate before the FIFO simulation, plus the model_uncal_*
+columns: the same final design priced by STOCK FINN v0.10.1's own estimators (no constant of this repo's cost model; MVAU_rtl and the stream nodes are 0 LUT, every Thresholding stage is URAM because the
+bridge leaves depth_trigger_uram at 0), from build_uncalibrated_cost.py -> uncalibrated_cost.json; blank when that file is missing; not plotted).
 
 Usage:
     python analysis/report/MILP/constrained_builds/build_dice_csv.py      # dice_scores.csv
+    python analysis/report/MILP/constrained_builds/build_uncalibrated_cost.py   # uncalibrated_cost.json (MILP container: needs torch)
     python analysis/report/MILP/constrained_builds/plot_constrained_builds.py
 """
 from __future__ import annotations
@@ -33,7 +36,7 @@ from plot_forcedsp_lut70_alpha_sweep import INK, SECONDARY_INK, SURFACE, ALPHA_C
 from plot_uniform_vs_ilp_overlay import UNIFORM_COLOR  # noqa: E402
 
 ARTIFACTS = REPO_ROOT / "MILP" / "artifacts" / "S12_512_ablation_v2"
-BUDGET = {"lut": 230400.0, "bram": 624.0, "dsp": 1728.0, "ff": 460800.0}        # XCZU7EV: LUT, BRAM18, DSP, FF
+BUDGET = {"lut": 230400.0, "bram": 624.0, "dsp": 1728.0, "ff": 460800.0, "uram": 96.0}        # XCZU7EV: LUT, BRAM18, DSP, FF, URAM288
 CAP_PCT = 40.0
 INFEASIBLE_COLOR = "#c0392b"
 MIXED_COLOR = ALPHA_COLORS.get(0.25)
@@ -54,6 +57,8 @@ def load_costs() -> dict:
     for r in csv.DictReader(open(HERE / "synth_utilization.csv", newline="")):
         if r["partition"] == "total":
             synth[r["build"]] = r
+    uncal_path = HERE / "uncalibrated_cost.json"
+    uncal = json.loads(uncal_path.read_text()) if uncal_path.exists() else None
     out = {}
     for key, (label, solve, sim_json, build) in SCHEMES.items():
         d = json.loads((ARTIFACTS / solve / "simfifo" / sim_json).read_text())["_diagnostics"]
@@ -67,13 +72,17 @@ def load_costs() -> dict:
             c["real_bram"] = float(synth[build]["BRAM18_equiv"])
             c["real_dsp"] = float(synth[build]["DSP"])
             c["real_ff"] = float(synth[build]["FF"])
+        c["model_uncal_lut"] = c["model_uncal_bram"] = c["model_uncal_dsp"] = c["model_uncal_uram"] = None
+        if uncal and key in uncal:        # build_uncalibrated_cost.py: the same final design priced by STOCK FINN's own estimators (no constant of this repo's cost model)
+            c["model_uncal_lut"], c["model_uncal_bram"], c["model_uncal_dsp"], c["model_uncal_uram"] = (uncal[key]["uncalibrated"][k] for k in ("lut", "bram18", "dsp", "uram"))
         out[key] = c
     return out
 
 
 def write_cost_csv(costs: dict, path: Path) -> None:
     cols = ["scheme", "milp_solve", "milp_lut_pct", "milp_bram_pct", "milp_dsp_pct", "model_lut", "model_lut_pct", "real_lut", "real_lut_pct", "model_bram18", "model_bram_pct", "real_bram18eq",
-            "real_bram_pct", "model_dsp", "model_dsp_pct", "real_dsp", "real_dsp_pct", "real_ff", "real_ff_pct"]
+            "real_bram_pct", "model_dsp", "model_dsp_pct", "real_dsp", "real_dsp_pct", "real_ff", "real_ff_pct",
+            "model_uncal_lut", "model_uncal_lut_pct", "model_uncal_bram18", "model_uncal_bram_pct", "model_uncal_dsp", "model_uncal_dsp_pct", "model_uncal_uram", "model_uncal_uram_pct"]
     pct = lambda v, k: "" if v is None else f"{100 * v / BUDGET[k]:.2f}"  # noqa: E731
     num = lambda v: "" if v is None else f"{v:.0f}"                         # noqa: E731
     with open(path, "w", newline="") as f:
@@ -83,7 +92,9 @@ def write_cost_csv(costs: dict, path: Path) -> None:
             w.writerow([c["label"], c["solve"], f"{c['milp_lut_pct']:.2f}", f"{c['milp_bram_pct']:.2f}", f"{c['milp_dsp_pct']:.2f}",
                         num(c["model_lut"]), pct(c["model_lut"], "lut"), num(c["real_lut"]), pct(c["real_lut"], "lut"),
                         num(c["model_bram"]), pct(c["model_bram"], "bram"), num(c["real_bram"]), pct(c["real_bram"], "bram"),
-                        num(c["model_dsp"]), pct(c["model_dsp"], "dsp"), num(c["real_dsp"]), pct(c["real_dsp"], "dsp"), num(c["real_ff"]), pct(c["real_ff"], "ff")])
+                        num(c["model_dsp"]), pct(c["model_dsp"], "dsp"), num(c["real_dsp"]), pct(c["real_dsp"], "dsp"), num(c["real_ff"]), pct(c["real_ff"], "ff"),
+                        num(c["model_uncal_lut"]), pct(c["model_uncal_lut"], "lut"), num(c["model_uncal_bram"]), pct(c["model_uncal_bram"], "bram"),
+                        num(c["model_uncal_dsp"]), pct(c["model_uncal_dsp"], "dsp"), num(c["model_uncal_uram"]), pct(c["model_uncal_uram"], "uram")])
 
 
 def load_dice() -> tuple[dict, float]:
