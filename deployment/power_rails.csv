@@ -1,0 +1,55 @@
+model_name,config,condition,rail,ref,channel,addr,bus_v,current_a,power_w,n_samples,errors,voltage_ok
+s12_512_bilinear_int8_maxfps,board_power,Idle,VCCPSINTFP,u76,0,0x40,0.8482,1.2605,1.06914,1746,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle,VCCPSINTLP,u77,0,0x41,0.8476,0.3048,0.25833,1746,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle,VCCPSAUX,u78,0,0x42,1.8144,0.0101,0.01828,1746,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle,VCCPSPLL,u87,0,0x43,1.198,0.0423,0.05073,1746,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle,MGTRAVCC,u85,0,0x44,0.8492,0.0888,0.07541,1746,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle,MGTRAVTT,u86,0,0x45,1.8125,0.0113,0.02049,1746,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle,VCCO_PSDDR_504,u93,0,0x46,1.1901,0.1566,0.18637,1746,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle,VCCOPS,u88,0,0x47,1.7973,-0.0091,-0.01633,1746,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle,VCCOPS3,u15,0,0x4a,1.8199,0.004,0.00729,1744,0,0
+s12_512_bilinear_int8_maxfps,board_power,Idle,VCCPSDDRPLL,u92,0,0x4b,1.8143,0.0235,0.04265,1744,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle,VCCINT,u79,1,0x40,0.8461,2.0577,1.74099,1744,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle,VCCBRAM,u81,1,0x41,0.9002,0.0578,0.05207,1744,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle,VCCAUX,u80,1,0x42,1.7961,0.1484,0.26657,1744,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle,VCC1V2,u84,1,0x43,1.2,0.0365,0.04378,1744,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle,VCC3V3,u16,1,0x44,3.2969,0.0027,0.00902,1744,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle,VADJ_FMC,u65,1,0x45,1.7974,0.0011,0.00199,1744,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle,MGTAVCC,u74,1,0x46,0.9005,0.0145,0.01301,1744,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle,MGTAVTT,u75,1,0x47,1.1997,0.0142,0.017,1744,0,1
+s12_512_bilinear_int8_maxfps,board_power,Inference (back-to-back),VCCPSINTFP,u76,0,0x40,0.8483,1.2803,1.08611,3472,0,1
+s12_512_bilinear_int8_maxfps,board_power,Inference (back-to-back),VCCPSINTLP,u77,0,0x41,0.8478,0.3063,0.25972,3472,0,1
+s12_512_bilinear_int8_maxfps,board_power,Inference (back-to-back),VCCPSAUX,u78,0,0x42,1.8145,0.0101,0.01827,3472,0,1
+s12_512_bilinear_int8_maxfps,board_power,Inference (back-to-back),VCCPSPLL,u87,0,0x43,1.198,0.0424,0.05082,3472,0,1
+s12_512_bilinear_int8_maxfps,board_power,Inference (back-to-back),MGTRAVCC,u85,0,0x44,0.8492,0.0889,0.07551,3472,0,1
+s12_512_bilinear_int8_maxfps,board_power,Inference (back-to-back),MGTRAVTT,u86,0,0x45,1.8125,0.0113,0.02051,3472,0,1
+s12_512_bilinear_int8_maxfps,board_power,Inference (back-to-back),VCCO_PSDDR_504,u93,0,0x46,1.1899,0.166,0.19755,3472,0,1
+s12_512_bilinear_int8_maxfps,board_power,Inference (back-to-back),VCCOPS,u88,0,0x47,1.7975,-0.009,-0.01625,3472,0,1
+s12_512_bilinear_int8_maxfps,board_power,Inference (back-to-back),VCCOPS3,u15,0,0x4a,1.8199,0.004,0.00726,3472,0,0
+s12_512_bilinear_int8_maxfps,board_power,Inference (back-to-back),VCCPSDDRPLL,u92,0,0x4b,1.8143,0.0236,0.04276,3472,0,1
+s12_512_bilinear_int8_maxfps,board_power,Inference (back-to-back),VCCINT,u79,1,0x40,0.8462,4.1984,3.5527,3472,0,1
+s12_512_bilinear_int8_maxfps,board_power,Inference (back-to-back),VCCBRAM,u81,1,0x41,0.9005,0.069,0.06216,3472,0,1
+s12_512_bilinear_int8_maxfps,board_power,Inference (back-to-back),VCCAUX,u80,1,0x42,1.7962,0.1477,0.26539,3472,0,1
+s12_512_bilinear_int8_maxfps,board_power,Inference (back-to-back),VCC1V2,u84,1,0x43,1.2002,0.0365,0.04383,3472,0,1
+s12_512_bilinear_int8_maxfps,board_power,Inference (back-to-back),VCC3V3,u16,1,0x44,3.2971,0.0027,0.009,3472,0,1
+s12_512_bilinear_int8_maxfps,board_power,Inference (back-to-back),VADJ_FMC,u65,1,0x45,1.7973,0.0011,0.00198,3471,0,1
+s12_512_bilinear_int8_maxfps,board_power,Inference (back-to-back),MGTAVCC,u74,1,0x46,0.9007,0.0158,0.0142,3469,0,1
+s12_512_bilinear_int8_maxfps,board_power,Inference (back-to-back),MGTAVTT,u75,1,0x47,1.2,0.0143,0.01718,3468,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle (after inference),VCCPSINTFP,u76,0,0x40,0.8482,1.2686,1.07596,1746,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle (after inference),VCCPSINTLP,u77,0,0x41,0.8475,0.3059,0.25927,1746,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle (after inference),VCCPSAUX,u78,0,0x42,1.8144,0.0101,0.01827,1746,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle (after inference),VCCPSPLL,u87,0,0x43,1.198,0.0424,0.05079,1744,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle (after inference),MGTRAVCC,u85,0,0x44,0.8492,0.0888,0.07543,1744,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle (after inference),MGTRAVTT,u86,0,0x45,1.8125,0.0113,0.02052,1744,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle (after inference),VCCO_PSDDR_504,u93,0,0x46,1.1901,0.1529,0.18197,1744,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle (after inference),VCCOPS,u88,0,0x47,1.7974,-0.0091,-0.01629,1744,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle (after inference),VCCOPS3,u15,0,0x4a,1.8199,0.004,0.00725,1744,0,0
+s12_512_bilinear_int8_maxfps,board_power,Idle (after inference),VCCPSDDRPLL,u92,0,0x4b,1.8143,0.0236,0.04275,1744,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle (after inference),VCCINT,u79,1,0x40,0.8461,2.0898,1.76816,1744,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle (after inference),VCCBRAM,u81,1,0x41,0.9002,0.0594,0.05348,1744,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle (after inference),VCCAUX,u80,1,0x42,1.7961,0.148,0.26585,1744,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle (after inference),VCC1V2,u84,1,0x43,1.1999,0.0365,0.04385,1744,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle (after inference),VCC3V3,u16,1,0x44,3.2968,0.0027,0.00904,1744,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle (after inference),VADJ_FMC,u65,1,0x45,1.7974,0.0011,0.00199,1744,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle (after inference),MGTAVCC,u74,1,0x46,0.9005,0.0154,0.01387,1744,0,1
+s12_512_bilinear_int8_maxfps,board_power,Idle (after inference),MGTAVTT,u75,1,0x47,1.1996,0.0141,0.01691,1744,0,1

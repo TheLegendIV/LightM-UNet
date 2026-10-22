@@ -44,10 +44,13 @@ MARKER_IMAGE = 0x01
 #   MARKER_LATENCY                    : lockstep per image; reply "LAT" + u32 n + n x 3 u32 PL ticks
 #   MARKER_RUN     + u8 mode + u8 reps: run the whole split `reps` times; reply "RUN" + u32 reps + reps x 3 u32 PL ticks
 #   MARKER_FETCH                      : reply "OUT" + u32 n, then n class maps
+#   MARKER_POWER   + u8 mode + u8 warmup_s + u8 window_s : sample the board's INA226 rails (mode 0: accelerator idle,
+#                     mode 1: the loaded split runs back-to-back); reply "PWR" + u32 18 + raw per-device sums (collect_split.py)
 MARKER_LOAD = 0x03
 MARKER_LATENCY = 0x04
 MARKER_RUN = 0x05
 MARKER_FETCH = 0x06
+MARKER_POWER = 0x07
 
 
 @dataclass(frozen=True)

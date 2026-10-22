@@ -26,8 +26,25 @@ PL_CLOCK_MHZ = 187.481262 MHz:
                                         and how far that is from hw_infer_ms (the model-vs-hardware check)
 (send_seconds is a legacy column: host time of the older lockstep runs; it is kept, not written any more.)
 
+Board power (--power; needs the lwip_collect_results build with the POWER command): the 18 INA226 rail monitors of the
+ZCU106 are sampled over the PS I2C bus (about 90 sweeps/s) in three windows of the same session and written to
+deployment/power_results.csv (one row per condition, key (model_name, config, condition, source)) and, per rail, to
+deployment/power_rails.csv:
+  Idle                          accelerator idle (before the images are loaded)             --power-idle-s
+  Inference (back-to-back)      the split runs back-to-back, after --power-warmup-s of unmeasured warm-up, for --power-load-s
+  Idle (after inference)        accelerator idle again (thermal drift check)                 (--no-power-idle-after skips it)
+  board_power_w                 SUM OF THE MONITORED RAILS (PS + PL, after the regulators: no conversion losses, no fan /
+                                clocks / PHYs). Differences between conditions on the same board are exact; the absolute
+                                value is not the 12 V input power.
+  increase_above_idle_w         board_power_w - board_power_w(Idle)
+  throughput_fps                images / (sum of the PL-tick pass times) of the passes inside the measured window
+  energy_per_image_mj           board_power_w / throughput_fps; dynamic_energy_per_image_mj uses the increase above idle
+For the true input power of the board read a plug / 12 V meter and pass --ext-power-idle-w / --ext-power-load-w: the same
+rows are added with source=external_meter (throughput from the same run).
+
   python deployment/collect_results.py                       # whole imagesTs, default build s12_512_bilinear_int8_maxfps
   python deployment/collect_results.py --limit 10            # smoke test
+  python deployment/collect_results.py --power               # + board power: idle / inference / idle after (about 1 min more)
   python deployment/collect_results.py --dma-mode frame      # one DMA start per image instead of one for the split
   python deployment/collect_results.py --no-send             # re-evaluate stored outputs
 """
@@ -48,17 +65,25 @@ REPO_ROOT = DEPLOYMENT.parent
 sys.path.insert(0, str(DEPLOYMENT))
 sys.path.insert(0, str(REPO_ROOT / "analysis" / "501_ARCADE"))
 import segmentation_topology as topo  # noqa: E402
-from img_intf.interfaces.collect_split import DMA_MODE_BATCH, DMA_MODE_FRAME, run_split_benchmark, ticks_to_intervals  # noqa: E402
+from img_intf.interfaces.collect_split import (  # noqa: E402
+    DMA_MODE_BATCH, DMA_MODE_FRAME, HandshakeError, PowerPlan, run_split_benchmark, ticks_to_intervals,
+)
+from img_intf.utils.power_report import (  # noqa: E402
+    PL_CLOCK_MHZ, POWER_COLUMNS, POWER_KEY, POWER_RAIL_COLUMNS, POWER_RAIL_KEY, external_power_rows, power_tables,
+    print_power_table, print_rail_table, upsert_csv,
+)
 from img_intf.utils.preprocess import case_id, png_to_u8  # noqa: E402
 
 IMAGE_H = int(os.getenv("IMAGE_H", "512"))
 IMAGE_W = int(os.getenv("IMAGE_W", "512"))
 RESULTS_CSV = DEPLOYMENT / "results.csv"
+POWER_CSV = DEPLOYMENT / "power_results.csv"
+POWER_RAILS_CSV = DEPLOYMENT / "power_rails.csv"
 NNUNET_RAW = REPO_ROOT / "data" / "nnUNet_raw"
 NNUNET_PREPROCESSED = REPO_ROOT / "data" / "nnUNet_preprocessed"
 OUTPUT_ROOT = DEPLOYMENT / "img_intf" / "output"
 CLASSES = ["LAD", "RCA", "LCX", "LM"]  # label ids 1..4 of Dataset509_ARCADE_1x1_4c
-PL_CLOCK_MHZ = 187.481262  # accelerator clock of the current bitstream (converts PL ticks to time)
+# PL_CLOCK_MHZ (accelerator clock of the current bitstream, converts PL ticks to time) is defined in img_intf/utils/power_report.py
 
 PERF_COLUMNS = ["split_repeats", "split_seconds", "split_seconds_std", "split_fps", "hw_infer_ms", "hw_infer_fps",
                 "hw_first_output_ms", "hw_latency_ms", "hw_latency_max_ms",
@@ -122,12 +147,25 @@ def upsert_row(row: dict) -> None:
         w.writerows(rows)
 
 
-def run_on_board(inputs: list[Path], raw_dir: Path, ip: str, port: int, dma_mode: int, repeats: int) -> dict:
+def run_on_board(inputs: list[Path], raw_dir: Path, ip: str, port: int, dma_mode: int, repeats: int,
+                 power_plan: PowerPlan | None = None) -> tuple[dict, dict | None]:
     """One session on lwip_collect_results: upload the split, per-image latency pass, `repeats` timed passes over the
-    whole split, download the class maps (stored as <raw_dir>/<input stem>.raw). Returns the speed columns."""
+    whole split, download the class maps (stored as <raw_dir>/<input stem>.raw). With `power_plan` the board's rails are
+    sampled around it too. Returns (the speed columns, the raw POWER replies or None)."""
     frames = [p.read_bytes() for p in inputs]
     n = len(frames)
-    r = run_split_benchmark(ip, port, frames, dma_mode=dma_mode, repeats=repeats, width=IMAGE_W, height=IMAGE_H)
+    try:
+        r = run_split_benchmark(ip, port, frames, dma_mode=dma_mode, repeats=repeats, width=IMAGE_W, height=IMAGE_H,
+                                power=power_plan)
+    except HandshakeError:
+        raise
+    except (ConnectionError, OSError) as exc:
+        if power_plan is None:
+            raise
+        raise RuntimeError(f"the session failed during a --power run ({exc}). Either the firmware has no POWER command (an "
+                           "lwip_collect_results build without it drops the session on the first POWER command: rebuild with "
+                           "src/power_mon.c + src/run.c), or the board hung / reset (check its UART log). Run without --power to "
+                           "separate the two") from exc
 
     raw_dir.mkdir(parents=True, exist_ok=True)
     for p, out in zip(inputs, r["outputs"]):
@@ -167,7 +205,7 @@ def run_on_board(inputs: list[Path], raw_dir: Path, ip: str, port: int, dma_mode
         print("[WARN] no valid split timing from the board (latency monitor missing or not armed)")
     print(f"[INFO] network: upload + latency pass {r['upload_s']:.1f} s, download {r['fetch_s']:.1f} s (not part of the "
           "inference numbers)")
-    return perf
+    return perf, r["power"]
 
 
 def compare_with_milp(milp_json: Path, measured_interval_ms: float) -> dict:
@@ -198,7 +236,21 @@ def main() -> None:
                     help="batch: one idma/odma start for the whole split (numReps = n); frame: one start per image")
     ap.add_argument("--milp-json", type=Path,
                     help="MILP layer_bits_folding_*.json of this build: records its predicted bottleneck (cycles at the PL clock) and the error against the measured steady-state interval")
+    ap.add_argument("--power", action="store_true",
+                    help="also measure the board's rail power (INA226 monitors): idle / inference / idle after -> power_results.csv, power_rails.csv")
+    ap.add_argument("--power-idle-s", type=int, default=10, help="length of each idle window (default 10)")
+    ap.add_argument("--power-warmup-s", type=int, default=5, help="inference warm-up before the measured window, run but not measured (default 5)")
+    ap.add_argument("--power-load-s", type=int, default=20, help="measured inference window (default 20)")
+    ap.add_argument("--no-power-idle-after", action="store_true", help="skip the second idle window after the inference window")
+    ap.add_argument("--ext-power-idle-w", type=float, help="board input power read from an external meter with the accelerator idle (W); needs --ext-power-load-w")
+    ap.add_argument("--ext-power-load-w", type=float, help="board input power from the external meter while the split runs back-to-back (W)")
     a = ap.parse_args()
+    if (a.ext_power_idle_w is None) != (a.ext_power_load_w is None):
+        ap.error("--ext-power-idle-w and --ext-power-load-w go together")
+    if a.power and a.no_send:
+        ap.error("--power needs the board (drop --no-send)")
+    power_plan = (PowerPlan(idle_s=a.power_idle_s, warmup_s=a.power_warmup_s, load_s=a.power_load_s,
+                            idle_after=not a.no_power_idle_after) if a.power else None)
 
     images = sorted((NNUNET_RAW / a.dataset / "imagesTs").glob("*.png"))[: a.limit]
     if not images:
@@ -210,9 +262,10 @@ def main() -> None:
     print(f"[INFO] {len(inputs)} preprocessed inputs ready")
 
     perf: dict = {}
+    power_raw = None
     if not a.no_send:
-        perf = run_on_board(inputs, raw_dir, a.ip, a.port,
-                            DMA_MODE_BATCH if a.dma_mode == "batch" else DMA_MODE_FRAME, a.repeats)
+        perf, power_raw = run_on_board(inputs, raw_dir, a.ip, a.port,
+                                       DMA_MODE_BATCH if a.dma_mode == "batch" else DMA_MODE_FRAME, a.repeats, power_plan)
 
     labels_dir = Path(a.labels_dir) if a.labels_dir else NNUNET_RAW / a.dataset / "labelsTs"
     if not labels_dir.is_dir():
@@ -233,6 +286,31 @@ def main() -> None:
     upsert_row(row)
     print(f"[INFO] wrote {RESULTS_CSV.name} row ({a.model_name}, {a.config}): "
           + ", ".join(f"{k}={v:.4f}" for k, v in metrics.items() if isinstance(v, float) and k in ("dice", "dice_binary")))
+
+    stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    power_rows: list = []
+    failure = None
+    if power_raw is not None:
+        try:
+            power_rows, rail_rows = power_tables(a.model_name, a.config, power_raw, stamp)
+            upsert_csv(POWER_RAILS_CSV, POWER_RAIL_COLUMNS, POWER_RAIL_KEY, rail_rows)
+            print(f"[INFO] wrote {len(rail_rows)} rail rows to {POWER_RAILS_CSV.name}")
+            print_rail_table(rail_rows)
+        except RuntimeError as exc:
+            failure = exc
+    if a.ext_power_idle_w is not None:
+        fps = next((r["throughput_fps"] for r in power_rows if r.get("throughput_fps")), None) or float(row.get("split_fps") or 0)
+        if fps > 0:
+            power_rows += external_power_rows(a.model_name, a.config, a.ext_power_idle_w, a.ext_power_load_w, fps, stamp)
+        else:
+            print("[WARN] no throughput known for this build (run without --no-send first): external meter rows not written")
+    if power_rows:
+        upsert_csv(POWER_CSV, POWER_COLUMNS, POWER_KEY, power_rows)
+        print(f"[INFO] wrote {len(power_rows)} row(s) to {POWER_CSV.name}")
+        print_power_table(power_rows)
+    if failure is not None:
+        print(f"[ERROR] {failure}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

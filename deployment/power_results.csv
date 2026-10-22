@@ -1,0 +1,4 @@
+model_name,config,condition,source,board_power_w,increase_above_idle_w,throughput_fps,energy_per_image_mj,dynamic_energy_per_image_mj,n_rails,n_samples,window_s,passes,timestamp
+s12_512_bilinear_int8_maxfps,board_power,Idle,ina226_rails,3.8568,0.0,,,,18,1744,10.0,,2026-10-22 18:57:42
+s12_512_bilinear_int8_maxfps,board_power,Inference (back-to-back),ina226_rails,5.7087,1.8519,354.76,16.092,5.22,18,3468,20.0,20,2026-10-22 18:57:42
+s12_512_bilinear_int8_maxfps,board_power,Idle (after inference),ina226_rails,3.8891,0.0323,,,,18,1744,10.0,,2026-10-22 18:57:42
