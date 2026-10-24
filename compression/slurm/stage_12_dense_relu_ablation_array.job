@@ -1,0 +1,189 @@
+#!/bin/bash
+#SBATCH --job-name=stage_12_dense_relu_ablation
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+#SBATCH --array=0-2
+#SBATCH --output=logs/%x_%a_%j.out
+#SBATCH --error=logs/%x_%a_%j.err
+
+set -e
+
+# The three runs still missing from the architecture ablation around the final baseline S12 dense / ReLU /
+# bilinear / U4 (nnUNetTrainerENet_12_dense_relu, stage "12_dense_relu" -- see stage_12_dense_relu.job).
+# Byte-for-byte the SAME recipe as that baseline and as stage_12_dense_relu_width_sweep_array.job (bottlenecks
+# 4,8,8,2,1, "dense_dilation" context pattern, no DSC, plain ReLU, non-separable dilated convs, no asymmetric
+# convs, fresh COLD-START 150-epoch PolyLR schedule at the trainer's default LR, same dataset) -- the ONLY
+# variables are ENET_CHANNELS and ENET_DECODER_TYPE:
+#
+#   task 0: MaxUnpool decoder at U4        4,16,32,32,16,4          max_unpool     12_dense_relu_maxunpool
+#   task 1: U2 width, bilinear decoder     8,32,64,64,32,8          upsample_conv  12_dense_relu_u2
+#   task 2: U1 width, bilinear decoder     16,64,128,128,64,16      upsample_conv  12_dense_relu_u1
+#
+# U-series widths are the 1_naive_baseline grid's own (ENet-paper 16,64,128,128,64,16 divided by U, floor 4 on
+# the initial / final stage): U1 = 16,64,128,128,64,16, U2 = 8,32,64,64,32,8, U4 = 4,16,32,32,16,4 (the baseline),
+# U8 = 4,8,16,16,8,4 (12_dense_relu_w8_16), U16 = 4,4,8,8,4,4 (12_dense_relu_w4_8) -- the last three already exist.
+#
+# max_unpool requires a symmetric channel plan (f5 == f_i, f1 == f4), true for the U4 plan above. Checked locally:
+# all three architectures build and run a 1x512x512 forward pass (24,261 / 92,592 / 361,452 params; ReLU,
+# dense_dilation, no asymmetric). MaxUnpool is the ENet-paper decoder; with PReLU and the default context it
+# scored 0.59 Dice at U4 (1_naive_baseline_prelu_maxunpool_U4), so the dense-dilation figure is the new data point.
+#
+# Results land in compression/results.csv as nnUNetTrainerENet_<RUN_NAME>, raw stage "12_dense_relu_ablation".
+
+ENET_CHANNELS_ARR=(
+    "4,16,32,32,16,4"
+    "8,32,64,64,32,8"
+    "16,64,128,128,64,16"
+)
+ENET_DECODER_ARR=(
+    max_unpool
+    upsample_conv
+    upsample_conv
+)
+RUN_NAME_ARR=(
+    12_dense_relu_maxunpool
+    12_dense_relu_u2
+    12_dense_relu_u1
+)
+
+TASK_ID=${SLURM_ARRAY_TASK_ID}
+ENET_CHANNELS_VAL="${ENET_CHANNELS_ARR[$TASK_ID]}"
+ENET_DECODER_VAL="${ENET_DECODER_ARR[$TASK_ID]}"
+RUN_NAME="${RUN_NAME_ARR[$TASK_ID]}"
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+TRAINER_CLASS="nnUNetTrainerENet"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- ENet trainer knobs -- byte-for-byte S12 dense's own recipe, only
+#    ENET_CHANNELS and ENET_DECODER_TYPE vary per array task ------------------
+export ENET_CHANNELS="${ENET_CHANNELS_VAL}"
+export ENET_BOTTLENECKS="4,8,8,2,1"
+export ENET_CONTEXT_PATTERN="dense_dilation"
+export ENET_DECODER_TYPE="${ENET_DECODER_VAL}"
+export ENET_USE_PRELU=0
+export ENET_USE_DILATED=1
+export ENET_USE_ASYMMETRIC=0
+export ENET_USE_STRIDED=1
+export ENET_USE_DSC=0
+export ENET_SEPARABLE_DILATED=0
+export ENET_DSC_NO_PROJECTION=0
+export ENET_EPOCHS=150
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Array task: ${TASK_ID} -> ${RUN_NAME} (ENET_CHANNELS=${ENET_CHANNELS}, ENET_DECODER_TYPE=${ENET_DECODER_TYPE})"
+echo "Output folder: ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Self-healing check: promote checkpoint_latest.pth over a STALE checkpoint_final.pth ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ] && [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
+    FINAL_EPOCH_CHECK=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)['current_epoch'])")
+    LATEST_EPOCH_CHECK=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth', map_location='cpu', weights_only=False)['current_epoch'])")
+    if [ "$LATEST_EPOCH_CHECK" -gt "$FINAL_EPOCH_CHECK" ]; then
+        echo "checkpoint_final.pth (epoch ${FINAL_EPOCH_CHECK}) is STALE relative to checkpoint_latest.pth (epoch ${LATEST_EPOCH_CHECK}) -- promoting latest, backing up the stale final."
+        cp "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" "${ENET_OUTPUT_FOLDER}/checkpoint_final_STALE_epoch${FINAL_EPOCH_CHECK}_backup.pth"
+        cp "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth"
+    fi
+fi
+
+echo "=== Checking training progress for ${RUN_NAME} ==="
+EXISTING_CHECKPOINT=""
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    EXISTING_CHECKPOINT="${ENET_OUTPUT_FOLDER}/checkpoint_final.pth"
+elif [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
+    EXISTING_CHECKPOINT="${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth"
+fi
+
+if [ -z "$EXISTING_CHECKPOINT" ]; then
+    echo "=== Start training (fresh, cold start): ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+else
+    CURRENT_EPOCH=$(cd "$HOME/LightM-UNet" && python -c "import torch; print(torch.load('${EXISTING_CHECKPOINT}', map_location='cpu', weights_only=False)['current_epoch'])")
+    echo "Existing checkpoint (${EXISTING_CHECKPOINT}) is at epoch ${CURRENT_EPOCH}/${ENET_EPOCHS}."
+    if [ "$CURRENT_EPOCH" -ge "$ENET_EPOCHS" ]; then
+        echo "Real 150-epoch schedule already complete -- skipping training."
+    else
+        echo "=== Resuming training with --c (continues the SAME 150-epoch LR schedule from epoch ${CURRENT_EPOCH}) ==="
+        nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}" --c
+    fi
+fi
+echo "Training step finished for ${RUN_NAME} (this submission's epoch budget)."
+
+echo "=== Archiving checkpoints + logs to \$HOME/models (only once the real 150-epoch schedule is complete) ==="
+FINAL_EPOCH=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)['current_epoch'])" 2>/dev/null || echo -1)
+if [ "$FINAL_EPOCH" -ge "$ENET_EPOCHS" ]; then
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+
+    echo "=== Collecting results into compression/results.csv ==="
+    cd "$HOME/LightM-UNet"
+    python compression/collect_results.py \
+        --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+        --stage "12_dense_relu_ablation" \
+        --dataset-name "${DATASET_NAME}" \
+        --dataset-id "${DATASET_ID}" \
+        --channels "${ENET_CHANNELS}" \
+        --bottlenecks "${ENET_BOTTLENECKS}" \
+        --decoder-type "${ENET_DECODER_TYPE}" \
+        --use-dilated "${ENET_USE_DILATED}" \
+        --use-asymmetric "${ENET_USE_ASYMMETRIC}" \
+        --use-strided "${ENET_USE_STRIDED}" \
+        --use-dsc "${ENET_USE_DSC}" \
+        --separable-dilated "${ENET_SEPARABLE_DILATED}" \
+        --context-pattern "${ENET_CONTEXT_PATTERN}" \
+        --use-prelu "${ENET_USE_PRELU}" \
+        --dsc-no-projection "${ENET_DSC_NO_PROJECTION}" \
+        --trainer-class "${TRAINER_CLASS}"
+else
+    echo "Only at epoch ${FINAL_EPOCH}/${ENET_EPOCHS} -- skipping archive/collect_results.py (resubmit to continue training)."
+fi
+
+echo "Done: ${RUN_NAME}."

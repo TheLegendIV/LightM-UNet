@@ -35,14 +35,20 @@ REPO_ROOT = HERE.parents[3]
 sys.path.insert(0, str(REPO_ROOT / "compression" / "analysis" / "qat_results"))
 from plot_forcedsp_lut70_alpha_sweep import INK, SECONDARY_INK, SURFACE, ALPHA_COLORS, _style_axes  # noqa: E402
 from plot_uniform_vs_ilp_overlay import UNIFORM_COLOR  # noqa: E402
+from plot_style import ALPHA as MARK_ALPHA, CAL_STYLE, GUIDE_COLOR, LINE_ALPHA, LINE_WIDTH, MARK_SIZE, MARK_WIDTH, RESOURCE_STYLE  # noqa: E402  (shared with plot_model_error.py)
 
 ARTIFACTS = REPO_ROOT / "MILP" / "artifacts" / "S12_512_ablation_v2"
 BUDGET = {"lut": 230400.0, "bram": 624.0, "dsp": 1728.0, "ff": 460800.0, "uram": 96.0}        # XCZU7EV: LUT, BRAM18, DSP, FF, URAM288
 CAP_PCT = 40.0
 INFEASIBLE_BG, INFEASIBLE_HATCH = "#cfe3f5", "#9a9a9a"      # shaded region beyond the resource cap
-MARK_SIZE, MARK_WIDTH = 11, 1.3      # estimated-resource plot: same size and thin stroke for every marker
 INFEASIBLE_COLOR = "#c0392b"
 MIXED_COLOR = ALPHA_COLORS.get(0.25)
+EST_MARK_SIZE, EST_MARK_WIDTH = 7, 1.2      # estimated plot: hollow markers, a bit larger than the error plot's so the outlines read
+INT4_COLOR = "#2a78d6"      # INT4 and INT6 are both feasible uniform builds; own hue for INT4 so the two lines are told apart (INT6 keeps UNIFORM_COLOR)
+
+
+def scheme_color(key: str) -> str:
+    return {"mixed468": MIXED_COLOR, "int8": INFEASIBLE_COLOR, "int4": INT4_COLOR}.get(key, UNIFORM_COLOR)      # INT8 red: does not fit the 40% caps
 
 # scheme -> (label, solve folder, simfifo json, synth build id or None)
 SCHEMES = {
@@ -127,7 +133,7 @@ def plot_one(resource: str, costs: dict, dice: dict, fp32: float, out_path: Path
     any_real = any_model = False
     for key, c in costs.items():
         model_pct, real_pct = pct(c, "model", resource), pct(c, "real", resource)
-        color = MIXED_COLOR if key == "mixed468" else (INFEASIBLE_COLOR if key == "int8" else UNIFORM_COLOR)   # INT8 does not fit the 40% caps
+        color = scheme_color(key)
         if model_pct is None and real_pct is None:      # nothing to plot (INT8 real cost is blank; FF has no model)
             continue
         if real_pct is not None:
@@ -165,25 +171,25 @@ def plot_one(resource: str, costs: dict, dice: dict, fp32: float, out_path: Path
 
 
 def plot_estimated(costs: dict, dice: dict, fp32: float, out_path: Path) -> None:
-    """Dice vs resource: per scheme, three markers (open circle LUT, x BRAM18K, + DSP) on a horizontal line at the scheme's Dice: the modelled (ILP + FIFO sim) % of the device. No real synthesis points."""
+    """Dice vs resource: per scheme, three hollow markers (circle LUT, square BRAM18K, triangle DSP; shapes and line weight from plot_style.py, shared with s12_512_cost_model_error.png) on a dashed horizontal
+    line at the scheme's Dice: the modelled (calibrated ILP + FIFO sim) % of the device. Colour = scheme (INT4 blue, INT6 purple, INT8 red = over the cap, Mixed teal), shape = resource. No real synthesis points."""
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
 
-    marks = {"lut": ("o", "LUT"), "bram": ("x", "BRAM18K"), "dsp": ("+", "DSP")}     # open markers, so overlapping estimates stay visible
     plt.rcParams["hatch.linewidth"] = 0.5       # thin hatch lines
     fig, ax = plt.subplots(figsize=(7.5, 5.8), facecolor=SURFACE)
     _style_axes(ax)
     ax.axhline(fp32, color=INK, linestyle=":", linewidth=1.2, zorder=1, label=f"FP32 baseline ({fp32:.4f})")
-    ax.axvline(CAP_PCT, color=INK, linewidth=1.2, alpha=0.6, zorder=1, label="40% resource cap")
+    ax.axvline(CAP_PCT, color=INK, linewidth=1.2, alpha=0.6, zorder=1, label="ILP resource cap (40%)")
     keys = list(costs)
     for key in keys:
         y = dice[key]
         c = costs[key]
-        color = MIXED_COLOR if key == "mixed468" else (INFEASIBLE_COLOR if key == "int8" else UNIFORM_COLOR)
-        xs = {r: pct(c, "model", r) for r in marks}
-        ax.plot([min(xs.values()), max(xs.values())], [y, y], color=color, linewidth=1.2, alpha=0.6, zorder=3)
-        for z, (r, (m, _)) in enumerate(marks.items()):
-            ax.plot([xs[r]], [y], marker=m, markersize=MARK_SIZE, markerfacecolor="none", markeredgecolor=color, markeredgewidth=MARK_WIDTH, linestyle="none", zorder=5 + z)
+        color = scheme_color(key)
+        xs = {r: pct(c, "model", r) for r in RESOURCE_STYLE}
+        ax.plot([min(xs.values()), max(xs.values())], [y, y], color=color, linestyle=CAL_STYLE, linewidth=LINE_WIDTH, alpha=LINE_ALPHA, zorder=3)
+        for z, (r, (m, _, _)) in enumerate(RESOURCE_STYLE.items()):
+            ax.plot([xs[r]], [y], marker=m, markersize=EST_MARK_SIZE, markerfacecolor="none", markeredgecolor=color, markeredgewidth=EST_MARK_WIDTH, alpha=MARK_ALPHA, linestyle="none", zorder=5 + z)
         if key == "mixed468":        # sits just under the INT8 line and above the INT6 line, so its label goes right of its markers
             ax.annotate(c["label"], (max(xs.values()), y), xytext=(14, 0), textcoords="offset points", ha="left", va="center", color=color, fontsize=10, fontweight="bold")
         else:
@@ -197,13 +203,15 @@ def plot_estimated(costs: dict, dice: dict, fp32: float, out_path: Path) -> None
     x_right = ax.get_xlim()[1]
     ax.axvspan(CAP_PCT, x_right, facecolor=INFEASIBLE_BG, edgecolor=INFEASIBLE_HATCH, hatch="/////", linewidth=0, alpha=0.5, zorder=0, label="Infeasible")     # right of the cap: light blue, fine grey diagonal hatch
     ax.set_xlim(max(0, lo), x_right)
+    ax.set_xticks(range(5 * int(-(-ax.get_xlim()[0] // 5)), int(x_right) + 1, 5))        # a tick (and a faint vertical line) every 5 %
+    ax.grid(axis="x", color="#e1e0d9", linewidth=0.5, alpha=0.8, zorder=0)
     for t in ax.get_xticklabels() + ax.get_yticklabels():
         t.set_fontweight("bold")
     handles, labels = ax.get_legend_handles_labels()
-    for m, name in marks.values():
-        handles.append(Line2D([], [], marker=m, color="none", markerfacecolor="none", markeredgecolor=SECONDARY_INK, markeredgewidth=MARK_WIDTH, markersize=MARK_SIZE))
+    for m, name, _ in RESOURCE_STYLE.values():
+        handles.append(Line2D([], [], marker=m, color="none", markerfacecolor="none", markeredgecolor=SECONDARY_INK, markeredgewidth=EST_MARK_WIDTH, markersize=EST_MARK_SIZE))
         labels.append(name)
-    leg = ax.legend(handles, labels, loc="lower right", frameon=True, facecolor=SURFACE, edgecolor="#c3c2b7", fontsize=7.5, markerscale=0.75, borderpad=0.5, labelspacing=0.35, labelcolor=SECONDARY_INK)
+    leg = ax.legend(handles, labels, loc="lower right", frameon=True, facecolor=SURFACE, edgecolor=GUIDE_COLOR, fontsize=7.5, markerscale=0.75, borderpad=0.5, labelspacing=0.35, labelcolor=SECONDARY_INK)
     for t in leg.get_texts():
         t.set_fontweight("bold")
     fig.tight_layout()
