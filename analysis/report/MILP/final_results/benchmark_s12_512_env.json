@@ -200,5 +200,55 @@
       "idle_window_s": 30.03080105781555,
       "energy_source": "NVML nvmlDeviceGetTotalEnergyConsumption (RTX 2050 board energy)"
     }
+  },
+  "dpu:int8_dpu": {
+    "platform": "Zynq UltraScale+ ZCU104 (DPU, 2xB4096)",
+    "job": "12_dense_relu_warmstart150ep_fp32",
+    "input": "int8 NHWC, z-score + DPU input fix-point scale, resident before timing",
+    "input_scale": 32,
+    "warm_runs_s": [
+      2.4789857900000243,
+      2.4730873999999403,
+      2.4730365499999607,
+      2.472698179999952,
+      2.47442032999993
+    ],
+    "warmup": 10,
+    "batch_size": 1,
+    "timestamp": "2026-10-26T12:10:20",
+    "timed_unit": "DPU execute -> class map after on-DPU argmax (preprocessing excluded)",
+    "kernel": "5.15.36-xilinx-v2022.2",
+    "python": "3.9.9",
+    "model": "12_dense_relu_warmstart150ep_fp32.xmodel",
+    "power_source": "INA226 12 V board input (hwmon power1_input), whole-board incl. regulator losses, PS, PL, DDR, fan, PHY",
+    "ina226_sampling_frequency_hz": "114",
+    "ina226_oversampling_ratio": "4",
+    "ina226_integration_time_s": "0.001100",
+    "ina226_shunt_ohm": "0.005000000",
+    "energy": {
+      "energy_dyn_j_per_image_mean": 0.014450714824638103,
+      "energy_dyn_j_per_image_std": 5.107390030630839e-05,
+      "energy_dyn_j_per_image_runs": [
+        0.01437363460536858,
+        0.014453709430158336,
+        0.014493094931062014,
+        0.014433513438716971,
+        0.014499621717884614
+      ],
+      "energy_j_per_image_runs": [
+        0.1356662725218119,
+        0.13545774477581596,
+        0.13549464554157098,
+        0.13541851081365824,
+        0.1355688784448382
+      ],
+      "power_idle_before_w": 14.701907665247772,
+      "power_idle_after_w": 14.655091131601306,
+      "idle_window_s": 20.01767086982727,
+      "energy_source": "INA226 12 V board input (hwmon power1_input), whole-board incl. regulator losses, PS, PL, DDR, fan, PHY",
+      "n_power_samples": 13425,
+      "ina226_sampling_frequency_hz": "114",
+      "ina226_oversampling_ratio": "4"
+    }
   }
 }
