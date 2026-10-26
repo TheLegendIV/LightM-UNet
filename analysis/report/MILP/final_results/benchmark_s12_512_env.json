@@ -250,5 +250,55 @@
       "ina226_sampling_frequency_hz": "114",
       "ina226_oversampling_ratio": "4"
     }
+  },
+  "dpu:int8_dpu_qat": {
+    "platform": "Zynq UltraScale+ ZCU104 (DPU, 2xB4096)",
+    "job": "12_dense_relu_warmstart150ep_fp32",
+    "input": "int8 NHWC, z-score + DPU input fix-point scale, resident before timing",
+    "input_scale": 32,
+    "warm_runs_s": [
+      2.4936043699999573,
+      2.492952639993746,
+      2.4933541799982777,
+      2.49375616999896,
+      2.4936824799951864
+    ],
+    "warmup": 10,
+    "batch_size": 1,
+    "timestamp": "2026-10-26T20:51:28",
+    "timed_unit": "DPU execute -> class map after on-DPU argmax (preprocessing excluded)",
+    "kernel": "5.15.36-xilinx-v2022.2",
+    "python": "3.9.9",
+    "model": "12_dense_relu_warmstart150ep_fp32_qat.xmodel",
+    "power_source": "INA226 12 V board input (hwmon power1_input), whole-board incl. regulator losses, PS, PL, DDR, fan, PHY",
+    "ina226_sampling_frequency_hz": "114",
+    "ina226_oversampling_ratio": "4",
+    "ina226_integration_time_s": "0.001100",
+    "ina226_shunt_ohm": "0.005000000",
+    "energy": {
+      "energy_dyn_j_per_image_mean": 0.014536435574533383,
+      "energy_dyn_j_per_image_std": 5.469694069300479e-05,
+      "energy_dyn_j_per_image_runs": [
+        0.014467883329177623,
+        0.014494087166604051,
+        0.014548670014200365,
+        0.0146008854091365,
+        0.014570651953548364
+      ],
+      "energy_j_per_image_runs": [
+        0.1362673553080542,
+        0.13626172036300516,
+        0.13633591422365512,
+        0.13640776392263432,
+        0.13637393200918774
+      ],
+      "power_idle_before_w": 14.651379529672546,
+      "power_idle_after_w": 14.655467440055633,
+      "idle_window_s": 20.020050287246704,
+      "energy_source": "INA226 12 V board input (hwmon power1_input), whole-board incl. regulator losses, PS, PL, DDR, fan, PHY",
+      "n_power_samples": 13451,
+      "ina226_sampling_frequency_hz": "114",
+      "ina226_oversampling_ratio": "4"
+    }
   }
 }
