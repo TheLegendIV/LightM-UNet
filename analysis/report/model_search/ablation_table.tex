@@ -1,0 +1,28 @@
+\begin{table*}[t]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lccccccccccccccrrrc}
+\toprule
+ & \multicolumn{2}{c}{Act} & \multicolumn{3}{c}{Upsample} & \multicolumn{5}{c}{Channel width} & \multicolumn{4}{c}{Context} &  &  &  &  \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-6}\cmidrule(lr){7-11}\cmidrule(lr){12-15}
+Variant & \rotatebox{90}{ReLU} & \rotatebox{90}{PReLU} & \rotatebox{90}{Bilinear} & \rotatebox{90}{NN} & \rotatebox{90}{MaxUnpool} & \rotatebox{90}{U1} & \rotatebox{90}{U2} & \rotatebox{90}{U4} & \rotatebox{90}{U8} & \rotatebox{90}{U16} & \rotatebox{90}{No Dilated} & \rotatebox{90}{No Asym} & \rotatebox{90}{Our Context} & \rotatebox{90}{ENet Context} & Params & Buff elements & FLOPs & Dice \\
+\midrule
+Ours (baseline) & \checkmark &  & \checkmark &  &  &  &  & \checkmark &  &  &  &  & \checkmark &  & 24\,261 & 139\,264 & 297.3\,M & 0.7876 \\
+\midrule
+PReLU &  & \checkmark & \checkmark &  &  &  &  & \checkmark &  &  &  &  & \checkmark &  & 25\,201 & 139\,264 & 297.3\,M & 0.7960 \\
+NN upsample & \checkmark &  &  & \checkmark &  &  &  & \checkmark &  &  &  &  & \checkmark &  & 24\,261 & 139\,264 & 297.3\,M & 0.7734 \\
+MaxUnpool & \checkmark &  &  &  & \checkmark &  &  & \checkmark &  &  &  &  & \checkmark &  & 24\,261 & 139\,264 & 297.3\,M & 0.6947 \\
+U1 & \checkmark &  & \checkmark &  &  & \checkmark &  &  &  &  &  &  & \checkmark &  & 361\,452 & 552\,448 & 4214.1\,M & 0.8279 \\
+U2 & \checkmark &  & \checkmark &  &  &  & \checkmark &  &  &  &  &  & \checkmark &  & 92\,592 & 276\,992 & 1099.3\,M & 0.8165 \\
+U8 & \checkmark &  & \checkmark &  &  &  &  &  & \checkmark &  &  &  & \checkmark &  & 6\,745 & 71\,680 & 111.7\,M & 0.6995 \\
+U16 & \checkmark &  & \checkmark &  &  &  &  &  &  & \checkmark &  &  & \checkmark &  & 2\,088 & 37\,888 & 64.5\,M & 0.4365 \\
+ENet Context & \checkmark &  & \checkmark &  &  &  &  & \checkmark &  &  &  &  &  & \checkmark & 24\,581 & 90\,240 & 299.4\,M & 0.7471 \\
+ENet Context, No Dilated & \checkmark &  & \checkmark &  &  &  &  & \checkmark &  &  & \checkmark &  &  & \checkmark & 24\,581 & 36\,992 & 299.4\,M & 0.3986 \\
+ENet Context, No Asym & \checkmark &  & \checkmark &  &  &  &  & \checkmark &  &  &  & \checkmark &  & \checkmark & 24\,261 & 86\,016 & 297.3\,M & 0.7550 \\
+\midrule
+ENet (original) &  & \checkmark &  &  & \checkmark & \checkmark &  &  &  &  &  &  &  & \checkmark & 369\,692 & 356\,352 & 4247.7\,M & 0.8091 \\
+\bottomrule
+\end{tabular}}
+\caption{Ablation around our final model (first row: ReLU, bilinear upsampling, width U4, our stacked-dilation context). Each row is one configuration, with a tick in every selected option; the rows change one design choice at a time, and the last row is the original ENet. No Dilated / No Asym remove the dilated / asymmetric convolutions from the ENet context block. Params in elements, Buff elements in sliding-window line-buffer activation elements, FLOPs for a $1\times512\times512$ input, Dice is the test mean over the four vessel classes. Every network is trained once from scratch for 150 epochs.}
+\label{tab:ablation}
+\end{table*}

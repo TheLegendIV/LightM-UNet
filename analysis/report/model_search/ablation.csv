@@ -1,11 +1,13 @@
-block,change,vs,config_name,activation,decoder,dilated,asymmetric,context,params,macs,flops,mem_elements,dice,epochs,flops_in_results_csv,d_params_pct,d_flops_pct,d_mem_elements_pct,d_dice
-"A U4, default context",reference: PReLU + bilinear,,nnUNetTrainerENet_2_special_ops_prelu,PReLU,upsample_conv,1,1,default,25553,149684224,299368448,90240,0.7743,148,299368448,,,,
-"A U4, default context",decoder: MaxUnpool,nnUNetTrainerENet_2_special_ops_prelu,nnUNetTrainerENet_1_naive_baseline_prelu_maxunpool_U4,PReLU,max_unpool,1,1,default,25553,149684224,299368448,90240,0.5905,150,299368448,0.0,0.0,0.0,-0.1838
-"A U4, default context",activation: ReLU,nnUNetTrainerENet_2_special_ops_prelu,nnUNetTrainerENet_1_naive_baseline_U4,ReLU,upsample_conv,1,1,default,24581,149684224,299368448,90240,0.7471,150,687996928,-3.8,0.0,0.0,-0.0272
-"A U4, default context",no asymmetric convs,nnUNetTrainerENet_2_special_ops_prelu,nnUNetTrainerENet_2_special_ops_prelu_no_asymmetric,PReLU,upsample_conv,1,0,default,25201,148635648,297271296,86016,0.7784,150,297271296,-1.4,-0.7,-4.7,0.0041
-"A U4, default context",no dilated convs,nnUNetTrainerENet_2_special_ops_prelu,nnUNetTrainerENet_2_special_ops_prelu_no_dilated,PReLU,upsample_conv,0,1,default,25553,149684224,299368448,36992,0.462,149,299368448,0.0,0.0,-59.0,-0.3123
-B dense dilation,reference: PReLU + bilinear,,nnUNetTrainerENet_4_8_dense_dilation,PReLU,upsample_conv,1,0,dense_dilation,25201,148635648,297271296,139264,0.796,131,686555136,,,,
-B dense dilation,activation: ReLU,nnUNetTrainerENet_4_8_dense_dilation,nnUNetTrainerENet_12_dense_relu,ReLU,upsample_conv,1,0,dense_dilation,24261,148635648,297271296,139264,0.7876,147,297271296,-3.7,0.0,0.0,-0.0084
-B dense dilation (ReLU),decoder: nearest,nnUNetTrainerENet_12_dense_relu,nnUNetTrainerENet_12_dense_relu_nearest_upsample,ReLU,nearest_upsample,1,0,dense_dilation,24261,148635648,297271296,139264,0.7734,140,297271296,0.0,0.0,0.0,-0.0142
-B dense dilation (ReLU),decoder: nearest + conv,nnUNetTrainerENet_12_dense_relu,nnUNetTrainerENet_12_dense_relu_nearest_conv_upsample,ReLU,nearest_conv_upsample,1,0,dense_dilation,26749,195821568,391643136,145408,0.7779,143,391643136,10.3,31.7,4.4,-0.0097
-B dense dilation (ReLU),decoder: learned upsample,nnUNetTrainerENet_12_dense_relu,nnUNetTrainerENet_12_dense_relu_learned_upsample,ReLU,learned_upsample,1,0,dense_dilation,25349,169607168,339214336,139264,0.7671,149,339214336,4.5,14.1,0.0,-0.0205
+variant,config_name,ReLU,PReLU,Bilinear,NN,MaxUnpool,U1,U2,U4,U8,U16,No Dilated,No Asym,Our Context,ENet Context,channels,params,macs,flops,mem_elements,dice,epochs,flops_in_results_csv,d_params_pct,d_flops_pct,d_mem_elements_pct,d_dice
+Ours (baseline),nnUNetTrainerENet_12_dense_relu,1,0,1,0,0,0,0,1,0,0,0,0,1,0,4/16/32/32/16/4,24261,148635648,297271296,139264,0.7876,147,297271296,0.0,0.0,0.0,0.0
+PReLU,nnUNetTrainerENet_4_8_dense_dilation,0,1,1,0,0,0,0,1,0,0,0,0,1,0,4/16/32/32/16/4,25201,148635648,297271296,139264,0.796,131,686555136,3.9,0.0,0.0,0.0084
+NN upsample,nnUNetTrainerENet_12_dense_relu_nearest_upsample,1,0,0,1,0,0,0,1,0,0,0,0,1,0,4/16/32/32/16/4,24261,148635648,297271296,139264,0.7734,140,297271296,0.0,0.0,0.0,-0.0142
+MaxUnpool,nnUNetTrainerENet_12_dense_relu_maxunpool,1,0,0,0,1,0,0,1,0,0,0,0,1,0,4/16/32/32/16/4,24261,148635648,297271296,139264,0.6947,150,297271296,0.0,0.0,0.0,-0.0929
+U1,nnUNetTrainerENet_12_dense_relu_u1,1,0,1,0,0,1,0,0,0,0,0,0,1,0,16/64/128/128/64/16,361452,2107047936,4214095872,552448,0.8279,150,4214095872,1389.8,1317.6,296.7,0.0403
+U2,nnUNetTrainerENet_12_dense_relu_u2,1,0,1,0,0,0,1,0,0,0,0,0,1,0,8/32/64/64/32/8,92592,549650432,1099300864,276992,0.8165,149,1099300864,281.6,269.8,98.9,0.0289
+U8,nnUNetTrainerENet_12_dense_relu_w8_16,1,0,1,0,0,0,0,0,1,0,0,0,1,0,4/8/16/16/8/4,6745,55836672,111673344,71680,0.6995,144,111673344,-72.2,-62.4,-48.5,-0.0881
+U16,nnUNetTrainerENet_12_dense_relu_w4_8,1,0,1,0,0,0,0,0,0,1,0,0,1,0,4/4/8/8/4/4,2088,32243712,64487424,37888,0.4365,150,64487424,-91.4,-78.3,-72.8,-0.3511
+ENet Context,nnUNetTrainerENet_1_naive_baseline_U4,1,0,1,0,0,0,0,1,0,0,0,0,0,1,4/16/32/32/16/4,24581,149684224,299368448,90240,0.7471,150,687996928,1.3,0.7,-35.2,-0.0405
+"ENet Context, No Dilated",nnUNetTrainerENet_2_special_ops_no_dilated,1,0,1,0,0,0,0,1,0,0,1,0,0,1,4/16/32/32/16/4,24581,149684224,299368448,36992,0.3986,150,687996928,1.3,0.7,-73.4,-0.389
+"ENet Context, No Asym",nnUNetTrainerENet_2_special_ops_no_asymmetric,1,0,1,0,0,0,0,1,0,0,0,1,0,1,4/16/32/32/16/4,24261,148635648,297271296,86016,0.755,146,675414016,0.0,0.0,-38.2,-0.0326
+ENet (original),nnUNetTrainerENet_enet_original_prelu_maxunpool_4c,0,1,0,0,1,1,0,0,0,0,0,0,0,1,16/64/128/128/64/16,369692,2123825152,4247650304,356352,0.8091,150,4247650304,1423.8,1328.9,155.9,0.0215

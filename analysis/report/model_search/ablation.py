@@ -1,16 +1,18 @@
-"""Architecture ablation table of the NAS narrative (stages 1-5) -> analysis/report/model_search/ablation.csv.
+"""Architecture ablation around the final baseline S12 dense / ReLU / bilinear / U4 -> ablation.csv + ablation_table.tex (analysis/report/model_search/).
 
-One row per single change (PReLU / ReLU, MaxUnpool / bilinear / nearest decoder, no asymmetric, no dilated), each with its own Params, FLOPs and buffer memory elements, and the change relative to the
-row it was ablated from (`vs`). Dice is the held-out test mean over the four classes from compression/results.csv.
-
-Block A  (stage 1/2, U4 width 4,16,32,32,16,4, default context block): reference PReLU + bilinear (upsample_conv); ablate the decoder (MaxUnpool), the activation (ReLU), asymmetric and dilated convs.
-Block B  (stage 3-5, same width, dense_dilation context block): PReLU -> ReLU, then the decoder under ReLU (bilinear, nearest, nearest + conv, learned). Nearest-neighbour decoders only exist on this
-         family, so they are not compared at the U4 / default-context point.
+One row per single change from the baseline (every row is a cold-start 150-epoch run of the same recipe, see compression/slurm/stage_12_dense_relu*.job), on four axes:
+  activation  ReLU | PReLU
+  upsample    bilinear | nearest neighbour (NN) | MaxUnpool
+  width       U1 | U2 | U4 | U8 | U16  (ENet-paper channels 16,64,128,128,64,16 divided by U, floor 4 on the outer stages)
+  context     Our Context (stacked dilation) | ENet Context (default block), the latter optionally with No Dilated and / or No Asym ticked (the dilated / asymmetric convs removed from it)
+plus the original ENet (PReLU, MaxUnpool, U1, ENet Context) as the reference of the whole table. Each row is a binary selection over the 14 columns
+  ReLU, PReLU | Bilinear, NN, MaxUnpool | U1, U2, U4, U8, U16 | No Dilated, No Asym, Our Context, ENet Context
+(0/1 columns in ablation.csv, ticks in ablation_table.tex) and reports Params, buffer memory elements, FLOPs and test Dice.
 
 Params, MACs, FLOPs and buffer elements are RECOMPUTED here from the architecture (same ENet class and counters as compression/collect_results.py: params = all parameters, FLOPs = 2 * MACs of every
 Conv2d / ConvTranspose2d, buffer elements = compression/utils.count_buffer_elements, input 1x512x512, 5 output channels). The `flops` stored in compression/results.csv before 2026-08-25 were counted with thop,
 which double-counts the aliased convs of ENet's RegularBottleneck (~2.3x on some rows, see utils.count_flops), so the recorded value is kept in `flops_in_results_csv` only for comparison. Params and buffer
-elements are checked against the recorded values.
+elements are checked against the recorded values. Dice = test-split mean over the four classes (results.csv `dice`).
     python analysis/report/model_search/ablation.py
 """
 from __future__ import annotations
@@ -31,24 +33,32 @@ from utils import count_buffer_elements, count_flops, count_params  # noqa: E402
 PREFIX = "nnUNetTrainerENet_"
 INPUT_HW, IN_CH, OUT_CH = (512, 512), 1, 5
 FLAG_TO_KWARG = {"dilated": "use_dilated", "asymmetric": "use_asymmetric", "strided": "use_strided", "dsc": "use_dsc", "prelu": "use_prelu"}
+BASELINE = "12_dense_relu"
 
-# (block, change, config_name without the trainer prefix, vs = config it is compared against or None)
+# The 14 binary selection columns, in table order, grouped as in the table header.
+GROUPS = [("Act", ["ReLU", "PReLU"]), ("Upsample", ["Bilinear", "NN", "MaxUnpool"]), ("Channel width", ["U1", "U2", "U4", "U8", "U16"]),
+          ("Context", ["No Dilated", "No Asym", "Our Context", "ENet Context"])]
+COLUMNS = [c for _, cols in GROUPS for c in cols]
+
+# (row label, config_name without the trainer prefix, the columns that are ticked in this row)
 ROWS = [
-    ("A U4, default context", "reference: PReLU + bilinear", "2_special_ops_prelu", None),
-    ("A U4, default context", "decoder: MaxUnpool", "1_naive_baseline_prelu_maxunpool_U4", "2_special_ops_prelu"),
-    ("A U4, default context", "activation: ReLU", "1_naive_baseline_U4", "2_special_ops_prelu"),
-    ("A U4, default context", "no asymmetric convs", "2_special_ops_prelu_no_asymmetric", "2_special_ops_prelu"),
-    ("A U4, default context", "no dilated convs", "2_special_ops_prelu_no_dilated", "2_special_ops_prelu"),
-    ("B dense dilation", "reference: PReLU + bilinear", "4_8_dense_dilation", None),
-    ("B dense dilation", "activation: ReLU", "12_dense_relu", "4_8_dense_dilation"),
-    ("B dense dilation (ReLU)", "decoder: nearest", "12_dense_relu_nearest_upsample", "12_dense_relu"),
-    ("B dense dilation (ReLU)", "decoder: nearest + conv", "12_dense_relu_nearest_conv_upsample", "12_dense_relu"),
-    ("B dense dilation (ReLU)", "decoder: learned upsample", "12_dense_relu_learned_upsample", "12_dense_relu"),
+    ("Ours (baseline)", "12_dense_relu", ["ReLU", "Bilinear", "U4", "Our Context"]),
+    ("PReLU", "4_8_dense_dilation", ["PReLU", "Bilinear", "U4", "Our Context"]),
+    ("NN upsample", "12_dense_relu_nearest_upsample", ["ReLU", "NN", "U4", "Our Context"]),
+    ("MaxUnpool", "12_dense_relu_maxunpool", ["ReLU", "MaxUnpool", "U4", "Our Context"]),
+    ("U1", "12_dense_relu_u1", ["ReLU", "Bilinear", "U1", "Our Context"]),
+    ("U2", "12_dense_relu_u2", ["ReLU", "Bilinear", "U2", "Our Context"]),
+    ("U8", "12_dense_relu_w8_16", ["ReLU", "Bilinear", "U8", "Our Context"]),
+    ("U16", "12_dense_relu_w4_8", ["ReLU", "Bilinear", "U16", "Our Context"]),
+    ("ENet Context", "1_naive_baseline_U4", ["ReLU", "Bilinear", "U4", "ENet Context"]),
+    ("ENet Context, No Dilated", "2_special_ops_no_dilated", ["ReLU", "Bilinear", "U4", "No Dilated", "ENet Context"]),
+    ("ENet Context, No Asym", "2_special_ops_no_asymmetric", ["ReLU", "Bilinear", "U4", "No Asym", "ENet Context"]),
+    ("ENet (original)", "enet_original_prelu_maxunpool_4c", ["PReLU", "MaxUnpool", "U1", "ENet Context"]),
 ]
 
 
 def build(row: pd.Series) -> ENet:
-    flags = dict(kv.split("=", 1) for kv in row["ops_flags"].split(","))
+    flags = dict(kv.split("=", 1) for kv in row["ops_flags"].split(",") if "=" in kv)
     accepted = set(inspect.signature(ENet.__init__).parameters)
     kwargs = {}
     for key, val in flags.items():
@@ -69,34 +79,80 @@ def measure(row: pd.Series) -> dict:
     return {"params": params, "macs": int(macs), "flops": int(flops), "mem_elements": int(buffers)}
 
 
+WIDTH_F1 = {"U1": 64, "U2": 32, "U4": 16, "U8": 8, "U16": 4}                      # stage-1 channels of each U-series width
+DECODER = {"Bilinear": "upsample_conv", "NN": "nearest_upsample", "MaxUnpool": "max_unpool"}
+
+
+def check_selection(variant: str, ticked: list[str], rec: pd.Series, flags: dict) -> None:
+    """Every tick must match what the config actually is (a mislabelled row would silently misreport the ablation)."""
+    one = lambda group: [c for c in dict(GROUPS)[group] if c in ticked]               # noqa: E731
+    act, up, width = one("Act"), one("Upsample"), one("Channel width")
+    assert len(act) == len(up) == len(width) == 1, f"{variant}: exactly one activation / upsample / width must be ticked"
+    assert (act[0] == "PReLU") == (flags["prelu"] == "1"), f"{variant}: activation tick vs prelu flag"
+    assert DECODER[up[0]] == rec["decoder_type"], f"{variant}: upsample tick vs decoder_type {rec['decoder_type']}"
+    assert WIDTH_F1[width[0]] == int(rec["f1"]), f"{variant}: width tick vs f1={rec['f1']}"
+    assert ("Our Context" in ticked) == (flags["context_pattern"] == "dense_dilation"), f"{variant}: Our Context tick vs context_pattern {flags['context_pattern']}"
+    assert ("ENet Context" in ticked) == (flags["context_pattern"] == "default"), f"{variant}: ENet Context tick vs context_pattern {flags['context_pattern']}"
+    if "ENet Context" in ticked:
+        assert ("No Dilated" in ticked) == (flags["dilated"] == "0"), f"{variant}: No Dilated tick vs dilated flag"
+        assert ("No Asym" in ticked) == (flags["asymmetric"] == "0"), f"{variant}: No Asym tick vs asymmetric flag"
+    else:
+        assert "No Dilated" not in ticked and "No Asym" not in ticked, f"{variant}: No Dilated / No Asym only apply to the ENet context block"
+
+
+def latex(table: pd.DataFrame) -> str:
+    """Binary-selection table: one row per ablation, a tick in every selected column of the 14, then Params, Buff elements, FLOPs, Dice."""
+    n_ticks = len(COLUMNS)
+    head1 = " & ".join([""] + [f"\\multicolumn{{{len(v)}}}{{c}}{{{g}}}" for g, v in GROUPS] + ["", "", "", ""])
+    head2 = " & ".join(["Variant"] + [f"\\rotatebox{{90}}{{{c}}}" for c in COLUMNS] + ["Params", "Buff elements", "FLOPs", "Dice"])
+    lines = ["\\begin{table*}[t]", "\\centering", "\\resizebox{\\textwidth}{!}{%", f"\\begin{{tabular}}{{l{'c' * n_ticks}rrrc}}", "\\toprule", head1 + " \\\\"]
+    start, rules = 2, []
+    for _, v in GROUPS:
+        rules.append(f"\\cmidrule(lr){{{start}-{start + len(v) - 1}}}")
+        start += len(v)
+    lines += ["".join(rules), head2 + " \\\\", "\\midrule"]
+    for _, r in table.iterrows():
+        ticks = ["\\checkmark" if r[c] else "" for c in COLUMNS]
+        cells = [r["variant"]] + ticks + [f"{r['params']:,}".replace(",", "\\,"), f"{r['mem_elements']:,}".replace(",", "\\,"), f"{r['flops'] / 1e6:.1f}\\,M", f"{r['dice']:.4f}"]
+        lines.append(" & ".join(cells) + " \\\\")
+        if r["variant"] in ("Ours (baseline)", "ENet Context, No Asym"):                 # baseline on its own, original ENet on its own
+            lines.append("\\midrule")
+    lines += ["\\bottomrule", "\\end{tabular}}",
+              "\\caption{Ablation around our final model (first row: ReLU, bilinear upsampling, width U4, our stacked-dilation context). Each row is one configuration, with a tick in every selected option; "
+              "the rows change one design choice at a time, and the last row is the original ENet. No Dilated / No Asym remove the dilated / asymmetric convolutions from the ENet context block. "
+              "Params in elements, Buff elements in sliding-window line-buffer activation elements, FLOPs for a $1\\times512\\times512$ input, Dice is the test mean over the four vessel classes. "
+              "Every network is trained once from scratch for 150 epochs.}",
+              "\\label{tab:ablation}", "\\end{table*}"]
+    return "\n".join(lines) + "\n"
+
+
 def main() -> int:
     df = pd.read_csv(REPO_ROOT / "compression" / "results.csv").set_index("config_name")
     out, measured = [], {}
-    for block, change, name, vs in ROWS:
+    for variant, name, ticked in ROWS:
         rec = df.loc[PREFIX + name]
         m = measured[name] = measure(rec)
-        flags = dict(kv.split("=", 1) for kv in rec["ops_flags"].split(","))
+        flags = dict(kv.split("=", 1) for kv in rec["ops_flags"].split(",") if "=" in kv)
+        check_selection(variant, ticked, rec, flags)
         if m["params"] != int(rec["params"]) or m["mem_elements"] != int(rec["mem_elements"]):
             raise SystemExit(f"{name}: recomputed params / buffers {m['params']} / {m['mem_elements']} differ from results.csv {int(rec['params'])} / {int(rec['mem_elements'])}")
-        out.append({"block": block, "change": change, "vs": vs or "", "config_name": PREFIX + name,
-                    "activation": "PReLU" if flags["prelu"] == "1" else "ReLU", "decoder": rec["decoder_type"],
-                    "dilated": int(flags["dilated"]), "asymmetric": int(flags["asymmetric"]), "context": flags["context_pattern"],
+        out.append({"variant": variant, "config_name": PREFIX + name, **{c: int(c in ticked) for c in COLUMNS},
+                    "channels": "/".join(str(int(rec[c])) for c in ("f_i", "f1", "f2", "f3", "f4", "f5")),
                     **m, "dice": round(float(rec["dice"]), 4), "epochs": int(rec["epochs"]), "flops_in_results_csv": int(rec["flops"])})
+    base = next(r for r in out if r["config_name"] == PREFIX + BASELINE)
     for r in out:
-        ref = measured.get(r["vs"].removeprefix(PREFIX)) if r["vs"] else None
-        ref_dice = next((x["dice"] for x in out if x["config_name"] == PREFIX + r["vs"]), None) if r["vs"] else None
-        pct = lambda key: round(100.0 * (r[key] - ref[key]) / ref[key], 1) if ref else ""        # noqa: E731
-        r["vs"] = PREFIX + r["vs"] if r["vs"] else ""
-        r.update({"d_params_pct": pct("params"), "d_flops_pct": pct("flops"), "d_mem_elements_pct": pct("mem_elements"), "d_dice": round(r["dice"] - ref_dice, 4) if ref else ""})
+        pct = lambda key: round(100.0 * (r[key] - base[key]) / base[key], 1)             # noqa: E731
+        r.update({"d_params_pct": pct("params"), "d_flops_pct": pct("flops"), "d_mem_elements_pct": pct("mem_elements"), "d_dice": round(r["dice"] - base["dice"], 4)})
     table = pd.DataFrame(out)
     table.to_csv(HERE / "ablation.csv", index=False)
+    (HERE / "ablation_table.tex").write_text(latex(table))
     with pd.option_context("display.width", 250, "display.max_columns", None):
-        print(table.drop(columns=["config_name", "vs", "macs", "flops_in_results_csv"]).to_string(index=False))
+        print(table[["variant"] + COLUMNS + ["params", "mem_elements", "flops", "dice", "epochs", "d_dice"]].to_string(index=False))
     stale = table[(table["flops"] - table["flops_in_results_csv"]).abs() / table["flops"] > 0.01]
     if len(stale):
         print("\nrows whose recorded flops in results.csv differ from the recomputed value (old thop count):")
         print(stale[["config_name", "flops", "flops_in_results_csv"]].to_string(index=False))
-    print(f"\nWrote {HERE / 'ablation.csv'}")
+    print(f"\nWrote {HERE / 'ablation.csv'} and {HERE / 'ablation_table.tex'}")
     return 0
 
 
