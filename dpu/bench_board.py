@@ -10,9 +10,11 @@ all N images are z-scored and quantized with the DPU input scale before the firs
                 --warmup untimed inferences; every pass is one region from the first submit to the last result
   single_image  --single-n synchronous runs of one image on one runner (after --warmup), per-run latency
   accuracy      separate untimed pass over all images, class maps -> out/pred.npy (N,H,W) uint8
-  power         INA226 on the 12 V board input (hwmon), sampled by a separate process; idle windows (model loaded,
-                nothing running) before and after the streams. Samples and window times are written to out/result.json,
-                dynamic energy is computed on the host with analysis/benchmark/power_meter.summarize.
+  power         PMBus telemetry (READ_POUT) of every IRPS5401 output rail of the ZCU104 (i2c-4, 0x43 / 0x44, pages 0-4) summed
+                per sweep (~100 Hz), the counterpart of the FINN ZCU106 sum over its INA226 rails; the 12 V input INA226
+                (hwmon) is sampled in the same sweep as a second series. Sampled by a separate process; idle windows (model
+                loaded, nothing running) before and after the streams. Samples and window times are written to
+                out/result.json, dynamic energy is computed on the host with analysis/benchmark/power_meter.summarize.
 """
 import argparse
 import json
@@ -29,6 +31,16 @@ import numpy as np
 HWMON_NAME = "ina226"
 IIO = "/sys/bus/iio/devices/iio:device1"
 
+# ZCU104 PMBus regulators behind the PCA9548 (0x74) channel 2 = /dev/i2c-4: two IRPS5401 (5 outputs each). Every output
+# is a rail with its own READ_VOUT / READ_IOUT / READ_POUT, the counterpart of the 18 INA226 rails of the ZCU106
+# (deployment/FINN_interface/lwip_collect_results/src/power_mon.c). The 12 V INA226 (hwmon) stays as a second series.
+PMBUS_BUS = "/dev/i2c-4"
+PMBUS_ADDRS = (0x43, 0x44)
+PMBUS_PAGES = range(5)
+I2C_SLAVE_FORCE, I2C_SMBUS = 0x0706, 0x0720
+SMB_READ, SMB_WRITE, SMB_BYTE, SMB_WORD = 1, 0, 2, 3
+REG_PAGE, REG_VOUT_MODE, REG_READ_VOUT, REG_READ_IOUT, REG_READ_POUT = 0x00, 0x20, 0x8B, 0x8C, 0x96
+
 
 def find_power_file():
     base = "/sys/class/hwmon"
@@ -38,17 +50,87 @@ def find_power_file():
     raise RuntimeError("no ina226 hwmon device")
 
 
+def linear11(w):
+    e, m = w >> 11, w & 0x7FF
+    return (m - 2048 if m > 1023 else m) * 2.0 ** (e - 32 if e > 15 else e)
+
+
+class PMBus:
+    """SMBus word reads of the IRPS5401 telemetry through /dev/i2c-N (ioctl I2C_SMBUS, repeated start)."""
+
+    def __init__(self, path):
+        import ctypes
+        import fcntl
+        self.ct, self.fcntl = ctypes, fcntl
+        self.fd = os.open(path, os.O_RDWR)
+
+        class Data(ctypes.Union):
+            _fields_ = [("byte", ctypes.c_uint8), ("word", ctypes.c_uint16), ("block", ctypes.c_uint8 * 34)]
+
+        class Args(ctypes.Structure):
+            _fields_ = [("rw", ctypes.c_uint8), ("cmd", ctypes.c_uint8), ("size", ctypes.c_uint32),
+                        ("data", ctypes.POINTER(Data))]
+
+        self.Data, self.Args = Data, Args
+
+    def select(self, addr):
+        self.fcntl.ioctl(self.fd, I2C_SLAVE_FORCE, addr)
+
+    def xfer(self, rw, cmd, size, val=0):
+        d = self.Data()
+        if size == SMB_BYTE:
+            d.byte = val
+        else:
+            d.word = val
+        self.fcntl.ioctl(self.fd, I2C_SMBUS, self.Args(rw, cmd, size, self.ct.pointer(d)))
+        return d.byte if size == SMB_BYTE else d.word
+
+    def rails(self):
+        """[(addr, page, vout_exponent)] of the outputs that answer, with their present voltage."""
+        out = []
+        for addr in PMBUS_ADDRS:
+            self.select(addr)
+            for page in PMBUS_PAGES:
+                try:
+                    self.xfer(SMB_WRITE, REG_PAGE, SMB_BYTE, page)
+                    if self.xfer(SMB_READ, REG_PAGE, SMB_BYTE) != page:
+                        continue
+                    mode = self.xfer(SMB_READ, REG_VOUT_MODE, SMB_BYTE)
+                    ex = mode & 0x1F
+                    vout = self.xfer(SMB_READ, REG_READ_VOUT, SMB_WORD) * 2.0 ** (ex - 32 if ex > 15 else ex)
+                    self.xfer(SMB_READ, REG_READ_POUT, SMB_WORD)
+                except OSError:
+                    continue
+                out.append({"addr": addr, "page": page, "vout_exp": ex - 32 if ex > 15 else ex, "vout_nominal_v": round(vout, 3)})
+        return out
+
+    def read(self, rail):
+        self.select(rail["addr"])
+        self.xfer(SMB_WRITE, REG_PAGE, SMB_BYTE, rail["page"])
+        v = self.xfer(SMB_READ, REG_READ_VOUT, SMB_WORD) * 2.0 ** rail["vout_exp"]
+        i = linear11(self.xfer(SMB_READ, REG_READ_IOUT, SMB_WORD))
+        p = linear11(self.xfer(SMB_READ, REG_READ_POUT, SMB_WORD))
+        return v, i, p
+
+
 def sample_power(path):
     stop = []
     signal.signal(signal.SIGTERM, lambda *_: stop.append(1))
     f = open(find_power_file())
-    t, w = [], []
+    bus = PMBus(PMBUS_BUS)
+    rails = bus.rails()
+    t, w12, wsum = [], [], []
+    series = [{"v": [], "i": [], "p": []} for _ in rails]
     while not stop:
+        row = [bus.read(r) for r in rails]
         f.seek(0)
-        w.append(int(f.read()) * 1e-6)
+        w12.append(int(f.read()) * 1e-6)
+        wsum.append(sum(p for _, _, p in row))
+        for s, (v, i, p) in zip(series, row):
+            s["v"].append(v), s["i"].append(i), s["p"].append(p)
         t.append(time.time())
-        time.sleep(0.004)
-    json.dump({"t": t, "w": w}, open(path, "w"))
+    json.dump({"t": t, "w": wsum, "w_12v": w12,
+               "rails": [{**r, **s} for r, s in zip(rails, series)]}, open(path, "w"))
 
 
 def dpu_subgraph(graph):
@@ -156,6 +238,7 @@ def main():
         runs.append(stream(workers, xs, n))
         print(f"stream_warm run {k + 1}/{a.repeats}: {runs[-1]['total_s']:.3f} s ({n / runs[-1]['total_s']:.2f} fps)", flush=True)
 
+    rails_info = None
     if not a.no_power:
         time.sleep(2)                                           # cool-down of the load transient is excluded from the idle window
         i0 = time.time()
@@ -164,6 +247,8 @@ def main():
         time.sleep(0.2)
         sampler.send_signal(signal.SIGTERM)
         sampler.wait(timeout=30)
+        rails_info = [{k: r[k] for k in ("addr", "page", "vout_nominal_v")}
+                      for r in json.load(open(os.path.join(a.out, "power.json")))["rails"]]
 
     w = workers[0]
     for k in range(a.warmup):
@@ -186,7 +271,11 @@ def main():
         "power_file": None if a.no_power else "power.json",
         "info": {"kernel": platform.release(), "python": platform.python_version(),
                  "model": os.path.basename(a.model),
-                 "power_source": "INA226 12 V board input (hwmon power1_input), whole-board incl. regulator losses, PS, PL, DDR, fan, PHY",
+                 "power_source": "sum of the PMBus output powers (READ_POUT) of all answering IRPS5401 rails of the ZCU104 = "
+                                 "post-regulator rail sum like the ZCU106 INA226 sum; excludes regulator losses and unmonitored loads "
+                                 "(fan, PHY, the PMBus regulator at 0x13 that returns no telemetry, ...)",
+                 "power_rails": rails_info,
+                 "power_12v_source": "INA226 12 V board input (hwmon power1_input), whole board incl. regulator losses",
                  "ina226_sampling_frequency_hz": read_iio("in_sampling_frequency"),
                  "ina226_oversampling_ratio": read_iio("in_oversampling_ratio"),
                  "ina226_integration_time_s": read_iio("in_voltage0_integration_time"),

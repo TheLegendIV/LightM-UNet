@@ -60,7 +60,12 @@ measurement there, scores the class maps with the repo Dice, and upserts the
 `stream_warm` / `single_image` rows (`int8_dpu`) into
 `analysis/report/MILP/final_results/benchmark_s12_512.csv` + `_env.json`.
 Timing covers DPU input → class map after argmax; preprocessing is done before
-and excluded. Power is the whole ZCU104 12 V input (INA226), idle vs. active.
+and excluded. Power follows the FINN flow (sum of the board's rail monitors, `deployment/FINN_interface/.../power_mon.c`):
+the ZCU104 has only one INA226 (12 V input), but its two IRPS5401 regulators (i2c-4, 0x43/0x44) report `READ_POUT`
+per output, so `bench_board.py` sums those rails (~100 Hz, idle vs. active). This is post-regulator (no conversion
+losses, fan, PHY), about 8.2 W idle / 9.6 W active; the 12 V input INA226 (≈14.7 / 16.5 W) is sampled in the same sweep
+and stored in the env JSON as `energy_12v_input`. The PMBus regulator at 0x13 returns no telemetry, so its rail is not
+in the sum.
 `--no-run` re-scores the stored outputs in `dpu/results/<job>/`.
 `--qat` benchmarks the QAT model instead (`compiled_qat/`, results in `dpu/results/<job>_qat/`, `numeric_mode=int8_dpu_qat`).
 

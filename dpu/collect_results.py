@@ -15,10 +15,12 @@ Per run (dpu/bench_board.py on the board):
   stream_warm   --warmup untimed inferences, then --repeats passes over the 300 images, batch 1, --threads VART runners
                 (one per DPU core). latency_ms_mean = total_s / n (time per image of the stream, as in the other rows).
   single_image  --single-n synchronous runs of one image on one runner (mean/std/median/min/p95/p99).
-  energy        INA226 on the 12 V board input, sampled at ~200 Hz (the sensor updates at ~114 Hz); idle windows with the
-                model loaded before and after the streams, energy over exactly the timed streams, dynamic energy above idle
-                (analysis/benchmark/power_meter.summarize). WHOLE BOARD at the input (PS + PL + DDR + regulator losses + fan),
-                not the post-regulator rail sum the FINN ZCU106 power rows use.
+  energy        PMBus telemetry (READ_POUT) of every IRPS5401 output rail (2 regulators, ~9 live rails) summed per sweep at
+                ~100 Hz, as the FINN ZCU106 rows sum their INA226 rails (deployment/.../power_mon.c): post-regulator, so
+                regulator losses and unmonitored loads (fan, PHY, ...) are excluded. Idle windows with the model loaded
+                before and after the streams, energy over exactly the timed streams, dynamic energy above idle
+                (analysis/benchmark/power_meter.summarize). The 12 V input INA226 is sampled in the same sweep and reported
+                in the env JSON (energy_12v_input) only.
   accuracy      untimed pass over all test images, same Dice definitions as deployment/collect_results.py.
 """
 from __future__ import annotations
@@ -70,12 +72,13 @@ def job_env(job: str) -> dict:
 
 
 class BoardMeter:
-    """Energy from the board-side power samples (power_meter.summarize interface)."""
+    """Energy from the board-side power samples (power_meter.summarize interface). series: "w" = sum of the PMBus rails,
+    "w_12v" = INA226 on the 12 V input."""
 
-    name = "ina226-12v"
-
-    def __init__(self, samples, info):
-        self.t, self.w, self._info = samples["t"], samples["w"], info
+    def __init__(self, samples, info, series="w"):
+        self.t, self.w, self._info = samples["t"], samples[series], info
+        self.name = "pmbus-rail-sum" if series == "w" else "ina226-12v"
+        self._source = info["power_source"] if series == "w" else info["power_12v_source"]
 
     def energy_j(self, t0, t1):
         t, w = self.t, self.w
@@ -92,9 +95,7 @@ class BoardMeter:
         return sum((xs[k + 1] - xs[k]) * (ys[k + 1] + ys[k]) / 2 for k in range(len(xs) - 1))
 
     def info(self):
-        return {"energy_source": self._info["power_source"], "n_power_samples": len(self.t),
-                "ina226_sampling_frequency_hz": self._info.get("ina226_sampling_frequency_hz"),
-                "ina226_oversampling_ratio": self._info.get("ina226_oversampling_ratio")}
+        return {"energy_source": self._source, "n_power_samples": len(self.t)}
 
 
 def accuracy(pred, files):
@@ -162,11 +163,15 @@ def main() -> None:
     print(f"accuracy ({n} images): dice {acc['dice']:.4f}  binary {acc['dice_binary']:.4f}  "
           + "  ".join(f"{c} {acc[f'dice_{c}']:.4f}" for c in bench.CLASSES), flush=True)
 
-    energy = {}
+    energy = energy_12v = {}
     if res["power_file"]:
         samples = json.loads((out_dir / res["power_file"]).read_text())
-        meter = BoardMeter(samples, res["info"])
-        energy = pm.summarize(meter, [(r["t0"], r["t1"]) for r in res["runs"]], res["idle1"], res["idle2"], n)
+        windows = ([(r["t0"], r["t1"]) for r in res["runs"]], res["idle1"], res["idle2"], n)
+        energy = pm.summarize(BoardMeter(samples, res["info"]), *windows)
+        energy_12v = pm.summarize(BoardMeter(samples, res["info"], "w_12v"), *windows)
+        print(f"power: rail sum {energy['power_active_w']:.2f} W active / {energy['power_idle_w']:.2f} W idle, "
+              f"{energy['energy_dyn_j_per_image']:.4f} J/img dynamic; 12 V input {energy_12v['power_active_w']:.2f} / "
+              f"{energy_12v['power_idle_w']:.2f} W, {energy_12v['energy_dyn_j_per_image']:.4f} J/img dynamic", flush=True)
 
     ts = [r["total_s"] for r in res["runs"]]
     lat = res["latency_ms"]
@@ -192,7 +197,8 @@ def main() -> None:
         "platform": PLATFORM, "job": a.job, "input": "int8 NHWC, z-score + DPU input fix-point scale, resident before timing",
         "input_scale": res["input_scale"], "warm_runs_s": ts, "warmup": res["warmup"], "batch_size": 1, "timestamp": ts_now,
         "timed_unit": "DPU execute -> class map after on-DPU argmax (preprocessing excluded)", **res["info"],
-        **({"energy": {k: v for k, v in energy.items() if k not in ekeys}} if energy else {})}
+        **({"energy": {k: v for k, v in energy.items() if k not in ekeys},
+            "energy_12v_input": energy_12v} if energy else {})}
     bench.OUT_ENV.write_text(json.dumps(env, indent=2))
     for r in rows:
         print({k: r[k] for k in ("mode", "runs", "total_s", "total_s_std", "latency_ms_mean", "latency_ms_std", "latency_ms_median",
