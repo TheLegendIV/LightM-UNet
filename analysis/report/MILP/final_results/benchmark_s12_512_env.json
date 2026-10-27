@@ -166,38 +166,38 @@
     "checkpoint": "nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_bilinear_upsample_256_perlayer_12_dense_relu_warmstart150ep_bilinear_uniform_int8_perlayer_ft15ep",
     "input": "uint8 levels as float32, profile s12_512_bilinear_int8_maxfps",
     "warm_runs_s": [
-      0.8027320556640625,
-      0.8149166259765624,
-      0.8176207275390625,
-      0.8178626098632813,
-      0.8196649169921875
+      0.8805826416015625,
+      0.88478515625,
+      1.0059386596679687,
+      1.0218700561523437,
+      1.113555908203125
     ],
     "warmup": 10,
     "batch_size": 1,
-    "timestamp": "2026-10-22T20:50:04",
+    "timestamp": "2026-10-27T13:09:13",
     "runtime": "TensorRT 10.3.0",
-    "builder_flags": "INT8 + FP16",
-    "engine_layers": 154,
+    "builder_flags": "INT8",
+    "engine_layers": 159,
     "energy": {
-      "energy_dyn_j_per_image_mean": 0.07578959829649742,
-      "energy_dyn_j_per_image_std": 0.006556261760767656,
+      "energy_dyn_j_per_image_mean": 0.08828491022088497,
+      "energy_dyn_j_per_image_std": 0.009937429240656352,
       "energy_dyn_j_per_image_runs": [
-        0.06776911075217695,
-        0.07421276996983538,
-        0.07481421314287957,
-        0.07616263600546609,
-        0.0859892616121291
+        0.08017982142570089,
+        0.07706814538014176,
+        0.10181043044644836,
+        0.08981134737770825,
+        0.09255480647442567
       ],
       "energy_j_per_image_runs": [
-        0.08003000000006674,
-        0.08664999999998448,
-        0.08729000000001785,
-        0.0886433333333116,
-        0.09849666666666357
+        0.09454666666667132,
+        0.0914900000000489,
+        0.11821333333326038,
+        0.10647333333336671,
+        0.11070666666666512
       ],
-      "power_idle_before_w": 4.364885230588666,
-      "power_idle_after_w": 4.7821200673748985,
-      "idle_window_s": 30.03080105781555,
+      "power_idle_before_w": 4.4007799623057675,
+      "power_idle_after_w": 5.371607081818329,
+      "idle_window_s": 20.019633054733276,
       "energy_source": "NVML nvmlDeviceGetTotalEnergyConsumption (RTX 2050 board energy)"
     }
   },

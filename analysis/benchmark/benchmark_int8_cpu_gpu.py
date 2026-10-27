@@ -2,7 +2,7 @@
 perlayer_ft15ep, the network of the FPGA build s12_512_bilinear_int8_maxfps) -> rows of analysis/report/MILP/final_results/benchmark_s12_512.csv, same modes and timing rules as benchmark_fp32_cpu_gpu.py.
 
   --backend ort-cpu   ONNX Runtime CPU, int8 kernels (QDQ graph -> QLinearConv, VNNI), i7-1260P
-  --backend trt-gpu   TensorRT INT8 (explicit quantization; FP16 allowed for the layers without Q/DQ), RTX 2050 laptop (TensorRT only exists for NVIDIA GPUs)
+  --backend trt-gpu   TensorRT INT8 (explicit quantization; no FP16 flag, so layers without an int8 kernel run FP32), RTX 2050 laptop (TensorRT only exists for NVIDIA GPUs)
 The ONNX files are analysis/benchmark/export_int8_qcdq.py's QDQ conversion of the FPGA build's QONNX export (BatchNorm folded into per-channel int8 weight scales, an ArgMax appended: the timed unit is
 network + argmax, as everywhere else). The input is the board's UINT8 input contract (z-score, quantize with the input_profiles.json scale, +128) computed on the host BEFORE timing, as the FPGA host does.
 
@@ -92,7 +92,7 @@ class TrtGpu:
         import torch
         self.trt, self.torch = trt, torch
         logger = trt.Logger(trt.Logger.WARNING)
-        plan = ONNX_DIR / "s12_512_bilinear_int8_trt.plan"
+        plan = ONNX_DIR / "s12_512_bilinear_int8only_trt.plan"
         runtime = trt.Runtime(logger)
         if plan.is_file():
             engine = runtime.deserialize_cuda_engine(plan.read_bytes())
@@ -104,7 +104,7 @@ class TrtGpu:
                 raise RuntimeError("ONNX parse failed: " + "; ".join(str(parser.get_error(i)) for i in range(parser.num_errors)))
             config = builder.create_builder_config()
             config.set_flag(trt.BuilderFlag.INT8)
-            config.set_flag(trt.BuilderFlag.FP16)
+            config.profiling_verbosity = trt.ProfilingVerbosity.DETAILED     # per-layer precision readable with the engine inspector
             config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 2 << 30)
             ser = builder.build_serialized_network(network, config)
             if ser is None:
@@ -149,7 +149,7 @@ class TrtGpu:
         return {"total_s": start.elapsed_time(end) / 1000.0, "wall_s": time.perf_counter() - w0}
 
     def info(self):
-        return {"runtime": f"TensorRT {self.trt.__version__}", "builder_flags": "INT8 + FP16", "engine_layers": self.engine.num_layers}
+        return {"runtime": f"TensorRT {self.trt.__version__}", "builder_flags": "INT8", "engine_layers": self.engine.num_layers}
 
 
 def single_latencies(be, warmup, n):
