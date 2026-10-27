@@ -207,48 +207,121 @@
     "input": "int8 NHWC, z-score + DPU input fix-point scale, resident before timing",
     "input_scale": 32,
     "warm_runs_s": [
-      2.4789857900000243,
-      2.4730873999999403,
-      2.4730365499999607,
-      2.472698179999952,
-      2.47442032999993
+      2.478447249988676,
+      2.4775090600014664,
+      2.478377190011088,
+      2.4781368399999337,
+      2.4779821400006767
     ],
     "warmup": 10,
     "batch_size": 1,
-    "timestamp": "2026-10-26T12:10:20",
+    "timestamp": "2026-10-27T11:51:50",
     "timed_unit": "DPU execute -> class map after on-DPU argmax (preprocessing excluded)",
     "kernel": "5.15.36-xilinx-v2022.2",
     "python": "3.9.9",
     "model": "12_dense_relu_warmstart150ep_fp32.xmodel",
-    "power_source": "INA226 12 V board input (hwmon power1_input), whole-board incl. regulator losses, PS, PL, DDR, fan, PHY",
+    "power_source": "sum of the PMBus output powers (READ_POUT) of all answering IRPS5401 rails of the ZCU104 = post-regulator rail sum like the ZCU106 INA226 sum; excludes regulator losses and unmonitored loads (fan, PHY, the PMBus regulator at 0x13 that returns no telemetry, ...)",
+    "power_rails": [
+      {
+        "addr": 67,
+        "page": 0,
+        "vout_nominal_v": 0.855
+      },
+      {
+        "addr": 67,
+        "page": 1,
+        "vout_nominal_v": 1.797
+      },
+      {
+        "addr": 67,
+        "page": 2,
+        "vout_nominal_v": 1.203
+      },
+      {
+        "addr": 67,
+        "page": 4,
+        "vout_nominal_v": 0.891
+      },
+      {
+        "addr": 68,
+        "page": 0,
+        "vout_nominal_v": 3.297
+      },
+      {
+        "addr": 68,
+        "page": 1,
+        "vout_nominal_v": 1.133
+      },
+      {
+        "addr": 68,
+        "page": 2,
+        "vout_nominal_v": 5.008
+      },
+      {
+        "addr": 68,
+        "page": 3,
+        "vout_nominal_v": 1.199
+      },
+      {
+        "addr": 68,
+        "page": 4,
+        "vout_nominal_v": 0.836
+      }
+    ],
+    "power_12v_source": "INA226 12 V board input (hwmon power1_input), whole board incl. regulator losses",
     "ina226_sampling_frequency_hz": "114",
     "ina226_oversampling_ratio": "4",
     "ina226_integration_time_s": "0.001100",
     "ina226_shunt_ohm": "0.005000000",
     "energy": {
-      "energy_dyn_j_per_image_mean": 0.014450714824638103,
-      "energy_dyn_j_per_image_std": 5.107390030630839e-05,
+      "energy_dyn_j_per_image_mean": 0.011736112073666712,
+      "energy_dyn_j_per_image_std": 9.429414176090585e-05,
       "energy_dyn_j_per_image_runs": [
-        0.01437363460536858,
-        0.014453709430158336,
-        0.014493094931062014,
-        0.014433513438716971,
-        0.014499621717884614
+        0.011630164668886849,
+        0.011694400861925977,
+        0.011733819000050438,
+        0.011735745865261755,
+        0.011886429972208533
       ],
       "energy_j_per_image_runs": [
-        0.1356662725218119,
-        0.13545774477581596,
-        0.13549464554157098,
-        0.13541851081365824,
-        0.1355688784448382
+        0.07913750392143433,
+        0.07917618627560641,
+        0.07923924902041828,
+        0.07923462994672795,
+        0.07938109945610809
       ],
-      "power_idle_before_w": 14.701907665247772,
-      "power_idle_after_w": 14.655091131601306,
-      "idle_window_s": 20.01767086982727,
-      "energy_source": "INA226 12 V board input (hwmon power1_input), whole-board incl. regulator losses, PS, PL, DDR, fan, PHY",
-      "n_power_samples": 13425,
-      "ina226_sampling_frequency_hz": "114",
-      "ina226_oversampling_ratio": "4"
+      "power_idle_before_w": 8.171189819354392,
+      "power_idle_after_w": 8.171463584773676,
+      "idle_window_s": 20.00146222114563,
+      "energy_source": "sum of the PMBus output powers (READ_POUT) of all answering IRPS5401 rails of the ZCU104 = post-regulator rail sum like the ZCU106 INA226 sum; excludes regulator losses and unmonitored loads (fan, PHY, the PMBus regulator at 0x13 that returns no telemetry, ...)",
+      "n_power_samples": 5787
+    },
+    "energy_12v_input": {
+      "energy_j_per_image": 0.13623158712936254,
+      "energy_dyn_j_per_image": 0.014699535983523191,
+      "power_active_w": 16.493047733795756,
+      "power_idle_w": 14.71342999792749,
+      "energy_dyn_j_per_image_mean": 0.014658705433714832,
+      "energy_dyn_j_per_image_std": 9.595667245659933e-05,
+      "energy_dyn_j_per_image_runs": [
+        0.014509335403178293,
+        0.014622638788416301,
+        0.014754417078384445,
+        0.014707599915071938,
+        0.014699535983523191
+      ],
+      "energy_j_per_image_runs": [
+        0.13606419995018101,
+        0.13613149065803412,
+        0.13630584382941482,
+        0.13624723993705432,
+        0.13623158712936254
+      ],
+      "power_idle_before_w": 14.708653864611543,
+      "power_idle_after_w": 14.718206131243436,
+      "idle_window_s": 20.00146222114563,
+      "energy_source": "INA226 12 V board input (hwmon power1_input), whole board incl. regulator losses",
+      "n_power_samples": 5787
     }
   },
   "dpu:int8_dpu_qat": {
@@ -257,48 +330,121 @@
     "input": "int8 NHWC, z-score + DPU input fix-point scale, resident before timing",
     "input_scale": 32,
     "warm_runs_s": [
-      2.4936043699999573,
-      2.492952639993746,
-      2.4933541799982777,
-      2.49375616999896,
-      2.4936824799951864
+      2.497317529996508,
+      2.4967972300073598,
+      2.496835479993024,
+      2.4981626799999503,
+      2.4970986300031655
     ],
     "warmup": 10,
     "batch_size": 1,
-    "timestamp": "2026-10-26T20:51:28",
+    "timestamp": "2026-10-27T11:53:16",
     "timed_unit": "DPU execute -> class map after on-DPU argmax (preprocessing excluded)",
     "kernel": "5.15.36-xilinx-v2022.2",
     "python": "3.9.9",
     "model": "12_dense_relu_warmstart150ep_fp32_qat.xmodel",
-    "power_source": "INA226 12 V board input (hwmon power1_input), whole-board incl. regulator losses, PS, PL, DDR, fan, PHY",
+    "power_source": "sum of the PMBus output powers (READ_POUT) of all answering IRPS5401 rails of the ZCU104 = post-regulator rail sum like the ZCU106 INA226 sum; excludes regulator losses and unmonitored loads (fan, PHY, the PMBus regulator at 0x13 that returns no telemetry, ...)",
+    "power_rails": [
+      {
+        "addr": 67,
+        "page": 0,
+        "vout_nominal_v": 0.852
+      },
+      {
+        "addr": 67,
+        "page": 1,
+        "vout_nominal_v": 1.797
+      },
+      {
+        "addr": 67,
+        "page": 2,
+        "vout_nominal_v": 1.199
+      },
+      {
+        "addr": 67,
+        "page": 4,
+        "vout_nominal_v": 0.891
+      },
+      {
+        "addr": 68,
+        "page": 0,
+        "vout_nominal_v": 3.305
+      },
+      {
+        "addr": 68,
+        "page": 1,
+        "vout_nominal_v": 1.133
+      },
+      {
+        "addr": 68,
+        "page": 2,
+        "vout_nominal_v": 5.0
+      },
+      {
+        "addr": 68,
+        "page": 3,
+        "vout_nominal_v": 1.199
+      },
+      {
+        "addr": 68,
+        "page": 4,
+        "vout_nominal_v": 0.836
+      }
+    ],
+    "power_12v_source": "INA226 12 V board input (hwmon power1_input), whole board incl. regulator losses",
     "ina226_sampling_frequency_hz": "114",
     "ina226_oversampling_ratio": "4",
     "ina226_integration_time_s": "0.001100",
     "ina226_shunt_ohm": "0.005000000",
     "energy": {
-      "energy_dyn_j_per_image_mean": 0.014536435574533383,
-      "energy_dyn_j_per_image_std": 5.469694069300479e-05,
+      "energy_dyn_j_per_image_mean": 0.011677028604296952,
+      "energy_dyn_j_per_image_std": 0.00010549026625153144,
       "energy_dyn_j_per_image_runs": [
-        0.014467883329177623,
-        0.014494087166604051,
-        0.014548670014200365,
-        0.0146008854091365,
-        0.014570651953548364
+        0.01156086749929738,
+        0.011689116433242315,
+        0.011654177959590738,
+        0.011634905825301977,
+        0.011846075304052354
       ],
       "energy_j_per_image_runs": [
-        0.1362673553080542,
-        0.13626172036300516,
-        0.13633591422365512,
-        0.13640776392263432,
-        0.13637393200918774
+        0.07958064791358174,
+        0.07969472728971123,
+        0.0796608278303816,
+        0.07967770690065681,
+        0.0798598943736646
       ],
-      "power_idle_before_w": 14.651379529672546,
-      "power_idle_after_w": 14.655467440055633,
-      "idle_window_s": 20.020050287246704,
-      "energy_source": "INA226 12 V board input (hwmon power1_input), whole-board incl. regulator losses, PS, PL, DDR, fan, PHY",
-      "n_power_samples": 13451,
-      "ina226_sampling_frequency_hz": "114",
-      "ina226_oversampling_ratio": "4"
+      "power_idle_before_w": 8.170827136199911,
+      "power_idle_after_w": 8.171455088432552,
+      "idle_window_s": 20.018550872802734,
+      "energy_source": "sum of the PMBus output powers (READ_POUT) of all answering IRPS5401 rails of the ZCU104 = post-regulator rail sum like the ZCU106 INA226 sum; excludes regulator losses and unmonitored loads (fan, PHY, the PMBus regulator at 0x13 that returns no telemetry, ...)",
+      "n_power_samples": 5795
+    },
+    "energy_12v_input": {
+      "energy_j_per_image": 0.13697929263767744,
+      "energy_dyn_j_per_image": 0.01448806045882814,
+      "power_active_w": 16.458348289972985,
+      "power_idle_w": 14.717577546556317,
+      "energy_dyn_j_per_image_mean": 0.014505369199492671,
+      "energy_dyn_j_per_image_std": 6.023840522825257e-05,
+      "energy_dyn_j_per_image_runs": [
+        0.014442058864950601,
+        0.014478694532813492,
+        0.01448806045882814,
+        0.014515776276679233,
+        0.014602255864191893
+      ],
+      "energy_j_per_image_runs": [
+        0.1369569413258643,
+        0.13696805527490202,
+        0.13697929263767744,
+        0.137072122758324,
+        0.1371064009566906
+      ],
+      "power_idle_before_w": 14.710860455784669,
+      "power_idle_after_w": 14.724294637327963,
+      "idle_window_s": 20.018550872802734,
+      "energy_source": "INA226 12 V board input (hwmon power1_input), whole board incl. regulator losses",
+      "n_power_samples": 5795
     }
   }
 }
