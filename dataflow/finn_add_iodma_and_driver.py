@@ -21,7 +21,7 @@ Why no re-stitch is needed:
     partition only synthesizes the one new IODMA node.
 
 Usage (inside the FINN container):
-    docker cp hardware/finn_add_iodma_and_driver.py <container>:/home/thelegendiv/finn/notebooks/enet/
+    docker cp dataflow/finn_add_iodma_and_driver.py <container>:/home/thelegendiv/finn/notebooks/enet/
     docker exec -e HOME=/tmp/home_dir <container> bash -c \\
         "source /tools/Xilinx/Vivado/2022.2/settings64.sh && \\
          cd /home/thelegendiv/finn/notebooks/enet && \\

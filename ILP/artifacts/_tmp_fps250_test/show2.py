@@ -1,5 +1,5 @@
 import csv,glob,os
-for f in sorted(glob.glob('/workspace/LightM-UNet/MILP/artifacts/S12_dense_nearest_upsample_512_hwsweep_partition2_wm_finncaps_pinbits/*/')):
+for f in sorted(glob.glob('/workspace/LightM-UNet/ILP/artifacts/S12_dense_nearest_upsample_512_hwsweep_partition2_wm_finncaps_pinbits/*/')):
     t=f.rstrip('/').split('/')[-1]
     s=f+'summary.csv'
     if not os.path.exists(s):

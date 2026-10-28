@@ -12,11 +12,11 @@ multi-day builds and cross-reference prior results before starting new ones.
 | Folder | Purpose | Docs |
 |---|---|---|
 | `enet/` | nnU-Net v2 fork + `ENet`/`QuantENet` model code, trainer classes | `enet/nnunetv2/**/readme.md` |
-| `compression/` | Pruning/quantization sweep orchestration (Slurm), results tracking | [compression/README.md](compression/README.md), `compression/foundation_log.md` |
-| `hardware/` | FINN export → HAWQ → build → OOC-synth pipeline for the active architecture | [hardware/README.md](hardware/README.md) |
+| `nas/` | Pruning/quantization sweep orchestration (Slurm), results tracking | [nas/README.md](nas/README.md), `nas/foundation_log.md` |
+| `dataflow/` | FINN export → HAWQ → build → OOC-synth pipeline for the active architecture | [dataflow/README.md](dataflow/README.md) |
 | `deployment/` | Bitstreams (.bit/.xsa), drivers, PC↔FPGA image transfer interface (`img_intf/`), board test-set `collect_results.py` → `deployment/results.csv` | [deployment/img_intf/README.md](deployment/img_intf/README.md) |
-| `analysis/501_ARCADE/` | Topology/quality metrics beyond Dice | [analysis/501_ARCADE/README.md](analysis/501_ARCADE/README.md) |
-| `archive/` (any depth, e.g. `hardware/archive/`) | Retired code/docs kept for history | — |
+| `report/` | Thesis report scripts/tables: `model_search/` (NAS + benchmark CSVs), `MILP/` (constrained builds, FIFO sim, final results, CPU/GPU `benchmark/`) | — |
+| `archive/` (any depth, e.g. `dataflow/archive/`) | Retired code/docs kept for history | — |
 
 **`**/archive/` is gitignored repo-wide.** New files created directly inside an
 `archive/` dir will never show up in `git status`/get committed — that's
@@ -34,13 +34,13 @@ from scratch. Config identity in results tables is `(model_name, config)` —
 reusing an existing name silently overwrites/upserts that row instead of
 adding a new one.
 
-- `compression/` sweeps: `config_name = {stage}_{descriptive-suffix}`
-  (e.g. `stage2_U4_bnnative`), tracked in `compression/results.csv` via
+- `nas/` sweeps: `config_name = {stage}_{descriptive-suffix}`
+  (e.g. `stage2_U4_bnnative`), tracked in `nas/results.csv` via
   `collect_results.py` (idempotent — re-running a finished config is safe).
-- `hardware/` builds: one script per pipeline phase per architecture variant
-  (see [hardware/README.md](hardware/README.md) for the current S12-dense
-  phase list). Results land in `hardware/results.csv` /
-  `hardware/datasets/*.csv` via `hardware/collect_results.py`.
+- `dataflow/` builds: one script per pipeline phase per architecture variant
+  (see [dataflow/README.md](dataflow/README.md) for the current S12-dense
+  phase list). Results land in `dataflow/results.csv` /
+  `dataflow/datasets/*.csv` via `dataflow/collect_results.py`.
 - Before a destructive change to generated artifacts, back up as
   `archive_pre_<YYYYMMDD>_<reason>/` next to the thing being changed (existing
   convention, not a script).
@@ -62,11 +62,11 @@ adding a new one.
    `docker exec -e HOME=/tmp/home_dir <container> python3 <script>`.
    Scripts are deployed by `docker cp`-ing individual `.py` files into the
    container's flat `/home/thelegendiv/finn/notebooks/enet/` — this repo's
-   local `hardware/` subfolder layout is git-organization only and doesn't
+   local `dataflow/` subfolder layout is git-organization only and doesn't
    need to mirror the container.
    Vivado/Vitis HLS 2022.2 live at `/tools/Xilinx/{Vivado,Vitis_HLS}/2022.2`
    in-container but aren't on `PATH` — `source .../settings64.sh` first.
-3. **Host (Windows)** — for `compression/hawq/*.py` / `hardware/collect_results.py`,
+3. **Host (Windows)** — for `nas/hawq/*.py` / `dataflow/collect_results.py`,
    which need torch+pulp+the vendored `enet/nnunetv2` package but have no
    venv/conda set up in this repo. Default Windows `python`/`py` is 3.6 with
    no torch.

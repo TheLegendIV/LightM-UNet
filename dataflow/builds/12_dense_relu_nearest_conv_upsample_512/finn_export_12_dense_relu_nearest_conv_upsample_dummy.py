@@ -4,16 +4,16 @@ context, SEPARABLE_DILATED=False, plain ReLU, decoder_type=
 "nearest_conv_upsample" -- nearest-neighbor resize + a REAL learned 3x3
 skip_resize_conv on the up4/up5 skip branch, replacing the old
 "upsample_conv" bilinear-substitute decoder -- see
-MILP/config_12_dense_relu_nearest_conv_upsample.py and
+ILP/config_12_dense_relu_nearest_conv_upsample.py and
 enet/nnunetv2/nets/LayerQuantEnetFINN.py's FINNUpsamplingBottleneck
 docstring for the full rationale). Byte-for-byte identical to
 finn_export_12_dense_relu_warmstart150ep_alpha025_dummy.py otherwise --
 same channels/bottleneck depths/context pattern -- only DECODER_TYPE and
 the bits-file/output name differ. alpha=1.0, joint per-layer bits+folding
-ILP solve (MILP/artifacts/S12_dense_nn_upsample_v1, hard caps LUT 50%/
+ILP solve (ILP/artifacts/S12_dense_nn_upsample_v1, hard caps LUT 50%/
 BRAM 20%/DSP 90%, max-latency 200ms, max-join-imbalance 1.1 -- see that
 solve's own run_args.json/summary.csv and
-compression/slurm/qat_12_dense_relu_nearest_conv_upsample_joint_alpha1.0_perlayer_candidatebits468_forcedsp_lut50_bram20_dsp90_maxlat200ms_joinbalance1.1_ft15ep.job
+nas/slurm/qat_12_dense_relu_nearest_conv_upsample_joint_alpha1.0_perlayer_candidatebits468_forcedsp_lut50_bram20_dsp90_maxlat200ms_joinbalance1.1_ft15ep.job
 for the exact chosen config -- this is the SITES variant, not the folding
 one, matching finn_export_..._alpha025_dummy.py's own DEFAULT_BITS_FILE
 convention of loading layer_bits_SITES_*.json, NOT layer_bits_folding_*.json).
@@ -29,11 +29,11 @@ finn_export_12_dense_relu_warmstart150ep_alpha025_trained.py vs. its own
 _dummy sibling).
 
 Usage (run inside the pytorch training container, e.g. `lightm_pytorch`):
-    docker exec lightm_pytorch python /workspace/LightM-UNet/hardware/finn_export_12_dense_relu_nearest_conv_upsample_dummy.py
+    docker exec lightm_pytorch python /workspace/LightM-UNet/dataflow/finn_export_12_dense_relu_nearest_conv_upsample_dummy.py
 
-Output: hardware/outputs/finn_exports/quantEnet_12_dense_relu_nearest_conv_upsample_dummy_int8.onnx
+Output: dataflow/outputs/finn_exports/quantEnet_12_dense_relu_nearest_conv_upsample_dummy_int8.onnx
 Then, inside the FINN container:
-    docker cp hardware/outputs/finn_exports/quantEnet_12_dense_relu_nearest_conv_upsample_dummy_int8.onnx \\
+    docker cp dataflow/outputs/finn_exports/quantEnet_12_dense_relu_nearest_conv_upsample_dummy_int8.onnx \\
         <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/
 """
 from __future__ import annotations
@@ -58,7 +58,7 @@ BOTTLENECKS_PER_STAGE = (4, 8, 8, 2, 1)
 CONTEXT_PATTERN = "dense_dilation"
 DECODER_TYPE = "nearest_conv_upsample"
 DEFAULT_BITS_FILE = (
-    REPO_ROOT / "MILP" / "artifacts" / "S12_dense_nn_upsample_v1"
+    REPO_ROOT / "ILP" / "artifacts" / "S12_dense_nn_upsample_v1"
     / "layer_bits_SITES_12_dense_relu_nearest_conv_upsample_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram20_dsp90_maxlat200ms_joinbalance1.1.json"
 )
 FALLBACK_BITS = 6  # user decision -- any site missing from the real JSON falls back to 6, not 8
@@ -131,7 +131,7 @@ def main() -> None:
     export_model(model, name, dummy)
 
     print("\nDone. Copy to FINN container with:")
-    print(f"  docker cp hardware/outputs/finn_exports/{name}.onnx <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/")
+    print(f"  docker cp dataflow/outputs/finn_exports/{name}.onnx <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/")
 
 
 if __name__ == "__main__":

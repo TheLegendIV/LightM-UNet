@@ -1,18 +1,18 @@
 """Shared constants for nnUNetTrainerENet_12_dense_relu_nearest_upsample_warmstart150ep's
 ("S12-dense, bare nearest-neighbor decoder, WARM-STARTED continuation") HAWQ
-per-layer W/A search -- the already-trained checkpoint (compression/results.csv's
+per-layer W/A search -- the already-trained checkpoint (nas/results.csv's
 own nnUNetTrainerENet_12_dense_relu_nearest_upsample_warmstart150ep row, stage
 "12_dense_relu_nearest_upsample_warmstart150ep", dice=0.7863, 149/150 epochs --
 an improvement over the base `..._nearest_upsample` checkpoint's own
 dice=0.7734 (see config_12_dense_relu_nearest_upsample.py), from a second,
 reduced-LR 150-epoch schedule warm-started from that checkpoint, see
-compression/slurm/stage_12_dense_relu_nearest_upsample_warmstart150ep.job).
+nas/slurm/stage_12_dense_relu_nearest_upsample_warmstart150ep.job).
 Same 512x512 patch size, same architecture shape entirely -- this checkpoint
 differs from the base one ONLY in trained weights (continued training), not
 in any architecture parameter below.
 
 "_wm" is this config's own naming shorthand for "warmstart150ep" throughout
-MILP/hardware/QAT artifacts for this specific checkpoint (e.g.
+ILP/hardware/QAT artifacts for this specific checkpoint (e.g.
 `S12_dense_nearest_upsample_wm_v1`), to keep filenames shorter than spelling
 out "warmstart150ep" everywhere.
 

@@ -11,8 +11,8 @@ finn_export_12_dense_relu_nearest_conv_upsample_trained.py's own
 --input-hw 512 512 export instead.
 
 Prerequisite (run inside the pytorch training container first):
-    docker exec lightm_pytorch python /workspace/LightM-UNet/hardware/finn_export_12_dense_relu_nearest_conv_upsample_dummy.py --input-hw 512 512
-    docker cp hardware/outputs/finn_exports/quantEnet_12_dense_relu_nearest_conv_upsample_dummy_int8_512x512.onnx \\
+    docker exec lightm_pytorch python /workspace/LightM-UNet/dataflow/finn_export_12_dense_relu_nearest_conv_upsample_dummy.py --input-hw 512 512
+    docker cp dataflow/outputs/finn_exports/quantEnet_12_dense_relu_nearest_conv_upsample_dummy_int8_512x512.onnx \\
         <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/
 
 Run inside the FINN container:

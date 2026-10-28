@@ -3,7 +3,7 @@
 # those are added in step 3 as flat Verilog, never as BD cells, to avoid
 # the documented "Cannot upgrade to invalid target ''" Vivado bug hit
 # when combining FINN's partition-level stitched IPs via IP Integrator
-# (see hardware/finn_partition_build_steps.py step_combine_partitions).
+# (see dataflow/finn_partition_build_steps.py step_combine_partitions).
 # The PS/interconnect/smartconnect here are plain catalog IP, so BD is
 # safe for them.
 

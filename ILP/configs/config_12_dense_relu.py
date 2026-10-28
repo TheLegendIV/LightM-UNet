@@ -1,6 +1,6 @@
 """Shared constants for nnUNetTrainerENet_12_dense_relu's ("S12-dense")
 HAWQ per-block W/A search -- the already-trained S12-dense checkpoint
-(compression/results.csv's own nnUNetTrainerENet_12_dense_relu row, stage
+(nas/results.csv's own nnUNetTrainerENet_12_dense_relu row, stage
 "12_dense_relu", dice=0.7876, 147/150 epochs).
 
 Byte-for-byte config_12_separable_dense_relu.py's own S12 recipe -- same

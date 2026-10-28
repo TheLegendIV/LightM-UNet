@@ -31,12 +31,12 @@ single call is both mathematically equivalent and, since it shares one
 first-order backward graph across everything, strictly cheaper.
 
 Usage:
-    python compression/hawq/layer_sensitivity.py \\
+    python nas/hawq/layer_sensitivity.py \\
         --config config_12_separable_dense_relu \\
         --net-name nnUNetTrainerENet_12_separable_dense_relu \\
         --checkpoint-name checkpoint_best.pth \\
         --n-batches 64 --n-probes 30 \\
-        --out-file compression/hawq/artifacts/layer_sensitivity_12_separable_dense_relu.json
+        --out-file nas/hawq/artifacts/layer_sensitivity_12_separable_dense_relu.json
 """
 from __future__ import annotations
 
@@ -257,7 +257,7 @@ def run_layer_sensitivity(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", default="config_23_1",
-                         help="Which MILP/configs/config_*.py to load -- e.g. config_12_separable_dense_relu.")
+                         help="Which ILP/configs/config_*.py to load -- e.g. config_12_separable_dense_relu.")
     parser.add_argument("--net-name", default=None, help="Defaults to the loaded config's own NET_NAME.")
     parser.add_argument("--dataset-name", default="Dataset509_ARCADE_1x1_4c")
     parser.add_argument("--plans-name", default="nnUNetPlans")
@@ -274,7 +274,7 @@ def main() -> None:
                               "--candidate-bits use. Needed whenever a downstream per-layer ILP run wants a "
                               "bit-width this config's own default CANDIDATE_BITS never measured.")
     parser.add_argument("--out-file", type=Path, default=None,
-                         help="Defaults to compression/hawq/artifacts/layer_sensitivity_<config suffix>.json.")
+                         help="Defaults to nas/hawq/artifacts/layer_sensitivity_<config suffix>.json.")
     args = parser.parse_args()
 
     load_config(args.config)  # populates CHANNELS/BOTTLENECKS_PER_STAGE/NET_NAME/... as module globals
@@ -289,7 +289,7 @@ def main() -> None:
     # KeyError inside quantization_deltas.
     _sensitivity.CANDIDATE_BITS = CANDIDATE_BITS
     net_name = args.net_name or NET_NAME
-    out_file = args.out_file or Path(f"compression/hawq/artifacts/layer_sensitivity_{args.config.removeprefix('config_')}.json")
+    out_file = args.out_file or Path(f"nas/hawq/artifacts/layer_sensitivity_{args.config.removeprefix('config_')}.json")
 
     checkpoint_path = (
         NNUNET_RESULTS / args.dataset_name / f"{net_name}__{args.plans_name}__{args.configuration}"
@@ -308,7 +308,7 @@ def main() -> None:
     # need to scan CANDIDATE_BITS separately). A layer with a truly-dead
     # activation (its own ReLU permanently off, e.g. a collapsed BatchNorm
     # in a too-narrow bottleneck -- see this session's own regular5.0
-    # postmortem, MILP/artifacts/.../S12_dense_nn_upsample_v1 investigation)
+    # postmortem, ILP/artifacts/.../S12_dense_nn_upsample_v1 investigation)
     # reports an EXACT 0.0 here, not just a small number -- the epsilon
     # below is generous (1e-9) purely to also catch float-noise-adjacent
     # cases, real "small but alive" layers measured this session sit in the

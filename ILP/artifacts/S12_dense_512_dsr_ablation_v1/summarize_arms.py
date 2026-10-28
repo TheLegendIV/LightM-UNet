@@ -1,6 +1,6 @@
 """Summarise the DSR ablation arms (folder / arm names keep the old word "ratchet") (run run_ablation.sh first).
 
-    python3 MILP/artifacts/S12_dense_512_dsr_ablation_v1/summarize_arms.py
+    python3 ILP/artifacts/S12_dense_512_dsr_ablation_v1/summarize_arms.py
 
 Writes next to this file: arms_summary.csv (one row per arm), arms_to_build.txt (one representative arm per DISTINCT folding, in arm order: arms with an identical folding share one hardware build)
 and arm_groups.json (fingerprint -> arms). Also checks, per arm: the DSR rule holds on every compute edge, mvau-wwidth-max 72 holds, every layer is INT6.

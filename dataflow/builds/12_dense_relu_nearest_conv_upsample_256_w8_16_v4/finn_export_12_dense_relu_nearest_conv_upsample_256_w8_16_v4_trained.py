@@ -4,23 +4,23 @@ bottlenecks_per_stage/context_pattern/decoder_type); only deltas:
   - Checkpoint points at the DEDICATED w8_16_v4 QAT job's own checkpoint
     (nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_nearest_conv_upsample_256_w8_16_perlayer_
     12_dense_relu_nearest_conv_upsample_256_w8_16_v4 -- see
-    compression/slurm/qat_12_dense_relu_nearest_conv_upsample_256_w8_16_v4.job)
+    nas/slurm/qat_12_dense_relu_nearest_conv_upsample_256_w8_16_v4.job)
     -- this is a REAL new fine-tune, NOT a reuse of w8_16_v2's checkpoint
     (correction: an earlier assumption that v4 was "pure new MILP solve,
     same export as v2" was WRONG -- v4 has its own dedicated checkpoint).
   - Bits file points at the w8_16_v4 MILP solve's own SITES file
-    (MILP/artifacts/S12_dense_nn_upsample_256_w8_16_v4/layer_bits_SITES_
+    (ILP/artifacts/S12_dense_nn_upsample_256_w8_16_v4/layer_bits_SITES_
     S12_dense_nn_upsample_256_w8_16_v4.json), matching what the w8_16_v4
     QAT job actually trained against.
   - Export/output names carry a "_w8_16_v4_" tag so they never collide with
     the w8_16_v2 build.
-  - Lives in its own hardware/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/
+  - Lives in its own dataflow/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/
     job folder; output onnx goes to that folder's own outputs/ subfolder.
 
 Usage (inside the pytorch training container):
-    docker exec <container> python3 hardware/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/finn_export_12_dense_relu_nearest_conv_upsample_256_w8_16_v4_trained.py --skip-cross-test
+    docker exec <container> python3 dataflow/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/finn_export_12_dense_relu_nearest_conv_upsample_256_w8_16_v4_trained.py --skip-cross-test
 
-Output: hardware/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/outputs/quantEnet_12_dense_relu_nearest_conv_upsample_256_w8_16_v4_trained.onnx
+Output: dataflow/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/outputs/quantEnet_12_dense_relu_nearest_conv_upsample_256_w8_16_v4_trained.onnx
 """
 from __future__ import annotations
 
@@ -32,12 +32,12 @@ import torch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
-sys.path.insert(0, str(REPO_ROOT / "analysis" / "501_ARCADE"))
-sys.path.insert(0, str(REPO_ROOT / "hardware"))
+sys.path.insert(0, str(REPO_ROOT / "nas"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 # base-width job folder: only for the shared helpers below, not yet promoted
-# to top-level hardware/ shared infra (see builds/README.md).
-sys.path.insert(0, str(REPO_ROOT / "hardware" / "builds" / "12_dense_relu_nearest_conv_upsample_256"))
+# to top-level dataflow/ shared infra (see builds/README.md).
+sys.path.insert(0, str(REPO_ROOT / "dataflow" / "builds" / "12_dense_relu_nearest_conv_upsample_256"))
 import finn_enet_prod_export  # noqa: E402
 from nnunetv2.nets.LayerQuantENet import layer_names_for  # noqa: E402
 from nnunetv2.nets.LayerQuantEnetFINN import LayerQuantEnetFINN  # noqa: E402
@@ -56,7 +56,7 @@ from finn_export_12_dense_relu_nearest_conv_upsample_256_trained import (  # noq
 )
 
 # Redirect export_model()'s output into this job's own folder instead of the
-# shared (deprecated) hardware/outputs/finn_exports/.
+# shared (deprecated) dataflow/outputs/finn_exports/.
 finn_enet_prod_export.OUT_DIR = Path(__file__).resolve().parent / "outputs"
 
 # w8/16 width point: only CHANNELS differs vs the base-width v2 job.
@@ -71,7 +71,7 @@ DEFAULT_CHECKPOINT = (
     / f"{NET_NAME}__nnUNetPlans__2d" / "fold_0" / "checkpoint_best.pth"
 )
 DEFAULT_BITS_FILE = (
-    REPO_ROOT / "MILP" / "artifacts" / "S12_dense_nn_upsample_256_w8_16_v4"
+    REPO_ROOT / "ILP" / "artifacts" / "S12_dense_nn_upsample_256_w8_16_v4"
     / "layer_bits_SITES_S12_dense_nn_upsample_256_w8_16_v4.json"
 )
 DEFAULT_PREPROCESSED_DIR = REPO_ROOT / "data" / "nnUNet_preprocessed" / DATASET_NAME / "nnUNetPlans_2d"
@@ -139,7 +139,7 @@ def main() -> None:
         name = "quantEnet_12_dense_relu_nearest_conv_upsample_256_w8_16_v4_trained"
         export_model(model, name, dummy)
         print(f"\nExported. Copy to FINN container with:")
-        print(f"  docker cp hardware/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/outputs/{name}.onnx <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/")
+        print(f"  docker cp dataflow/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/outputs/{name}.onnx <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/")
 
     if not args.skip_cross_test:
         print("\n=== Cross test: FINN mirror vs. real model, full imagesTs/labelsTs (300 cases) ===")

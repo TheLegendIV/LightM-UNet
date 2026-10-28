@@ -1,11 +1,11 @@
 import json,glob,onnx
 tag='dsr5.0'
 base='/workspace/LightM-UNet/'
-mf=glob.glob(base+f'MILP/artifacts/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/dsrSweep_pbiOff_dsr{tag[3:]}/layer_bits_folding_*.json')[0]
+mf=glob.glob(base+f'ILP/artifacts/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/dsrSweep_pbiOff_dsr{tag[3:]}/layer_bits_folding_*.json')[0]
 pl=json.load(open(mf))['per_layer']
 names=list(pl); start=names.index('stage2.0.reduce.0')
 lay=[(k,pl[k]) for k in names[start:] if pl[k].get('mvu_cycles') is not None]
-m=onnx.load(base+f'hardware/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/post_fifo_autosize_checkpoints/partition2_dsrSweep_pbiOff_dsr{tag[3:]}_milpfold_prefifo_autosize.onnx')
+m=onnx.load(base+f'dataflow/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/post_fifo_autosize_checkpoints/partition2_dsrSweep_pbiOff_dsr{tag[3:]}_milpfold_prefifo_autosize.onnx')
 def at(n): return {x.name:x.i for x in n.attribute if x.type==2}
 mv=[(n.name,at(n)) for n in m.graph.node if n.op_type.startswith('MVAU')]
 sw=[(n.name,at(n)) for n in m.graph.node if n.op_type.startswith('ConvolutionInputGenerator')]

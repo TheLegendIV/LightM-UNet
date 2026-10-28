@@ -59,7 +59,7 @@ def check(part_idx, folding_path, onnx_path):
 
 
 if __name__ == "__main__":
-    base = r"c:\DEV\repos\LightM-UNet\hardware\temp\p5_p6_diag"
+    base = r"c:\DEV\repos\LightM-UNet\dataflow\temp\p5_p6_diag"
     total_missing = total_mismatch = 0
     for idx in (5, 6):
         m, mm = check(

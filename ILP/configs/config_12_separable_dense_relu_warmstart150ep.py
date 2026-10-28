@@ -1,6 +1,6 @@
 """Shared constants for nnUNetTrainerENet_12_separable_dense_relu_warmstart150ep's
 ("S12.1-separable, warm-started") HAWQ per-layer W/A search -- the WARM-
-STARTED checkpoint (compression/slurm/stage_12_separable_dense_relu_warmstart150ep.job:
+STARTED checkpoint (nas/slurm/stage_12_separable_dense_relu_warmstart150ep.job:
 a fresh 150-epoch continued-training run warm-started from
 nnUNetTrainerENet_12_separable_dense_relu's own checkpoint_best.pth, dice=
 0.7729 @ 144 epochs, at a reduced LR=1e-4 -- byte-for-byte the same warm-start

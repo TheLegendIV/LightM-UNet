@@ -1,5 +1,5 @@
 """Trained-weight export for the S12_dense_nearest_upsample_512 dsr/pbi-ratio
-hardware-validation sweep (MILP/artifacts/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/).
+hardware-validation sweep (ILP/artifacts/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/).
 
 Sibling of ../12_dense_relu_nearest_upsample_512/finn_export_12_dense_relu_nearest_upsample_dummy.py,
 but loads REAL trained weights via LayerQuantEnetFINN.from_pretrained() from
@@ -21,9 +21,9 @@ re-quantized per each tag's own layer_weight_bits/layer_act_bits):
 
 Usage (inside the pytorch training container):
     python finn_export_trained.py --tag baseline_both_off \\
-        --bits-file MILP/artifacts/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/baseline_both_off/layer_bits_SITES_baseline_both_off.json
+        --bits-file ILP/artifacts/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/baseline_both_off/layer_bits_SITES_baseline_both_off.json
 
-Output: hardware/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/outputs/
+Output: dataflow/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/outputs/
     quantEnet_12_dense_relu_nearest_upsample_trained_<tag>_512x512.onnx
 Then, inside the FINN container:
     docker cp <onnx> <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/
@@ -38,8 +38,8 @@ import torch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
-sys.path.insert(0, str(REPO_ROOT / "hardware"))
-sys.path.insert(0, str(REPO_ROOT / "hardware" / "builds" / "12_dense_relu_nearest_upsample_512"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow" / "builds" / "12_dense_relu_nearest_upsample_512"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import finn_enet_prod_export  # noqa: E402
@@ -111,9 +111,9 @@ def main() -> None:
 
     name = f"quantEnet_12_dense_relu_nearest_upsample_trained_{args.tag}_{h}x{w}"
     export_model(model, name, dummy)
-    print(f"\nExported: hardware/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/outputs/{name}.onnx")
+    print(f"\nExported: dataflow/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/outputs/{name}.onnx")
     print("Copy to FINN container with:")
-    print(f"  docker cp hardware/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/outputs/{name}.onnx "
+    print(f"  docker cp dataflow/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/outputs/{name}.onnx "
           "<finn_container_id>:/home/thelegendiv/finn/notebooks/enet/")
 
 

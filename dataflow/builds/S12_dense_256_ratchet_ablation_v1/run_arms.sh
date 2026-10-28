@@ -1,6 +1,6 @@
 #!/bin/bash
 # Ratchet ablation, hardware side: standalone per-partition OOC builds of the S12 dense nearest-upsample (noconv) ReLU 256x256 net, uniform INT6.
-#   one build per DISTINCT MILP folding (arms with an identical folding share a build, see MILP/artifacts/S12_dense_256_ratchet_ablation_v1/arms_to_build.txt)
+#   one build per DISTINCT MILP folding (arms with an identical folding share a build, see ILP/artifacts/S12_dense_256_ratchet_ablation_v1/arms_to_build.txt)
 #   arms_to_build.txt lists the five <arm>_simfifo variants (MILP foldings + simulated FIFO lists). EVERY partition also gets the CONTROL build, always queued:
 #   ratchet_ablation_finn_autofold = FINN's own auto-fold (no --folding-json) + FINN's rtlsim FIFO autosizer, with the same --target-fps / --mvau-wwidth-max as the MILP arms.
 # Run INSIDE the FINN container (HOME=/tmp/home_dir) after docker cp-ing the inputs into the flat /home/thelegendiv/finn/notebooks/enet/ dir (README.md "Inputs").

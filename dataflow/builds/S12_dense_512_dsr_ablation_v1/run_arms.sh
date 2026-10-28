@@ -1,6 +1,6 @@
 #!/bin/bash
 # DSR ablation, hardware side: standalone per-partition OOC builds of the S12 dense nearest-upsample (noconv) ReLU 512x512 net, uniform INT6.
-#   one build per DISTINCT MILP folding (arms with an identical folding share a build, see MILP/artifacts/S12_dense_512_dsr_ablation_v1/arms_to_build.txt)
+#   one build per DISTINCT MILP folding (arms with an identical folding share a build, see ILP/artifacts/S12_dense_512_dsr_ablation_v1/arms_to_build.txt)
 #   arms_to_build.txt lists the five <arm>_simfifo variants (MILP foldings + simulated FIFO lists). EVERY partition also gets the CONTROL build, always queued:
 #   dsr_ablation_finn_autofold = FINN's own auto-fold (no --folding-json) + FINN's rtlsim FIFO autosizer, with the same --target-fps / --mvau-wwidth-max as the MILP arms.
 # Run INSIDE the FINN container (HOME=/tmp/home_dir) after docker cp-ing the inputs into the flat /home/thelegendiv/finn/notebooks/enet/ dir (README.md "Inputs").
@@ -11,7 +11,7 @@ set -eo pipefail
 cd /home/thelegendiv/finn/notebooks/enet
 source /tools/Xilinx/Vivado/2022.2/settings64.sh > /dev/null 2>&1
 
-MODEL=quantEnet_S12_dense_512_u4_analytical_v1_ft15ep_u8in     # onnx basename (QAT'd 15-epoch export, uint8 input contract), hardware/builds/S12_dense_512_u4_analytical_v1/outputs
+MODEL=quantEnet_S12_dense_512_u4_analytical_v1_ft15ep_u8in     # onnx basename (QAT'd 15-epoch export, uint8 input contract), dataflow/builds/S12_dense_512_u4_analytical_v1/outputs
 CONV_ORDER=quantEnet_S12_dense_512_u4_analytical_v1_conv_order.json
 TARGET_FPS=250
 WWIDTH=96            # same as the MILP's --mvau-wwidth-max (72 is infeasible at 512x512 / 250 fps)

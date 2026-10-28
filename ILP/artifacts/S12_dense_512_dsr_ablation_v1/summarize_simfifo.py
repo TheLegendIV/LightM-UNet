@@ -1,6 +1,6 @@
 """Compare each MILP arm's FIFO estimate with its simulated FIFOs (run run_simfifo.sh first).
 
-    python3 MILP/artifacts/S12_dense_512_dsr_ablation_v1/summarize_simfifo.py
+    python3 ILP/artifacts/S12_dense_512_dsr_ablation_v1/summarize_simfifo.py
 
 Writes next to this file: fifo_changes.csv (one row per FIFO and arm: MILP depth / BRAM18 / LUT where the MILP listed the FIFO, simulated ones next to it) and
 fifo_sim_report.md (per arm: did the blocks / the chain deadlock or miss their rate, what grew, FIFO totals before and after, by FIFO class).

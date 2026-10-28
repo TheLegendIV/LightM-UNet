@@ -14,7 +14,7 @@ all N images are z-scored and quantized with the DPU input scale before the firs
                 per sweep (~100 Hz), the counterpart of the FINN ZCU106 sum over its INA226 rails; the 12 V input INA226
                 (hwmon) is sampled in the same sweep as a second series. Sampled by a separate process; idle windows (model
                 loaded, nothing running) before and after the streams. Samples and window times are written to
-                out/result.json, dynamic energy is computed on the host with analysis/benchmark/power_meter.summarize.
+                out/result.json, dynamic energy is computed on the host with report/MILP/benchmark/power_meter.summarize.
 """
 import argparse
 import json

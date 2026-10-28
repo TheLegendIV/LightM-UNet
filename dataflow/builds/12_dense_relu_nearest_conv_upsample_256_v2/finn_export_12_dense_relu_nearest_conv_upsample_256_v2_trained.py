@@ -1,7 +1,7 @@
 """v2 sibling of finn_export_12_dense_relu_nearest_conv_upsample_256_trained.py
 -- same architecture (channels/bottlenecks_per_stage/context_pattern/
 decoder_type), only deltas:
-  - Bits file points at the v2 MILP solve (MILP/artifacts/
+  - Bits file points at the v2 MILP solve (ILP/artifacts/
     S12_dense_nn_upsample_256_v2/, downstream-rate-aware objective
     optimize-downstream-rate=1.5), NOT v1's.
   - Checkpoint points at nnUNetTrainerLayerQuantEnetFINN_..._dsrate1.5_ft15ep
@@ -12,15 +12,15 @@ decoder_type), only deltas:
     calibration pass is needed (--skip-calibration defaults on here, unlike
     the v1 script).
   - Export/output names carry a "_v2_" tag so they never collide with v1's.
-  - Lives in its own hardware/builds/12_dense_relu_nearest_conv_upsample_256_v2/
+  - Lives in its own dataflow/builds/12_dense_relu_nearest_conv_upsample_256_v2/
     job folder (not v1's) per this repo's builds/README.md convention;
     output onnx goes to that folder's own outputs/ subfolder instead of the
-    (deprecated) shared hardware/outputs/finn_exports/.
+    (deprecated) shared dataflow/outputs/finn_exports/.
 
 Usage (inside the pytorch training container):
-    docker exec <container> python3 hardware/builds/12_dense_relu_nearest_conv_upsample_256_v2/finn_export_12_dense_relu_nearest_conv_upsample_256_v2_trained.py --skip-cross-test
+    docker exec <container> python3 dataflow/builds/12_dense_relu_nearest_conv_upsample_256_v2/finn_export_12_dense_relu_nearest_conv_upsample_256_v2_trained.py --skip-cross-test
 
-Output: hardware/builds/12_dense_relu_nearest_conv_upsample_256_v2/outputs/quantEnet_12_dense_relu_nearest_conv_upsample_256_v2_trained.onnx
+Output: dataflow/builds/12_dense_relu_nearest_conv_upsample_256_v2/outputs/quantEnet_12_dense_relu_nearest_conv_upsample_256_v2_trained.onnx
 """
 from __future__ import annotations
 
@@ -32,12 +32,12 @@ import torch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
-sys.path.insert(0, str(REPO_ROOT / "analysis" / "501_ARCADE"))
-sys.path.insert(0, str(REPO_ROOT / "hardware"))
+sys.path.insert(0, str(REPO_ROOT / "nas"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 # v1's job folder: only for the shared helpers below, not yet promoted to
-# top-level hardware/ shared infra (see builds/README.md).
-sys.path.insert(0, str(REPO_ROOT / "hardware" / "builds" / "12_dense_relu_nearest_conv_upsample_256"))
+# top-level dataflow/ shared infra (see builds/README.md).
+sys.path.insert(0, str(REPO_ROOT / "dataflow" / "builds" / "12_dense_relu_nearest_conv_upsample_256"))
 import finn_enet_prod_export  # noqa: E402
 from nnunetv2.nets.LayerQuantENet import layer_names_for  # noqa: E402
 from nnunetv2.nets.LayerQuantEnetFINN import LayerQuantEnetFINN  # noqa: E402
@@ -57,7 +57,7 @@ from finn_export_12_dense_relu_nearest_conv_upsample_256_trained import (  # noq
 )
 
 # Redirect export_model()'s output into this job's own folder instead of the
-# shared (deprecated) hardware/outputs/finn_exports/.
+# shared (deprecated) dataflow/outputs/finn_exports/.
 finn_enet_prod_export.OUT_DIR = Path(__file__).resolve().parent / "outputs"
 
 NET_NAME = (
@@ -70,7 +70,7 @@ DEFAULT_CHECKPOINT = (
     / f"{NET_NAME}__nnUNetPlans__2d" / "fold_0" / "checkpoint_best.pth"
 )
 DEFAULT_BITS_FILE = (
-    REPO_ROOT / "MILP" / "artifacts" / "S12_dense_nn_upsample_256_v2"
+    REPO_ROOT / "ILP" / "artifacts" / "S12_dense_nn_upsample_256_v2"
     / "layer_bits_SITES_12_dense_relu_nearest_conv_upsample_256_joint_alpha1.0_"
       "candidatebits468_forcedsp_lut50_bram50_dsp90_fps250_dsrate1.5.json"
 )
@@ -139,7 +139,7 @@ def main() -> None:
         name = "quantEnet_12_dense_relu_nearest_conv_upsample_256_v2_trained"
         export_model(model, name, dummy)
         print(f"\nExported. Copy to FINN container with:")
-        print(f"  docker cp hardware/builds/12_dense_relu_nearest_conv_upsample_256_v2/outputs/{name}.onnx <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/")
+        print(f"  docker cp dataflow/builds/12_dense_relu_nearest_conv_upsample_256_v2/outputs/{name}.onnx <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/")
 
     if not args.skip_cross_test:
         print("\n=== Cross test: FINN mirror vs. real model, full imagesTs/labelsTs (300 cases) ===")

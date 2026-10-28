@@ -17,7 +17,7 @@ location depends on the UNION of whatever each operand's RF covers at that
 same location -- and jump must match across predecessors (asserted).
 
 Usage:
-    python MILP/compute_receptive_field.py --config <config_module_name>
+    python ILP/compute_receptive_field.py --config <config_module_name>
 """
 from __future__ import annotations
 

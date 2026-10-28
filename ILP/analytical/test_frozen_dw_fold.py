@@ -1,4 +1,4 @@
-"""add_frozen_dw_fold.py: the post-solve fold of the bilinear decoder's frozen depthwise 3x3 conv. Run: cd MILP/analytical && python3 -m unittest test_frozen_dw_fold"""
+"""add_frozen_dw_fold.py: the post-solve fold of the bilinear decoder's frozen depthwise 3x3 conv. Run: cd ILP/analytical && python3 -m unittest test_frozen_dw_fold"""
 import os
 import sys
 import unittest

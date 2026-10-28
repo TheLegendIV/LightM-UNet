@@ -2,9 +2,9 @@
 (module call order), includes the frozen depthwise tent-kernel convs (`<up stage>.main_up.1`).
 
 Usage (repo root, .venv with torch+brevitas):
-    .venv\\Scripts\\python.exe hardware/builds/S12_dense_256_u4_bilinear_analytical_v1/finn_hawq_dump_conv_order_S12_dense_256_u4_bilinear_analytical_v1.py
+    .venv\\Scripts\\python.exe dataflow/builds/S12_dense_256_u4_bilinear_analytical_v1/finn_hawq_dump_conv_order_S12_dense_256_u4_bilinear_analytical_v1.py
 
-Output: hardware/builds/S12_dense_256_u4_bilinear_analytical_v1/outputs/quantEnet_S12_dense_256_u4_bilinear_analytical_v1_conv_order.json
+Output: dataflow/builds/S12_dense_256_u4_bilinear_analytical_v1/outputs/quantEnet_S12_dense_256_u4_bilinear_analytical_v1_conv_order.json
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ import brevitas.nn as qnn
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
-sys.path.insert(0, str(REPO_ROOT / "hardware"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from finn_export_S12_dense_256_u4_bilinear_analytical_v1_ft15ep import (  # noqa: E402

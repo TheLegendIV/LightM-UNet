@@ -1,9 +1,9 @@
 """Fit an avg_bits-dependent RTL MVU LUT derate against real per-node data,
-and (optionally) log the fit to MILP/calibration.csv.
+and (optionally) log the fit to ILP/calibration.csv.
 
 SUPERSEDED 2026-10-17: finn_cost_model.py no longer applies this derate to MVAU_rtl (a structural
 `base + per_pe*PE + per_lane*PE*SIMD` fit generalises far better) -- use
-hardware/utils/fit_cost_model_from_node_csv.py (spec `mvau_rtl_lut`). `raw_and_current_mvu_lut`
+dataflow/utils/fit_cost_model_from_node_csv.py (spec `mvau_rtl_lut`). `raw_and_current_mvu_lut`
 below divides out the LEGACY derate constants and is only meaningful for the old formula.
 
 Why: finn_cost_model.py's RTL LUT derate (applied inside `conv_cost_pe_simd`
@@ -35,7 +35,7 @@ wm_bram18/mvu_dsp), then fit:
     => derate(avg_bits) = a*avg_bits + b
 
 matching this repo's existing "N-term OLS through origin" convention (see
-MILP/calibration.csv's threshold_lut/threshold_bram rows).
+ILP/calibration.csv's threshold_lut/threshold_bram rows).
 
 raw_mvu_lut_and_bits() recovers the pre-derate value by dividing the
 function's current *post-derate* mvu_lut by WHATEVER derate
@@ -50,13 +50,13 @@ future rerun (e.g. against a new v5 build) correctly measures the CURRENT
 live formula's error and refits from there.
 
 --write-calibration-csv appends this run's fit as a new dated row to
-MILP/calibration.csv via csv.DictWriter (correct quoting/escaping handled
+ILP/calibration.csv via csv.DictWriter (correct quoting/escaping handled
 automatically -- no hand-editing, and no risk of the comma-in-unquoted-field
 bug a hand-written row can introduce). Without the flag, the script only
 prints.
 
 Usage:
-    docker exec lightmunet_dev python3 /workspace/LightM-UNet/hardware/fit_rtl_mvu_lut_derate.py [--write-calibration-csv]
+    docker exec lightmunet_dev python3 /workspace/LightM-UNet/dataflow/fit_rtl_mvu_lut_derate.py [--write-calibration-csv]
 """
 import argparse
 import csv
@@ -64,22 +64,22 @@ import sys
 from datetime import date
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "MILP"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ILP"))
 from finn_cost_model import (  # noqa: E402
     LayerGeometry, conv_cost_pe_simd, _interpolate_derating, _RTL_MVU_LUT_DERATE_BITS, _RTL_MVU_LUT_DERATE_FACTORS,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-CALIBRATION_CSV = REPO_ROOT / "MILP" / "calibration.csv"
+CALIBRATION_CSV = REPO_ROOT / "ILP" / "calibration.csv"
 
 DATASETS = {
-    "v1": REPO_ROOT / "hardware/builds/12_dense_relu_nearest_conv_upsample_256/results/"
+    "v1": REPO_ROOT / "dataflow/builds/12_dense_relu_nearest_conv_upsample_256/results/"
                        "mvau_lut_calibration_dataset_12_dense_relu_nearest_conv_upsample_256_v1_full.csv",
-    "v2": REPO_ROOT / "hardware/builds/12_dense_relu_nearest_conv_upsample_256_v2/results/"
+    "v2": REPO_ROOT / "dataflow/builds/12_dense_relu_nearest_conv_upsample_256_v2/results/"
                        "mvau_lut_calibration_dataset_12_dense_relu_nearest_conv_upsample_256_v2_full.csv",
-    "v4": REPO_ROOT / "hardware/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/results/"
+    "v4": REPO_ROOT / "dataflow/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/results/"
                        "mvau_lut_calibration_dataset_12_dense_relu_nearest_conv_upsample_256_w8_16_v4_full.csv",
-    "warmstart150ep": REPO_ROOT / "hardware/datasets/"
+    "warmstart150ep": REPO_ROOT / "dataflow/datasets/"
                                   "mvau_lut_calibration_dataset_12_dense_relu_warmstart150ep_alpha025_rtl_mvau_noact1_extended.csv",
 }
 
@@ -162,7 +162,7 @@ def append_calibration_row(row: dict) -> None:
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--write-calibration-csv", action="store_true",
-                     help="Append this run's fit to MILP/calibration.csv (default: print only).")
+                     help="Append this run's fit to ILP/calibration.csv (default: print only).")
     args = ap.parse_args()
 
     per_build = {}
@@ -224,7 +224,7 @@ def main():
             "old_value": f"bits=({_RTL_MVU_LUT_DERATE_BITS[0]:.4f}, {_RTL_MVU_LUT_DERATE_BITS[1]:.4f}), "
                           f"factors=({_RTL_MVU_LUT_DERATE_FACTORS[0]:.4f}, {_RTL_MVU_LUT_DERATE_FACTORS[1]:.4f}) (live before this run)",
             "new_value": f"bits=({bits_min:.4f}, {bits_max:.4f}), factors=({derate_lo:.4f}, {derate_hi:.4f})",
-            "method": "2-term OLS through origin via hardware/fit_rtl_mvu_lut_derate.py: "
+            "method": "2-term OLS through origin via dataflow/fit_rtl_mvu_lut_derate.py: "
                       "real_LUT ~= a*(avg_bits*raw_mvu_lut) + b*raw_mvu_lut",
             "dataset": "12_dense_relu_nearest_conv_upsample_256 (v1) + _v2 + _w8_16_v4 + "
                        "warmstart150ep_alpha025_rtl_mvau_noact1_extended (4 datasets pooled, MVAU_rtl rows only)",

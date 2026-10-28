@@ -28,7 +28,7 @@ data/nnUNet_preprocessed/*
 # Raw datasets: no longer pushed at all (both Dataset509_ARCADE_1x1_4c and
 # Dataset511_ARCADE_1x1_3c now exist as local files on the machines that need
 # them -- the 3c one is regenerable any time from Dataset509 via
-# compression/scripts/make_arcade_3c_dataset.py, and the 4c one is the
+# nas/scripts/make_arcade_3c_dataset.py, and the 4c one is the
 # original ARCADE export). Carrying ~190MB/dataset of raw PNGs through every
 # clone/pull was never worth it once that regeneration path existed.
 data/nnUNet_raw/*
@@ -45,12 +45,12 @@ logs/*
 # nnU-Net's own per-run training-curve plot -- regenerable from the run's
 # own training_log_*.txt at any time, never worth committing. Scoped to
 # data/nnUNet_results specifically so this can't ever catch a real report
-# figure (e.g. analysis/report/**/*.png) that happens to be named progress.png.
+# figure (e.g. report/**/*.png) that happens to be named progress.png.
 data/nnUNet_results/**/progress.png
 
-# Regenerable from a checkpoint + compression/export_quant_checkpoint.py at
+# Regenerable from a checkpoint + nas/export_quant_checkpoint.py at
 # any time -- never worth committing.
-# compression/configs/qonnx_exports/
+# nas/configs/qonnx_exports/
 
 # Runtime mutex for collect_results.py's results.csv flock -- never has
 # content worth tracking, just a lock target.
@@ -83,4 +83,4 @@ data/nnUNet_raw/Dataset509_ARCADE_1x1_4c/*
 
 
 !deployment/img_intf/output/video1_overlay.mp4
-analysis/benchmark/power_logs/
+report/MILP/benchmark/power_logs/

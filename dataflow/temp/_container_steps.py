@@ -35,7 +35,7 @@ THRESH_OP_TYPES = ("Thresholding_hls", "Thresholding_rtl")
 SWU_OP_TYPES = ("ConvolutionInputGenerator_hls", "ConvolutionInputGenerator_rtl")
 FMPAD_OP_TYPES = ("FMPadding_hls", "FMPadding_rtl", "FMPadding_Pixel", "FMPadding_Pixel_hls", "FMPadding_Pixel_rtl")
 # Pinned Thresholding_rtl memory placement (thresholding.sv: stage depth >= trigger -> BRAM, else LUTRAM;
-# 0 = Vivado "auto"). MUST match MILP/finn_cost_model.py THR_DEPTH_TRIGGER_BRAM / THR_DEPTH_TRIGGER_DISTRIBUTED,
+# 0 = Vivado "auto"). MUST match ILP/finn_cost_model.py THR_DEPTH_TRIGGER_BRAM / THR_DEPTH_TRIGGER_DISTRIBUTED,
 # which is what the MILP priced: ram_style "block" -> 1024, "distributed" -> 999999 (everything LUTRAM).
 THRESH_BRAM_TRIGGER = 1024
 THRESH_DISTRIBUTED_BRAM_TRIGGER = 999999
@@ -44,7 +44,7 @@ PARTITION_RANGE_ORDER = [
     "down1_start", "down2_start", "q2_start", "q3_start", "q4_start", "up4_start", "up5_start",
 ]
 
-# Ported from hardware/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4's
+# Ported from dataflow/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4's
 # finn_ooc_..._8way_full_v4_256x256.py step_allocate_uram_fifos (opt-in here via
 # finn_s12_build.py's --allocate-uram, default OFF -- "no URAM forcing" standing rule otherwise).
 # ZCU7EV has 96 URAM288 blocks (4096-deep x 72b each) total; all 8 partitions are simultaneously
@@ -599,7 +599,7 @@ def _find_join_thresholds(kernel_model, logical_names, prev_block=None, claimed_
     feeding an add input whose producer is NOT an MVAU/VVAU, OR is an MVAU/VVAU not already claimed
     as a main-path leaf by claimed_mvau_names (dn_bottleneck.py's skip_pad='mvau' identity-pad conv --
     a claimed one is that conv's own thr, handled via _find_following_thresholding instead). Ported from
-    hardware/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/
+    dataflow/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/
     finn_hawq_folding_bridge_nearest_upsample.py's find_join_thresholds."""
     adds = [n for n in kernel_model.graph.node if n.op_type.startswith("AddStreams")]
     blocks = [ln[: -len(".expand.0")] for ln in logical_names if ln.endswith(".expand.0")]
@@ -700,7 +700,7 @@ def _role_name_of(node, role_of_node: dict):
     return role_of_node.get(node.name)
 
 
-# per_layer-key leaf suffix (as built by MILP/analytical/net_fold.py's run_block/put calls) -> (mvau role, thr role)
+# per_layer-key leaf suffix (as built by ILP/analytical/net_fold.py's run_block/put calls) -> (mvau role, thr role)
 _LEAF_ROLES = {
     "reduce.0": ("mvau_r", "thr_r"), "conv": ("mvau_m", "thr_m"), "conv.0": ("mvau_m", "thr_m"),
     "expand.0": ("mvau_e", "thr_e"), "main_proj.0": ("mvau_p", "thr_p"), "up.0": ("mvau_u", "thr_u"),
@@ -906,7 +906,7 @@ def _find_block_join_nodes(kernel_model, logical_names, prev_block=None, claimed
             by_name[f"{block}.thr_out"] = node_name
             by_name[f"{block}.out_act"] = node_name  # net_fold.py's intra/inter_block_fifos role name for this node
     for key in list(by_name):
-        # thr_out/out_act fallback: hardware/finn_compose_thresholds.py's step_compose_consecutive_thresholds
+        # thr_out/out_act fallback: dataflow/finn_compose_thresholds.py's step_compose_consecutive_thresholds
         # (wired into the real preamble) merges the real residual_add + out_act Thresholding nodes into ONE
         # node, so _find_join_thresholds above never finds a SEPARATE out_act node and 'kind == "out_act"'
         # above never fires -- without this fallback 'down1.out_act' (etc.) is simply absent from role_by_name,
@@ -947,10 +947,10 @@ def step_set_fifo_depths_fixed2(model, cfg):
 
 def step_force_fifo_depths_from_milp(model, fifo_plan: dict, min_depth: int = 2, skip_scale: float = 1.0):
     """After FINN's own (autosized) step_set_fifo_depths, overwrite StreamingFIFO* node depths with the
-    MILP/analytical per-block-simulated ones (fifo_plan's 'wanted', keyed '<producer_role>=><consumer_role>'),
+    ILP/analytical per-block-simulated ones (fifo_plan's 'wanted', keyed '<producer_role>=><consumer_role>'),
     matched by role identity via fifo_plan's 'role_of_node' (node name -> role string) + _real_producer/
     _real_consumer. Edges with no match keep FINN's autosized depth (safety net -- same pattern as
-    hardware/builds/bottleneck_probe_v1/finn_bottleneck_probe_build.py's step_force_fifo_depths, generalized
+    dataflow/builds/bottleneck_probe_v1/finn_bottleneck_probe_build.py's step_force_fifo_depths, generalized
     from one isolated block to a whole partition's worth of block instances). Every report entry (matched or
     not) also carries the REAL producer/consumer node name + op_type, so unmatched edges are directly
     actionable without a separate describe-the-graph pass."""

@@ -1,6 +1,6 @@
 # S12_dense_arms_bc_v1 -- MILP folding vs FINN auto-fold (partition 2 only)
 
-Three builds, **same bits** (`MILP/artifacts/S12_dense_arms_bc_v1/lex_dsr2_fps305`, QAT checkpoint
+Three builds, **same bits** (`ILP/artifacts/S12_dense_arms_bc_v1/lex_dsr2_fps305`, QAT checkpoint
 re-quantized), same FPS target 305.17, same `mvau_wwidth_max = 80`; only the folding differs:
 
 | Arm | Folding | Source |
@@ -23,9 +23,9 @@ Run: `docker exec -e HOME=/tmp/home_dir <finn_container> bash /home/thelegendiv/
 
 ## Gates (before trusting any OOC number)
 1. Bridge logs show `Bridged 5 SWU node(s)` with `parallel_window=1`, no WARNING lines.
-2. `python hardware/checks/check_milp_vs_landed_folding.py <milp folding json> <armC_* partition2 prefifo .onnx>` -> `OK` for both C arms.
-3. Arm B: price with `MILP/utils/apply_folding_config_cost.py` (partition 2) and, for the whole network,
-   `MILP/utils/price_autofold_all_partitions.py --dir autofold_armB_all_partitions`.
+2. `python dataflow/checks/check_milp_vs_landed_folding.py <milp folding json> <armC_* partition2 prefifo .onnx>` -> `OK` for both C arms.
+3. Arm B: price with `ILP/utils/apply_folding_config_cost.py` (partition 2) and, for the whole network,
+   `ILP/utils/price_autofold_all_partitions.py --dir autofold_armB_all_partitions`.
 
 ## Table columns
 Estimated resources/FPS: cost model on each landed graph. Real resources/FPS: OOC (partition 2).

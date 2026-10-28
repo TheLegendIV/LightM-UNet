@@ -3,7 +3,7 @@ layer's OUTPUT actually feeds into this conv/pool layer's OWN INPUT", via
 torch.fx symbolic tracing of a PLAIN FP32 model (never a Brevitas-quantized
 one -- see compute_predecessor_map's own docstring for why).
 
-WHY THIS EXISTS: compression/hawq/layer_sensitivity.py measures a layer's
+WHY THIS EXISTS: nas/hawq/layer_sensitivity.py measures a layer's
 sensitivity from a forward hook on that SAME layer's own module, i.e. on its
 OWN OUTPUT tensor. But finn_cost_model.py's per-layer cost formula (see
 BRAM_swu's `ceil(C*A/36)` line-buffer-sizing term, a real citation from
@@ -12,7 +12,7 @@ stream's bit-width -- the tensor arriving at its own SWU, produced by
 whatever sits immediately upstream. For a plain serial chain these would be
 adjacent, near-enough tensors, but they are never the SAME tensor, and at a
 residual join or a downsampling/upsampling block's own dual-path structure
-they can be several hops apart. compression/hawq/joint_bits_folding_
+they can be several hops apart. nas/hawq/joint_bits_folding_
 ilp_perlayer.py's own module docstring documents this mismatch -- this file
 is the fix: a real predecessor map, so a layer's act-sensitivity COEFFICIENT
 in the ILP's objective (or a deployment bit-width lookup, see
@@ -232,7 +232,7 @@ def _data_inputs(node: fx.Node) -> list[fx.Node]:
 def compute_dataflow_graph(model: nn.Module) -> tuple[dict[str, list[str]], dict[str, str]]:
     """The real FINN dataflow graph (FINN v0.10.1 lowering): every hardware
     node, including those with no PyTorch module of their own. Returns
-    (predecessor map, {virtual node name: kind}). See MILP/finn_milp.md
+    (predecessor map, {virtual node name: kind}). See ILP/finn_milp.md
     ("Dataflow graph") for what each kind is and the evidence for it.
 
     Kinds (conv / pool nodes are the traced modules and carry no kind):

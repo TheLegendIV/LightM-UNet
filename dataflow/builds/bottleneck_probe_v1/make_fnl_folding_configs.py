@@ -1,6 +1,6 @@
 """Folding + FIFO config (and the model's prediction) for the final-deconvolution probes. Standard library only.
 
-    python3 hardware/builds/bottleneck_probe_v1/make_fnl_folding_configs.py [--bits 4 6 8] [--variants bias nobias]
+    python3 dataflow/builds/bottleneck_probe_v1/make_fnl_folding_configs.py [--bits 4 6 8] [--variants bias nobias]
 
 Same case as export_fnl_probe.py (4 -> 5 channels, 128x128 -> 256x256, F = 73728). Writes inputs/fnl_cin4_cout5_in128_int{b}_{variant}_folding.json.
 """
@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_ROOT / "MILP" / "analytical"))
+sys.path.insert(0, str(REPO_ROOT / "ILP" / "analytical"))
 
 from fnl_block import model_fnl_block, to_folding_config, verify_with_sim  # noqa: E402
 

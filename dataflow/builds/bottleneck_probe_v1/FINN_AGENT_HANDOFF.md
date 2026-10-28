@@ -24,26 +24,26 @@ thresholds -> Add -> Thr(residual_add) -> Thr(out_act)`; the merge pass collapse
 (that is the graph the analytical model describes). Dilation 16 on 32x32 is a degenerate padding-dominated stress case
 (window wider than the map, skip FIFO ~17.5k words); expect it to be the largest/slowest to simulate.
 
-## 3. Files (all under `hardware/builds/bottleneck_probe_v1/` unless noted)
+## 3. Files (all under `dataflow/builds/bottleneck_probe_v1/` unless noted)
 | File | Role | Status |
 |---|---|---|
 | `export_bottleneck_probe.py` | Brevitas -> QONNX per case (runs in `lightmunet_dev`, torch+brevitas+qonnx) | done, ran, 15 ONNX written |
 | `inputs/<case>.onnx`, `_probe.json`, `_folding.json` | model, case parameters, role-keyed folding + FIFO config + model prediction | done (45 files) |
-| `make_folding_configs.py` | regenerates `_folding.json` from `MILP/analytical/bottleneck.py` (+ `bottleneck_sim.py` verification) | done |
+| `make_folding_configs.py` | regenerates `_folding.json` from `ILP/analytical/bottleneck.py` (+ `bottleneck_sim.py` verification) | done |
 | `../../finn_compose_thresholds.py` | `ComposeConsecutiveMultiThresholds` + `step_compose_consecutive_thresholds` | done, 11 unit tests (`../../checks/test_compose_thresholds.py`) exact-match |
 | `finn_bottleneck_probe_build.py` | the FINN build of one case (container) | **UNTESTED, yours to fix** |
 | `run_probes.sh`, `collect_probe_outputs.sh` | host-side launcher (docker cp + parallel exec) and result collector | syntax-checked only |
 | `compare_probe_vs_model.py` | verdict + predicted-vs-landed table from collected `probe_result.json` | compiles, untested on real data |
 
-`MILP/analytical/` has the model (`bottleneck.py`), the cycle-level simulator (`bottleneck_sim.py`) and `analytical.md`.
+`ILP/analytical/` has the model (`bottleneck.py`), the cycle-level simulator (`bottleneck_sim.py`) and `analytical.md`.
 `bottleneck.py ... --folding-json PATH` regenerates a case's config; `--onnx` writes a Netron graph of the verified design
-(example: `MILP/analytical/outputs/bottleneck_ref_cin32_d8_T72_int4.onnx`).
+(example: `ILP/analytical/outputs/bottleneck_ref_cin32_d8_T72_int4.onnx`).
 
 ## 4. Do these in order (cheap gates first; do not launch the batch before gate 3 passes)
 1. **Container**: `docker ps` for the FINN container name (changes across recreations). Check FINN version and that
    `FMPadding_*`, `ConvolutionInputGenerator_rtl`, `MVAU_rtl`, `Thresholding_rtl`, `StreamingFIFO_*`, `StreamingDataWidthConverter_*`
    op names match what the script assumes (it matches by `op_type.startswith(...)`, so FMPadding_hls/rtl both work).
-2. **Merge-pass test in the container** (it must also pass with FINN's qonnx): `python3 hardware/checks/test_compose_thresholds.py`.
+2. **Merge-pass test in the container** (it must also pass with FINN's qonnx): `python3 dataflow/checks/test_compose_thresholds.py`.
 3. **Dry run of one case up to folding**: `CONTAINER=<name> CASES=bottleneck_cin32_d8_int4 STOP_AFTER=folding bash run_probes.sh`,
    then read `/tmp/probe_bottleneck_cin32_d8_int4.log` and `<out>/probe_result.json`. Verify:
    - every step ran; `after_convert_to_hw.onnx` contains `Thresholding` (standalone, `noActivation=1` MVAUs), one `DuplicateStreams`,
@@ -60,9 +60,9 @@ thresholds -> Add -> Thr(residual_add) -> Thr(out_act)`; the merge pass collapse
    `--ooc` in the first batch if Vivado time is acceptable) and copy `utilization_placed.rpt` out of `/tmp/finn_dev_*` before the container goes away.
 
 Useful existing tools for gates 3-4 (found by the exploration pass, not verified against this FINN version):
-`hardware/dump_milpfold_landed_partition.py` applies a folding JSON and re-runs `AnnotateCycles` in seconds without HLS/Vivado
+`dataflow/dump_milpfold_landed_partition.py` applies a folding JSON and re-runs `AnnotateCycles` in seconds without HLS/Vivado
 (hardwired to the 8-way flow, so it needs generalising for one block; the probe script's own `identify_roles` + `stages.folding`
-output covers the same check), and `hardware/utils/dump_fifo_depths.py` dumps landed `StreamingFIFO_rtl` depths and LUT/FF/SRL cost.
+output covers the same check), and `dataflow/utils/dump_fifo_depths.py` dumps landed `StreamingFIFO_rtl` depths and LUT/FF/SRL cost.
 
 ## 5. Where I expect trouble (untested assumptions in `finn_bottleneck_probe_build.py`)
 a. **Merge pass precondition.** It matches `MultiThreshold -> [scalar Mul/Add]* -> MultiThreshold` with one consumer, same data layout, integer-valued
@@ -72,14 +72,14 @@ a. **Merge pass precondition.** It matches `MultiThreshold -> [scalar Mul/Add]* 
    thresholds after the Add, unlike the model).
 b. **Step list.** It mirrors `enet_ip_partitioned_8way_steps` up to `_fixup_degenerate_signed_bias`, plus merge, plus the live
    RTL-MVAU convert, then `step_create_dataflow_partition` (child model), `step_specialize_layers`. If the archived
-   `hardware/archive/20261001_refactor/probes/finn_build_probe_s12_context_v2.py` has a step ordering that works better for single blocks
+   `dataflow/archive/20261001_refactor/probes/finn_build_probe_s12_context_v2.py` has a step ordering that works better for single blocks
    (it has `step_fix_signed_thresholds`), borrow it. The input is `QuantIdentity(unsigned)`; if FINN complains "Signed output requires actval < 0"
    use that step.
 c. **FIFO forcing** (`step_force_fifo_depths`). It matches `StreamingFIFO*` nodes to predicted edges by the roles at both ends (DWC = `dwc`).
    Open questions you must settle against the actual FINN version: does `step_set_fifo_depths` leave depth-2 FIFOs or remove "shallow" ones;
    is `depth` the only attribute to change, or must `impl_style` (rtl vs vivado) also follow the new depth (deep skip FIFO!); are DWCs inserted
    before or after the FIFO sizing so the edge list matches `cfgj["fifos"]`. After changing depths it re-runs `SplitLargeFIFOs`, `PrepareIP`,
-   `HLSSynthIP` (same recipe as `hardware/finn_s12_build.py:127-139`). If an edge FINN has but we do not predict exists, keep stock depth (never below 2).
+   `HLSSynthIP` (same recipe as `dataflow/finn_s12_build.py:127-139`). If an edge FINN has but we do not predict exists, keep stock depth (never below 2).
 d. **rtlsim.** `step_measure_rtlsim_performance` is called with `rtlsim_batch_size = 3`; steady throughput comes from `stable_throughput[images/s]`
    in `report/rtlsim_performance.json` (key names may differ: the script falls back to `throughput[images/s]`; with a single frame the
    number includes pipeline fill and is not a steady rate, so make sure it really runs >= 2 frames). A deadlock presents as the rtlsim never finishing:
@@ -100,10 +100,10 @@ user should restore the import block before the next training/export run.
 For each case: `verdict` from `compare_probe_vs_model.py` (PASS / SLOW / NO-RTLSIM), rtlsim steady cyc/px vs 72 vs the simulator's 72.00, rtlsim
 first-out latency vs the model's (d=8 INT4: ~19.8k cycles), the forced vs stock FIFO depths, any edges where FINN disagreed with the prediction,
 and -- if `--ooc` ran -- LUT/BRAM18/DSP/fmax vs `predicted.totals` (model: d=8 INT4 = 2451 LUT, 3 BRAM18, 16 DSP; INT8 moves several thresholdings to
-BRAM, expect ~34 BRAM18). Append rows to `hardware/results.csv` via `hardware/collect_results.py` with `model_name=bottleneck_cin32_d{d}_int{b}`,
+BRAM, expect ~34 BRAM18). Append rows to `dataflow/results.csv` via `dataflow/collect_results.py` with `model_name=bottleneck_cin32_d{d}_int{b}`,
 `config=T72_merged` (the OOC `DSP` field is wrong; use `--dsp-rpt-dir`). Any deadlock is the headline finding: capture which FIFO was full
-(`dump_fifo_depths.py` / rtlsim wave) and compare with `MILP/analytical/bottleneck_sim.py` (it can reproduce a deadlock by lowering `skip_depth`, see
-`test_undersized_skip_fifo_deadlocks` in `MILP/analytical/test_bottleneck_sim.py`).
+(`dump_fifo_depths.py` / rtlsim wave) and compare with `ILP/analytical/bottleneck_sim.py` (it can reproduce a deadlock by lowering `skip_depth`, see
+`test_undersized_skip_fifo_deadlocks` in `ILP/analytical/test_bottleneck_sim.py`).
 
 ## 8. Reference facts from the model (for sanity checks)
 - Reference case d=8 INT4: MVAU_r PE1xSIMD4 (64 cyc/px), MVAU_m PE1xSIMD8 (72), MVAU_e PE1xSIMD4 (64); all thresholds PE 1; SWG/FMPad SIMD 8
@@ -119,7 +119,7 @@ BRAM, expect ~34 BRAM18). Append rows to `hardware/results.csv` via `hardware/co
 
 Goal is the same (no deadlock in hardware, throughput within 2% of the target), now for the ENet **downsampling** bottleneck:
 `dn_cin16_cout32_in64_int{4,6,8}_{fmpad,mvau}`. One block = one partition = one single-partition run, exactly like section 4
-(use `SET=dn CONTAINER=<name> bash run_probes.sh`; `STOP_AFTER=folding` first). Model: `MILP/analytical/dn_bottleneck.py`
+(use `SET=dn CONTAINER=<name> bash run_probes.sh`; `STOP_AFTER=folding` first). Model: `ILP/analytical/dn_bottleneck.py`
 (+ `dn_bottleneck_sim.py`, `test_dn_bottleneck.py`, section "Downsampling bottleneck" in `analytical.md`).
 
 Case: Cin 16 -> Cout 32, internal ratio 4 (Cmid 8), 64x64 input -> 32x32 output, uniform INT b, frame budget F = 72*32*32 = 73728
@@ -137,10 +137,10 @@ Graph (after merge pass): `Thr_in -> Dup -> [main] SWG_r(2x2 s2) -> MVAU_r -> Th
 * **`fmpad` variants (3 probes) replace the identity MVAU by a channel zero-pad**: the exported ONNX has `MaxPool -> Pad(pads [0,0,0,0, 0,16,0,0],
   value 0) -> Quant` (the residual add's shared input quantizer, i.e. the skip threshold sits AFTER the pad = "pad_thr" order in the model;
   the model's default "thr_pad" order would need a different export, not done). FINN has no hardware op for a channel pad, so a **new pass
-  `hardware/finn_channel_pad.py::step_channel_pad_to_fmpadding` must be written by you** (currently a stub raising NotImplementedError; the
+  `dataflow/finn_channel_pad.py::step_channel_pad_to_fmpadding` must be written by you** (currently a stub raising NotImplementedError; the
   full contract is in its docstring). Idea: the stream is NHWC, so re-read it as `[N, H*W, C/s, s]` (s = 16 here) and pad the "width" axis
   (C/s) on the right by (Cout-Cin)/s = 1 with FMPadding: ImgDim [1024, 1], NumChannels = SIMD = 16, Padding [0,0,0,1] (the exact values are
-  in `folding["fmpad_c"]`). The graph keeps its real tensor shapes. Test it on the tiny example in `MILP/analytical/analytical.md` (2x2, C 2 -> 6,
+  in `folding["fmpad_c"]`). The graph keeps its real tensor shapes. Test it on the tiny example in `ILP/analytical/analytical.md` (2x2, C 2 -> 6,
   s = 2) before trusting it, in whole-graph rtlsim. If FINN rejects this, report why: the alternatives are a StreamingConcat with a
   zero stream (needs a zero source) or going back to the identity MVAU.
 * **Differences from the regular block to watch for in the logs:** two pixel domains (Dup, MaxPool, SWG_r see 64x64, the rest 32x32);
@@ -207,7 +207,7 @@ re-copies the host files, so just rerun it (check that your fixes 1-5 are still 
 ## 11. Upsampling probes (6 more cases): `up_cin32_cout16_in32_int{4,6,8}_{conv,noconv}`
 
 Same goal and procedure as sections 4 / 9 (`SET=up CONTAINER=<name> bash run_probes.sh`; `STOP_AFTER=folding` first). Model:
-`MILP/analytical/up_bottleneck.py` (+ `up_bottleneck_sim.py`, `test_up_bottleneck.py`, section "Upsampling bottleneck" in `analytical.md`).
+`ILP/analytical/up_bottleneck.py` (+ `up_bottleneck_sim.py`, `test_up_bottleneck.py`, section "Upsampling bottleneck" in `analytical.md`).
 Measure steady throughput as in section 10.1: `(cycles - latency_cycles) / (N - 1) / 4096` -- the target is **18 cyc per OUTPUT pixel**
 (`predicted.T`; frame budget F = 73728, same as the 72-cycle 32x32 probes; input side 72 cyc per input pixel).
 
@@ -246,7 +246,7 @@ Case: ENet up4-like, nearest-neighbour decoder: Cin 32 -> Cout 16, Cmid = Cin //
 ## 12. Initial-block probes (3 cases): `init_cin1_cout4_in256_int{4,6,8}`  (`SET=int`)
 
 ENet U4 initial block, `FINNInitialBlockConcat` (LayerQuantEnetFINN.py): 1 -> 4 channels, 256x256 input -> 128x128 output. The block has its own input quantizer
-(no stand-in). Model: `MILP/analytical/int_bottleneck.py` (+ `int_bottleneck_sim.py`, `test_int_bottleneck.py`, section in `analytical.md`).
+(no stand-in). Model: `ILP/analytical/int_bottleneck.py` (+ `int_bottleneck_sim.py`, `test_int_bottleneck.py`, section in `analytical.md`).
 
     Thr_in -> Dup -> [FMPad -> SWG (3x3, stride 2) -> MVAU_c (9 -> 3) -> Thr_c] -> FIFO main -+
                      [MaxPool (2x2, stride 2) -> Thr_m] --------------------> skip FIFO -----+-> Concat -> Thr_act
@@ -269,7 +269,7 @@ ENet U4 initial block, `FINNInitialBlockConcat` (LayerQuantEnetFINN.py): 1 -> 4 
 ## 13. Final-deconvolution probes (6 cases): `fnl_cin4_cout5_in128_int{4,6,8}_{bias,nobias}`  (`SET=fnl`)
 
 ENet U4 final layer of `LayerQuantEnetFINN`: `qnn.QuantConvTranspose2d(c5 = 4 -> out_channels = 5, kernel 2, stride 2)`, 128x128 input -> 256x256 output, Int8 weight quantizer at
-weight_bit_width = b. Model: `MILP/analytical/fnl_block.py` (+ `fnl_block_sim.py`, `test_fnl_block.py`, section in `analytical.md`). **Not a bottleneck**: one path, no Dup, no skip, no join
+weight_bit_width = b. Model: `ILP/analytical/fnl_block.py` (+ `fnl_block_sim.py`, `test_fnl_block.py`, section in `analytical.md`). **Not a bottleneck**: one path, no Dup, no skip, no join
 FIFO, no output threshold (the output is the raw logit). Export: `export_fnl_probe.py`; folding: `make_fnl_folding_configs.py`.
 
     Thr_in -> FMPadding_Pixel -> SWG (2x2, stride 1) -> MVAU_f (4*Cin = 16 -> Cout = 5) -> [Bias add]
@@ -281,7 +281,7 @@ FIFO, no output threshold (the output is the raw logit). Export: `export_fnl_pro
   transposed conv spends 4x MACs on inserted zeros (3 of the 4 window elements), as in the up-blocks.
 * Two variants, because the repo itself is inconsistent here -- **this is the main open question of this block**:
   * `bias`   = `LayerQuantEnetFINN` default (`final_bias=True`, `Int32Bias`): the graph has an integer bias add after the MVAU. Expected to land as a `ChannelwiseOp` (role `bias`).
-  * `nobias` = what `hardware/finn_enet_prod_export.py` exports today (comment there: "bias in ConvTranspose requires extra BN/threshold handling").
+  * `nobias` = what `dataflow/finn_enet_prod_export.py` exports today (comment there: "bias in ConvTranspose requires extra BN/threshold handling").
   Report for `bias`: what node the bias becomes (ChannelwiseOp, an MVAU bias attribute, or a leftover `Add`/`Mul` that stays OUTSIDE the dataflow partition). If it does not lower, say so --
   that decides whether the production network must keep `final_bias=False` or needs a new absorb pass. `identify_roles_final` raises "bias variant: no node after the MVAU" in that case.
 * The output is tagged INT8 (as `finn_enet_prod_export.export_model` does). Streamlining may leave the weight-scale `Mul` after the MVAU outside the dataflow partition: that is fine for
@@ -379,7 +379,7 @@ Changed files and what to rebuild:
 ## 18. Initial block with the landed graph order: `init_cin1_cout4_in256_int{4,6,8}_thrpre`  (`SET=intpre`, 3 builds, rtlsim + OOC)
 
 Why: the first init probes (`init_cin1_cout4_in256_int{4,6,8}`) measured 15.78 cyc/px against the 5.0 target. Their FIFO report showed the hardware graph is `Dup -> Thr_m -> MaxPool -> Concat`:
-FINN's streamline step `MoveMaxPoolPastMultiThreshold` (`hardware/finn_enet_build.py`) swapped the exported `MaxPool -> Quant` into `Thr -> MaxPool`. The model had `Dup -> MaxPool -> Thr_m -> Concat`,
+FINN's streamline step `MoveMaxPoolPastMultiThreshold` (`dataflow/finn_enet_build.py`) swapped the exported `MaxPool -> Quant` into `Thr -> MaxPool`. The model had `Dup -> MaxPool -> Thr_m -> Concat`,
 so (a) Thr_m's work was priced at 16,384 pixels instead of 65,536 and (b) **the 96-word skip FIFO was forced on the edge `thr_m -> concat`, which does not exist in hardware**; in the first
 probes the real join edge `maxpool -> concat` kept FINN's 2 words and the edges in front of the maxpool kept FINN's stock sizes (25,304 and 65,536 words). That mismatch is a candidate cause of the slowdown.
 

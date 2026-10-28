@@ -1,7 +1,7 @@
 """QAT trainer that trains `LayerQuantEnetFINN` (the FINN-safe architectural
 mirror, see enet/nnunetv2/nets/LayerQuantEnetFINN.py) DIRECTLY, instead of
 training the real LayerQuantENet and exporting/transferring into the FINN
-mirror post-hoc (see hardware/finn_export_12_dense_relu_nearest_conv_
+mirror post-hoc (see dataflow/finn_export_12_dense_relu_nearest_conv_
 upsample_256_trained.py, and the cross-test it runs).
 
 Byte-for-byte the same shape/config as nnUNetTrainerLayerQuantENet_

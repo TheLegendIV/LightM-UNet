@@ -2,7 +2,7 @@
 TRAINED checkpoint build, 256x256 input -- run this FIRST (before the 8-way
 build) to discover structural/graph-conversion errors early. IDENTICAL in
 structure/steps to
-hardware/archive/pre_builds_refactor_20260926/12_dense_relu_nearest_conv_upsample_512/
+dataflow/archive/pre_builds_refactor_20260926/12_dense_relu_nearest_conv_upsample_512/
 finn_hawq_preamble_12_dense_relu_nearest_conv_upsample_dummy_512x512.py
 (same shared step_enet_convert_to_hw_rtl_mvau conversion, same relaxed
 stage-boundary detection, same dangling-node check) -- only MODEL_NAME/
@@ -10,8 +10,8 @@ MODEL_FILE and OUTPUT_DIR differ (real trained 256x256 export, not dummy
 512x512).
 
 Prerequisite (run inside the pytorch training container first):
-    python hardware/builds/12_dense_relu_nearest_conv_upsample_256/finn_export_12_dense_relu_nearest_conv_upsample_256_trained.py --calibration-images -1 --skip-cross-test
-    docker cp hardware/outputs/finn_exports/quantEnet_12_dense_relu_nearest_conv_upsample_256_trained_int8.onnx \\
+    python dataflow/builds/12_dense_relu_nearest_conv_upsample_256/finn_export_12_dense_relu_nearest_conv_upsample_256_trained.py --calibration-images -1 --skip-cross-test
+    docker cp dataflow/outputs/finn_exports/quantEnet_12_dense_relu_nearest_conv_upsample_256_trained_int8.onnx \\
         <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/
 
 Run inside the FINN container:

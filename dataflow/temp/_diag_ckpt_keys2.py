@@ -4,8 +4,8 @@ from pathlib import Path
 import torch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(REPO_ROOT / "hardware" / "builds" / "S12_dense_256_u4_analytical_v1"))
-sys.path.insert(0, str(REPO_ROOT / "hardware" / "builds" / "12_dense_relu_nearest_conv_upsample_256"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow" / "builds" / "S12_dense_256_u4_analytical_v1"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow" / "builds" / "12_dense_relu_nearest_conv_upsample_256"))
 import finn_export_S12_dense_256_u4_analytical_v1_finn_calibrated_ft15ep as ft  # noqa: E402
 from nnunetv2.nets.LayerQuantENet import layer_names_for  # noqa: E402
 from nnunetv2.nets.LayerQuantEnetFINN import LayerQuantEnetFINN  # noqa: E402

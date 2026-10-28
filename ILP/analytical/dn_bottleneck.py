@@ -538,7 +538,7 @@ def to_folding_config(r: BottleneckResult) -> dict:
     """Role-keyed FINN nodeattrs, the verified FIFO depths per edge and the model's prediction (same schema as
     bottleneck.to_folding_config; roles: dup, swg_r, mvau_r, thr_r, fmpad, swg_m, mvau_m, thr_m, mvau_e, thr_e, maxpool,
     [mvau_s], thr_s, [fmpad_c], add, thr_out). fmpad_c is the channel pad: its attributes describe the REGROUPED stream
-    (ImgDim [H*W, C/s], NumChannels = SIMD = s, Padding right) and are applied by hardware/finn_channel_pad.py ("custom": true).
+    (ImgDim [H*W, C/s], NumChannels = SIMD = s, Padding right) and are applied by dataflow/finn_channel_pad.py ("custom": true).
     Needs verify_with_sim(r) to have run."""
     if not r.fifo_graph:
         raise RuntimeError("run verify_with_sim(result) before to_folding_config")

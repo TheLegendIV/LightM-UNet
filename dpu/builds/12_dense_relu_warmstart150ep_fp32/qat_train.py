@@ -1,6 +1,6 @@
 """QAT fine-tuning of the S12 dense ReLU warm-start ENet with the Vitis AI QatProcessor.
 
-Mimics the repo's nnU-Net ENet QAT run (compression/slurm/qat_*_ft15ep.job, trainer
+Mimics the repo's nnU-Net ENet QAT run (nas/slurm/qat_*_ft15ep.job, trainer
 nnUNetTrainerLayerQuantEnetFINN_*) as a standalone loop, because nnU-Net needs torch 2.0
 while pytorch_nndct (Vitis AI 3.0) needs torch 1.12:
 

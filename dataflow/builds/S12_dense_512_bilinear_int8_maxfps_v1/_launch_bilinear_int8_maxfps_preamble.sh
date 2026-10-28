@@ -1,6 +1,6 @@
 #!/bin/bash
 # Preamble (+ bridge/FIFO landing gates, no HLS/Vivado build) for the uniform-INT8 bilinear 512 network folded from
-# MILP/artifacts/S12_512_bilin_int8_maxfps/simfifo_pairs. Run inside the FINN container (docker exec finn_persistent bash <this>).
+# ILP/artifacts/S12_512_bilin_int8_maxfps/simfifo_pairs. Run inside the FINN container (docker exec finn_persistent bash <this>).
 cd /home/thelegendiv/finn/notebooks/enet
 export HOME=/tmp/home_dir
 export FINN_BUILD_DIR=/home/thelegendiv/finn/notebooks/enet/finn_build_tmp

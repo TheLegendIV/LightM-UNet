@@ -9,7 +9,7 @@ real threshold nodes synthesize with ZERO BRAM and ZERO LUTRAM (Vivado infers
 no dedicated memory at all for small-enough thresholds): v2 87/170 nonzero,
 v4 78/170 nonzero. Applying a flat per-(PE*numSteps) rate to a population
 that's half genuinely zero both under-fits the nonzero rows (the rate gets
-diluted, see MILP/calibration.csv's threshold_bram row, R^2=0.753) and
+diluted, see ILP/calibration.csv's threshold_bram row, R^2=0.753) and
 mis-predicts nonzero BRAM for every node that should be free. This is a
 likely driver of the BRAM error flipping sign between v2 (-26.7%) and v4
 (+47.4%) found this session (different real threshold-size mixes land on
@@ -26,7 +26,7 @@ NOT expected to be a clean zero-counterexample boundary like
 _WM_BRAM_AUTO_MIN_WMEM had, reported honestly either way.
 
 --write-calibration-csv appends this run's fit as a new dated row to
-MILP/calibration.csv via csv.DictWriter (correct quoting/escaping handled
+ILP/calibration.csv via csv.DictWriter (correct quoting/escaping handled
 automatically -- no hand-editing). Without the flag, the script only prints.
 The printed/logged "before" comparison is always against finn_cost_model.py's
 CURRENT LIVE constants (imported directly, not a hardcoded historical
@@ -34,7 +34,7 @@ snapshot), so reruns after a previous fit from this script was applied stay
 meaningful.
 
 Usage:
-    docker exec lightmunet_dev python3 /workspace/LightM-UNet/hardware/fit_threshold_bram_cutoff.py [--write-calibration-csv]
+    docker exec lightmunet_dev python3 /workspace/LightM-UNet/dataflow/fit_threshold_bram_cutoff.py [--write-calibration-csv]
 """
 import argparse
 import csv
@@ -42,17 +42,17 @@ import sys
 from datetime import date
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "MILP"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ILP"))
 from finn_cost_model import _THR_RTL_BRAM18_PER_PE_NUMSTEP as LIVE_RATE  # noqa: E402
 from finn_cost_model import _THR_RTL_BRAM_MIN_CHANNELS_NUMSTEP as LIVE_CUTOFF  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-CALIBRATION_CSV = REPO_ROOT / "MILP" / "calibration.csv"
+CALIBRATION_CSV = REPO_ROOT / "ILP" / "calibration.csv"
 
 DATASETS = {
-    "v2": REPO_ROOT / "hardware/builds/12_dense_relu_nearest_conv_upsample_256_v2/results/"
+    "v2": REPO_ROOT / "dataflow/builds/12_dense_relu_nearest_conv_upsample_256_v2/results/"
                        "mvau_lut_calibration_dataset_12_dense_relu_nearest_conv_upsample_256_v2_full.csv",
-    "v4": REPO_ROOT / "hardware/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/results/"
+    "v4": REPO_ROOT / "dataflow/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/results/"
                        "mvau_lut_calibration_dataset_12_dense_relu_nearest_conv_upsample_256_w8_16_v4_full.csv",
 }
 
@@ -136,7 +136,7 @@ def append_calibration_row(row: dict) -> None:
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--write-calibration-csv", action="store_true",
-                     help="Append this run's fit to MILP/calibration.csv (default: print only).")
+                     help="Append this run's fit to ILP/calibration.csv (default: print only).")
     args = ap.parse_args()
 
     per_build = {name: load_threshold_rows(path) for name, path in DATASETS.items()}
@@ -205,7 +205,7 @@ def main():
             "new_value": f"cutoff={cutoff:.1f} ({best_label}) / rate={k_new:.6f}",
             "method": "Decision-stump misclassification scan over PE*numSteps / NumChannels*numSteps / "
                       "PE*NumChannels*numSteps (cutoff), then 1-term OLS through origin on the above-cutoff "
-                      "subset only (rate), via hardware/fit_threshold_bram_cutoff.py",
+                      "subset only (rate), via dataflow/fit_threshold_bram_cutoff.py",
             "dataset": "12_dense_relu_nearest_conv_upsample_256_v2 + _w8_16_v4 ("
                        + "; ".join(f"{n}: {len(r)} rows/{sum(x['nonzero'] for x in r)} nonzero"
                                     for n, r in per_build.items()) + ")",

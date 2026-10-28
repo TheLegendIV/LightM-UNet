@@ -1,5 +1,5 @@
 """v3 sibling of finn_export_12_dense_relu_nearest_conv_upsample_256_v3_trained.py: exports the S12 dense 256x256 full-width
-network for the TIED-residual-bits MILP solve (MILP/artifacts/S12_dense_256_fullwidth_joinsdist_v1/final_tied_dsr1.04/:
+network for the TIED-residual-bits MILP solve (ILP/artifacts/S12_dense_256_fullwidth_joinsdist_v1/final_tied_dsr1.04/:
 --joins-distributed --tie-residual-bits, FPS 100, DSR 1.04, caps LUT 0.7 / BRAM 0.4 / DSP 0.9). Deltas vs v2:
   - Source is the FP32 checkpoint (nnUNetTrainerENet_12_dense_relu_nearest_conv_upsample_256, trained from scratch, 150 ep),
     re-quantized with the tied SITES bits via LayerQuantEnetFINN.from_pretrained, then runtime-stats calibrated on the FULL
@@ -8,9 +8,9 @@ network for the TIED-residual-bits MILP solve (MILP/artifacts/S12_dense_256_full
   - Output goes to this folder's outputs/ with a "_v3_" tag.
 
 Usage (pytorch container, repo root):
-    docker exec lightmunet_dev python3 hardware/builds/12_dense_relu_nearest_conv_upsample_256_v3/finn_export_12_dense_relu_nearest_conv_upsample_256_v3_trained.py --skip-cross-test
+    docker exec lightmunet_dev python3 dataflow/builds/12_dense_relu_nearest_conv_upsample_256_v3/finn_export_12_dense_relu_nearest_conv_upsample_256_v3_trained.py --skip-cross-test
 
-Output: hardware/builds/12_dense_relu_nearest_conv_upsample_256_v3/outputs/quantEnet_12_dense_relu_nearest_conv_upsample_256_v3_trained.onnx
+Output: dataflow/builds/12_dense_relu_nearest_conv_upsample_256_v3/outputs/quantEnet_12_dense_relu_nearest_conv_upsample_256_v3_trained.onnx
 """
 from __future__ import annotations
 
@@ -22,12 +22,12 @@ import torch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
-sys.path.insert(0, str(REPO_ROOT / "analysis" / "501_ARCADE"))
-sys.path.insert(0, str(REPO_ROOT / "hardware"))
+sys.path.insert(0, str(REPO_ROOT / "nas"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 # v1's job folder: only for the shared helpers below, not yet promoted to
-# top-level hardware/ shared infra (see builds/README.md).
-sys.path.insert(0, str(REPO_ROOT / "hardware" / "builds" / "12_dense_relu_nearest_conv_upsample_256"))
+# top-level dataflow/ shared infra (see builds/README.md).
+sys.path.insert(0, str(REPO_ROOT / "dataflow" / "builds" / "12_dense_relu_nearest_conv_upsample_256"))
 import finn_enet_prod_export  # noqa: E402
 from nnunetv2.nets.LayerQuantENet import layer_names_for  # noqa: E402
 from nnunetv2.nets.LayerQuantEnetFINN import LayerQuantEnetFINN  # noqa: E402
@@ -47,7 +47,7 @@ from finn_export_12_dense_relu_nearest_conv_upsample_256_trained import (  # noq
 )
 
 # Redirect export_model()'s output into this job's own folder instead of the
-# shared (deprecated) hardware/outputs/finn_exports/.
+# shared (deprecated) dataflow/outputs/finn_exports/.
 finn_enet_prod_export.OUT_DIR = Path(__file__).resolve().parent / "outputs"
 
 NET_NAME = "nnUNetTrainerENet_12_dense_relu_nearest_conv_upsample_256"  # FP32 source (also the cross-test reference name)
@@ -56,7 +56,7 @@ DEFAULT_CHECKPOINT = (
     / f"{NET_NAME}__nnUNetPlans__2d" / "fold_0" / "checkpoint_best.pth"
 )
 DEFAULT_BITS_FILE = (
-    REPO_ROOT / "MILP" / "artifacts" / "S12_dense_256_fullwidth_joinsdist_v1" / "final_tied_dsr1.04"
+    REPO_ROOT / "ILP" / "artifacts" / "S12_dense_256_fullwidth_joinsdist_v1" / "final_tied_dsr1.04"
     / "layer_bits_SITES_final.json"
 )
 DEFAULT_PREPROCESSED_DIR = REPO_ROOT / "data" / "nnUNet_preprocessed" / DATASET_NAME / "nnUNetPlans_2d"
@@ -123,7 +123,7 @@ def main() -> None:
         name = "quantEnet_12_dense_relu_nearest_conv_upsample_256_v3_trained"
         export_model(model, name, dummy)
         print(f"\nExported. Copy to FINN container with:")
-        print(f"  docker cp hardware/builds/12_dense_relu_nearest_conv_upsample_256_v3/outputs/{name}.onnx <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/")
+        print(f"  docker cp dataflow/builds/12_dense_relu_nearest_conv_upsample_256_v3/outputs/{name}.onnx <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/")
 
     if not args.skip_cross_test:
         print("\n=== Cross test: FINN mirror vs. real model, full imagesTs/labelsTs (300 cases) ===")

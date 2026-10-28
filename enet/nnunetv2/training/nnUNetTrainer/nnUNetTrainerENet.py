@@ -339,7 +339,7 @@ class nnUNetTrainerENet(nnUNetTrainerLightMUNet):
 
     def perform_actual_validation(self, save_probabilities: bool = False):
         # Default ON (2026-09-26): nnU-Net's own internal validation/ pass is
-        # redundant with compression/collect_results.py's own independent
+        # redundant with nas/collect_results.py's own independent
         # predict+eval (which never reads validation/'s own summary.json or
         # PNGs) -- it only cost real compute/disk with nothing downstream
         # ever consuming it. Set ENET_SKIP_FINAL_VALIDATION=0 to re-enable

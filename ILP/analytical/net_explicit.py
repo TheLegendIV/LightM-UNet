@@ -1,6 +1,6 @@
 """Simulate a GIVEN folding (a MILP solution) in the analytical block models + simulators, STARTING from the MILP's own FIFO depths, and size the FIFOs to reach the MILP's rate at the least memory.
 
-    python3 MILP/analytical/net_explicit.py <layer_bits_folding_ARM.json> --out-dir <dir> --tag ARM_simfifo [--workers 6] [--max-iterations 3]
+    python3 ILP/analytical/net_explicit.py <layer_bits_folding_ARM.json> --out-dir <dir> --tag ARM_simfifo [--workers 6] [--max-iterations 3]
 
 A folding json whose per_layer carries the bilinear decoder's frozen depthwise conv (`<up stage>.main_up.1`: written by finn_milp.py since 2026-10-13, or added by add_frozen_dw_fold.py) builds its up blocks WITH that conv.
 The MILP prices its FIFOs in closed form and never simulates the design; the analytical flow (net_fold.py) searches its own folding and simulates every block. This script closes the gap: every block model is fed the MILP's
@@ -32,7 +32,7 @@ from multiprocessing import Pool
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-for p in (REPO / "enet", REPO / "MILP", REPO / "MILP" / "utils", REPO / "MILP" / "analytical"):
+for p in (REPO / "enet", REPO / "ILP", REPO / "ILP" / "utils", REPO / "ILP" / "analytical"):
     sys.path.insert(0, str(p))
 
 import finn_milp  # noqa: E402

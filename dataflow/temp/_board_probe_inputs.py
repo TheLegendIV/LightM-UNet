@@ -2,7 +2,7 @@ import os, sys, numpy as np
 sys.path.insert(0, os.path.abspath("deployment/image_transfer_interface/interfaces"))
 from async_read_write_single import BatchImageStreamer
 
-d = "hardware/temp/_probe_in"; o = "hardware/temp/_probe_out"
+d = "dataflow/temp/_probe_in"; o = "dataflow/temp/_probe_out"
 os.makedirs(d, exist_ok=True)
 rng = np.random.default_rng(0)
 cases = {"zeros": np.zeros(65536, np.uint8), "ones128": np.full(65536, 128, np.uint8),

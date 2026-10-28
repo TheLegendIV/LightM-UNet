@@ -13,11 +13,11 @@
 # This overwrites each packaged IP's hdl/verilog sources (the copies
 # actually referenced by its component.xml fileset, NOT the pristine
 # sol1/impl/verilog HLS output) with the already-renamed sources from
-# hardware/_rename_iodma_sources.py's prior output (module declaration +
+# dataflow/_rename_iodma_sources.py's prior output (module declaration +
 # every internal submodule reference consistently prefixed
 # p0_input_/p7_output_), then refreshes IP-XACT checksums.
 #
-# Run ONCE, BEFORE hardware/regen_iodma_bd_outputs_S12_dense_256_u4_analytical_v1.tcl.
+# Run ONCE, BEFORE dataflow/regen_iodma_bd_outputs_S12_dense_256_u4_analytical_v1.tcl.
 # Does not touch the live S12_256_analytical project; only the IP repo.
 
 set BASE "/home/thelegendiv/finn/notebooks/enet/finn_build_tmp/S12_dense_256_u4_analytical_v1_ft15ep_int6_fps250_lat200"

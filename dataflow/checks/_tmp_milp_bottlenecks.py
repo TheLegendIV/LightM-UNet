@@ -2,7 +2,7 @@
 import sys
 from pathlib import Path
 
-root = Path(r"C:\DEV\repos\LightM-UNet\MILP\artifacts\S12_512_bilin_int8_maxfps")
+root = Path(r"C:\DEV\repos\LightM-UNet\ILP\artifacts\S12_512_bilin_int8_maxfps")
 files = [
     root / "maxfps" / "layer_bits_folding_maxfps.json",
     root / "pinned_minres" / "layer_bits_folding_pinned_minres.json",

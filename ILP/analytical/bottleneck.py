@@ -506,11 +506,11 @@ URAM_BITS = 72 * 4096          # one URAM288: 4096 deep x 72 wide
 BLOCK_FIFO_DEPTH = 32
 FIFO_SRL_MAX_DEPTH = 256       # FINN max_qsrl_depth: up to here a FIFO stays StreamingFIFO_rtl (SRL shift registers / LUT); deeper ones are split and the pieces > 256 become Vivado FIFO IP (BRAM / URAM).
                                # Real S12-dense bilinear 256 build: every rtl FIFO is <= 256 deep, every vivado one >= 512 (was 64 here: that sent ~57 FIFOs to BRAM that the real build kept in LUT).
-FIFO_VIVADO_MAX_PIECE = 32768  # Vivado axis_data_fifo depth cap (hardware/finn_s12_build.py)
+FIFO_VIVADO_MAX_PIECE = 32768  # Vivado axis_data_fifo depth cap (dataflow/finn_s12_build.py)
 FIFO_URAM_MIN_EFF = 0.2        # auto: use URAM only if at least this fraction of the allocated URAM bits is used (BRAM-bound: relieve BRAM18 where URAM is not wasteful)
 FIFO_AUTO_URAM = False         # URAM FIFOs are opt-in in the real build (finn_s12_build.py --allocate-uram; no URAM in the default bilinear-256 build): auto picks BRAM unless this is set
 
-# LUT fits from the real post-route FIFOs of S12_dense_256_u4_bilinear_analytical_v1 (n=553: 440 depth<=2, 74 rtl deeper, 39 vivado), OLS through the origin, 2026-10-11, MILP/calibration.csv.
+# LUT fits from the real post-route FIFOs of S12_dense_256_u4_bilinear_analytical_v1 (n=553: 440 depth<=2, 74 rtl deeper, 39 vivado), OLS through the origin, 2026-10-11, ILP/calibration.csv.
 # width = PE words x element bits of the stream (folded_shape[-1] * bits), NOT the CSV's `bits` column.
 _SRL_TINY_LUT = (6.255, 1.003)      # depth <= 2:  a + b*width            (mean 19.5 LUT, sum ratio 1.00; the ~35 per-FIFO outliers up to 326 LUT are not reproducible)
 _SRL_LUT = (35.66, 1.238)           # depth > 2:   a + b*width*ceil(depth/32)   (median error 6.9%; the real SRL count is exactly width*ceil(depth/32))
@@ -830,7 +830,7 @@ def verify_with_sim(r: BottleneckResult, fifo_depth: int = 2, tol: float = 0.02,
     return r.verification
 
 
-# ---------------------------------------------------------------- ONNX export (same style as MILP/milp_outputs.py)
+# ---------------------------------------------------------------- ONNX export (same style as ILP/milp_outputs.py)
 
 _OP_LABEL = {
     "Dup": "DuplicateStreams_hls", "MVAU_r": "MVAU_rtl", "MVAU_m": "MVAU_rtl", "MVAU_e": "MVAU_rtl",
@@ -933,7 +933,7 @@ def export_onnx(r: BottleneckResult, path: str) -> None:
 
 # ---------------------------------------------------------------- FINN folding / FIFO config for hardware probes
 
-# role -> FINN-facing role name used by hardware/builds/bottleneck_probe_v1 (stable keys, no FINN node names)
+# role -> FINN-facing role name used by dataflow/builds/bottleneck_probe_v1 (stable keys, no FINN node names)
 _ROLE_OF = {
     "Dup": "dup", "MVAU_r": "mvau_r", "Thr_r": "thr_r", "FMPad": "fmpad", "SWG_m": "swg", "MVAU_m": "mvau_m",
     "Thr_m": "thr_m", "MVAU_e": "mvau_e", "Thr_e": "thr_e", "Thr_s": "thr_s", "Add": "add", "Thr_out": "thr_out",

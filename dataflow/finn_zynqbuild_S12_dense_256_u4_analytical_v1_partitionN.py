@@ -1,7 +1,7 @@
 """FINN full ZynqBuild (real PS+PL bitstream + PYNQ driver) for a SINGLE
 PARTITION (index given on the command line) of the S12_dense_256_u4_analytical_v1
 8-way build family -- the "alternative: single-partition ZynqBuild" track
-(hardware/README.md item 6), for board bring-up/driver testing of one
+(dataflow/README.md item 6), for board bring-up/driver testing of one
 partition's own real Vivado project, independent of the 8-way combine flow.
 
 Reuses the SAME per-partition build helpers finn_s12_build.py's own 8-way

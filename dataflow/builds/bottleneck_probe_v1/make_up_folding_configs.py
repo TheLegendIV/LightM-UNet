@@ -1,6 +1,6 @@
 """Folding + FIFO config (and the model's prediction) for the upsampling probes. Standard library only.
 
-    python3 hardware/builds/bottleneck_probe_v1/make_up_folding_configs.py [--bits 4 6 8] [--variants conv noconv]
+    python3 dataflow/builds/bottleneck_probe_v1/make_up_folding_configs.py [--bits 4 6 8] [--variants conv noconv]
 
 Same case as export_up_probe.py (32 -> 16, 32x32 input -> 64x64 output, T_out = 18 per output pixel). Writes
 inputs/up_cin32_cout16_in32_int{b}_{variant}_folding.json.
@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_ROOT / "MILP" / "analytical"))
+sys.path.insert(0, str(REPO_ROOT / "ILP" / "analytical"))
 
 from up_bottleneck import model_up_bottleneck, to_folding_config, verify_with_sim  # noqa: E402
 

@@ -1,8 +1,8 @@
 # S12 512 bilinear precision ablation (v2): FINN build results
 
-Build outputs of the ablation arms solved in [`MILP/artifacts/S12_512_ablation_v2/`](../../../MILP/artifacts/S12_512_ablation_v2). The folder layout mirrors the MILP one (`<solve>/<arm>`), so every arm here sits next to the solve and FIFO-simulated folding it was built from (`…/<arm>/simfifo/layer_bits_folding_*_simfifo.json`).
+Build outputs of the ablation arms solved in [`ILP/artifacts/S12_512_ablation_v2/`](../../../ILP/artifacts/S12_512_ablation_v2). The folder layout mirrors the MILP one (`<solve>/<arm>`), so every arm here sits next to the solve and FIFO-simulated folding it was built from (`…/<arm>/simfifo/layer_bits_folding_*_simfifo.json`).
 
-Only reports, configs and logs are kept (no `intermediate_models`, no IP / bitstreams). The scripts and the exported networks of each job are in `hardware/builds/S12_dense_512_bilinear_<arm>_<v>/` (and `…_uniform_jobs/` for the generic launchers).
+Only reports, configs and logs are kept (no `intermediate_models`, no IP / bitstreams). The scripts and the exported networks of each job are in `dataflow/builds/S12_dense_512_bilinear_<arm>_<v>/` (and `…_uniform_jobs/` for the generic launchers).
 
 ## Layout
 
@@ -24,7 +24,7 @@ Only reports, configs and logs are kept (no `intermediate_models`, no IP / bitst
 
 ## Results (OOC synthesis of the 8 partitions, 100 MHz target)
 
-DSP is the real DSP48E2 count (`| DSPs |` row of each partition's Vivado `report_utilization`, via `hardware/utils/dump_real_dsp_utilization.py`). The `DSP` field in the `ooc_synth_*.json` files of the `report/` folders is always 0 (broken Tcl filter) and was not corrected in place; per-partition real values for the constrained builds are in `analysis/report/MILP/constrained_builds/real_dsp_per_partition.json` (INT8 fps150: `relaxed_fps150/uniform_int8/real_dsp_per_partition.json`).
+DSP is the real DSP48E2 count (`| DSPs |` row of each partition's Vivado `report_utilization`, via `dataflow/utils/dump_real_dsp_utilization.py`). The `DSP` field in the `ooc_synth_*.json` files of the `report/` folders is always 0 (broken Tcl filter) and was not corrected in place; per-partition real values for the constrained builds are in `report/MILP/constrained_builds/real_dsp_per_partition.json` (INT8 fps150: `relaxed_fps150/uniform_int8/real_dsp_per_partition.json`).
 
 | Arm | LUT | FF | DSP | BRAM18 + BRAM36 | Worst-partition Fmax (MHz) | FINN est. FPS @100 MHz | Combined rtlsim (cycles, 1 image) |
 |---|---|---|---|---|---|---|---|
@@ -38,7 +38,7 @@ All partitions of all five builds pass the per-partition rtlsim without deadlock
 
 ## FINN-native build: `finn_auto/cap40_fps150/uniform_int6`
 
-Same uniform INT6 network as `cap40_fps150/uniform_int6`, but with **FINN's own auto-folding** (`step_target_fps_parallelization`, 150 FPS target at 100 MHz, no MILP folding, no MILP FIFO depths, FINN's stock MaxPool lowering) and **FINN's rtlsim-based FIFO autosizing** (`--fifo-autosize rtlsim`). Job tag `S12_dense_512_bilinear_int6_cap40_finnauto_v1`; launcher `hardware/builds/S12_dense_512_bilinear_uniform_jobs/_launch_finn_auto.sh`.
+Same uniform INT6 network as `cap40_fps150/uniform_int6`, but with **FINN's own auto-folding** (`step_target_fps_parallelization`, 150 FPS target at 100 MHz, no MILP folding, no MILP FIFO depths, FINN's stock MaxPool lowering) and **FINN's rtlsim-based FIFO autosizing** (`--fifo-autosize rtlsim`). Job tag `S12_dense_512_bilinear_int6_cap40_finnauto_v1`; launcher `dataflow/builds/S12_dense_512_bilinear_uniform_jobs/_launch_finn_auto.sh`.
 
 Partitions 0-6 built normally. **Partition 7 could not be placed**: FINN's FIFO autosizing gave it FIFOs of 1,310,718 x 16 bit, 262,144 x 6 bit and 262,144 x 80 bit words (about 46 Mbit in total) next to PE=1 / SIMD=1 nodes, so Vivado stops in `place_design` with DRC `UTLZ-1` (1,300 RAMB36 needed, 312 on the xczu7ev; even the largest installed part, xczu19eg, has only 984). Partition 7's numbers are therefore from the post-synthesis / post-opt checkpoint (`finish_p7.py`, `util_from_dcp.tcl`, `report/p7_synth_only/`): utilization only, no WNS / Fmax. Its single-image rtlsim does not complete (261,892 of 262,144 output beats after 7.6 M cycles, flagged as deadlock).
 

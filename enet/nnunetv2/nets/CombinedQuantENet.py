@@ -2,7 +2,7 @@
 of QuantENetS19Block.py / QuantENet26_5_w24.py / QuantENet5_6Block.py (and,
 via uniform-bits broadcasting, QuantENet23_1.py's per-stage granularity
 too), prepared for a future refactor once the per-block-QAT-stuck-training
-investigation (see compression/configs/ and this session's own notes) has
+investigation (see nas/configs/ and this session's own notes) has
 settled. Created deliberately as a NEW, separate file rather than by
 editing any of those four in place: every one of them is currently a
 provenance record of exactly what code a specific real checkpoint was
@@ -117,7 +117,7 @@ def expand_uniform_bits(weight_bit_width: int, act_bit_width: int, block_names: 
     case through this same per-block-dict interface, without a separate
     code path. NOT a per-stage broadcast (QuantENet23_1's actual interface,
     one pair per one of 5 STAGE_NAMES groups) -- that needs a stage->block
-    membership mapping (STAGE_MODULE_ATTRS in compression/hawq/config_23_1.py)
+    membership mapping (STAGE_MODULE_ATTRS in nas/hawq/config_23_1.py)
     this function deliberately doesn't duplicate; add a
     expand_stage_bits(stage_weight_bits, stage_act_bits, stage_module_attrs,
     block_names) here if/when a real caller needs it."""
@@ -131,11 +131,11 @@ def expand_stage_bits(
     stage_weight_bits: dict[str, int], stage_act_bits: dict[str, int],
     stage_module_attrs: dict[str, tuple[str, ...]], block_names: tuple[str, ...],
 ) -> tuple[dict, dict]:
-    """Broadcasts a per-STAGE (w, a) pair (e.g. compression/hawq/ilp_search.py's
+    """Broadcasts a per-STAGE (w, a) pair (e.g. nas/hawq/ilp_search.py's
     stage_bits_*.json output: {"stage_weight_bits": {...}, "stage_act_bits":
     {...}}, one entry per one of the 5 HAWQ stage groups) to every individual
     block within that stage, via the same stage->block membership map
-    compression/hawq/config_*.py's own STAGE_MODULE_ATTRS defines (e.g.
+    nas/hawq/config_*.py's own STAGE_MODULE_ATTRS defines (e.g.
     "context": ("down2", "stage2", "stage3")) -- a block's own stage is
     whichever STAGE_MODULE_ATTRS entry's prefix its block_names name starts
     with (block_names are of the form "<attr>.<i>" or a bare "<attr>" for

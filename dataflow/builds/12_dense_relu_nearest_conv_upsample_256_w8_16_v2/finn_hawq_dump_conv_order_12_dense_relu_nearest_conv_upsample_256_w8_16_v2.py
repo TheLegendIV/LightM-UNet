@@ -8,9 +8,9 @@ this repo's naming convention (see AGENTS.md), pointing at the w8_16 job's
 NET_NAME/bits file via finn_export_..._w8_16_v2_trained's constants instead.
 
 Usage (run inside the pytorch training container):
-    python hardware/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v2/finn_hawq_dump_conv_order_12_dense_relu_nearest_conv_upsample_256_w8_16_v2.py
+    python dataflow/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v2/finn_hawq_dump_conv_order_12_dense_relu_nearest_conv_upsample_256_w8_16_v2.py
 
-Output: hardware/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v2/outputs/
+Output: dataflow/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v2/outputs/
     quantEnet_12_dense_relu_nearest_conv_upsample_256_w8_16_v2_trained_conv_order.json
 """
 from __future__ import annotations
@@ -26,10 +26,10 @@ import brevitas.nn as qnn
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
-sys.path.insert(0, str(REPO_ROOT / "hardware"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 # base-width job folder: only for the shared helpers re-exported by the w8_16 export module.
-sys.path.insert(0, str(REPO_ROOT / "hardware" / "builds" / "12_dense_relu_nearest_conv_upsample_256"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow" / "builds" / "12_dense_relu_nearest_conv_upsample_256"))
 
 from finn_export_12_dense_relu_nearest_conv_upsample_256_w8_16_v2_trained import (  # noqa: E402
     LayerQuantEnetFINN,

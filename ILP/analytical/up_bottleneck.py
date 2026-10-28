@@ -235,7 +235,7 @@ def model_up_bottleneck(
     main_px = max(1, math.ceil(max(0.0, l_ext - l_main) / T)) + 1
     if not skip_conv:
         # The latency difference above misses the real upsampler (finn-hlslib row-buffer UpsampleNearestNeighbour, UpNNNode): it understates the ext-end skip FIFO 16-30x. Closed forms fitted to
-        # the simulation (fifo_model.UP_SKIP_ROWS / UP_MAIN_ROWS, MILP/finn_milp.md): skip = ONE input row (paced need W-1 px at every fold swept), FIFO main <= 3 input rows. verify_with_sim still measures both.
+        # the simulation (fifo_model.UP_SKIP_ROWS / UP_MAIN_ROWS, ILP/finn_milp.md): skip = ONE input row (paced need W-1 px at every fold swept), FIFO main <= 3 input rows. verify_with_sim still measures both.
         skip_px, main_px = W, 3 * W
     depth = skip_px * ext_w
     fw = tpe_e * A_e

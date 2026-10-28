@@ -10,7 +10,7 @@ network_weights, then export.
 
 Generalized across every Ox/quant config trained so far (not just O4): by
 default the architecture (channels/bottlenecks/decoder/op flags/quant bits)
-is looked up from compression/results.csv by --net-name, the same
+is looked up from nas/results.csv by --net-name, the same
 config_name every collect_results.py run already keys its row on -- one
 source of truth, no re-typing/retyping-drift risk between how a config was
 trained and what shape this script tries to load its weights into. Pass
@@ -18,11 +18,11 @@ trained and what shape this script tries to load its weights into. Pass
 that hasn't been through collect_results.py yet.
 
 Usage:
-    python compression/export_quant_checkpoint.py \
+    python nas/export_quant_checkpoint.py \
         --net-name nnUNetTrainerENetQuant_3a_quant_O4_int8_no_asym
 
     # bypassing the results.csv lookup:
-    python compression/export_quant_checkpoint.py \
+    python nas/export_quant_checkpoint.py \
         --net-name some_new_run --channels 4,16,32,16,4 \
         --bottlenecks 4,8,8,2,1 --decoder-type upsample_conv --quant-bits 8
 """
@@ -41,8 +41,8 @@ from nnunetv2.nets.QuantENet import QuantENet  # noqa: E402
 
 DATASET_NAME = "Dataset501_ARCADE"
 NNUNET_RESULTS = REPO_ROOT / "data" / "nnUNet_results"
-OUT_DIR = REPO_ROOT / "hardware" / "outputs" / "qonnx_exports"
-RESULTS_CSV = REPO_ROOT / "compression" / "results.csv"
+OUT_DIR = REPO_ROOT / "dataflow" / "outputs" / "qonnx_exports"
+RESULTS_CSV = REPO_ROOT / "nas" / "results.csv"
 
 
 def parse_tuple5(value: str, name: str) -> tuple[int, ...]:
@@ -116,7 +116,7 @@ def main() -> None:
     parser.add_argument("--configuration", default="2d")
     parser.add_argument("--fold", type=int, default=0)
     parser.add_argument("--checkpoint-name", default="checkpoint_best.pth")
-    parser.add_argument("--output", default=None, help="Defaults to hardware/outputs/qonnx_exports/<net-name>.onnx")
+    parser.add_argument("--output", default=None, help="Defaults to dataflow/outputs/qonnx_exports/<net-name>.onnx")
     args = parser.parse_args()
 
     if args.channels is not None:

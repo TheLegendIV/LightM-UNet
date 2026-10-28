@@ -2,7 +2,7 @@
 against REAL Vivado synthesis measurements (not just internal consistency).
 
 Ground truth: the 7 real MVAU_rtl nodes of the s12_context_dense_int6_pemh
-probe (hardware/probes/mvau_lut_calibration_dataset_s12_context_dense_
+probe (dataflow/probes/mvau_lut_calibration_dataset_s12_context_dense_
 int6_pemh_simd1.csv) -- a small, fully-known 2-bottleneck network (1x1 stem
 -> [1x1 reduce -> 3x3 dilated conv -> 1x1 expand] x2), built at W6A6,
 force_dsp=True, PE=MH/SIMD=1 folding (every layer's PE == its own output
@@ -15,7 +15,7 @@ kernel, dilation) is hardcoded here directly from finn_export_probe_
 s12_context_common.py's ProbeNet architecture, matched 1:1 against the CSV
 rows in real graph order -- so this only needs finn_cost_model.py itself.
 
-Run (from MILP/): python -m unittest test_finn_cost_model -v
+Run (from ILP/): python -m unittest test_finn_cost_model -v
 """
 from __future__ import annotations
 

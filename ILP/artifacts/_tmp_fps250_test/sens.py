@@ -4,7 +4,7 @@ import finn_milp as fm
 from pathlib import Path
 fm.load_config('config_12_dense_relu_nearest_upsample_wm')
 fm.CANDIDATE_BITS=(4,6,8)
-sens=json.load(open('/workspace/LightM-UNet/MILP/artifacts/layer_sensitivity_12_dense_relu_nearest_upsample_wm.json'))
+sens=json.load(open('/workspace/LightM-UNet/ILP/artifacts/layer_sensitivity_12_dense_relu_nearest_upsample_wm.json'))
 sens.pop('_zero_sensitivity_layers',None)
 model,geoms,extra,pred,dmap,kinds=fm.build_model_and_graph()
 names=[g.name for g in geoms]; pairs=[(w,a) for w in fm.CANDIDATE_BITS for a in fm.CANDIDATE_BITS]
@@ -18,13 +18,13 @@ for n in names:
 norm=fm._normalize(raw)
 def score(wb,ab):
     r=sum(raw[(n,wb[n],ab[n])] for n in names); m=sum(norm[(n,wb[n],ab[n])] for n in names)/len(names); return r,m
-A='/workspace/LightM-UNet/MILP/artifacts/'
+A='/workspace/LightM-UNet/ILP/artifacts/'
 rows=[]
 def add(label,path):
     j=json.load(open(path)); 
     if not j.get('layer_weight_bits'): return
     r,m=score(j['layer_weight_bits'],j['layer_act_bits']); rows.append((label,r,m,sum(j['layer_weight_bits'].values())/len(names),sum(j['layer_act_bits'].values())/len(names)))
-add('NO width cap (DSR2,305fps)','/workspace/LightM-UNet/MILP/artifacts/_tmp_fps250_test/nocap/l.json')
+add('NO width cap (DSR2,305fps)','/workspace/LightM-UNet/ILP/artifacts/_tmp_fps250_test/nocap/l.json')
 add('THIS: lex fps305 (caps1.0,DSR2)',A+'S12_dense_arms_bc_v1/lex_dsr2_fps305/layer_bits_folding_lex_dsr2_fps305.json')
 add('lex fps250 (caps1.0,DSR2)',A+'S12_dense_arms_bc_v1/lex_dsr2/layer_bits_folding_lex_dsr2.json')
 for t in ['baseline_both_off','dsrSweep_pbiOff_dsr1.5','dsrSweep_pbiOff_dsr3.0','dsrSweep_pbiOff_dsr7.5','dsrSweep_pbiOff_dsr15.0','dsrSweep_pbiOff_dsr150.0','pbiSweep_dsrOff_pbi1.5']:

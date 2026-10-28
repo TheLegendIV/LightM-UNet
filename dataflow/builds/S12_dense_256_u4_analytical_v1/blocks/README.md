@@ -1,7 +1,7 @@
 # S12_dense_256_u4_analytical_v1: per-shape standalone builds
 
 One FINN partition per analytical **block** (29) instead of the 8-way stage split, and one standalone build (HLS + IP stitch + rtlsim, optional OOC synth) per distinct block **shape** (12), using the
-S12 U4 analytical folding **unchanged** (`MILP/artifacts/S12_dense_256_u4_analytical_v1/int6_fps250_lat200/layer_bits_folding_final.json`, including its simulated `intra_block_fifos`). Purpose: rtlsim every block
+S12 U4 analytical folding **unchanged** (`ILP/artifacts/S12_dense_256_u4_analytical_v1/int6_fps250_lat200/layer_bits_folding_final.json`, including its simulated `intra_block_fifos`). Purpose: rtlsim every block
 shape alone, to find which block diverges from the cycle simulator (stalls, latency, FIFO occupancy). Written but NOT run: `py_compile` plus the cut finder tested on the eight specialised partition graphs of
 `outputs/int6_fps250_lat200_milpfold_8way_20261005_235400` (all 90 weight nodes matched, one stream per cut). The FINN container is run by hand.
 
@@ -26,7 +26,7 @@ shape alone, to find which block diverges from the cycle simulator (stalls, late
 
 ## What changed in the flow (additive; the 8-way flow is untouched)
 
-* `hardware/finn_s12_blocks.py` (new): block names from conv_order.json (`regular1.0.reduce.0` -> `regular1.0`), cut after each block's out_act (the Thresholding behind its AddStreams / StreamingConcat), fail-fast if
+* `dataflow/finn_s12_blocks.py` (new): block names from conv_order.json (`regular1.0.reduce.0` -> `regular1.0`), cut after each block's out_act (the Thresholding behind its AddStreams / StreamingConcat), fail-fast if
   the block's weight nodes are not contiguous or more than one stream crosses a cut; `assign_block_partition_ids` build step; `block_partitions.json` (id, stage, node range, logical conv / pool names per block).
 * `finn_s12_preamble.py --blocks --conv-order ...`: the same preamble with that step in place of the 8-way tagging.
 * `finn_s12_build.py --blocks --partitions shapes|<block names>|<ids> [--block-shapes block_shapes.json] [--no-ooc]`: standalone builds on the block partitions (the bridge needs nothing new: it is per partition);
@@ -34,9 +34,9 @@ shape alone, to find which block diverges from the cycle simulator (stalls, late
 
 ## Inputs (docker cp into the flat `/home/thelegendiv/finn/notebooks/enet/`)
 
-* `hardware/finn_s12_blocks.py`, `finn_s12_preamble.py`, `finn_s12_build.py`, `finn_s12_build_steps.py` (changed) and the usual S12 flow files (`finn_s12_*`, `finn_stage_partition.py`, `finn_partition_build_steps.py`, ...).
+* `dataflow/finn_s12_blocks.py`, `finn_s12_preamble.py`, `finn_s12_build.py`, `finn_s12_build_steps.py` (changed) and the usual S12 flow files (`finn_s12_*`, `finn_stage_partition.py`, `finn_partition_build_steps.py`, ...).
 * the QAT'd export `outputs/quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated_ft15ep.onnx` (+ `.onnx.data`) and `..._conv_order.json`.
-* `MILP/artifacts/S12_dense_256_u4_analytical_v1/int6_fps250_lat200/layer_bits_folding_final.json` **as** `layer_bits_folding_u4_analytical.json`.
+* `ILP/artifacts/S12_dense_256_u4_analytical_v1/int6_fps250_lat200/layer_bits_folding_final.json` **as** `layer_bits_folding_u4_analytical.json`.
 * `block_shapes.json`, `run_blocks.sh` from this folder.
 
 ## Run
@@ -54,7 +54,7 @@ Check the first run: 29 `[blocks] partition ...` lines (stage names in dataflow 
 ## Caveats
 
 * The standalone rtlsim drives the block with FINN's stock `step_measure_rtlsim_performance` (saturated input, a few frames), the same as the existing partition builds. Compare its cycles with the cycle simulator's
-  `frame_cycles` / `latency_first_out` for the same block (`MILP/analytical/net_explicit.py` json, `fifo_sim.blocks`).
+  `frame_cycles` / `latency_first_out` for the same block (`ILP/analytical/net_explicit.py` json, `fifo_sim.blocks`).
 * The first block (`initial`) contains the network input transpose and the last (`final`) the argmax; both are tagged like the 8-way flow's partitions 0 and 7.
 * `validate_partition_single_output` is a warning in blocks mode (the 8-way flow raises).
 * The bridge applies the analytical FIFO lists by role: FIFOs it cannot match stay at depth 2 (`--fifo-autosize fixed2`, the default). The inter-block FIFOs of the folding json are unmatched in a single-block build (depth 2).

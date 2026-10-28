@@ -1,6 +1,6 @@
 import onnx
 for idx in (5, 6):
-    m = onnx.load(rf"c:\DEV\repos\LightM-UNet\hardware\temp\p5_p6_diag\partition_{idx}_prefifo_autosize.onnx")
+    m = onnx.load(rf"c:\DEV\repos\LightM-UNet\dataflow\temp\p5_p6_diag\partition_{idx}_prefifo_autosize.onnx")
     print(f"=== partition {idx} ===")
     for n in m.graph.node:
         if n.op_type.startswith("UpsampleNearestNeighbour"):

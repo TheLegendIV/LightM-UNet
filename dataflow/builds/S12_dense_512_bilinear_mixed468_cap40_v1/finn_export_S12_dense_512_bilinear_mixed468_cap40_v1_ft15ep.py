@@ -2,18 +2,18 @@
 (decoder_type="upsample_conv": frozen nearest upsample + frozen depthwise 3x3 INT8 tent-kernel conv on the main
 branch of up4/up5) as a QONNX file with the UINT8 input contract (u = clip(round(z/s_in)+128, 0, 255)), plus its conv_order.json.
 
-Network: the MILP solution MILP/artifacts/S12_512_ablation_v2/cap40_fps150/mixed_468 (candidate bits 4/6/8 per layer and per site, 0.4 resource caps, 150 FPS at 100 MHz,
+Network: the MILP solution ILP/artifacts/S12_512_ablation_v2/cap40_fps150/mixed_468 (candidate bits 4/6/8 per layer and per site, 0.4 resource caps, 150 FPS at 100 MHz,
 max-accuracy objective, recalibrated cost model of 2026-10-17): weights 82 x 8 bit + 3 x 6 bit, activations 39 x 8 bit + 46 x 6 bit (85 weight layers).
 
 Checkpoint: Dataset509_ARCADE_1x1_4c / nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_bilinear_upsample_perlayer_12_dense_relu_warmstart150ep_bilinear_ablation_v2_cap40_fps150_mixed468_perlayer_ft15ep
 (LayerQuantEnetFINN, U4 widths (4,16,32,16,4), bottlenecks (4,8,8,2,1), dense_dilation, 5 output classes). Ships as checkpoint_best.pth.txt (git-ignore-safe).
 
-Bits: MILP/artifacts/S12_512_ablation_v2/cap40_fps150/mixed_468/layer_bits_SITES_mixed_468.json (85 weight / 110 act sites) = the per-site schema of the folding json this build is folded from.
+Bits: ILP/artifacts/S12_512_ablation_v2/cap40_fps150/mixed_468/layer_bits_SITES_mixed_468.json (85 weight / 110 act sites) = the per-site schema of the folding json this build is folded from.
 
 Usage (repo root, torch+brevitas+nnunetv2 env, e.g. the CPU pytorch container):
-    python hardware/builds/S12_dense_512_bilinear_mixed468_cap40_v1/finn_export_S12_dense_512_bilinear_mixed468_cap40_v1_ft15ep.py [--check-keys]
+    python dataflow/builds/S12_dense_512_bilinear_mixed468_cap40_v1/finn_export_S12_dense_512_bilinear_mixed468_cap40_v1_ft15ep.py [--check-keys]
 
-Output: hardware/builds/S12_dense_512_bilinear_mixed468_cap40_v1/outputs/quantEnet_S12_dense_512_bilinear_mixed468_cap40_v1_ft15ep_u8in.onnx
+Output: dataflow/builds/S12_dense_512_bilinear_mixed468_cap40_v1/outputs/quantEnet_S12_dense_512_bilinear_mixed468_cap40_v1_ft15ep_u8in.onnx
         .../outputs/quantEnet_S12_dense_512_bilinear_mixed468_cap40_v1_conv_order.json
         .../outputs/quantEnet_S12_dense_512_bilinear_mixed468_cap40_v1_ft15ep_u8in_verify_ref.npz
 """
@@ -28,7 +28,7 @@ import torch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
-sys.path.insert(0, str(REPO_ROOT / "hardware"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow"))
 
 import finn_enet_prod_export  # noqa: E402
 from nnunetv2.nets.LayerQuantENet import layer_names_for  # noqa: E402
@@ -52,7 +52,7 @@ NET_NAME = (
 _CKPT_DIR = REPO_ROOT / "data" / "nnUNet_results" / DATASET_NAME / f"{NET_NAME}__nnUNetPlans__2d" / "fold_0"
 DEFAULT_CHECKPOINT = _CKPT_DIR / ("checkpoint_best.pth" if (_CKPT_DIR / "checkpoint_best.pth").is_file() else "checkpoint_best.pth.txt")
 DEFAULT_BITS_FILE = (
-    REPO_ROOT / "MILP" / "artifacts" / "S12_512_ablation_v2" / "cap40_fps150" / "mixed_468" / "layer_bits_SITES_mixed_468.json"
+    REPO_ROOT / "ILP" / "artifacts" / "S12_512_ablation_v2" / "cap40_fps150" / "mixed_468" / "layer_bits_SITES_mixed_468.json"
 )
 DEFAULT_PREPROCESSED_DIR = REPO_ROOT / "data" / "nnUNet_preprocessed" / DATASET_NAME / "nnUNetPlans_2d"
 NAME_STEM = "quantEnet_S12_dense_512_bilinear_mixed468_cap40_v1"
@@ -86,7 +86,7 @@ def main() -> None:
     parser.add_argument("--preprocessed-dir", default=str(DEFAULT_PREPROCESSED_DIR))
     parser.add_argument("--check-keys", action="store_true", help="only compare checkpoint vs model keys/shapes, then exit")
     parser.add_argument("--skip-verify", action="store_true",
-                         help="skip the mandatory post-export Dice/agreement gate (hardware/verify_export.py)")
+                         help="skip the mandatory post-export Dice/agreement gate (dataflow/verify_export.py)")
     parser.add_argument("--min-fg-dice", type=float, default=0.5,
                          help="gate: minimum foreground Dice of the PyTorch model on the val split")
     parser.add_argument("--n-cases", type=int, default=200, help="val cases for the PyTorch reference (lower = faster on CPU)")
@@ -140,7 +140,7 @@ def main() -> None:
 
     if not args.skip_verify:
         import verify_export  # noqa: E402
-        print("\n=== Post-export verification gate (hardware/verify_export.py) ===")
+        print("\n=== Post-export verification gate (dataflow/verify_export.py) ===")
         ref_npz = OUT_DIR / f"{NET_NAME_SHORT}_verify_ref.npz"
         verify_export.build_reference(model, Path(args.preprocessed_dir), ref_npz, n_cases=args.n_cases,
                                       min_fg_dice=args.min_fg_dice, hw=HW)

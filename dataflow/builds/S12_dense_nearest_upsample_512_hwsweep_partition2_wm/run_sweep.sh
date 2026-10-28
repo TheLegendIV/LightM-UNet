@@ -5,11 +5,11 @@
 #   - quantEnet_12_dense_relu_nearest_upsample_dummy_int8_conv_order.json
 #   - finn_hawq_preamble_trained.py, finn_hawq_folding_bridge_nearest_upsample.py,
 #     finn_ooc_partition2_trained.py
-#   - each MILP/artifacts/.../<tag>/layer_bits_folding_<tag>.json
+#   - each ILP/artifacts/.../<tag>/layer_bits_folding_<tag>.json
 #
 # Runs the cheap (no-Vivado) preamble + folding-bridge steps sequentially per
 # tag, then launches all 6 partition-2 OOC syntheses in parallel background
-# workers (mirrors hardware/temp/run_partitions_3456_parallel.sh's proven
+# workers (mirrors dataflow/temp/run_partitions_3456_parallel.sh's proven
 # nohup pattern -- that ran 4 concurrent partition builds successfully).
 set -e
 cd /home/thelegendiv/finn/notebooks/enet

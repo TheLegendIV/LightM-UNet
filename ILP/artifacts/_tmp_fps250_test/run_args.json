@@ -1,12 +1,12 @@
 {
   "pipeline": [
-    "MILP/layer_sensitivity.py --candidate-bits ...",
-    "MILP/finn_milp.py --candidate-bits ... --hard-lut-fraction ... --hard-bram-fraction ... --hard-dsp-fraction ... --force-dsp",
-    "MILP/expand_layer_bits.py"
+    "ILP/layer_sensitivity.py --candidate-bits ...",
+    "ILP/finn_milp.py --candidate-bits ... --hard-lut-fraction ... --hard-bram-fraction ... --hard-dsp-fraction ... --force-dsp",
+    "ILP/expand_layer_bits.py"
   ],
   "shared_args": {
     "config": "config_12_dense_relu_nearest_upsample",
-    "sensitivity-file": "MILP/artifacts/layer_sensitivity_12_dense_relu_nearest_upsample.json",
+    "sensitivity-file": "ILP/artifacts/layer_sensitivity_12_dense_relu_nearest_upsample.json",
     "candidate-bits": "4,6,8",
     "hard-lut-fraction": 0.9,
     "hard-bram-fraction": 0.9,

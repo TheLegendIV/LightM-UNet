@@ -72,8 +72,8 @@ Known simplifications (this is a TOTAL-only check, not a per-node one):
 
 Usage:
     python compare_model_vs_real_resources_from_dataset.py \\
-        hardware/builds/12_dense_relu_nearest_conv_upsample_256_v2/results/mvau_lut_calibration_dataset_..._full.csv \\
-        hardware/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/results/mvau_lut_calibration_dataset_..._full.csv
+        dataflow/builds/12_dense_relu_nearest_conv_upsample_256_v2/results/mvau_lut_calibration_dataset_..._full.csv \\
+        dataflow/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/results/mvau_lut_calibration_dataset_..._full.csv
 """
 import argparse
 import csv
@@ -82,7 +82,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "MILP"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ILP"))
 from finn_cost_model import (  # noqa: E402
     LayerGeometry, calibrated_bram18k, calibrated_lut, conv_cost_pe_simd, stream_node_cost,
     _finn_swu, _thresholding_rtl_cost, THR_DEPTH_TRIGGER_DISTRIBUTED, _MAXPOOL_FIXED_LUT, _MAXPOOL_LUT_PER_CHANNEL,

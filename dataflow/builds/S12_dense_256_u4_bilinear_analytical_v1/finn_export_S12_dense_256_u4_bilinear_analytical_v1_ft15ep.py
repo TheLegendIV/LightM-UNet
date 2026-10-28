@@ -10,9 +10,9 @@ checkpoint_best.pth arrives as checkpoint_best.pth.txt (git-ignore-safe transfer
 checkpoint path below uses the .txt copy if the .pth is not there.
 
 Usage (repo root, local .venv has torch+brevitas):
-    .venv\\Scripts\\python.exe hardware/builds/S12_dense_256_u4_bilinear_analytical_v1/finn_export_S12_dense_256_u4_bilinear_analytical_v1_ft15ep.py
+    .venv\\Scripts\\python.exe dataflow/builds/S12_dense_256_u4_bilinear_analytical_v1/finn_export_S12_dense_256_u4_bilinear_analytical_v1_ft15ep.py
 
-Output: hardware/builds/S12_dense_256_u4_bilinear_analytical_v1/outputs/quantEnet_S12_dense_256_u4_bilinear_analytical_v1_ft15ep_u8in.onnx
+Output: dataflow/builds/S12_dense_256_u4_bilinear_analytical_v1/outputs/quantEnet_S12_dense_256_u4_bilinear_analytical_v1_ft15ep_u8in.onnx
 """
 from __future__ import annotations
 
@@ -24,10 +24,10 @@ import torch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
-sys.path.insert(0, str(REPO_ROOT / "analysis" / "501_ARCADE"))
-sys.path.insert(0, str(REPO_ROOT / "hardware"))
-sys.path.insert(0, str(REPO_ROOT / "hardware" / "builds" / "S12_dense_256_u4_analytical_v1"))
-sys.path.insert(0, str(REPO_ROOT / "hardware" / "builds" / "12_dense_relu_nearest_conv_upsample_256"))
+sys.path.insert(0, str(REPO_ROOT / "nas"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow" / "builds" / "S12_dense_256_u4_analytical_v1"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow" / "builds" / "12_dense_relu_nearest_conv_upsample_256"))
 
 from finn_export_S12_dense_256_u4_analytical_v1_finn_calibrated import (  # noqa: E402
     DATASET_NAME,
@@ -53,7 +53,7 @@ NET_NAME = (
 _CKPT_DIR = REPO_ROOT / "data" / "nnUNet_results" / DATASET_NAME / f"{NET_NAME}__nnUNetPlans__2d" / "fold_0"
 DEFAULT_CHECKPOINT = _CKPT_DIR / ("checkpoint_best.pth" if (_CKPT_DIR / "checkpoint_best.pth").is_file() else "checkpoint_best.pth.txt")
 DEFAULT_BITS_FILE = (
-    REPO_ROOT / "MILP" / "artifacts" / "S12_dense_bilinear_256_uniform_int6_v1" / "layer_bits_SITES_uniform_int6.json"
+    REPO_ROOT / "ILP" / "artifacts" / "S12_dense_bilinear_256_uniform_int6_v1" / "layer_bits_SITES_uniform_int6.json"
 )
 NET_NAME_SHORT = "quantEnet_S12_dense_256_u4_bilinear_analytical_v1_ft15ep_u8in"
 
@@ -66,7 +66,7 @@ def main() -> None:
     parser.add_argument("--out-channels", type=int, default=5)
     parser.add_argument("--preprocessed-dir", default=str(DEFAULT_PREPROCESSED_DIR))
     parser.add_argument("--skip-verify", action="store_true",
-                         help="skip the mandatory post-export Dice/agreement gate (hardware/verify_export.py)")
+                         help="skip the mandatory post-export Dice/agreement gate (dataflow/verify_export.py)")
     parser.add_argument("--min-fg-dice", type=float, default=0.5,
                          help="gate: minimum foreground Dice of the PyTorch model on the val split")
     parser.add_argument("--skip-export", action="store_true")
@@ -104,11 +104,11 @@ def main() -> None:
         print(f"  forward OK: output shape {tuple(out.shape)}")
         onnx_path = export_model(model, NET_NAME_SHORT, dummy, force_input_dtype="UINT8")
         print("\nExported. Copy to FINN container with:")
-        print(f"  docker cp hardware/builds/S12_dense_256_u4_bilinear_analytical_v1/outputs/{NET_NAME_SHORT}.onnx <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/")
+        print(f"  docker cp dataflow/builds/S12_dense_256_u4_bilinear_analytical_v1/outputs/{NET_NAME_SHORT}.onnx <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/")
 
     if not args.skip_verify:
         import verify_export  # noqa: E402
-        print("\n=== Post-export verification gate (hardware/verify_export.py) ===")
+        print("\n=== Post-export verification gate (dataflow/verify_export.py) ===")
         ref_npz = finn_enet_prod_export.OUT_DIR / f"{NET_NAME_SHORT}_verify_ref.npz"
         verify_export.build_reference(model, Path(args.preprocessed_dir), ref_npz, min_fg_dice=args.min_fg_dice)
         if not args.skip_export:

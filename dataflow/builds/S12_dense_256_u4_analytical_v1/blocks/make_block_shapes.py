@@ -1,9 +1,9 @@
 """Group the 29 blocks of a folding json by SHAPE (block kind + geometry + every node's PE / SIMD): one hardware build per group is enough, since blocks of one shape are the same hardware.
 
-    python3 hardware/builds/S12_dense_256_u4_analytical_v1/blocks/make_block_shapes.py \\
-        [--folding MILP/artifacts/S12_dense_256_u4_analytical_v1/int6_fps250_lat200/layer_bits_folding_final.json] [--out .../blocks/block_shapes.json]
+    python3 dataflow/builds/S12_dense_256_u4_analytical_v1/blocks/make_block_shapes.py \\
+        [--folding ILP/artifacts/S12_dense_256_u4_analytical_v1/int6_fps250_lat200/layer_bits_folding_final.json] [--out .../blocks/block_shapes.json]
 
-Run in lightmunet_dev (needs the MILP stack; same grouping key as MILP/analytical/net_explicit.verify_blocks_keep). Writes block_shapes.json:
+Run in lightmunet_dev (needs the MILP stack; same grouping key as ILP/analytical/net_explicit.verify_blocks_keep). Writes block_shapes.json:
 {"folding": ..., "shapes": [{"id": 0, "kind": "init", "representative": "initial", "members": ["initial"], "node_folds": {...}}, ...]}
 The representative is the first member in dataflow order (the one finn_s12_build.py --blocks --partitions shapes builds).
 """
@@ -14,7 +14,7 @@ import types
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[4]
-for p in (REPO / "enet", REPO / "MILP", REPO / "MILP" / "utils", REPO / "MILP" / "analytical"):
+for p in (REPO / "enet", REPO / "ILP", REPO / "ILP" / "utils", REPO / "ILP" / "analytical"):
     sys.path.insert(0, str(p))
 
 import finn_milp  # noqa: E402
@@ -25,7 +25,7 @@ HERE = Path(__file__).resolve().parent
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--folding", type=Path, default=REPO / "MILP/artifacts/S12_dense_256_u4_analytical_v1/int6_fps250_lat200/layer_bits_folding_final.json")
+    ap.add_argument("--folding", type=Path, default=REPO / "ILP/artifacts/S12_dense_256_u4_analytical_v1/int6_fps250_lat200/layer_bits_folding_final.json")
     ap.add_argument("--out", type=Path, default=HERE / "block_shapes.json")
     ap.add_argument("--config", default="config_12_dense_relu_nearest_upsample_256")
     ap.add_argument("--bits", type=int, default=6)

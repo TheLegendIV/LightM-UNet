@@ -3,7 +3,7 @@ nnUNetTrainerENet_12_dense_relu_nearest_upsample (dense KxK dilated context,
 SEPARABLE_DILATED=False, plain ReLU, decoder_type="nearest_upsample" --
 bare nearest-neighbor resize on the up4/up5 skip branch, NO skip_resize_conv
 at all, unlike the "nearest_conv_upsample" sibling this mirrors -- see
-MILP/configs/config_12_dense_relu_nearest_upsample.py and
+ILP/configs/config_12_dense_relu_nearest_upsample.py and
 enet/nnunetv2/nets/LayerQuantEnetFINN.py's FINNUpsamplingBottleneck
 docstring). Byte-for-byte identical to
 finn_export_12_dense_relu_nearest_conv_upsample_dummy.py otherwise -- only
@@ -11,20 +11,20 @@ DECODER_TYPE and the bits-file/output name differ.
 
 DUMMY variant: fresh (torch.manual_seed(0)) conv/BN weights throughout --
 this repo's dsr-ratio/pbi-ratio real-hardware sweep (partition 2 only, see
-MILP/artifacts/S12_dense_nearest_upsample_512_hwsweep_partition2/) only
+ILP/artifacts/S12_dense_nearest_upsample_512_hwsweep_partition2/) only
 needs structurally-correct bit-width/fold placement, not trained accuracy,
 so dummy weights are the right variant for that sweep. --bits-file must be
 pointed at each sweep point's own layer_bits_SITES_*.json explicitly (no
 single DEFAULT_BITS_FILE is representative across the sweep).
 
 Usage (run inside the pytorch training container, e.g. `lightmunet_dev`):
-    docker exec lightmunet_dev python /workspace/LightM-UNet/hardware/builds/12_dense_relu_nearest_upsample_512/finn_export_12_dense_relu_nearest_upsample_dummy.py \\
-        --bits-file MILP/artifacts/S12_dense_nearest_upsample_512_hwsweep_partition2/<tag>/layer_bits_SITES_<tag>.json \\
+    docker exec lightmunet_dev python /workspace/LightM-UNet/dataflow/builds/12_dense_relu_nearest_upsample_512/finn_export_12_dense_relu_nearest_upsample_dummy.py \\
+        --bits-file ILP/artifacts/S12_dense_nearest_upsample_512_hwsweep_partition2/<tag>/layer_bits_SITES_<tag>.json \\
         --input-hw 512 512
 
-Output: hardware/outputs/finn_exports/quantEnet_12_dense_relu_nearest_upsample_dummy_int8_512x512.onnx
+Output: dataflow/outputs/finn_exports/quantEnet_12_dense_relu_nearest_upsample_dummy_int8_512x512.onnx
 Then, inside the FINN container:
-    docker cp hardware/outputs/finn_exports/quantEnet_12_dense_relu_nearest_upsample_dummy_int8_512x512.onnx \\
+    docker cp dataflow/outputs/finn_exports/quantEnet_12_dense_relu_nearest_upsample_dummy_int8_512x512.onnx \\
         <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/
 """
 from __future__ import annotations
@@ -49,7 +49,7 @@ BOTTLENECKS_PER_STAGE = (4, 8, 8, 2, 1)
 CONTEXT_PATTERN = "dense_dilation"
 DECODER_TYPE = "nearest_upsample"
 DEFAULT_BITS_FILE = (
-    REPO_ROOT / "MILP" / "artifacts" / "S12_dense_nearest_upsample_512_v1"
+    REPO_ROOT / "ILP" / "artifacts" / "S12_dense_nearest_upsample_512_v1"
     / "layer_bits_SITES_12_dense_relu_nearest_upsample_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram50_dsp90.json"
 )
 FALLBACK_BITS = 6  # user decision -- any site missing from the real JSON falls back to 6, not 8
@@ -122,7 +122,7 @@ def main() -> None:
     export_model(model, name, dummy)
 
     print("\nDone. Copy to FINN container with:")
-    print(f"  docker cp hardware/outputs/finn_exports/{name}.onnx <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/")
+    print(f"  docker cp dataflow/outputs/finn_exports/{name}.onnx <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/")
 
 
 if __name__ == "__main__":

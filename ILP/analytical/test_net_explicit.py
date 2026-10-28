@@ -135,7 +135,7 @@ class TestWholeNetCheckAndPairs(unittest.TestCase):
 
     def test_widen_producer_on_the_s12_512_maxfps_folding(self):
         import json
-        f = net_explicit.REPO / "MILP/artifacts/S12_512_bilin_int8_maxfps/pinned_minres/layer_bits_folding_pinned_minres.json"
+        f = net_explicit.REPO / "ILP/artifacts/S12_512_bilin_int8_maxfps/pinned_minres/layer_bits_folding_pinned_minres.json"
         if not f.exists():
             self.skipTest("artifact not present")
         import finn_milp

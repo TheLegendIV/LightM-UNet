@@ -138,7 +138,7 @@ def _build_one_partition(fn, cfg, prefix, folding_file, idx, full, fold_suffix, 
     full=False: standalone flow (default "finn_design" IP name, required by stock rtlsim's hardcoded wrapper name).
     fifo_plan (this partition's bridged MILP inter_block_fifos/intra_block_fifos, see
     finn_s12_build_steps.build_partition_folding_config) is applied AFTER the FIFO-depth-assignment step
-    (fixed2 default or rtlsim, see fifo_autosize) -- matched edges get the MILP/analytical-sim depth,
+    (fixed2 default or rtlsim, see fifo_autosize) -- matched edges get the ILP/analytical-sim depth,
     unmatched edges keep whatever the depth-assignment step gave them (2 for fixed2, autosized for rtlsim)."""
     if build_dir:
         part_build_dir = os.path.join(build_dir, prefix.rstrip("_"))

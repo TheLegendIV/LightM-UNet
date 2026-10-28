@@ -437,7 +437,7 @@ def step_enet_convert_to_hw(model: ModelWrapper, cfg: DataflowBuildConfig):
     # Transpose is first moved past the intervening MultiThreshold and
     # absorbed directly into Resize (reordering its scales to NHWC). Safe
     # no-op for any model with no Resize node at all. Verified end-to-end in
-    # hardware/finn_build_probe_upsample_nearest_depthwise_int8.py.
+    # dataflow/finn_build_probe_upsample_nearest_depthwise_int8.py.
     model = model.transform(AbsorbTransposeIntoMultiThreshold())
     model = model.transform(AbsorbTransposeIntoResize())
     model = model.transform(AbsorbConsecutiveTransposes())

@@ -1,4 +1,4 @@
-"""One naming scheme for the analytical block models (MILP/analytical/*) and the MILP (finn_milp.py, per_layer / extra_nodes / dataflow_graph).
+"""One naming scheme for the analytical block models (ILP/analytical/*) and the MILP (finn_milp.py, per_layer / extra_nodes / dataflow_graph).
 
 The MILP names are the canonical ones: a hardware node belongs to a MILP entry (a conv/pool layer or an extra node, e.g. `regular1.0.conv`, `regular1.0.skip_quant`,
 `initial.act`, `final.argmax`) and, because one MILP layer entry bundles several FINN nodes (MVAU + its threshold + the window generator + the padding stage), a `part`.
@@ -7,7 +7,7 @@ The analytical blocks call the same nodes MVAU_m, Thr_m, SWG_m, FMPad, Thr_s, ..
     milp_node(stage, kind, "SWG_m")  ->  ("regular1.0.conv", "swg")
 
 Writers (net_fold intra/inter FIFO lists, net_onnx node names) add the MILP name next to the analytical role they already carry, so nothing that reads the old role
-strings (the FINN bridge in hardware/finn_s12_build_steps.py) changes. Pure data, no imports of torch / pulp.
+strings (the FINN bridge in dataflow/finn_s12_build_steps.py) changes. Pure data, no imports of torch / pulp.
 
 Block kinds follow net_fold.block_kind: reg (identity residual bottleneck), dn (downsampling), up (upsampling), init (initial block), final (last deconv + bias + argmax).
 """

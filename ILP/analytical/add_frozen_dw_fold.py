@@ -1,6 +1,6 @@
 """Fold the bilinear decoder's FROZEN depthwise 3x3 conv AFTER the MILP solve, outside the MILP, and add its cost to the arm's totals.
 
-    python3 MILP/analytical/add_frozen_dw_fold.py <layer_bits_folding_ARM.json> --config <config> [--simfifo <layer_bits_folding_ARM_simfifo.json>] [--out <path>]
+    python3 ILP/analytical/add_frozen_dw_fold.py <layer_bits_folding_ARM.json> --config <config> [--simfifo <layer_bits_folding_ARM_simfifo.json>] [--out <path>]
 
 LayerQuantEnetFINN's bilinear decoder puts a frozen INT8 depthwise 3x3 conv (`<stage>.main_up.1`: nearest upsample -> depthwise conv -> the block's skip_quant threshold) in the main branch of every up block. It has no
 quantizer site and no bit choice, so the MILP graph (and with it the folding json the FINN bridge reads) has no entry for it; left to FINN's default fold (PE = SIMD = 1) it would need 9 * C * H*W ~ 2.36M cycles
@@ -26,7 +26,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-for p in (REPO / "enet", REPO / "MILP", REPO / "MILP" / "utils", REPO / "MILP" / "analytical"):
+for p in (REPO / "enet", REPO / "ILP", REPO / "ILP" / "utils", REPO / "ILP" / "analytical"):
     sys.path.insert(0, str(p))
 
 import finn_milp  # noqa: E402
@@ -83,7 +83,7 @@ def fold_frozen_dw(layer, a_bits: int, budget_cycles: float, force_dsp: bool = T
         raise ValueError(f"{layer.name}: no (PE, SIMD) reaches {budget_cycles} cycles/frame")
     _, pe, simd, ram_style, variant, o = best
     c = o["cost"]
-    # FINN's depthwise invariant (also hardware/ bridge scripts): FMPadding.SIMD == ConvolutionInputGenerator.SIMD == VVAU.PE (channel parallelism); the VVAU's own SIMD is the kernel parallelism (| 9,
+    # FINN's depthwise invariant (also dataflow/ bridge scripts): FMPadding.SIMD == ConvolutionInputGenerator.SIMD == VVAU.PE (channel parallelism); the VVAU's own SIMD is the kernel parallelism (| 9,
     # > 1 = the SWG's parallel_window). cost["simd_swu"] is the SWG / FMPadding SIMD the cost model prices a depthwise conv with.
     assert c["simd_swu"] == pe, (layer.name, "SWG / FMPadding SIMD must equal the VVAU PE", c["simd_swu"], pe)
     assert layer.cout % pe == 0 and 9 % simd == 0, (layer.name, pe, simd)
@@ -124,7 +124,7 @@ def run(folding_json: Path, config: str, simfifo: Path | None, out: Path | None)
     if ra.exists():                                    # the caps the arm was SOLVED under (a --lexicographic run records pass 1's own use as the roof in _diagnostics)
         sa = json.loads(ra.read_text())["shared_args"]
         cap = {"lut": sa["max-lut-fraction"], "bram18": sa["max-bram-fraction"], "dsp": sa["max-dsp-fraction"]}
-    rep = dict(note="frozen depthwise 3x3 conv of the bilinear decoder, folded after the solve (MILP/analytical/add_frozen_dw_fold.py); width converters to its neighbours are not priced",
+    rep = dict(note="frozen depthwise 3x3 conv of the bilinear decoder, folded after the solve (ILP/analytical/add_frozen_dw_fold.py); width converters to its neighbours are not priced",
                budget_cycles=budget, layers={n: dict(pe=e["pe"], simd=e["simd"], cycles=e["cycles"], act_bits=e["act_bits"], lut=e["lut_calibrated"] + e["fifo_lut"], bram18=e["bram18k_calibrated"] + e["fifo_bram18"],
                                                      dsp=e["total_dsp"]) for n, e in entries.items()},
                added=add, milp_before=milp, milp_with_dw={k: milp[k] + add[k] for k in milp}, cap_fraction=cap)

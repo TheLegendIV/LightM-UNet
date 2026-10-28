@@ -1,6 +1,6 @@
 """Collect real single-partition (partition 2 only) OOC-synth results for the
 S12_dense_nearest_upsample_512_hwsweep_partition2_wm probe family into
-hardware/results.csv, mirroring hardware/collect_results.py's schema/upsert
+dataflow/results.csv, mirroring dataflow/collect_results.py's schema/upsert
 conventions but for a single `report/ooc_synth_and_timing.json` (NOT the
 8-way `ooc_synth_and_timing_per_partition.json` that script expects -- these
 builds only ever synthesize partition 2 standalone).
@@ -21,7 +21,7 @@ Usage (run from inside the FINN container, where finn_build_tmp/ is visible):
         --build-tmp-root . \\
         --results-csv <path to local results.csv, or copy out after>
 Or run against a LOCAL copy of finn_deployment_outputs (as docker cp'd into
-hardware/builds/.../outputs/finn_deployment_outputs/) with --no-real-dsp to
+dataflow/builds/.../outputs/finn_deployment_outputs/) with --no-real-dsp to
 skip the vivado.log lookup, then merge in --dsp-overrides-json separately.
 """
 from __future__ import annotations
@@ -34,7 +34,7 @@ from pathlib import Path
 import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-RESULTS_CSV = REPO_ROOT / "hardware" / "results.csv"
+RESULTS_CSV = REPO_ROOT / "dataflow" / "results.csv"
 
 RESULTS_COLUMNS = [
     "model_name", "config", "channels", "bottlenecks", "bit_width",

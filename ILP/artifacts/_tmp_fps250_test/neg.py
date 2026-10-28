@@ -1,5 +1,5 @@
 import json
-s=json.load(open('/workspace/LightM-UNet/MILP/artifacts/layer_sensitivity_12_dense_relu_nearest_upsample_wm.json'))
+s=json.load(open('/workspace/LightM-UNet/ILP/artifacts/layer_sensitivity_12_dense_relu_nearest_upsample_wm.json'))
 L={k:v for k,v in s.items() if isinstance(v,dict) and 'trace_w' in v}
 nw=[(k,v['trace_w']) for k,v in L.items() if v['trace_w']<0]; na=[(k,v['trace_a']) for k,v in L.items() if v['trace_a']<0]
 print('layers',len(L),'neg trace_w',len(nw),'neg trace_a',len(na))

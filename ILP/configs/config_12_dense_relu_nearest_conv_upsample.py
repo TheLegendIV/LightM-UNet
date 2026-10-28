@@ -1,9 +1,9 @@
 """Shared constants for nnUNetTrainerENet_12_dense_relu_nearest_conv_upsample's
 ("S12-dense, nearest+conv decoder") HAWQ per-layer W/A search -- the
-already-trained checkpoint (compression/results.csv's own
+already-trained checkpoint (nas/results.csv's own
 nnUNetTrainerENet_12_dense_relu_nearest_conv_upsample row, stage
 "12_dense_relu_nearest_conv_upsample", dice=0.7779, 143/150 epochs, see
-compression/slurm/stage_12_dense_relu_nearest_conv_upsample.job).
+nas/slurm/stage_12_dense_relu_nearest_conv_upsample.job).
 
 Byte-for-byte config_12_dense_relu.py's own recipe (same channels, native
 bottleneck depth, plain "dense_dilation" context pattern, no DSC, plain

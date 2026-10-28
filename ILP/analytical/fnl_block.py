@@ -45,7 +45,7 @@ def model_fnl_block(
     argmax=True appends the deployed network's final argmax over the `cout` output channels (FINN LabelSelect, one label per pixel): foldable PE | cout,
     2 * ceil(cout / PE) cycles per output pixel (measured: not pipelined across pixels), the smallest PE that meets the budget (PE = cout when it cannot: then the slowest node exceeds F and a
     warning says so), input = the stream before it (MVAU_f or Bias), output one UINT8 label per pixel (as in the real FINN build:
-    hardware/builds/S12_dense_256_u4_analytical_v1/probes/partition7_fifo_check_20261005_222226)."""
+    dataflow/builds/S12_dense_256_u4_analytical_v1/probes/partition7_fifo_check_20261005_222226)."""
     if (F is None) == (T_out is None):
         raise ValueError("give exactly one of F (frame cycles) or T_out (cycles per output pixel)")
     H, W, Ho, Wo = height, width, 2 * height, 2 * width

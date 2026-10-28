@@ -12,13 +12,13 @@ calls than the nearest_conv_upsample family.
 This ordered list is the positional bridge between the FINN dataflow
 graph's weight-like nodes (MVAU/VVAU/MaxPool, in forward-execution order)
 and this architecture's real per-layer folding config
-(MILP/artifacts/S12_dense_nearest_upsample_512_hwsweep_partition2/<tag>/layer_bits_folding_<tag>.json's
+(ILP/artifacts/S12_dense_nearest_upsample_512_hwsweep_partition2/<tag>/layer_bits_folding_<tag>.json's
 "per_layer" dict, keyed by these same logical dotted names).
 
 Usage (run inside the pytorch training container):
-    python hardware/builds/12_dense_relu_nearest_upsample_512/finn_hawq_dump_conv_order_12_dense_relu_nearest_upsample.py
+    python dataflow/builds/12_dense_relu_nearest_upsample_512/finn_hawq_dump_conv_order_12_dense_relu_nearest_upsample.py
 
-Output: hardware/outputs/finn_exports/
+Output: dataflow/outputs/finn_exports/
     quantEnet_12_dense_relu_nearest_upsample_dummy_int8_conv_order.json
 """
 from __future__ import annotations

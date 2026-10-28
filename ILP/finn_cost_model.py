@@ -1,9 +1,9 @@
 """Analytical FINN dataflow resource-cost formulas: LUT/BRAM_18K/URAM/DSP/
 cycles as functions of (weight_bits, act_bits, PE, SIMD) per layer.
 
-AGENTS: read MILP/finn_cost_model.md before changing this file, and update it
+AGENTS: read ILP/finn_cost_model.md before changing this file, and update it
 with any change -- every constant below is fit or derived from real
-hardware/synthesis data, and the .md holds that provenance, the regime history
+dataflow/synthesis data, and the .md holds that provenance, the regime history
 (auto-resType vs forced-DSP, HLS vs RTL, fused vs standalone activation) and
 what is still not modeled."""
 from __future__ import annotations
@@ -37,7 +37,7 @@ _BRAM_ANCHOR_FACTORS = (22 / 171, 906 / 1_495)
 # the first genuine holdout check before trusting this further.
 _RTL_MVU_LUT_DERATE_BITS = (3.5, 8.0)       # LEGACY: the avg_bits derate below is no longer applied (2026-10-17, see _MVAU_RTL_LUT_*); kept for provenance
 _RTL_MVU_LUT_DERATE_FACTORS = (0.6704, 0.2884)
-# 2026-10-17 refit (hardware/utils/fit_cost_model_from_node_csv.py, 7 pooled real datasets, n = 572 MVAU_rtl nodes, MILP/calibration.csv): the derate above could not be made to generalise --
+# 2026-10-17 refit (dataflow/utils/fit_cost_model_from_node_csv.py, 7 pooled real datasets, n = 572 MVAU_rtl nodes, ILP/calibration.csv): the derate above could not be made to generalise --
 # pooled, per-dataset sum errors ran from -19 % to +72 % (nn256_v1 / nn256_w8_16_v4 over, the first full-INT8 build under) and the avg_bits term was the unstable part. A structural fit
 # generalises far better (median abs error 17.5 % against 27-37 %, per-dataset sum errors within +-24 %, leave-one-dataset-out -30 % .. +29 %): the RTL MVU does its multiplies in DSPs,
 # so its LUT is a fixed part, a part per PE (accumulator / control) and a part per PE*SIMD lane, and does NOT depend on the operand widths (adding PE*avg_bits: 1.45, no better).
@@ -99,7 +99,7 @@ _S12_DENSE_DSP_FORCED_BRAM_AFFINE = (0.1131, -0.1973)  # weak (R^2=0.468), not a
 # conv-fused Thresholding_rtl row from a join-point standalone one, so this
 # necessarily blends both populations rather than fitting them separately.
 # real_LUT=66,632 / raw_LUT=108,433 (from
-# hardware/builds/12_dense_relu_nearest_conv_upsample_256_v2/results/
+# dataflow/builds/12_dense_relu_nearest_conv_upsample_256_v2/results/
 # mvau_lut_calibration_dataset_..._full.csv, excluding FIFO); real_BRAM18eq=
 # 427.0 / raw_BRAM18k=311.9. DSP was NOT recalibrated here (real=1,022 vs
 # raw=1,161, ratio 0.880 -- no DSP calibration hook exists in this file at
@@ -121,7 +121,7 @@ _S12_DENSE_256_V2_FORCED_BRAM_FACTOR = 1.3690  # SUPERSEDED same day, see below
 # never matching real hardware (the folding-propagation bug fixed earlier
 # this session in the three 256x256 build scripts -- see finn_milp.md).
 # Applying 0.6145 on top of the now-separately-fixed sub-formulas would
-# double-correct. Reverted to identity below; MILP/calibration.csv has the
+# double-correct. Reverted to identity below; ILP/calibration.csv has the
 # full per-component breakdown that led to this reversal.
 
 # ACTIVE default (2026-09-28): identity. Each sub-formula (mvu_lut, SWU,
@@ -129,7 +129,7 @@ _S12_DENSE_256_V2_FORCED_BRAM_FACTOR = 1.3690  # SUPERSEDED same day, see below
 # and supports it -- this bundle-level slot is for whatever residual bias
 # remains AFTER those, and current evidence doesn't show one. Revisit once a
 # build with the thr_pe-propagation fix deployed lands (see
-# MILP/calibration.csv's "threshold_lut" row: the current threshold refit is
+# ILP/calibration.csv's "threshold_lut" row: the current threshold refit is
 # PE=1-only, real hardware has never yet built a PE>1 standalone threshold,
 # so the formula's PE-scaling behavior remains completely unvalidated).
 _FORCED_DSP_LUT_FACTOR = 1.0
@@ -176,7 +176,7 @@ RAM_STYLE_AUTO: RamStyle = "auto"
 # 179 (including several at wmem up to 288 when mem_width was smaller) are
 # exactly 0. This is a small sample right at the boundary (only 10 nonzero
 # points, none far past the threshold) -- revisit with more data before
-# trusting it far above these values. See MILP/calibration.csv.
+# trusting it far above these values. See ILP/calibration.csv.
 _WM_BRAM_AUTO_MIN_WMEM = 256
 _WM_BRAM_AUTO_MIN_MEM_WIDTH = 16
 
@@ -191,16 +191,16 @@ _THR_RTL_LUT_PER_NUMSTEP_PE = 0.1095   # LEGACY, see above
 # real LUT ~= 9.0428 * PE * in_bits, uncentered R^2 0.979, median abs error 8.5%, sum(model)/sum(real) 0.99. The input width is the driver the legacy fit lacked; the old
 # formula + 1 LUT per 64 bits of LUTRAM overestimated Thresholding LUT by +83% / +144% / +96% on this and the two nn-up builds (real LUTRAM of these nodes is ~0).
 # Only identified at output_bits = 6 (numSteps is 63 in every row): the older auto-placement builds fit ~5.9 LUT per input bit (+0.047/step) and sit 10-30% below this
-# at the same width, so other output widths are NOT calibrated. See MILP/calibration.csv.
+# at the same width, so other output widths are NOT calibrated. See ILP/calibration.csv.
 _THR_RTL_LUT_PER_INBIT_PE = 9.0428      # LEGACY (INT6-only form PE*9.04*in_bits = _THR_BLOCK_LUT_PER_INOUTBIT_PE * 6 at out_bits = 6): no longer used
 # 2026-10-11 refit of the OTHER placement, ram_style "distributed" (depth_trigger_bram 999999: no stage may use BRAM): the 48 conv thresholds the MILP pinned to it in the real v4 build
 # (12_dense_relu_nearest_conv_upsample_256_w8_16_v4: all PE=1, numSteps 15 / 63 / 255, in_bits 12-19, joined by (partition, node name) to the pinned folding config), real LUT sum 8,009,
 # BRAM18 5 (3 nodes), real LUTRAM 0: forced out of BRAM the threshold ROM is synthesised as plain logic LUTs, so there is no separate "LUTRAM" resource to price. OLS through the origin:
 #   real_LUT ~= PE * (4.6881 * in_bits + 0.5926 * numSteps)       medAPE 10.0 %, leave-one-out 10.4 %, sum ratio 0.99   (the removed 1 LUT / 64 bits term: 2.36x over, medAPE 84 %)
-# Identified only at PE=1 and in_bits >= 12 (the residual-join thresholds are 7-10 bits wide: an extrapolation); see MILP/calibration.csv.
+# Identified only at PE=1 and in_bits >= 12 (the residual-join thresholds are 7-10 bits wide: an extrapolation); see ILP/calibration.csv.
 _THR_DIST_LUT_PER_INBIT_PE = 4.6881      # LEGACY (pre-2026-10-17 form PE*(4.69*in_bits + 0.593*numSteps)): no longer used, see _THR_DIST_LUT_PER_INOUTBIT_PE
 _THR_DIST_LUT_PER_STEP_PE = 0.5926      # LEGACY, see above
-# 2026-10-17 refit (hardware/utils/fit_cost_model_from_node_csv.py, pooled node CSVs that record depth_trigger_bram: S12 INT6 256 bilinear, S12 INT8 512 bilinear v2, tied_dsr104), see MILP/calibration.csv.
+# 2026-10-17 refit (dataflow/utils/fit_cost_model_from_node_csv.py, pooled node CSVs that record depth_trigger_bram: S12 INT6 256 bilinear, S12 INT8 512 bilinear v2, tied_dsr104), see ILP/calibration.csv.
 # The INT6-only fits above (output_bits = 6 in every row) did not extrapolate: the INT8 512 build's 255-step thresholds sat -23 % (block) and -25 % .. -66 % (distributed) off them.
 #   "block"       : real_LUT ~= c * PE * in_bits * out_bits          (the old 9.04 per input bit IS c * 6 at out_bits = 6; leave-one-dataset-out sum error +4 % / -10 % / +4 %)
 #   "distributed" : real_LUT ~= PE * in_bits * out_bits * c1 + c2 * channels * numSteps * in_bits   (second term only for wide inputs, in_bits >= _THR_DIST_WIDE_IN_BITS: a conv threshold's
@@ -347,9 +347,9 @@ def _finn_buffer_uram18(buffer_width: int, buffer_depth: int) -> int:
     return int(cascade_depth * cascade_width)
 
 
-_SWU_LUT_DERATE = 0.934527  # OLS-through-origin, n=51 real SWU nodes (S12 dense 256x256 v1+v2), R^2=0.970 -- see finn_cost_model.md / MILP/calibration.csv
+_SWU_LUT_DERATE = 0.934527  # OLS-through-origin, n=51 real SWU nodes (S12 dense 256x256 v1+v2), R^2=0.970 -- see finn_cost_model.md / ILP/calibration.csv
 # VVAU_hls (the frozen depthwise bilinear conv): the generic mvu_lut formula was built for MVAUs and over-predicts every real VVAU (+150 % .. +370 % in all builds, n = 8..11 nodes);
-# this multiplies it for depthwise layers. Fitted by hardware/utils/fit_cost_model_from_node_csv.py; 1.0 = unfitted.
+# this multiplies it for depthwise layers. Fitted by dataflow/utils/fit_cost_model_from_node_csv.py; 1.0 = unfitted.
 _VVAU_HLS_LUT_DERATE = 0.264539
 
 
@@ -508,7 +508,7 @@ def stream_node_cost(kind: str, layer: LayerGeometry, pe: int = 1) -> dict:
 # every real DWC row in the calibration data: real_BRAM18/BRAM36/URAM/DSP are
 # all 0). See finn_cost_model.md for the real-data fit.
 _DWC_LUT_FACTOR = 0.8697  # LEGACY (real/raw of FINN's own lut_estimation, S12 dense 256x256 v1+v2, n=258): no longer used, see _DWC_LUT_PER_IN_BIT
-# 2026-10-17 refit (hardware/utils/fit_cost_model_from_node_csv.py, 4 pooled datasets, n = 525 real DWC nodes, MILP/calibration.csv): FINN's own estimate barely tracks the real LUT
+# 2026-10-17 refit (dataflow/utils/fit_cost_model_from_node_csv.py, 4 pooled datasets, n = 525 real DWC nodes, ILP/calibration.csv): FINN's own estimate barely tracks the real LUT
 # (uncentered R^2 0.20, median abs error 82 %, leave-one-dataset-out -81 % .. +7 %), while the stream widths do:
 #   real_LUT ~= 1.0784 * in_width + 0.0930 * out_width        R^2 0.993, median abs error 6.7 %, leave-one-dataset-out -8 % .. +4 %
 # i.e. one LUT per input-stream bit (the input register stage) and almost nothing per output bit.

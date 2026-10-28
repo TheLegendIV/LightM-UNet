@@ -1,7 +1,7 @@
 """Merge two consecutive MultiThreshold nodes into one (build-step + qonnx Transformation).
 
 Why: the streamlined bottleneck graph ends in  Add -> MultiThreshold(residual_add) -> MultiThreshold(out_act) -> Dup ...
-(see MILP/finn_cost_model.md "Residual-join thresholds"). Both are per-channel monotone staircase functions of an
+(see ILP/finn_cost_model.md "Residual-join thresholds"). Both are per-channel monotone staircase functions of an
 integer-valued stream, so their composition is again a staircase with at most N2 steps (N2 = thresholds of the second node):
 one Thresholding node and one threshold memory instead of two.
 
@@ -16,7 +16,7 @@ Limitations (the transformation skips, never miscompiles): stage-1 consumers oth
 scale, unsorted thresholds, mismatching data layouts, non-initializer thresholds.
 
 Import-light on purpose: depends only on numpy, onnx and qonnx, so it is unit-testable outside the FINN container
-(hardware/checks/test_compose_thresholds.py).
+(dataflow/checks/test_compose_thresholds.py).
 """
 from __future__ import annotations
 

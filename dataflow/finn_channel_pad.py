@@ -3,7 +3,7 @@ record; do not keep trying this route -- use the `mvau` skip variant (frozen ide
 is mathematically identical and already works because FINN's own Im2Col/MatMul lowering brackets it in a real NCHW<->
 NHWC Transpose pair that gets absorbed into the MVAU/SWG HW lowering.
 
-Used by the downsampling probes' `fmpad` variant (hardware/builds/bottleneck_probe_v1, dn_cin16_cout32_in64_int*_fmpad). The exported
+Used by the downsampling probes' `fmpad` variant (dataflow/builds/bottleneck_probe_v1, dn_cin16_cout32_in64_int*_fmpad). The exported
 graph has   MaxPool -> Pad(constant 0, pads only on the channel axis) -> Quant(residual add input quantizer) -> Add .
 The original idea: FINN NHWC streams have channel as the fastest axis, so a channel-pad could be read as an FMPadding over a
 regrouped view [N, H*W, C/s, s] (rows = pixels, columns = C/s, s channels per column; no data moves), padding the "column" axis

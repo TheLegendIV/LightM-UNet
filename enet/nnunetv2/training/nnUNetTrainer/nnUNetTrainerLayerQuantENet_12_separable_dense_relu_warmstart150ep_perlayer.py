@@ -6,7 +6,7 @@ for the full per-site naming scheme). Byte-for-byte the same mechanism as
 nnUNetTrainerLayerQuantENet_12_dense_relu_warmstart150ep_perlayer, just for
 the WARM-STARTED 12_separable_dense_relu architecture (separable_dilated=
 True -- dense conv factored into a (k,1)+(1,k) pair, plain "dense_dilation"
-context pattern, no reg-trailing block -- see compression/hawq/
+context pattern, no reg-trailing block -- see nas/hawq/
 config_12_separable_dense_relu_warmstart150ep.py). Same construction/
 Brevitas-device-fix pattern as every other CombinedQuantENet_*/
 LayerQuantENet_* trainer.

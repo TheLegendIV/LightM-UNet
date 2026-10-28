@@ -1,6 +1,6 @@
 """Combined per-node attrs dumper: MVAU/VVAU, Thresholding, SWU
 (ConvolutionInputGenerator) AND StreamingFIFO nodes in one pass -- superset
-of hardware/dump_node_attrs.py (MVAU/VVAU only) and dump_fifo_depths.py
+of dataflow/dump_node_attrs.py (MVAU/VVAU only) and dump_fifo_depths.py
 (FIFO only), used by build_node_resource_calibration_csv.py so a single
 attrs JSON covers every node kind that needs joining against a real Vivado
 hierarchical utilization report.
@@ -48,8 +48,8 @@ ATTR_KEYS = (
     "ImgDim", "Padding", "inputDataType", "numInputVectors",
     # Thresholding_rtl's real memory-style control -- NOT the generic "ram_style"
     # above (that key doesn't exist for this op type, silently dropped by the
-    # per-key try/except below). See MILP/finn_milp.md "RAM_STYLES and URAM
-    # (history)" and MILP/finn_cost_model.py's _THR_RTL_LUTRAM_PER_PE_NUMSTEP
+    # per-key try/except below). See ILP/finn_milp.md "RAM_STYLES and URAM
+    # (history)" and ILP/finn_cost_model.py's _THR_RTL_LUTRAM_PER_PE_NUMSTEP
     # section -- real build scripts set thr_config["depth_trigger_bram"].
     # Additive/forward-looking only: doesn't affect any existing dataset (every
     # real Thresholding row checked so far has real_LUTRAM==0 regardless), only

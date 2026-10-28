@@ -33,11 +33,11 @@ re-deriving each extra-node kind's cost formula here, so the two can never
 silently diverge.
 
 Usage:
-    python MILP/uniform_bits_same_folding.py \\
+    python ILP/uniform_bits_same_folding.py \\
         --config config_12_dense_relu_warmstart150ep \\
-        --reference-ilp-result MILP/artifacts/archive/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.25_candidatebits468_forcedsp_lut70.json \\
+        --reference-ilp-result ILP/artifacts/archive/12_dense_relu_warmstart150ep_ILP_outputs_perlayer_forcedsp_lut70/layer_bits_folding_12_dense_relu_warmstart150ep_joint_alpha0.25_candidatebits468_forcedsp_lut70.json \\
         --uniform-bits 4,6,8 \\
-        --out-dir MILP/artifacts/archive/12_dense_relu_warmstart150ep_uniform_samefolding_alpha0.25
+        --out-dir ILP/artifacts/archive/12_dense_relu_warmstart150ep_uniform_samefolding_alpha0.25
 """
 from __future__ import annotations
 

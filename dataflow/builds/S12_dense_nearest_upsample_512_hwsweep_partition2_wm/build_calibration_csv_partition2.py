@@ -1,7 +1,7 @@
 """Join real Vivado hierarchical-utilization data with per-node attrs for
 each completed single-partition OOC-synth build in this family, writing one
 calibration CSV per build directory (same schema as
-hardware/utils/build_node_resource_calibration_csv.py, minus the Vivado-
+dataflow/utils/build_node_resource_calibration_csv.py, minus the Vivado-
 invocation step -- the hier .rpt files are pre-generated separately since
 this family's builds use a flat "finn_design_wrapper" top, not FINN's
 8-way "GenericPartition_N" convention).

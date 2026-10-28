@@ -19,11 +19,11 @@ FINN compatibility modifications vs QuantENet.py:
    so use_dilated=True is fine and left configurable.
 
 Usage:
-    python hardware/finn_enet_prod_export.py
-    python hardware/finn_enet_prod_export.py --channels 8 16 32 16 8   # smaller test
-    python hardware/finn_enet_prod_export.py --no-residuals             # fully no-residual (debug-like)
+    python dataflow/finn_enet_prod_export.py
+    python dataflow/finn_enet_prod_export.py --channels 8 16 32 16 8   # smaller test
+    python dataflow/finn_enet_prod_export.py --no-residuals             # fully no-residual (debug-like)
 
-Output: hardware/outputs/finn_exports/quantEnet_finn_v1.onnx (and ..._enc.onnx)
+Output: dataflow/outputs/finn_exports/quantEnet_finn_v1.onnx (and ..._enc.onnx)
 """
 from __future__ import annotations
 
@@ -452,7 +452,7 @@ def main() -> None:
     export_model(full, f"quantEnet_finn_v1{suffix}", dummy)
 
     print("\nDone. Copy to FINN container with:")
-    print(f"  docker cp hardware/outputs/finn_exports/quantEnet_finn_v1{suffix}.onnx "
+    print(f"  docker cp dataflow/outputs/finn_exports/quantEnet_finn_v1{suffix}.onnx "
           f"<container_id>:/home/thelegendiv/finn/notebooks/enet/")
 
 

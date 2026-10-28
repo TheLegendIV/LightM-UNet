@@ -4,11 +4,11 @@ MILP FOLDING differs (the weights depend only on the bits): S12_dense_512_biline
 
 Checkpoint: Dataset509_ARCADE_1x1_4c / nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_bilinear_upsample_256_perlayer_12_dense_relu_warmstart150ep_bilinear_uniform_int<B>_perlayer_ft15ep
 (LayerQuantEnetFINN, U4 widths (4,16,32,16,4), bottlenecks (4,8,8,2,1), dense_dilation, 5 output classes). Ships as checkpoint_best.pth.txt (git-ignore-safe).
-Bits: MILP/artifacts/S12_dense_bilinear_512_uniform_v1/layer_bits_SITES_uniform_int<B>.json (85 weight / 110 act sites, all B).
+Bits: ILP/artifacts/S12_dense_bilinear_512_uniform_v1/layer_bits_SITES_uniform_int<B>.json (85 weight / 110 act sites, all B).
 
 Usage (repo root, torch+brevitas+nnunetv2 env, e.g. the CPU pytorch container):
-    python hardware/builds/S12_dense_512_bilinear_uniform_jobs/finn_export_uniform.py --bits 4 --stem quantEnet_S12_dense_512_bilinear_int4_cap40_v1 \\
-        --out-dir hardware/builds/S12_dense_512_bilinear_int4_cap40_v1/outputs [--check-keys]
+    python dataflow/builds/S12_dense_512_bilinear_uniform_jobs/finn_export_uniform.py --bits 4 --stem quantEnet_S12_dense_512_bilinear_int4_cap40_v1 \\
+        --out-dir dataflow/builds/S12_dense_512_bilinear_int4_cap40_v1/outputs [--check-keys]
 
 Output: <out-dir>/<stem>_ft15ep_u8in.onnx, <out-dir>/<stem>_conv_order.json, <out-dir>/<stem>_ft15ep_u8in_verify_ref.npz
 """
@@ -22,7 +22,7 @@ import torch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
-sys.path.insert(0, str(REPO_ROOT / "hardware"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow"))
 
 import finn_enet_prod_export  # noqa: E402
 from nnunetv2.nets.LayerQuantENet import layer_names_for  # noqa: E402
@@ -78,7 +78,7 @@ def main() -> None:
     parser.add_argument("--out-channels", type=int, default=5)
     parser.add_argument("--preprocessed-dir", default=str(DEFAULT_PREPROCESSED_DIR))
     parser.add_argument("--check-keys", action="store_true", help="only compare checkpoint vs model keys/shapes, then exit")
-    parser.add_argument("--skip-verify", action="store_true", help="skip the mandatory post-export Dice/agreement gate (hardware/verify_export.py)")
+    parser.add_argument("--skip-verify", action="store_true", help="skip the mandatory post-export Dice/agreement gate (dataflow/verify_export.py)")
     parser.add_argument("--min-fg-dice", type=float, default=0.5, help="gate: minimum foreground Dice of the PyTorch model on the val split")
     parser.add_argument("--n-cases", type=int, default=200, help="val cases for the PyTorch reference (lower = faster on CPU)")
     parser.add_argument("--skip-export", action="store_true")
@@ -89,7 +89,7 @@ def main() -> None:
         out_dir = REPO_ROOT / out_dir
     finn_enet_prod_export.OUT_DIR = out_dir
     bits_file = Path(args.bits_file) if args.bits_file else (
-        REPO_ROOT / "MILP" / "artifacts" / "S12_dense_bilinear_512_uniform_v1" / f"layer_bits_SITES_uniform_int{args.bits}.json")
+        REPO_ROOT / "ILP" / "artifacts" / "S12_dense_bilinear_512_uniform_v1" / f"layer_bits_SITES_uniform_int{args.bits}.json")
     checkpoint_path = Path(args.checkpoint) if args.checkpoint else default_checkpoint(args.bits)
     if not checkpoint_path.is_file():
         parser.error(f"checkpoint not found: {checkpoint_path}")
@@ -133,7 +133,7 @@ def main() -> None:
 
     if not args.skip_verify:
         import verify_export  # noqa: E402
-        print("\n=== Post-export verification gate (hardware/verify_export.py) ===")
+        print("\n=== Post-export verification gate (dataflow/verify_export.py) ===")
         ref_npz = out_dir / f"{net_name_short}_verify_ref.npz"
         verify_export.build_reference(model, Path(args.preprocessed_dir), ref_npz, n_cases=args.n_cases, min_fg_dice=args.min_fg_dice, hw=HW)
         if not args.skip_export:

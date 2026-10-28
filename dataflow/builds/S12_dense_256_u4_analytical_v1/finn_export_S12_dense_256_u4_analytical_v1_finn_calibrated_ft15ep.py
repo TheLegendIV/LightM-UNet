@@ -1,7 +1,7 @@
 """Export the FINE-TUNED (15 epochs, on top of the PTQ-calibrated checkpoint) S12-dense
 256x256 network -- IDENTICAL architecture/bits to finn_export_S12_dense_256_u4_analytical_v1_
 finn_calibrated.py (U4 widths (4,16,32,16,4), bottlenecks (4,8,8,2,1), dense_dilation context,
-decoder_type="nearest_upsample", Dataset510_ARCADE_256_4c, uniform INT6, same MILP/artifacts/
+decoder_type="nearest_upsample", Dataset510_ARCADE_256_4c, uniform INT6, same ILP/artifacts/
 S12_dense_256_u4_analytical_v1/int6_fps250_lat200/ folding/FIFO build) -- only NET_NAME/
 DEFAULT_CHECKPOINT and the exported `name` differ, so conv_order.json and the MILP folding
 json are reused unchanged from that job (purely structural / architecture-shape-identical,
@@ -12,11 +12,11 @@ checkpoint_best.pth.txt (byte-identical copy); rename it to checkpoint_best.pth 
 this script if that hasn't been done yet (see /memories/repo/s12_dense_256_u4_analytical_v1_build.md).
 
 Usage (repo root; local .venv has torch+brevitas, no training container needed for export):
-    .venv\\Scripts\\python.exe hardware/builds/S12_dense_256_u4_analytical_v1/finn_export_S12_dense_256_u4_analytical_v1_finn_calibrated_ft15ep.py --skip-cross-test
+    .venv\\Scripts\\python.exe dataflow/builds/S12_dense_256_u4_analytical_v1/finn_export_S12_dense_256_u4_analytical_v1_finn_calibrated_ft15ep.py --skip-cross-test
 
-Output: hardware/builds/S12_dense_256_u4_analytical_v1/outputs/quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated_ft15ep.onnx
+Output: dataflow/builds/S12_dense_256_u4_analytical_v1/outputs/quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated_ft15ep.onnx
 Then, inside the FINN container:
-    docker cp hardware/builds/S12_dense_256_u4_analytical_v1/outputs/quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated_ft15ep.onnx \\
+    docker cp dataflow/builds/S12_dense_256_u4_analytical_v1/outputs/quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated_ft15ep.onnx \\
         <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/
 """
 from __future__ import annotations
@@ -29,10 +29,10 @@ import torch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
-sys.path.insert(0, str(REPO_ROOT / "analysis" / "501_ARCADE"))
-sys.path.insert(0, str(REPO_ROOT / "hardware"))
+sys.path.insert(0, str(REPO_ROOT / "nas"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(REPO_ROOT / "hardware" / "builds" / "12_dense_relu_nearest_conv_upsample_256"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow" / "builds" / "12_dense_relu_nearest_conv_upsample_256"))
 
 from finn_export_S12_dense_256_u4_analytical_v1_finn_calibrated import (  # noqa: E402
     DATASET_NAME,
@@ -85,7 +85,7 @@ def main() -> None:
                          help="fine-tuned checkpoint already has its own runtime-stats activation scales "
                               "from training -- skipped by default; pass this to force an EXTRA pass")
     parser.add_argument("--skip-verify", action="store_true",
-                         help="skip the mandatory post-export Dice/agreement gate (hardware/verify_export.py)")
+                         help="skip the mandatory post-export Dice/agreement gate (dataflow/verify_export.py)")
     parser.add_argument("--min-fg-dice", type=float, default=0.5,
                          help="gate: minimum foreground Dice of the PyTorch model on the val split "
                               "(ft15ep INT6 measures 0.638)")
@@ -136,11 +136,11 @@ def main() -> None:
         name = "quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated_ft15ep_u8in"
         onnx_path = export_model(model, name, dummy, force_input_dtype="UINT8")
         print("\nExported. Copy to FINN container with:")
-        print(f"  docker cp hardware/builds/S12_dense_256_u4_analytical_v1/outputs/{name}.onnx <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/")
+        print(f"  docker cp dataflow/builds/S12_dense_256_u4_analytical_v1/outputs/{name}.onnx <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/")
 
     if not args.skip_verify:
         import verify_export  # noqa: E402
-        print("\n=== Post-export verification gate (hardware/verify_export.py) ===")
+        print("\n=== Post-export verification gate (dataflow/verify_export.py) ===")
         ref_npz = finn_enet_prod_export.OUT_DIR / f"{NET_NAME_SHORT}_verify_ref.npz"
         verify_export.build_reference(model, Path(args.preprocessed_dir), ref_npz, min_fg_dice=args.min_fg_dice)
         if not args.skip_export:

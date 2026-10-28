@@ -1,8 +1,8 @@
 """Shared constants for nnUNetTrainerENet_12_dense_relu_nearest_conv_upsample_256's
 ("S12-dense, nearest+conv decoder, 256x256/Dataset510_ARCADE_256_4c") HAWQ
-per-layer W/A search, once compression/slurm/stage_12_dense_relu_nearest_conv_
+per-layer W/A search, once nas/slurm/stage_12_dense_relu_nearest_conv_
 upsample_256.job has produced a checkpoint (stage
-"12_dense_relu_nearest_conv_upsample_256" in compression/results.csv).
+"12_dense_relu_nearest_conv_upsample_256" in nas/results.csv).
 
 Byte-for-byte config_12_dense_relu_nearest_conv_upsample.py's own recipe --
 same channels, native bottleneck depth, no DSC, plain ReLU,

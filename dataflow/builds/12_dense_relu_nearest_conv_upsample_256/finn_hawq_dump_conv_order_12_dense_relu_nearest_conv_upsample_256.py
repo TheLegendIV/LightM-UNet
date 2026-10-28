@@ -3,7 +3,7 @@ every weight-bearing / pool node in the PER-LAYER HAWQ, alpha=1.0
 12_dense_relu_nearest_conv_upsample_256 FINN-safe model (`LayerQuantEnetFINN`,
 architecture constants from finn_export_12_dense_relu_nearest_conv_upsample_256_trained.py),
 in named_modules() registration order -- see
-hardware/archive/pre_builds_refactor_20260926/12_dense_relu_nearest_conv_upsample_512/
+dataflow/archive/pre_builds_refactor_20260926/12_dense_relu_nearest_conv_upsample_512/
 finn_hawq_dump_conv_order_12_dense_relu_nearest_conv_upsample.py (the 512x512
 sibling this mirrors) for the full rationale. No architecture delta vs that
 sibling (same channels/bottlenecks_per_stage/context_pattern/decoder_type) --
@@ -12,13 +12,13 @@ only the bits file and output paths point at the 256 config.
 This ordered list is the positional bridge between the FINN dataflow
 graph's weight-like nodes (MVAU/VVAU/MaxPool, in forward-execution order)
 and this architecture's real per-layer folding config
-(MILP/artifacts/S12_dense_nn_upsample_256_v1/layer_bits_folding_..._alpha1.0_...json's
+(ILP/artifacts/S12_dense_nn_upsample_256_v1/layer_bits_folding_..._alpha1.0_...json's
 "per_layer" dict, keyed by these same logical dotted names).
 
 Usage (run inside the pytorch training container):
-    python hardware/builds/12_dense_relu_nearest_conv_upsample_256/finn_hawq_dump_conv_order_12_dense_relu_nearest_conv_upsample_256.py
+    python dataflow/builds/12_dense_relu_nearest_conv_upsample_256/finn_hawq_dump_conv_order_12_dense_relu_nearest_conv_upsample_256.py
 
-Output: hardware/outputs/finn_exports/
+Output: dataflow/outputs/finn_exports/
     quantEnet_12_dense_relu_nearest_conv_upsample_256_trained_int8_conv_order.json
 """
 from __future__ import annotations
@@ -34,7 +34,7 @@ import brevitas.nn as qnn
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
-sys.path.insert(0, str(REPO_ROOT / "hardware"))  # shared infra
+sys.path.insert(0, str(REPO_ROOT / "dataflow"))  # shared infra
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from finn_export_12_dense_relu_nearest_conv_upsample_256_trained import (  # noqa: E402
@@ -48,7 +48,7 @@ from finn_export_12_dense_relu_nearest_conv_upsample_256_trained import (  # noq
 )
 from nnunetv2.nets.LayerQuantENet import layer_names_for  # noqa: E402
 
-OUT_DIR = REPO_ROOT / "hardware" / "outputs" / "finn_exports"
+OUT_DIR = REPO_ROOT / "dataflow" / "outputs" / "finn_exports"
 
 WEIGHT_MODULE_TYPES = (qnn.QuantConv2d, qnn.QuantConvTranspose2d, nn.MaxPool2d)
 

@@ -1,4 +1,4 @@
-"""Per-role precision (bits_map) of the analytical block models. Run in lightmunet_dev:  cd MILP/analytical && python3 -m unittest test_bits_map
+"""Per-role precision (bits_map) of the analytical block models. Run in lightmunet_dev:  cd ILP/analytical && python3 -m unittest test_bits_map
 
 1. bits_map None / {} / a map that restates the uniform bits reproduces the uniform model BIT FOR BIT (nodes, widths, DWCs, skip FIFO, totals).
 2. a mixed map changes exactly the widths / costs it should: stream widths of the nodes on the named wires, the DWCs on them, the skip FIFO width; unknown roles raise.

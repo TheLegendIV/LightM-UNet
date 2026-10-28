@@ -2,7 +2,7 @@
 
 Generalized to take channel/bottleneck shapes + an output name on the CLI,
 so different sweep-grid architectures (e.g. 2a_O8_native, 2a_O4_native from
-compression/results.csv) can be exported without editing this file each time.
+nas/results.csv) can be exported without editing this file each time.
 Writes directly into the FINN container's notebooks/enet/ folder (no
 separate docker cp needed for the .onnx itself).
 

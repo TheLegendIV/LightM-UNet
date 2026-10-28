@@ -2,7 +2,7 @@
 structurally identical wherever FINN can lower the real op directly
 (regular1/regular4/regular5/stage2/stage3 reuse LayerQuantRegularBottleneck
 UNMODIFIED), with 4 substitutions where the real op has no FINN hardware
-lowering path at all. Originally developed in hardware/finn_export_
+lowering path at all. Originally developed in dataflow/finn_export_
 12_dense_relu_warmstart150ep_alpha025_dummy.py; moved here (2026-09-14) to
 live alongside the other nnunetv2/nets/*.py architectures rather than as an
 export-script-local definition, since it's now warmstarted/fine-tuned as a
@@ -51,7 +51,7 @@ for the full derivation/verification of each:
    (frozen) depthwise 3x3 conv with the exact bilinear-equivalent "tent"
    kernel outer([1,2,1]/4, [1,2,1]/4) -- derived and verified (both on
    synthetic tensors and on real trained up4/up5 activations, see
-   hardware/testbench_bilinear_vs_nearest_depthwise_up4up5.py) to match
+   dataflow/testbench_bilinear_vs_nearest_depthwise_up4up5.py) to match
    F.interpolate EXACTLY (float-rounding-level, ~5e-7) on every interior
    pixel; only the outermost 1px border ring differs (zero-pad vs. the real
    op's edge-replicate/clamp assumption at the image border, <1% relative
@@ -182,7 +182,7 @@ def _nearest_depthwise_bilinear_kernel(channels: int) -> nn.Sequential:
     """Fixed (frozen, non-learned) nn.Upsample(mode="nearest") followed by a
     fixed depthwise conv, reproducing 2x bilinear upsampling
     (align_corners=False) exactly on interior pixels -- see module
-    docstring point 2 and hardware/testbench_bilinear_vs_nearest_depthwise_
+    docstring point 2 and dataflow/testbench_bilinear_vs_nearest_depthwise_
     up4up5.py (verified against real trained up4/up5 activations: interior
     max abs err ~5e-7, error only at the 1px border ring -- edge-replicate
     padding is NOT available in FINN, see module docstring, so this border

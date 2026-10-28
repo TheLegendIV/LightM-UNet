@@ -5,8 +5,8 @@ architecture-shape-agnostic); only MODEL_NAME and OUTPUT_DIR differ,
 pointing at the w8_16_v2 export instead of the base-width v2's.
 
 Prerequisite (run inside the pytorch training container first):
-    python hardware/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v2/finn_export_12_dense_relu_nearest_conv_upsample_256_w8_16_v2_trained.py --skip-cross-test
-    docker cp hardware/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v2/outputs/quantEnet_12_dense_relu_nearest_conv_upsample_256_w8_16_v2_trained.onnx \\
+    python dataflow/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v2/finn_export_12_dense_relu_nearest_conv_upsample_256_w8_16_v2_trained.py --skip-cross-test
+    docker cp dataflow/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v2/outputs/quantEnet_12_dense_relu_nearest_conv_upsample_256_w8_16_v2_trained.onnx \\
         <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/
 
 Run inside the FINN container:

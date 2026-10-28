@@ -1,7 +1,7 @@
 """Assemble a whole-network folding from the ANALYTICAL per-block models, written in the MILP flow's own formats.
 
-    python3 MILP/analytical/net_fold.py --config config_12_dense_relu_nearest_upsample_256 --bits 6 --fps 250 --clock-mhz 100 \\
-        --tag U4_int6_fps250 --out-dir MILP/artifacts/U4_256_int6_fps250_analytical_v1
+    python3 ILP/analytical/net_fold.py --config config_12_dense_relu_nearest_upsample_256 --bits 6 --fps 250 --clock-mhz 100 \\
+        --tag U4_int6_fps250 --out-dir ILP/artifacts/U4_256_int6_fps250_analytical_v1
 
 Pipeline (the MILP's own plumbing is reused, nothing is re-derived):
   1. finn_milp.build_model_and_graph() traces the network (LayerQuantEnetFINN has the same layer / site names as ENet) -> LayerGeometry per conv / pool,
@@ -38,7 +38,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-for p in (REPO / "enet", REPO / "MILP", REPO / "MILP" / "utils", REPO / "MILP" / "analytical"):
+for p in (REPO / "enet", REPO / "ILP", REPO / "ILP" / "utils", REPO / "ILP" / "analytical"):
     sys.path.insert(0, str(p))
 
 import finn_milp  # noqa: E402
@@ -336,7 +336,7 @@ def sites_for(config: str, folding_json: Path) -> dict:
 
 
 def write_sites(config: str, folding_json: Path, sites_json: Path) -> None:
-    """layer_bits_SITES_<tag>.json = MILP/expand_layer_bits.py run in-process. The working-tree LayerQuantENet.py lacks its `from QuantENet import (...)`
+    """layer_bits_SITES_<tag>.json = ILP/expand_layer_bits.py run in-process. The working-tree LayerQuantENet.py lacks its `from QuantENet import (...)`
     block, VALID_CONTEXT_PATTERNS and ACT_SITE_TYPES (dropped by the 'Sync' commit 66e0590e8b, present at b16b35468a; the file is not touched here), so what it needs from QuantENet (helpers, VALID_CONTEXT_PATTERNS, the dilation patterns) is injected first, as the probe export scripts do."""
     import nnunetv2.nets.LayerQuantENet as lq
     import nnunetv2.nets.CombinedQuantENet as cq
@@ -468,7 +468,7 @@ def assemble(a, ctx, F_top: int, compute_intra_fifos: bool = False, keep_blocks:
             "bottleneck_node": bott, "bottleneck_cycles": node_cycles[bott],
             "max_node_cycles": int(a.clock_mhz * 1e6 / a.fps), "per_node_budget_used": F_top, "target_fps": a.fps, "clock_mhz": a.clock_mhz,
             "max_latency_ms": a.max_latency_ms, "fps": a.clock_mhz * 1e6 / node_cycles[bott],
-            "analytical": {"source": "MILP/analytical/net_fold.py", "bilinear_up": BILINEAR_UP, "dsr_pct": a.dsr_pct, "mvau_wwidth_max": a.mvau_wwidth_max, "dsr": not a.no_dsr and a.dsr_pct is not None,
+            "analytical": {"source": "ILP/analytical/net_fold.py", "bilinear_up": BILINEAR_UP, "dsr_pct": a.dsr_pct, "mvau_wwidth_max": a.mvau_wwidth_max, "dsr": not a.no_dsr and a.dsr_pct is not None,
                            "sum_of_block_first_out_latencies_cycles": rough_latency, "block_profile": profile,
                            "mvau_cycle_mismatches_vs_milp_cost_model": mismatches},
             "note": "Folding assembled from the analytical per-block models (U4 widths), costed with the MILP's own layer_cost_pe_simd / extra_node_options. Not an ILP solve. "

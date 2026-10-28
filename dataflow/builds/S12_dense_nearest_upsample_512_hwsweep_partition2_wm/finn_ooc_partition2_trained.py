@@ -1,6 +1,6 @@
 """Partition-2-only real Vivado OOC synthesis for the
 S12_dense_nearest_upsample_512_hwsweep_partition2_wm sweep -- adapted from
-hardware/archive/finn_ooc_partition2_hawq_joint.py, parametrized by
+dataflow/archive/finn_ooc_partition2_hawq_joint.py, parametrized by
 <preamble_dir> and <tag>, with an OPTIONAL 3rd arg (bridged folding config
 json). When the 3rd arg is omitted, step_apply_folding_config is skipped
 entirely and FINN's own step_target_fps_parallelization auto-fold result is
@@ -20,7 +20,7 @@ Run inside the FINN container:
 
 --target-fps/--mvau-wwidth-max override cfg_stitched_ip_partitioned_8way's own
 defaults -- used for the FINN-only autofold CONTROL variant (target_fps=305.17,
-mvau_wwidth_max=80, matching MILP/artifacts/S12_dense_dsr_ablation_v1/
+mvau_wwidth_max=80, matching ILP/artifacts/S12_dense_dsr_ablation_v1/
 run_ablation.sh) so it is a fair comparison against the MILP-folded builds.
 """
 
@@ -93,7 +93,7 @@ THRESH_OP_TYPES = ("Thresholding_hls", "Thresholding_rtl")
 def step_force_dsp(model, cfg=None):
     """Force resType=dsp on every MVAU (pointwise/1x1) AND VVAU (depthwise
     KxK) node -- matches this sweep's MILP solve, which used --force-dsp
-    (see MILP/artifacts/.../run_args.json), so the built hardware's resource
+    (see ILP/artifacts/.../run_args.json), so the built hardware's resource
     type matches what the MILP already assumed when folding PE/SIMD."""
     n_dsp = 0
     for node in model.graph.node:

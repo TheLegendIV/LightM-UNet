@@ -8,17 +8,17 @@ throughput / rate-coherence / latency constraints. Accuracy-only objective --
 folding is otherwise a free choice among options that satisfy those hard
 constraints (see finn_milp.md "Formulation"). Solved with CBC (pulp).
 
-AGENTS: read MILP/finn_milp.md before changing this file, and update it with
+AGENTS: read ILP/finn_milp.md before changing this file, and update it with
 any behavior change -- it holds the formulation, the rationale and evidence
 behind every constraint and constant, the known gaps, and the output schema.
 Cost formulas live in finn_cost_model.py (+ finn_cost_model.md).
 
 Usage:
-    python MILP/finn_milp.py --config config_12_dense_relu_nearest_conv_upsample \\
-        --sensitivity-file MILP/artifacts/layer_sensitivity_12_dense_relu_nearest_conv_upsample.json \\
+    python ILP/finn_milp.py --config config_12_dense_relu_nearest_conv_upsample \\
+        --sensitivity-file ILP/artifacts/layer_sensitivity_12_dense_relu_nearest_conv_upsample.json \\
         --candidate-bits 4,6,8 --force-dsp \\
         --max-lut-fraction 0.5 --max-bram-fraction 0.5 --max-dsp-fraction 0.9 --max-latency-ms 200 \\
-        --out-file MILP/artifacts/<dir>/layer_bits_folding_<...>.json
+        --out-file ILP/artifacts/<dir>/layer_bits_folding_<...>.json
 """
 from __future__ import annotations
 
@@ -101,7 +101,7 @@ def _calibration_force_dsp(variant_kwargs: dict) -> bool:
 
 
 def load_config(config_module: str) -> None:
-    """Inject a MILP/configs/config_*.py's constants into this module's globals."""
+    """Inject a ILP/configs/config_*.py's constants into this module's globals."""
     cfg = importlib.import_module(f"configs.{config_module}")
     globals().update({k: v for k, v in vars(cfg).items() if not k.startswith("_")})
 
@@ -954,7 +954,7 @@ def solve_joint_perlayer(
             "top_stalls": [{"producer": p, "consumer": c, "stall_cycles": st, "producer_cycles": node_cycles[p], "consumer_cycles": node_cycles[c]} for st, p, c in edge_stall[:12] if st > 0],
         }
 
-    # The FINN bridge (hardware/finn_s12_build_steps.py) looks a conv_order logical name up in per_layer. The frozen depthwise conv is an extra node here (its resources are counted once, above), so it is
+    # The FINN bridge (dataflow/finn_s12_build_steps.py) looks a conv_order logical name up in per_layer. The frozen depthwise conv is an extra node here (its resources are counted once, above), so it is
     # MIRRORED into the written per_layer in the layer-entry schema: PE / SIMD, the SWG / FMPadding SIMD (= PE, FINN's depthwise rule) and the threshold behind it, which is the block's skip_quant.
     frozen_layers: dict[str, dict] = {}
     for name, v in extra_out.items():
@@ -1108,10 +1108,10 @@ def _write_run_summary(
     }
     run_args = {
         "pipeline": [
-            "MILP/layer_sensitivity.py --candidate-bits ...",
-            "MILP/finn_milp.py --candidate-bits ... --max-lut-fraction ... --max-bram-fraction ... "
+            "ILP/layer_sensitivity.py --candidate-bits ...",
+            "ILP/finn_milp.py --candidate-bits ... --max-lut-fraction ... --max-bram-fraction ... "
             "--max-dsp-fraction ... --force-dsp",
-            "MILP/expand_layer_bits.py",
+            "ILP/expand_layer_bits.py",
         ],
         "shared_args": shared_args,
         "granularity": "layer",
@@ -1147,7 +1147,7 @@ def build_model_and_graph() -> tuple[
 ]:
     """Builds the ENet model from the currently-loaded config globals and traces its
     full layer geometry + extra-node dataflow graph -- the shared setup used by both
-    the ILP solve (main(), below) and MILP/utils/uniform_bits_same_folding.py's
+    the ILP solve (main(), below) and ILP/utils/uniform_bits_same_folding.py's
     fixed-fold baseline (which needs the same real extra-node geometries/options to
     price thresholds/streams consistently with a real solve, not just per_layer convs).
     Extracted 2026-09-29 so the two never silently diverge on node-kind-detection
@@ -1193,7 +1193,7 @@ def build_model_and_graph() -> tuple[
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--config", required=True, help="MILP/configs/config_*.py module to load.")
+    parser.add_argument("--config", required=True, help="ILP/configs/config_*.py module to load.")
     parser.add_argument("--sensitivity-file", type=Path, required=True,
                          help="layer_sensitivity_*.json from layer_sensitivity.py.")
     parser.add_argument("--candidate-bits", type=str, default=None,

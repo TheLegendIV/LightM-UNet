@@ -17,7 +17,7 @@ across dilation {1,2,4,8,16} x int{4,6,8}.
 ## Bugs found and fixed this round
 
 All five fixes below are already landed in `finn_bottleneck_probe_build.py`
-and `hardware/checks/test_compose_thresholds.py` (host + container copies in
+and `dataflow/checks/test_compose_thresholds.py` (host + container copies in
 sync).
 
 1. **Opset mismatch in the threshold-merge unit test (gate 2).** onnx 1.17.0

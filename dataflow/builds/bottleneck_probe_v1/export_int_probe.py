@@ -5,7 +5,7 @@ maxpool branch 1 channel, 2x2 stride 2; shared branch_quant; concat; BN + ReLU),
 (torch.manual_seed(0)). The block has its own input quantizer, so no stand-in is needed. Frame budget of the folding config: F = 81920 cycles
 (T_out = 5.0 per output pixel) = the maxpool floor 1.25 * 256 * 256 of this input size.
 
-    python3 hardware/builds/bottleneck_probe_v1/export_int_probe.py [--bits 4 6 8]
+    python3 dataflow/builds/bottleneck_probe_v1/export_int_probe.py [--bits 4 6 8]
 Writes inputs/init_cin1_cout4_in256_int{b}.onnx and ..._probe.json.
 """
 from __future__ import annotations

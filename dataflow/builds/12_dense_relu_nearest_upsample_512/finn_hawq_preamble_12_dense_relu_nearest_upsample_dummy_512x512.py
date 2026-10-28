@@ -10,9 +10,9 @@ identical in both decoder types) -- see that sibling's docstring for the
 full rationale.
 
 Prerequisite (run inside the pytorch training container first):
-    docker exec lightmunet_dev python /workspace/LightM-UNet/hardware/builds/12_dense_relu_nearest_upsample_512/finn_export_12_dense_relu_nearest_upsample_dummy.py \\
+    docker exec lightmunet_dev python /workspace/LightM-UNet/dataflow/builds/12_dense_relu_nearest_upsample_512/finn_export_12_dense_relu_nearest_upsample_dummy.py \\
         --bits-file <sweep point's layer_bits_SITES_*.json> --input-hw 512 512
-    docker cp hardware/outputs/finn_exports/quantEnet_12_dense_relu_nearest_upsample_dummy_int8_512x512.onnx \\
+    docker cp dataflow/outputs/finn_exports/quantEnet_12_dense_relu_nearest_upsample_dummy_int8_512x512.onnx \\
         <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/
 
 Run inside the FINN container:

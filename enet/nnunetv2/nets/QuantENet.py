@@ -29,7 +29,7 @@ stage_4_quantization. Only verified so far: constructs, forward-passes, and
 exports to a QONNX file that passes onnx.checker -- NOT yet verified inside
 FINN itself (FINN requires its own dedicated Docker environment, separate
 from Vivado/Vitis and separate from this repo's training container; not set
-up yet, see compression/foundation_log.md).
+up yet, see nas/foundation_log.md).
 
 PReLU -> QuantReLU: ENet's blocks use PReLU throughout (see ENet.py); there
 is no standard quantized PReLU in Brevitas/FINN's dataflow op set, so this
@@ -44,7 +44,7 @@ target is ENet.py's frozen per-block LeakyReLU (apply_leaky_slope_
 overrides), passing that same per-block slope dict here builds a
 quantized, FINN-verified ALGEBRAIC DECOMPOSITION of it instead of forcing
 plain QuantReLU (see QuantDecomposedLeakyAct's own docstring, and
-hardware/README.md's "PReLU vs. QuantReLU -- FINN compatibility
+dataflow/README.md's "PReLU vs. QuantReLU -- FINN compatibility
 investigation" for the proof this decomposition survives FINN's real
 streamlining/HW-conversion pipeline). Values are FIXED (register_buffer,
 not learnable) -- meant for an already-trained slope, not a QAT target.
@@ -114,7 +114,7 @@ class QuantDecomposedLeakyAct(nn.Module):
     complete fpgadataflow HW op registry has no way to represent one
     directly either (a literal ONNX PRelu/LeakyRelu node survives FINN's
     entire streamlining pipeline completely untouched -- see
-    hardware/README.md's "PReLU vs. QuantReLU -- FINN compatibility
+    dataflow/README.md's "PReLU vs. QuantReLU -- FINN compatibility
     investigation").
 
     Uses the algebraic identity `LeakyReLU(x, a) = a*x + (1-a)*ReLU(x)`
@@ -127,7 +127,7 @@ class QuantDecomposedLeakyAct(nn.Module):
     shape ENet's own residual connections already use. Proven end-to-end
     against FINN's real streamlining + HW-conversion pipeline (all-HW
     residue, zero stuck PRelu nodes) and numerically validated against real
-    nn.PReLU (see hardware/README.md and hardware/_tmp_prelu_
+    nn.PReLU (see dataflow/README.md and dataflow/_tmp_prelu_
     investigation2.py's DecomposedPReLUAct, which this ports verbatim).
 
     `negative_slope` is a plain Python float, by default baked in as a fixed
@@ -148,7 +148,7 @@ class QuantDecomposedLeakyAct(nn.Module):
     gets the original frozen-buffer behavior unchanged) registers alpha/
     one_minus_alpha as real nn.Parameters instead: for a checkpoint whose
     slope value is only a POST-HOC average of a real per-channel PReLU
-    (e.g. compression/post-quantization/extract_leaky_slope_map.py
+    (e.g. nas/post-quantization/extract_leaky_slope_map.py
     --prelu-variant standard's output, as opposed to a genuinely-trained
     nonneg_block scalar), that average is a known-wrong starting point with
     no principled reason to stay fixed through a real QAT retrain -- unlike
@@ -176,7 +176,7 @@ class QuantDecomposedLeakyAct(nn.Module):
         # stability. Exists purely for the PTQ feasibility sweep asking
         # whether the leaky sites' collapse is fixable by precision alone
         # (vs. requiring the quant_enabled=False warm-start recipe) --
-        # see compression/post-quantization/calibrate_noquant_to_decomposed.py's
+        # see nas/post-quantization/calibrate_noquant_to_decomposed.py's
         # --out-bit-width sweep.
         self.out_bit_width = out_bit_width
         # OPT-IN, default-None (act_bit_width is used for pre_quant/act_pos
@@ -196,7 +196,7 @@ class QuantDecomposedLeakyAct(nn.Module):
         # (pre_quant -> act_pos -> out_quant) compound rounding error
         # roughly 3x over a single QuantReLU's one -- see quant_enabled's
         # own comment below -- and was isolated by direct experiment
-        # (compression/slurm/qat_26_9_w24_s14w12_nonneg_block_*proxy* jobs)
+        # (nas/slurm/qat_26_9_w24_s14w12_nonneg_block_*proxy* jobs)
         # as the actual cause of this architecture's QAT collapse,
         # independent of alpha itself: plain QuantReLU trains fine; every
         # variant of this 3-chained-quantizer class collapses regardless of
@@ -253,7 +253,7 @@ class QuantDecomposedLeakyAct(nn.Module):
         # values the FP32 network itself ever produced. Motivation: alpha is
         # currently a completely unconstrained nn.Parameter, yet a real
         # nonneg_block-trained FP32 checkpoint's own per-block means never
-        # exceed ~0.76 anywhere in the network (see compression/post-
+        # exceed ~0.76 anywhere in the network (see nas/post-
         # quantization/slope_maps/26_9_w24_s14w12_nonneg_block.json) -- [0, 0.8]
         # keeps alpha inside the region training already knows is productive,
         # on the theory that alpha is also a SCALE feeding a coarse (often
@@ -383,7 +383,7 @@ class QuantDecomposedLeakyAct(nn.Module):
         # constant operand MUST be input[1] (dynamic * constant, not
         # constant * dynamic) -- FINN's streamlining transforms (e.g.
         # CollapseRepeatedMul) hard-assume this convention, see
-        # hardware/_tmp_prelu_investigation2.py's own note. Still holds at
+        # dataflow/_tmp_prelu_investigation2.py's own note. Still holds at
         # export time when trainable_slope=True: whatever alpha's final
         # trained value is gets baked in as a QONNX Initializer the same
         # way a frozen buffer would.
@@ -412,7 +412,7 @@ class QuantFusedLeakyAct(nn.Module):
     underlying continuous parameter) rather than left an unconstrained
     continuous float -- a real per-block nonneg_block-trained FP32 slope
     never exceeds ~0.76 anywhere in this network (see
-    compression/post-quantization/slope_maps/26_9_w24_s14w12_nonneg_block.json),
+    nas/post-quantization/slope_maps/26_9_w24_s14w12_nonneg_block.json),
     so [0, 1] is a safe range with margin, same rationale ALPHA_CLAMP's own
     [0, 0.8] used.
 
@@ -420,7 +420,7 @@ class QuantFusedLeakyAct(nn.Module):
     exported graph is `[upstream, unquantized] -> LeakyRelu(alpha) ->
     MultiThreshold(out_quant)`, NOT the `MultiThreshold(pre_quant) ->
     LeakyRelu -> MultiThreshold(out_quant)` 3-node pattern
-    hardware/finn_enet_build_decomposed_prelu.py's own
+    dataflow/finn_enet_build_decomposed_prelu.py's own
     step_fuse_leaky_relu_to_threshold matches on -- that existing fusion
     pass will NOT fire on this module's graph as exported today, so real
     FINN-export verification/adaptation for a module built this way is
@@ -583,7 +583,7 @@ class QuantRegularBottleneck(nn.Module):
         # operand carried on entry. This residual join can never hit FINN's
         # "two independently-scaled int8 streams meeting at an Add" problem.
         # That problem DID occur in the separate FINN-export mirror
-        # hardware/finn_export_s13_leaky_frozen.py, whose hand-rolled
+        # dataflow/finn_export_s13_leaky_frozen.py, whose hand-rolled
         # residual blocks do a raw `+` with no shared quantizer at the join
         # at all (fixed there with an explicit CONST-scale shared
         # QuantIdentity: `_ConstScaleInt8Act`/`_requant_factory`). That fix is
@@ -1055,7 +1055,7 @@ if __name__ == "__main__":
     # default it saturates far below the input's actual dynamic range
     # (confirmed directly: input -3.0 came out of pre_quant as -1.0) --
     # exactly the same category of "uncalibrated minimal harness" artifact
-    # hardware/_tmp_prelu_investigation2.py's own
+    # dataflow/_tmp_prelu_investigation2.py's own
     # _fixup_degenerate_signed_bias documents hitting and explicitly
     # separates from real decomposition/FINN-capability bugs. This
     # self-consistency check instead verifies the DECOMPOSITION FORMULA

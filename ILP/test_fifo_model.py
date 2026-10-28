@@ -1,6 +1,6 @@
 """Tests for fifo_model.py (finn_milp.py, FIFO modelling is always on). Run in lightmunet_dev:  cd MILP && python3 test_fifo_model.py
 
-1. The closed-form skip / prefetch estimators reproduce the verified FIFO depths of the analytical S12-256 artifact (MILP/artifacts/S12_dense_256_u4_analytical_v1).
+1. The closed-form skip / prefetch estimators reproduce the verified FIFO depths of the analytical S12-256 artifact (ILP/artifacts/S12_dense_256_u4_analytical_v1).
 2. One real solve on the S12-256 config: feasible, the FIFO terms are in the totals and in the output lists, and the BRAM they add is the analytical
    design's order of magnitude (143 BRAM18).
 """

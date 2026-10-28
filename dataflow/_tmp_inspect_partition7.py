@@ -2,7 +2,7 @@
 from onnx import numpy_helper
 import numpy as np
 
-path = r"C:\DEV\repos\LightM-UNet\hardware\builds\12_dense_relu_nearest_conv_upsample_256_v2\results\finn_deployment_output_v2_20260926_234329\intermediate_models\supported_op_partitions\partition_7_prefifo_autosize.onnx"
+path = r"C:\DEV\repos\LightM-UNet\dataflow\builds\12_dense_relu_nearest_conv_upsample_256_v2\results\finn_deployment_output_v2_20260926_234329\intermediate_models\supported_op_partitions\partition_7_prefifo_autosize.onnx"
 m = onnx.load(path)
 g = m.graph
 print("=== GRAPH INPUTS ===")

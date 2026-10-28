@@ -30,8 +30,8 @@ finn_milp.py actually applies `calibrated_lut`/`calibrated_bram18k`:
 
 Usage:
     python compare_model_vs_real_resources.py \\
-        --folding-json MILP/artifacts/S12_dense_nn_upsample_256_v2/layer_bits_folding_..._dsrate1.5.json \\
-        --calibration-csv hardware/builds/12_dense_relu_nearest_conv_upsample_256_v2/results/mvau_lut_calibration_dataset_..._full.csv
+        --folding-json ILP/artifacts/S12_dense_nn_upsample_256_v2/layer_bits_folding_..._dsrate1.5.json \\
+        --calibration-csv dataflow/builds/12_dense_relu_nearest_conv_upsample_256_v2/results/mvau_lut_calibration_dataset_..._full.csv
 
 Requires the calibration CSV to have been (re)generated with
 build_node_resource_calibration_csv.py AFTER its AddStreams_hls/

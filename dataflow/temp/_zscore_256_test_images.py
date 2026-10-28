@@ -3,7 +3,7 @@
 Writes the full-frame float32 z-score (hardware path) to deployment/256_test_images_zscore/ and compares the
 nnU-Net-style result (crop to non-zero bbox, then z-score) against the cases in
 data/nnUNet_preprocessed/Dataset510_ARCADE_256_4c.
-Run: .venv\\Scripts\\python.exe hardware/temp/_zscore_256_test_images.py
+Run: .venv\\Scripts\\python.exe dataflow/temp/_zscore_256_test_images.py
 """
 import glob
 import sys

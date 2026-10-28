@@ -10,7 +10,7 @@ block's Thr_out) -> FINNUpsamplingBottleneck. Two variants per bit width (6 prob
 The ext branch (reduce 1x1 -> ConvTranspose 2x2 stride 2 -> expand 1x1) is identical. Frame budget used by the folding configs:
 F = 18 * 64 * 64 = 73728 cycles (T_out = 18 per output pixel), the same F as the 72-cycle regular / downsampling probes.
 
-    python3 hardware/builds/bottleneck_probe_v1/export_up_probe.py [--bits 4 6 8] [--variants conv noconv]
+    python3 dataflow/builds/bottleneck_probe_v1/export_up_probe.py [--bits 4 6 8] [--variants conv noconv]
 Writes inputs/up_cin32_cout16_in32_int{b}_{variant}.onnx and ..._probe.json.
 """
 from __future__ import annotations

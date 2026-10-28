@@ -3,7 +3,7 @@
 # those 2 point one level too high) plus finn-rtllib/memstream, so
 # generate_target on a combined BD fails with
 # "Cannot upgrade to invalid target ''". Use
-# hardware/finn_fix_combined_bd_ip_repos.tcl instead (auto-discovers the full
+# dataflow/finn_fix_combined_bd_ip_repos.tcl instead (auto-discovers the full
 # correct set via glob). Kept only for history.
 #
 # Registers all per-partition stitched IPs + both IODMA cores as IP

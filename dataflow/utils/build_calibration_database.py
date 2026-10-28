@@ -5,7 +5,7 @@ sources:
     12_separable_dense_relu_alpha025_trained_8way build
   - the S12 context dense int6 PE=MH/SIMD=1 probe
 
-Inputs (all in hardware/temp/, see hardware/finn_gotchas.md for how each is
+Inputs (all in dataflow/temp/, see dataflow/finn_gotchas.md for how each is
 regenerated):
   _tmp_hier_partition_<N>.rpt / _tmp_hier_probe_dense_int6_pemh.rpt
       Vivado `report_utilization -hierarchical -hierarchical_depth 4` on the
@@ -18,7 +18,7 @@ regenerated):
       Target folding_config PE/SIMD per MVAU/VVAU node name (partitions
       only -- the probe forces PE/SIMD directly in the build script).
 
-Output: hardware/mvau_swu_threshold_calibration_dataset.csv (one wide table,
+Output: dataflow/mvau_swu_threshold_calibration_dataset.csv (one wide table,
 row-per-node, with family-specific columns left blank where not applicable).
 
 Usage: python build_calibration_database.py

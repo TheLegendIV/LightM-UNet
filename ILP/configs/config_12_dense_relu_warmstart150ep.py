@@ -1,10 +1,10 @@
 """Shared constants for nnUNetTrainerENet_12_dense_relu_warmstart150ep's
 ("S12-dense, warm-started") HAWQ per-layer W/A search -- the already-trained
-checkpoint (compression/results.csv's own nnUNetTrainerENet_12_dense_relu_
+checkpoint (nas/results.csv's own nnUNetTrainerENet_12_dense_relu_
 warmstart150ep row, stage "12_dense_relu_warmstart150ep", dice=0.7954,
 best epoch 107/150 -- a fresh 150-epoch continued-training run warm-started
 from nnUNetTrainerENet_12_dense_relu's own checkpoint_best.pth at a reduced
-LR=1e-4, see compression/slurm/stage_12_dense_relu_warmstart150ep.job).
+LR=1e-4, see nas/slurm/stage_12_dense_relu_warmstart150ep.job).
 
 Byte-for-byte config_12_dense_relu.py's own architecture (same channels,
 native bottleneck depth, plain "dense_dilation" context pattern, no DSC,

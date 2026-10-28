@@ -1,11 +1,11 @@
 """Export the PTQ-calibrated S12-dense 256x256 network (U4 widths (4,16,32,16,4),
 bottlenecks (4,8,8,2,1), dense_dilation context, plain decoder_type="nearest_upsample",
 Dataset510_ARCADE_256_4c, uniform INT6) to a FINN-safe LayerQuantEnetFINN ONNX, for the
-MILP/artifacts/S12_dense_256_u4_analytical_v1/int6_fps250_lat200/ folding/FIFO build (see
+ILP/artifacts/S12_dense_256_u4_analytical_v1/int6_fps250_lat200/ folding/FIFO build (see
 that artifact's README.md).
 
 Checkpoint is POST-TRAINING quantization only (no fine-tuning): built by
-compression/post-quantization/calibrate_12_dense_relu_nearest_upsample_256_perlayer.py, which
+nas/post-quantization/calibrate_12_dense_relu_nearest_upsample_256_perlayer.py, which
 loads the real FP32 nearest_upsample weights (trained at 512x512, resolution-independent) and
 runs a single Brevitas calibration_mode() pass over all 1200 Dataset510_ARCADE_256_4c images
 (reflect-padded to a multiple of 8) to set runtime-stats activation scales -- no backprop, no
@@ -18,11 +18,11 @@ checkpoint_best.pth.txt (byte-identical copy); rename it to checkpoint_best.pth 
 this script if that hasn't been done yet (see /memories/repo/s12_dense_256_u4_analytical_v1_build.md).
 
 Usage (inside the pytorch training container, repo root):
-    docker exec <container> python3 hardware/builds/S12_dense_256_u4_analytical_v1/finn_export_S12_dense_256_u4_analytical_v1_finn_calibrated.py --skip-cross-test
+    docker exec <container> python3 dataflow/builds/S12_dense_256_u4_analytical_v1/finn_export_S12_dense_256_u4_analytical_v1_finn_calibrated.py --skip-cross-test
 
-Output: hardware/builds/S12_dense_256_u4_analytical_v1/outputs/quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated.onnx
+Output: dataflow/builds/S12_dense_256_u4_analytical_v1/outputs/quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated.onnx
 Then, inside the FINN container:
-    docker cp hardware/builds/S12_dense_256_u4_analytical_v1/outputs/quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated.onnx \\
+    docker cp dataflow/builds/S12_dense_256_u4_analytical_v1/outputs/quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated.onnx \\
         <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/
 """
 from __future__ import annotations
@@ -36,11 +36,11 @@ import torch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
-sys.path.insert(0, str(REPO_ROOT / "analysis" / "501_ARCADE"))
-sys.path.insert(0, str(REPO_ROOT / "hardware"))
+sys.path.insert(0, str(REPO_ROOT / "nas"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 # shared cross-test/calibration helpers (dataset-level, decoder-agnostic -- see that module).
-sys.path.insert(0, str(REPO_ROOT / "hardware" / "builds" / "12_dense_relu_nearest_conv_upsample_256"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow" / "builds" / "12_dense_relu_nearest_conv_upsample_256"))
 
 import nnunetv2.nets.CombinedQuantENet as _cq  # noqa: E402
 import nnunetv2.nets.ENet as _en  # noqa: E402
@@ -54,7 +54,7 @@ def _patch_missing_names() -> None:
     import (...)` block, VALID_CONTEXT_PATTERNS and ACT_SITE_TYPES in commit 66e0590e8b (intact at
     b16b35468a), and LayerQuantEnetFINN.py uses the same names through it. Inject what is missing
     (no-op when the files are intact) instead of editing them -- same patch as
-    compression/post-quantization/calibrate_12_dense_relu_nearest_upsample_256_perlayer.py."""
+    nas/post-quantization/calibrate_12_dense_relu_nearest_upsample_256_perlayer.py."""
     import brevitas.nn as qnn
     for mod in (_qe, _cq, _en):
         for name in dir(mod):
@@ -84,7 +84,7 @@ from finn_export_12_dense_relu_nearest_conv_upsample_256_trained import (  # noq
 )
 
 # Redirect export_model()'s output into this job's own folder instead of the
-# shared (deprecated) hardware/outputs/finn_exports/.
+# shared (deprecated) dataflow/outputs/finn_exports/.
 finn_enet_prod_export.OUT_DIR = Path(__file__).resolve().parent / "outputs"
 
 CHANNELS = (4, 16, 32, 16, 4)
@@ -98,7 +98,7 @@ DEFAULT_CHECKPOINT = (
     / f"{NET_NAME}__nnUNetPlans__2d" / "fold_0" / "checkpoint_best.pth"
 )
 DEFAULT_BITS_FILE = (
-    REPO_ROOT / "MILP" / "artifacts" / "S12_dense_256_u4_analytical_v1" / "int6_fps250_lat200"
+    REPO_ROOT / "ILP" / "artifacts" / "S12_dense_256_u4_analytical_v1" / "int6_fps250_lat200"
     / "layer_bits_SITES_final.json"
 )
 DEFAULT_PREPROCESSED_DIR = REPO_ROOT / "data" / "nnUNet_preprocessed" / DATASET_NAME / "nnUNetPlans_2d"
@@ -166,7 +166,7 @@ def main() -> None:
         calibrate_runtime_stats(model, calibration_images)
     else:
         print("\n=== Skipping calibration -- checkpoint already PTQ-calibrated by "
-              "compression/post-quantization/calibrate_12_dense_relu_nearest_upsample_256_perlayer.py ===")
+              "nas/post-quantization/calibrate_12_dense_relu_nearest_upsample_256_perlayer.py ===")
 
     if not args.skip_export:
         print("\n=== Forward-pass sanity check + QONNX export ===")
@@ -179,7 +179,7 @@ def main() -> None:
         name = "quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated"
         export_model(model, name, dummy)
         print("\nExported. Copy to FINN container with:")
-        print(f"  docker cp hardware/builds/S12_dense_256_u4_analytical_v1/outputs/{name}.onnx <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/")
+        print(f"  docker cp dataflow/builds/S12_dense_256_u4_analytical_v1/outputs/{name}.onnx <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/")
 
     if not args.skip_cross_test:
         print("\n=== Cross test: FINN mirror vs. real model, full imagesTs/labelsTs (300 cases) ===")

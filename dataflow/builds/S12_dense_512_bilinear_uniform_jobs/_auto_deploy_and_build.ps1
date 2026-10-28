@@ -2,14 +2,14 @@
 # simulation of its MILP folding (host), then copies the network files + simulated folding into finn_persistent and runs the generic launcher (_launch_job.sh ... all): preamble + checks, then the
 # full 8-way build. Aborts without starting anything if the export did not end with "VERIFY OK." or a file is missing. Progress goes to <JobDir>\_auto_build.log.
 # Usage: powershell -File _auto_deploy_and_build.ps1 -Job S12_dense_512_bilinear_int4_cap40_v1 -Stem quantEnet_S12_dense_512_bilinear_int4_cap40_v1 -Tag S12_dense_512_bilinear_int4_cap40_v1 `
-#          -SimJson MILP\artifacts\...\simfifo\layer_bits_folding_int4_cap40_simfifo.json -SimTag int4_cap40 -ExportTag int4_cap40 -ExportBits 4
+#          -SimJson ILP\artifacts\...\simfifo\layer_bits_folding_int4_cap40_simfifo.json -SimTag int4_cap40 -ExportTag int4_cap40 -ExportBits 4
 param(
     [Parameter(Mandatory)] [string]$Job, [Parameter(Mandatory)] [string]$Stem, [Parameter(Mandatory)] [string]$Tag,
     [Parameter(Mandatory)] [string]$SimJson, [Parameter(Mandatory)] [string]$SimTag, [Parameter(Mandatory)] [string]$ExportTag, [Parameter(Mandatory)] [int]$ExportBits
 )
 $ErrorActionPreference = "Continue"
 $repo = "C:\DEV\repos\LightM-UNet"
-$jobDir = "$repo\hardware\builds\$Job"
+$jobDir = "$repo\dataflow\builds\$Job"
 $log = "$jobDir\_auto_build.log"
 function Log($m) { "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  $m" | Out-File -Append -Encoding utf8 $log }
 $sim = if ([System.IO.Path]::IsPathRooted($SimJson)) { $SimJson } else { "$repo\$SimJson" }
@@ -36,7 +36,7 @@ foreach ($f in Get-ChildItem $out -Filter "${Stem}_ft15ep_u8in.onnx*") { docker 
 docker cp "$out\${Stem}_conv_order.json" "$E/${Stem}_conv_order.json" | Out-Null
 docker cp "$out\${Stem}_ft15ep_u8in_verify_ref.npz" "$E/${Stem}_ft15ep_u8in_verify_ref.npz" | Out-Null
 docker cp $sim "$E/$foldName" | Out-Null
-docker cp "$repo\hardware\builds\S12_dense_512_bilinear_uniform_jobs\_launch_job.sh" "$E/_launch_job.sh" | Out-Null
+docker cp "$repo\dataflow\builds\S12_dense_512_bilinear_uniform_jobs\_launch_job.sh" "$E/_launch_job.sh" | Out-Null
 docker exec finn_persistent bash -c "cd /home/thelegendiv/finn/notebooks/enet && tr -d '\r' < _launch_job.sh > _l.sh && mv -f _l.sh _launch_job.sh && ls -l ${Stem}_ft15ep_u8in.onnx* $foldName" 2>&1 | ForEach-Object { Log $_ }
 $r = docker exec finn_persistent bash -c "cd /home/thelegendiv/finn/notebooks/enet && bash _launch_job.sh $Stem $Tag $foldName all"
 Log "launched: $r"

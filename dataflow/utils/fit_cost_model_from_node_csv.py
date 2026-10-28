@@ -4,7 +4,7 @@ Input: one or more `build_node_resource_calibration_csv.py` outputs (a row per r
 node's hierarchy). Datasets are POOLED, because a constant fitted on one build only knows that build's regime (the INT8 512 build exposed this: thresholds with 255 steps and a wide input
 are 5-10x more expensive than the 63-step INT6 nodes the old fits saw).
 
-Method (the repo's convention, see MILP/calibration.csv): per node kind, ordinary least squares THROUGH THE ORIGIN, real_LUT ~ sum_i c_i * x_i, with the x_i structural features of the node
+Method (the repo's convention, see ILP/calibration.csv): per node kind, ordinary least squares THROUGH THE ORIGIN, real_LUT ~ sum_i c_i * x_i, with the x_i structural features of the node
 (PE * in_bits, PE * numSteps, channels * numSteps * in_bits, ...). Each fit reports n, per-dataset n, uncentered R^2, the median absolute % error and the sum error of the LIVE formula
 (what finn_cost_model.py predicts now) against the refitted one, and a leave-one-dataset-out sum error per dataset (does the fit generalise to a build it has not seen?). Coefficients are
 constrained to be >= 0 where `nonneg` is set (a negative LUT per feature is non-physical).
@@ -13,11 +13,11 @@ The fit table SPECS below is declarative: adding a node kind or a new feature se
 can be applied -- e.g. Upsample needs the activation width, which stream_node_cost does not take yet).
 
 Usage (host venv, no Vivado / FINN needed):
-    python hardware/utils/fit_cost_model_from_node_csv.py                         # all known datasets, print every fit
-    python hardware/utils/fit_cost_model_from_node_csv.py --specs thr_dist_lut_rom,mvau_rtl_derate
-    python hardware/utils/fit_cost_model_from_node_csv.py --csv path/to/new_build.csv     # pool one more build in
-    python hardware/utils/fit_cost_model_from_node_csv.py --write-calibration-csv         # log the fits to MILP/calibration.csv as 'proposed'
-    python hardware/utils/fit_cost_model_from_node_csv.py --apply [--write-calibration-csv]   # patch the constants in MILP/finn_cost_model.py (status 'applied')
+    python dataflow/utils/fit_cost_model_from_node_csv.py                         # all known datasets, print every fit
+    python dataflow/utils/fit_cost_model_from_node_csv.py --specs thr_dist_lut_rom,mvau_rtl_derate
+    python dataflow/utils/fit_cost_model_from_node_csv.py --csv path/to/new_build.csv     # pool one more build in
+    python dataflow/utils/fit_cost_model_from_node_csv.py --write-calibration-csv         # log the fits to ILP/calibration.csv as 'proposed'
+    python dataflow/utils/fit_cost_model_from_node_csv.py --apply [--write-calibration-csv]   # patch the constants in ILP/finn_cost_model.py (status 'applied')
 
 Re-running after --apply is safe: the "before" columns are the live constants, so they then measure the refitted model (and a second fit lands on the same coefficients).
 """
@@ -34,15 +34,15 @@ from typing import Callable, Optional
 import numpy as np
 
 REPO = Path(__file__).resolve().parents[2]
-for p in (REPO / "MILP", REPO / "hardware" / "utils", REPO / "hardware" / "checks"):
+for p in (REPO / "ILP", REPO / "dataflow" / "utils", REPO / "dataflow" / "checks"):
     sys.path.insert(0, str(p))
 
 import finn_cost_model as fcm  # noqa: E402
 from compare_model_vs_real_resources_from_dataset import predict_row  # noqa: E402
 
-CALIBRATION_CSV = REPO / "MILP" / "calibration.csv"
-COST_MODEL_PY = REPO / "MILP" / "finn_cost_model.py"
-B = REPO / "hardware" / "builds"
+CALIBRATION_CSV = REPO / "ILP" / "calibration.csv"
+COST_MODEL_PY = REPO / "ILP" / "finn_cost_model.py"
+B = REPO / "dataflow" / "builds"
 
 DATASETS = {
     "int8_512_v2": B / "S12_dense_512_bilinear_int8_v2/results/node_resource_calibration_S12_dense_512_bilinear_int8_v2.csv",
@@ -51,7 +51,7 @@ DATASETS = {
     "nn256_v1": B / "12_dense_relu_nearest_conv_upsample_256/results/mvau_lut_calibration_dataset_12_dense_relu_nearest_conv_upsample_256_v1_full.csv",
     "nn256_v2": B / "12_dense_relu_nearest_conv_upsample_256_v2/results/mvau_lut_calibration_dataset_12_dense_relu_nearest_conv_upsample_256_v2_full.csv",
     "nn256_w8_16_v4": B / "12_dense_relu_nearest_conv_upsample_256_w8_16_v4/results/mvau_lut_calibration_dataset_12_dense_relu_nearest_conv_upsample_256_w8_16_v4_full.csv",
-    "warmstart150ep": REPO / "hardware/datasets/mvau_lut_calibration_dataset_12_dense_relu_warmstart150ep_alpha025_rtl_mvau_noact1_extended.csv",
+    "warmstart150ep": REPO / "dataflow/datasets/mvau_lut_calibration_dataset_12_dense_relu_warmstart150ep_alpha025_rtl_mvau_noact1_extended.csv",
 }
 
 
@@ -116,7 +116,7 @@ SPECS = [
     Spec("mvau_rtl_lut", "mvau_rtl_lut", _mvau_rtl, lambda r: [1.0, num(r["PE"], 1) or 1, (num(r["PE"], 1) or 1) * (num(r["SIMD"], 1) or 1)], _before_lut,
          constants=("_MVAU_RTL_LUT_BASE", "_MVAU_RTL_LUT_PER_PE", "_MVAU_RTL_LUT_PER_LANE"),
          formula="real_LUT ~= c0 + c1*PE + c2*PE*SIMD   (MVAU_rtl: the DSPs take the multiplies, so the LUT is structural, not bits-driven)",
-         notes="Replaces the avg_bits-dependent derate of hardware/utils/fit_rtl_mvu_lut_derate.py, which did not generalise across builds (per-dataset sum errors -19 % .. +72 %)."),
+         notes="Replaces the avg_bits-dependent derate of dataflow/utils/fit_rtl_mvu_lut_derate.py, which did not generalise across builds (per-dataset sum errors -19 % .. +72 %)."),
     Spec("thr_block_lut", "threshold_lut", lambda r: _is_thr(r) and _thr_trigger(r) < fcm.THR_DEPTH_TRIGGER_DISTRIBUTED,
          lambda r: [_thr_ctx(r)[0] * _thr_ctx(r)[3] * _thr_ctx(r)[4]], _before_lut, constants=("_THR_BLOCK_LUT_PER_INOUTBIT_PE",),
          formula="real_LUT ~= c * PE * in_bits * out_bits   (ram_style 'block': trigger 1024 / auto)", datasets=("int8_512_v2", "bil256_int6", "tied_dsr104"),
@@ -278,7 +278,7 @@ def write_calibration_rows(results, status, dataset_label):
             for name, val in new_constants(res).items():
                 old = live_value(name)
                 w.writerow({"date": date.today().isoformat(), "component": spec.component, "constant": name, "old_value": fmt(old) if old is not None else "",
-                            "new_value": fmt(val), "method": f"OLS through origin (hardware/utils/fit_cost_model_from_node_csv.py {spec.key}): {spec.formula}",
+                            "new_value": fmt(val), "method": f"OLS through origin (dataflow/utils/fit_cost_model_from_node_csv.py {spec.key}): {spec.formula}",
                             "dataset": f"{dataset_label} ({', '.join(f'{d}:{n}' for d, n in res['per_ds'].items())})", "n": res["n"], "r2_uncentered": round(r2, 3),
                             "median_abs_pct_err": f"{mape:.1f}%", "status": status, "notes": spec.notes})
 
@@ -314,8 +314,8 @@ def main():
     ap.add_argument("--datasets", default=",".join(DATASETS), help=f"comma-separated subset of: {', '.join(DATASETS)} (default all)")
     ap.add_argument("--csv", action="append", default=[], help="an extra node-resource CSV to pool in (repeatable)")
     ap.add_argument("--specs", default="", help="comma-separated spec keys to run (default all)")
-    ap.add_argument("--write-calibration-csv", action="store_true", help="append the fits to MILP/calibration.csv (status 'proposed', or 'applied' with --apply)")
-    ap.add_argument("--apply", action="store_true", help="patch the fitted constants into MILP/finn_cost_model.py")
+    ap.add_argument("--write-calibration-csv", action="store_true", help="append the fits to ILP/calibration.csv (status 'proposed', or 'applied' with --apply)")
+    ap.add_argument("--apply", action="store_true", help="patch the fitted constants into ILP/finn_cost_model.py")
     ap.add_argument("--label", default="", help="dataset label written to calibration.csv (default: the pooled dataset names)")
     a = ap.parse_args()
 

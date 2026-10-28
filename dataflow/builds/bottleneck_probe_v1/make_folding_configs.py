@@ -1,9 +1,9 @@
 """Generate the role-keyed FINN folding + FIFO config (and the model's prediction) for every probe case.
 
-Pure Python (standard library only): runs on the host or in lightmunet_dev. Uses MILP/analytical/bottleneck.py, so each case is
+Pure Python (standard library only): runs on the host or in lightmunet_dev. Uses ILP/analytical/bottleneck.py, so each case is
 model_bottleneck -> verify_with_sim (sizes FIFOs, proves no deadlock in simulation) -> to_folding_config.
 
-    python3 hardware/builds/bottleneck_probe_v1/make_folding_configs.py [--dilations ...] [--bits ...] [--T 72]
+    python3 dataflow/builds/bottleneck_probe_v1/make_folding_configs.py [--dilations ...] [--bits ...] [--T 72]
 
 Writes inputs/bottleneck_cin32_d{d}_int{b}_folding.json (see to_folding_config for the schema).
 """
@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_ROOT / "MILP" / "analytical"))
+sys.path.insert(0, str(REPO_ROOT / "ILP" / "analytical"))
 
 from bottleneck import model_bottleneck, to_folding_config, verify_with_sim  # noqa: E402
 

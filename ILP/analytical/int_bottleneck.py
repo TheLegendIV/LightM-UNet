@@ -6,7 +6,7 @@ enet/nnunetv2/nets/LayerQuantEnetFINN.py (U4 network: 1 -> 4 channels, 256x256 -
 
 Thr_in is the block's input quantizer, Thr_c / Thr_m the shared `branch_quant` on both branches, Thr_act the BN + ReLU after the concat.
 Thr_m sits UPSTREAM of the maxpool (landed FINN graph, rtlsim probes of 2026-10-03/04): the exported ONNX has MaxPool -> Quant, but the streamline step
-`MoveMaxPoolPastMultiThreshold` (hardware/finn_enet_build.py) swaps MaxPool -> MultiThreshold into MultiThreshold -> MaxPool. FINN does it to pool narrow data
+`MoveMaxPoolPastMultiThreshold` (dataflow/finn_enet_build.py) swaps MaxPool -> MultiThreshold into MultiThreshold -> MaxPool. FINN does it to pool narrow data
 behind a conv; here the pool already reads the INT-A input stream, so it only makes Thr_m process H*W pixels (4x the output count) at full resolution.
 Input H x W, output (H/2) x (W/2). Balance is on FRAME cycles: pixels_node * cyc_per_pixel <= F, reported cyc_px is per OUTPUT pixel.
 

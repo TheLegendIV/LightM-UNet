@@ -24,11 +24,11 @@ to the whole LayerQuantENet instance (e.g. "regular1.0.reduce.0",
 the literal path PyTorch's own module-tree walk produces. Confirmed
 (brevitas==0.12.1) that qnn.QuantConv2d IS-A nn.Conv2d and
 qnn.QuantConvTranspose2d IS-A nn.ConvTranspose2d, so this is mechanically
-guaranteed to match compression/hawq/block_utils.block_weight_targets's own
+guaranteed to match nas/hawq/block_utils.block_weight_targets's own
 naming for the WEIGHT half (verified: running block_weight_targets against a
 built LayerQuantENet instance's underlying blocks produces the identical key
 set layer_names_for's own weight half does -- see this file's own __main__
-self-test and compression/hawq/layer_sensitivity.py, whose report keys this
+self-test and nas/hawq/layer_sensitivity.py, whose report keys this
 was built to line up with directly). The ACTIVATION half has no external
 naming contract to satisfy (FP32 ENet.py has no activation-quantizer-
 equivalent site at all) -- it uses this same dotted-path convention purely
@@ -878,7 +878,7 @@ if __name__ == "__main__":
     from pathlib import Path as _Path
 
     _REPO_ROOT = _Path(__file__).resolve().parent.parent.parent.parent
-    sys.path.insert(0, str(_REPO_ROOT / "compression" / "hawq"))
+    sys.path.insert(0, str(_REPO_ROOT / "nas" / "hawq"))
 
     torch.manual_seed(0)
 

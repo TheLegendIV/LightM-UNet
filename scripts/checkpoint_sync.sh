@@ -1,6 +1,6 @@
 #!/bin/bash
 # One-click sync of nnU-Net checkpoints from the HPC cluster down to this
-# repo's local data/nnUNet_results/, so compression/collect_results.py can
+# repo's local data/nnUNet_results/, so nas/collect_results.py can
 # be run locally against freshly-finished HPC training runs. Uses rsync, so
 # re-running this only transfers what actually changed -- already-synced
 # checkpoints are skipped, not re-downloaded.
@@ -72,4 +72,4 @@ echo
     "$REMOTE" "$LOCAL"
 
 echo
-echo "Done. Run compression/collect_results.py for any newly-synced runs to update results.csv."
+echo "Done. Run nas/collect_results.py for any newly-synced runs to update results.csv."

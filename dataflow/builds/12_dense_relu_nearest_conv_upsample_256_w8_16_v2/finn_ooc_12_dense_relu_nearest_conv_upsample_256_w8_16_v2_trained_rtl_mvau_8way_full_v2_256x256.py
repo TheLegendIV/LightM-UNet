@@ -11,7 +11,7 @@ hardcoded channel counts); only deltas vs the base-width v2 job:
   - MODEL_NAME/CONV_ORDER_FILE point at the w8_16_v2 export
     (finn_export_12_dense_relu_nearest_conv_upsample_256_w8_16_v2_trained.py's
     output + its conv_order.json), not the base-width v2's.
-  - FOLDING_BLOCK_FILE points at the w8_16 MILP solve: MILP/artifacts/
+  - FOLDING_BLOCK_FILE points at the w8_16 MILP solve: ILP/artifacts/
     S12_dense_nn_upsample_256_w8_16_v2/layer_bits_folding_12_dense_relu_
     nearest_conv_upsample_256_w8_16_joint_alpha1.0_candidatebits468_forcedsp_
     lut50_bram50_dsp90_fps250_dsrate2.25.json (same hard caps as the

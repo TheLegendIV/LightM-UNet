@@ -1,4 +1,4 @@
-p='/workspace/LightM-UNet/compression/slurm/qat_12_dense_relu_nearest_upsample_wm_lex_dsr2_fps305_candidatebits468_ft15ep.job'
+p='/workspace/LightM-UNet/nas/slurm/qat_12_dense_relu_nearest_upsample_wm_lex_dsr2_fps305_candidatebits468_ft15ep.job'
 s=open(p).read()
 a=s.index('    for EP in 5 10 15; do'); b=s.index('    done\n',a)+len('    done\n')
 s=s[:a]+'    # Inference ONLY on checkpoint_best.pth for QAT jobs (epoch5/10/15 snapshots are deliberately not evaluated).\n'+s[b:]

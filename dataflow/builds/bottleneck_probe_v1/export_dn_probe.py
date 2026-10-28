@@ -8,9 +8,9 @@ Thr_out) -> downsampling bottleneck. Two skip variants per bit width (6 probes t
   fmpad  same block, but the identity conv is replaced by a channel zero-pad on the maxpool output
          (F.pad on the channel axis; the residual add's shared input quantizer then requantizes the padded skip, i.e. the
          "pad_thr" order of dn_bottleneck.py). FINN needs a custom pass to turn that Pad into an FMPadding on a regrouped stream
-         (hardware/finn_channel_pad.py, to be written in the FINN container, see FINN_AGENT_HANDOFF.md).
+         (dataflow/finn_channel_pad.py, to be written in the FINN container, see FINN_AGENT_HANDOFF.md).
 
-    python3 hardware/builds/bottleneck_probe_v1/export_dn_probe.py [--bits 4 6 8] [--variants fmpad mvau]
+    python3 dataflow/builds/bottleneck_probe_v1/export_dn_probe.py [--bits 4 6 8] [--variants fmpad mvau]
 Writes inputs/dn_cin16_cout32_in64_int{b}_{variant}.onnx and ..._probe.json.
 """
 from __future__ import annotations

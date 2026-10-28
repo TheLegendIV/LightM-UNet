@@ -79,7 +79,7 @@ SKIP_OPS = ("StreamingFIFO",)   # transparent when walking the graph; DWC is its
 
 
 # ------------------------------------------------------------------ signed-identity-Quant workaround (see
-# hardware/archive/20261001_refactor/probes/finn_build_probe_s12_context_v2.py for the original pattern)
+# dataflow/archive/20261001_refactor/probes/finn_build_probe_s12_context_v2.py for the original pattern)
 def step_force_signed_identity_quant(model, cfg):
     """QuantIdentityHandler hard-requires signed=1 on any identity Quant node (no Relu/Selu predecessor) --
     our thr_in stand-in (previous block's ReLU output) is a real unsigned QuantIdentity. Force signed=1 just so

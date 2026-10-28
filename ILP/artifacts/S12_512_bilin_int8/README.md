@@ -7,4 +7,4 @@ MILP solve of the S12 dense **bilinear-decoder 512x512** net (`config_12_dense_r
 * 300 FPS @ 100 MHz (350 / 325 FPS infeasible: the unfoldable initial StreamingMaxPool needs 327,680 cycles/frame -> 305 FPS at most), caps LUT 0.7 / BRAM 0.8 / DSP 0.8,
   `--lexicographic`: pass 1 accuracy, pass 2 minimise resources. SWU line buffer in BRAM allowed (6 layers took it).
 * Result: all 85 weight layers and all 85 activation sites at 8 bits (hence "int8"), LUT 51.6 % / BRAM 39.1 % / DSP 17.0 % after pass 2, 305.2 FPS.
-* `S12_512_bilin_int8_simfifo/` = the same folding with the FIFOs sized by `MILP/analytical/net_explicit.py`.
+* `S12_512_bilin_int8_simfifo/` = the same folding with the FIFOs sized by `ILP/analytical/net_explicit.py`.

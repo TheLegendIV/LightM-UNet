@@ -1,6 +1,6 @@
 #!/bin/bash
 # Uniform-INT6 bilinear 512 network (fine-tuned uniform INT6 checkpoint), MILP artifact S12_512_ablation_v2/cap40_fps150/uniform_int6 (0.4 caps, 150 FPS at 100 MHz, min-resources, recalibrated cost model).
-# Folding json = MILP/artifacts/S12_512_ablation_v2/cap40_fps150/uniform_int6/simfifo/layer_bits_folding_int6_cap40_simfifo.json (the MILP folding + net_explicit.py FIFO lists).
+# Folding json = ILP/artifacts/S12_512_ablation_v2/cap40_fps150/uniform_int6/simfifo/layer_bits_folding_int6_cap40_simfifo.json (the MILP folding + net_explicit.py FIFO lists).
 # The preamble takes INITIAL_POOL_ROUTE (infer_pool) from the json's pool_impl; the build checks the lowered partitions against it.
 # Run inside the FINN container:   docker exec finn_persistent bash /home/thelegendiv/finn/notebooks/enet/_launch_int6_cap40_v1.sh [preamble|build|all]   (default all: preamble + its checks, then the 8-way build;
 # the build only starts when the preamble (streamline accuracy gate, threshold check, bridge / FIFO check) exited 0)

@@ -8,8 +8,8 @@ and sums apply_folding_config_cost.estimate() over partitions. Fails if any part
 unless --partial is given (then the totals are labelled PARTIAL and must not be used as MILP caps).
 
 Usage (needs only `onnx`; lightmunet_dev container or host Python):
-    python MILP/utils/price_autofold_all_partitions.py \
-        --dir hardware/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/autofold_configs_all_partitions
+    python ILP/utils/price_autofold_all_partitions.py \
+        --dir dataflow/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/autofold_configs_all_partitions
 """
 from __future__ import annotations
 

@@ -14,7 +14,7 @@ FINN-mirror checkpoints across experiments.
 512x512 S12-dense, decoder_type="nearest_upsample" (bare nearest-neighbor
 resize on the skip/main branch, no conv/BN/act afterward at all -- see
 enet/nnunetv2/nets/ENet.py's UpsamplingBottleneck and
-MILP/configs/config_12_dense_relu_nearest_upsample.py). Byte-for-byte the
+ILP/configs/config_12_dense_relu_nearest_upsample.py). Byte-for-byte the
 same shape/config as nnUNetTrainerLayerQuantENet_12_dense_relu_nearest_upsample_perlayer
 (CHANNELS, BOTTLENECKS_PER_STAGE, CONTEXT_PATTERN="dense_dilation") -- only
 the network class differs.

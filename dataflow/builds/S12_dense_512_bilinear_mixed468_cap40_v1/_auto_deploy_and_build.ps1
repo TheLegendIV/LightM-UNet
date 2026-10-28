@@ -4,11 +4,11 @@
 # Progress is written to _auto_build.log next to this script.   Start:  powershell -File _auto_deploy_and_build.ps1
 $ErrorActionPreference = "Continue"
 $repo = "C:\DEV\repos\LightM-UNet"
-$job = "$repo\hardware\builds\S12_dense_512_bilinear_mixed468_cap40_v1"
+$job = "$repo\dataflow\builds\S12_dense_512_bilinear_mixed468_cap40_v1"
 $log = "$job\_auto_build.log"
 function Log($m) { "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  $m" | Out-File -Append -Encoding utf8 $log }
 $stem = "quantEnet_S12_dense_512_bilinear_mixed468_cap40_v1"
-$sim = "$repo\MILP\artifacts\S12_512_ablation_v2\cap40_fps150\mixed_468\simfifo\layer_bits_folding_mixed468_cap40_simfifo.json"
+$sim = "$repo\ILP\artifacts\S12_512_ablation_v2\cap40_fps150\mixed_468\simfifo\layer_bits_folding_mixed468_cap40_simfifo.json"
 $E = "finn_persistent:/home/thelegendiv/finn/notebooks/enet"
 Log "watcher started"
 $deadline = (Get-Date).AddHours(4)

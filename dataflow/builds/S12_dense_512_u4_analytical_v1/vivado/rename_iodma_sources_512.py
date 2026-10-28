@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""512 variant of hardware/_rename_iodma_sources.py.
+"""512 variant of dataflow/_rename_iodma_sources.py.
 
 Renames the Verilog module declarations of the two standalone IODMA ipgen
 source sets (input = GenericPartition_0, output = GenericPartition_7) with a

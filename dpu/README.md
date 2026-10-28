@@ -1,6 +1,6 @@
 # dpu/ — Vitis AI 3.0 deployment on the ZCU104 DPUs
 
-Alternative to the FINN path in [`../hardware/`](../hardware/README.md): the
+Alternative to the FINN path in [`../dataflow/`](../dataflow/README.md): the
 trained network is quantized to INT8 with Vitis AI, compiled to an `.xmodel`
 and run through VART on the DPU cores (two B4096) of the official ZCU104
 Vitis AI 3.0 / 2022.2 board image. Nothing here reuses FINN/Brevitas exports.
@@ -58,7 +58,7 @@ It copies the xmodel, `bench_board.py` and the 300 test images to the board (ove
 WSL ssh), runs the timed streams, single-image latency and the board power
 measurement there, scores the class maps with the repo Dice, and upserts the
 `stream_warm` / `single_image` rows (`int8_dpu`) into
-`analysis/report/MILP/final_results/benchmark_s12_512.csv` + `_env.json`.
+`report/MILP/final_results/benchmark_s12_512.csv` + `_env.json`.
 Timing covers DPU input → class map after argmax; preprocessing is done before
 and excluded. Power follows the FINN flow (sum of the board's rail monitors, `deployment/FINN_interface/.../power_mon.c`):
 the ZCU104 has only one INA226 (12 V input), but its two IRPS5401 regulators (i2c-4, 0x43/0x44) report `READ_POUT`

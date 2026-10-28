@@ -12,7 +12,7 @@ source /tools/Xilinx/Vivado/2022.2/settings64.sh > /dev/null 2>&1
 
 MODEL=quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated_ft15ep
 CONV_ORDER=quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated_conv_order.json
-FOLDING=layer_bits_folding_u4_analytical.json          # MILP/artifacts/S12_dense_256_u4_analytical_v1/int6_fps250_lat200/layer_bits_folding_final.json, copied under this name
+FOLDING=layer_bits_folding_u4_analytical.json          # ILP/artifacts/S12_dense_256_u4_analytical_v1/int6_fps250_lat200/layer_bits_folding_final.json, copied under this name
 SHAPES=block_shapes.json
 TAG=blocks256
 TARGET_FPS=250

@@ -1,5 +1,5 @@
 import onnx
-d='/workspace/LightM-UNet/hardware/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/autofold_configs_all_partitions/'
+d='/workspace/LightM-UNet/dataflow/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/autofold_configs_all_partitions/'
 from collections import Counter
 c=Counter()
 for i in range(8):

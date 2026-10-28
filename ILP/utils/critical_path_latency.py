@@ -12,7 +12,7 @@ pair) CONCURRENTLY as independent streaming engines. A flat sum charges
 BOTH branches' full cycle cost as if they ran one after another; the real
 contribution of a join to end-to-end latency is max(branch cycles), not
 their sum -- the faster branch just idles/buffers waiting for the slower
-one (see MILP/scan_fork_join_mismatch.py's own `predicted_depth`, which
+one (see ILP/scan_fork_join_mismatch.py's own `predicted_depth`, which
 estimates exactly that buffering need). So finn_milp.py's own reported
 latency (and anything gated on --max-latency-ms) systematically
 OVERESTIMATES true single-image latency, growing with how much fork/join
@@ -39,9 +39,9 @@ gets chosen). No FINN/HLS/rtlsim needed -- reuses the exact same per-layer
 into the folding file's `per_layer` dict.
 
 Usage (host Python, same env finn_milp.py itself runs in):
-    python MILP/critical_path_latency.py \\
+    python ILP/critical_path_latency.py \\
         --config config_12_dense_relu_warmstart150ep \\
-        --folding-file MILP/artifacts/.../layer_bits_folding_....json \\
+        --folding-file ILP/artifacts/.../layer_bits_folding_....json \\
         --clock-mhz 100
 """
 from __future__ import annotations
@@ -100,7 +100,7 @@ def reconstruct_path(sink: str, best_predecessor: dict[str, str | None]) -> list
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--config", required=True, help="MILP/configs/config_*.py module name (no .py).")
+    parser.add_argument("--config", required=True, help="ILP/configs/config_*.py module name (no .py).")
     parser.add_argument("--folding-file", type=Path, required=True,
                          help="finn_milp.py --out-file JSON (has a top-level 'per_layer' dict with a "
                               "'cycles' entry per layer name).")

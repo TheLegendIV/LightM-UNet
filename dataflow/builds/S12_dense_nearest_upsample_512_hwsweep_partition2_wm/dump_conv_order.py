@@ -1,7 +1,7 @@
 """Standalone conv-order dump for this job -- avoids the broken REPO_ROOT/
 DEFAULT_BITS_FILE path assumptions in the sibling
 ../12_dense_relu_nearest_upsample_512/finn_hawq_dump_conv_order_....py
-(its REPO_ROOT resolves to hardware/, not the actual repo root, and its
+(its REPO_ROOT resolves to dataflow/, not the actual repo root, and its
 hardcoded DEFAULT_BITS_FILE doesn't exist on disk) -- rather than touch that
 shared architecture-level file, this is a self-contained copy of the same
 forward-hook logic, using one of THIS job's own valid bits files (bit
@@ -38,7 +38,7 @@ CONTEXT_PATTERN = "dense_dilation"
 DECODER_TYPE = "nearest_upsample"
 
 DEFAULT_BITS_FILE = (
-    REPO_ROOT / "MILP" / "artifacts" / "S12_dense_nearest_upsample_512_hwsweep_partition2_wm"
+    REPO_ROOT / "ILP" / "artifacts" / "S12_dense_nearest_upsample_512_hwsweep_partition2_wm"
     / "baseline_both_off" / "layer_bits_SITES_baseline_both_off.json"
 )
 

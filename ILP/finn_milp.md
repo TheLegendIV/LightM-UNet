@@ -180,7 +180,7 @@ Notes and evidence:
   weights are a constant identity/zero matrix whose FINN datatype wasn't
   checked. Calibrate from per-node Vivado hierarchy reports
   (`hier_partition_N.rpt`, no longer present locally).
-- **Not modeled:** FIFOs, data-width converters (the analytical blocks in `MILP/analytical/` size both), the final layer's bias ChannelwiseOp, FMPadding stages, the extra INT8 threshold seen
+- **Not modeled:** FIFOs, data-width converters (the analytical blocks in `ILP/analytical/` size both), the final layer's bias ChannelwiseOp, FMPadding stages, the extra INT8 threshold seen
   on the InitialBlock pool path in the built graph (no Brevitas quantizer
   explains it).
 - Real 8-way build: the residual-join thresholds alone were 68 nodes =
@@ -190,7 +190,7 @@ Notes and evidence:
 ## FIFOs and DWCs: always modelled
 
 **Always on since 2026-10-14** (default since 2026-10-08; the `--no-model-fifos` and `--model-fifos` flags were removed). With a single `--candidate-bits` value the FIFO / DWC terms are in every solve; with several values the model switches itself off
-(it prices streams at one bit width) and says so. `fifo_model.py` prices what the analytical blocks (`MILP/analytical/`) showed to matter, inside the solve:
+(it prices streams at one bit width) and says so. `fifo_model.py` prices what the analytical blocks (`ILP/analytical/`) showed to matter, inside the solve:
 
 * the **skip FIFO** of every residual diamond (`find_fork_join_diamonds`, join kind `add`, long branch holding a padded windowed conv): `(n_fill + max(4, 8.5% n_fill))` pixels of `Cout/PE` words,
   `n_fill = pad*W + pad + 1` (x1.10 for downsampling blocks). Its size in bits is ~fold-independent; the PE of the node before the join only sets the stream width (BRAM aspect, pow2 rounding via
@@ -209,7 +209,7 @@ the block's `expand.0` / residual-add quantizer, cycles inside the per-node budg
 Its FIFOs are priced by `fifo_model.py`: the prefetch FIFO in front of its FMPadding (role `fmpad_k`), the FMPadding -> SWG -> VVAU FIFOs at the up block's 32 words, and the up block's join FIFOs for the depthwise variant: the window delays the
 main branch, so the ext-end skip FIFO is `UP_SKIP_ROWS_DW = 6` input rows (simulation: 5.8 / 5.1 rows at up4 / up5) and `FIFO main` (producer role `thr_k`) `UP_MAIN_ROWS_DW = 0.5`. For the FINN bridge the node is written twice: in `extra_nodes`
 (where its resources are counted, once) and MIRRORED into `per_layer` in the layer-entry schema (`pe`, `simd`, `swg_simd`, `fmpad_simd`, `parallel_window`, `thr_pe` / `thr_ram_style` = the skip_quant node's, `frozen: true`), because the bridge looks a
-`conv_order.json` logical name up in `per_layer` (`hardware/finn_s12_build_steps.py`, `_LEAF_ROLES['main_up.1']`). `net_explicit.py` builds the up blocks with the depthwise path whenever `per_layer` carries the layer, and seeds the simulation with
+`conv_order.json` logical name up in `per_layer` (`dataflow/finn_s12_build_steps.py`, `_LEAF_ROLES['main_up.1']`). `net_explicit.py` builds the up blocks with the depthwise path whenever `per_layer` carries the layer, and seeds the simulation with
 the MILP's own FIFO depths. Folding jsons from solves made before this change are completed after the fact by `analytical/add_frozen_dw_fold.py`. Cost: at 512x512 INT6 the two nodes add ~3.1k LUT, 2 DSP and, with their FIFOs, ~3 BRAM18.
 
 Inter-block FIFOs are fixed at depth 2 (priced like the analytical artifact). NOT priced (no closed form, sized by the analytical simulations): the downsampling `Dup -> SWG_r` feed, the up-block and
@@ -223,7 +223,7 @@ unlike per element): for every dataflow edge P -> C between COMPUTE nodes (conv 
 Everything else (thresholds, dup, add, pools, upsample, concat, the 1-channel input quantizer) is relayed through (C is compared with its nearest compute ancestors); forks and joins need no special case. Thresholds / dup / add
 are NOT DSR nodes: their slowest fold is tiny (a 4-channel threshold at PE 1 = 65,536 cycles) while the conv behind them cannot be faster than ~131,072 cycles under a 72-bit width cap, so an edge rule on them is
 infeasible at any small pct. Because each node picks from a few distinct cycle values, the disjunction is written as pair exclusions on cycle-class indicators: `u_P[c1] + sum(u_C[c2] for c2 > (1+pct) c1) <= 1` (no big-M, no slack variable).
-It is the analytical build's block rule (`MILP/analytical/net_fold.py --dsr-pct`) applied edge by edge instead of block by block. A pct is only usable above the net's tightest feasible chain (about 34 % for the 512 nearest net, see below).
+It is the analytical build's block rule (`ILP/analytical/net_fold.py --dsr-pct`) applied edge by edge instead of block by block. A pct is only usable above the net's tightest feasible chain (about 34 % for the 512 nearest net, see below).
 The earlier floor (`--dsr-floor`, default 0.6, 0.33 in the 256 ablation: "a node may always use up to floor * F") is removed: it acted as a hidden throughput target of `fps / floor` and made the rule inert at the default. The DSR is now OFF unless asked for;
 old sweeps that relied on the 4 % / 0.6 default must pass `--dsr-pct 4` explicitly (and will usually be infeasible), or `--min-stall`, which finds the least-stall folding without a pct.
 
@@ -233,8 +233,8 @@ LUT / DSP-weighted utilisation) and the same figures in `summary.csv` (`dsr_*` c
 
 **Infeasibility without a floor (2026-10-11).** There is deliberately NO exemption for nodes that cannot satisfy the rule: if the rule can only hold by exempting a node, the allowance is infeasible and the run says so. On the 512 nearest net
 (INT6, 250 fps, width cap 96) the end of the net is the obstacle: `regular5.0.conv` (1 -> 1, 3x3) can only run at 66,566 or 196,608 cycles (its next fold, 590,339, exceeds F), and `final` cannot go below ~263,171 cycles (1 cycle per
-512x512 output pixel, SIMD 16 / PE 5 already used), so the chain `conv -> expand.0 -> final` needs `1 + pct >= 263,171 / 196,608`, i.e. pct >= ~34 %. The rule is infeasible below that; see `MILP/artifacts/S12_dense_512_dsr_ablation_v1/` and
-`MILP/test_dsr_pct.py`. (A `--dsr-exempt-stuck` option that relayed such nodes through was written and removed the same day: an exempted constraint is not a constraint.)
+512x512 output pixel, SIMD 16 / PE 5 already used), so the chain `conv -> expand.0 -> final` needs `1 + pct >= 263,171 / 196,608`, i.e. pct >= ~34 %. The rule is infeasible below that; see `ILP/artifacts/S12_dense_512_dsr_ablation_v1/` and
+`ILP/test_dsr_pct.py`. (A `--dsr-exempt-stuck` option that relayed such nodes through was written and removed the same day: an exempted constraint is not a constraint.)
 
 **What `--dsr-pct` used to mean (removed 2026-10-08).** Until then `--dsr-pct` (with `--dsr-pct-pass2` and `--min-dsr`) was an ELEMENT-rate chain constraint (cycles per OUTPUT element of a node vs the slowest rate anywhere
 downstream; off by default). It was removed and the frame-rate rule above took the name, because equal element rate forces every node with a small output tensor to be proportionally faster than the frame period needs:
@@ -345,7 +345,7 @@ joins were visible.
 ## Constants
 
 - `XCZU7EV = {LUT: 230,400, BRAM_18K: 624, DSP: 1,728, URAM: 96}` —
-  xczu7ev-ffvc1156-2-e. DSP matches `hardware/results.csv`'s DSP_pct column;
+  xczu7ev-ffvc1156-2-e. DSP matches `dataflow/results.csv`'s DSP_pct column;
   URAM=96 URAM288 blocks, confirmed against the real S12-dense-warmstart build
   (URAM=2/96).
 - `CANDIDATE_BITS = (2, 4, 6, 8, 16)` — usually overridden with
@@ -402,7 +402,7 @@ Every run so far passed `--force-dsp`, which masked this.
 
 | flag | notes |
 |---|---|
-| `--config` | `MILP/configs/config_*.py`, injected into module globals. No default config. |
+| `--config` | `ILP/configs/config_*.py`, injected into module globals. No default config. |
 | `--sensitivity-file` | `layer_sensitivity_*.json`. Must cover every conv layer (MaxPool may be absent). |
 | `--candidate-bits` | e.g. `4,6,8`. |
 | `--hard-{lut,bram,dsp,uram}-fraction` | hard caps, default 1.0. URAM is inert. |
@@ -496,7 +496,7 @@ Regenerate the pruning report / ONNX / `_diagnostics.branch_imbalance` /
 `_diagnostics.chain_rate_imbalance` for an existing result (also writes both
 back into `--result` itself, so an older artifact solved before these
 diagnostics existed gets them too):
-`python MILP/milp_outputs.py --result <json> --sensitivity-file <json>`.
+`python ILP/milp_outputs.py --result <json> --sensitivity-file <json>`.
 
 ## Scope boundary
 
@@ -507,7 +507,7 @@ cost model's calibration, not a certified hardware guarantee.
 
 ## History
 
-- 2026-10-14: `--refine-bits` (needs `--lexicographic`): third pass = pass 2's folding pinned (`solve_joint_perlayer(pinned_fold=...)`: every other fold option of every node switched off), bits freed, accuracy objective under the ORIGINAL caps; pass 2 is written as `stage2_<out>`, the final output is pass 3. On S12 bilinear-512 at 300 FPS (caps 0.7 / 0.9 / 0.9) it changed the sensitivity sum by <0.15 % (`MILP/artifacts/S12_dense_bilinear_512_fps300_v1/*_refine`): the accuracy objective is already saturated, the caps were not what limited the bits.
+- 2026-10-14: `--refine-bits` (needs `--lexicographic`): third pass = pass 2's folding pinned (`solve_joint_perlayer(pinned_fold=...)`: every other fold option of every node switched off), bits freed, accuracy objective under the ORIGINAL caps; pass 2 is written as `stage2_<out>`, the final output is pass 3. On S12 bilinear-512 at 300 FPS (caps 0.7 / 0.9 / 0.9) it changed the sensitivity sum by <0.15 % (`ILP/artifacts/S12_dense_bilinear_512_fps300_v1/*_refine`): the accuracy objective is already saturated, the caps were not what limited the bits.
 
 - 2026-10-15: the accuracy objective is scaled by `SENSITIVITY_OBJ_SCALE` = 1e6. The mean normalised sensitivity is ~1e-4 with per-layer differences ~1e-6 (the min-max span is set by one huge-trace layer), below CBC's tolerances: a pinned re-solve beat an "Optimal" result (`stage2.4.reduce.0` at 6 activation bits although 8 was feasible and better, also at gap 1e-5); with the scale all 85 layers come out at 8 bits under no caps. Accuracy-objective solves from before this may be slightly suboptimal.
 - 2026-10-15: the accuracy objective uses |sensitivity| (= |trace| x delta, delta > 0), weights and activations: a Hessian-trace estimate can be negative, which made FEWER bits look better and sent noise-negative layers to the lowest bits. Default, no flag; solves from earlier sensitivity files with negative traces no longer reproduce.
@@ -516,7 +516,7 @@ cost model's calibration, not a certified hardware guarantee.
 - 2026-10-16: model corrected against the real S12 512 INT8 build (rtlsim of the partitions, Vivado post-synthesis, board steady-state interval 525,930 cycles/frame = 2.805 ms at 187.48 MHz). The previous model predicted 327,680 cycles (572 FPS at 187.48 MHz, −37.7 %); the corrected one predicts 524,812 (357.2 FPS), within 0.2 % of the board (`collect_results.py --milp-json`).
   - `LabelSelect_hls` costs 2 cycles per fold and pixel (not pipelined across pixels; PE 1 = 10 cycles/pixel, PE 5 = 2 cycles/pixel, both measured), so every PE | labels is offered again (the earlier forced PE = labels is gone) and it is the hard floor of the whole network (524,288 cycles at 512×512). It is no longer a DSR node (its floor is above the final conv's). LUT: 226 at PE 5 (one real point, replaces the 64/PE placeholder).
   - `StreamingMaxPool_hls` cycles follow its loop nest: 6.5 cycles per (yp, ky, xp) iteration at 2×2 (kw + 4.5), i.e. 3.3 cycles/input pixel, not FINN's 1.25 (partition 0 measured 854,044 cycles, was priced 327,680).
-  - New per-pool choice, `--pool-impl {streaming,swg_pool,choose}` (default choose): StreamingMaxPool_hls (not foldable) or FINN's `Pool` route (InferPool: depthwise SWG + `Pool_hls`, PE | C, `finn_cost_model.pool_swg_cost`; Pool_hls 123 LUT real at 1 channel / 8 bit; no per-window overhead, 328,268 cycles measured for partition 0). `--pool-impl-scope {initial,all}` (default initial): only the initial 1-channel pool may use InferPool, the only pool the FINN flow lowers today (`hardware/finn_infer_pool_initial.py`); `all` also prices the down blocks' pools. Exported as `per_layer[<pool>].pool_impl` (`variant` `pool_swg`, `pe` = Pool PE); `hardware/finn_s12_preamble.py` reads it to select the pool route (no more `INITIAL_POOL_ROUTE` by hand) and `finn_s12_build.py` checks the lowered partitions against it. Offering InferPool for the down blocks is not buildable by the bridge yet; the Vivado risk is cleared: a down-block probe with the Pool route (`dn_cin16_cout32_in64_int{8,4}_mvau_pool`, 16 -> 32 channels, 64x64, run 2026-10-16 with `finn_bottleneck_probe_build.py --ooc --skip-rtlsim`) goes through stitching and out-of-context synthesis without the `TclStackFree` crash seen on the init-block probes in October (INT8: 6,593 LUT, 8 BRAM18, WNS +6.4 ns / 278 MHz; INT4: 3,390 LUT, 1 BRAM18, WNS +6.8 ns / 311 MHz; FIFOs at the fixed depth, not sized by simulation, and no rtlsim: Verilator cannot read the RTL MVAU's SystemVerilog package `mvu_pkg` in that harness, so the INT8 throughput of the Pool route in a down block is not simulated -- the INT4 rtlsim of 2026-10-03 gave 72 cycles/pixel = the model).
+  - New per-pool choice, `--pool-impl {streaming,swg_pool,choose}` (default choose): StreamingMaxPool_hls (not foldable) or FINN's `Pool` route (InferPool: depthwise SWG + `Pool_hls`, PE | C, `finn_cost_model.pool_swg_cost`; Pool_hls 123 LUT real at 1 channel / 8 bit; no per-window overhead, 328,268 cycles measured for partition 0). `--pool-impl-scope {initial,all}` (default initial): only the initial 1-channel pool may use InferPool, the only pool the FINN flow lowers today (`dataflow/finn_infer_pool_initial.py`); `all` also prices the down blocks' pools. Exported as `per_layer[<pool>].pool_impl` (`variant` `pool_swg`, `pe` = Pool PE); `dataflow/finn_s12_preamble.py` reads it to select the pool route (no more `INITIAL_POOL_ROUTE` by hand) and `finn_s12_build.py` checks the lowered partitions against it. Offering InferPool for the down blocks is not buildable by the bridge yet; the Vivado risk is cleared: a down-block probe with the Pool route (`dn_cin16_cout32_in64_int{8,4}_mvau_pool`, 16 -> 32 channels, 64x64, run 2026-10-16 with `finn_bottleneck_probe_build.py --ooc --skip-rtlsim`) goes through stitching and out-of-context synthesis without the `TclStackFree` crash seen on the init-block probes in October (INT8: 6,593 LUT, 8 BRAM18, WNS +6.4 ns / 278 MHz; INT4: 3,390 LUT, 1 BRAM18, WNS +6.8 ns / 311 MHz; FIFOs at the fixed depth, not sized by simulation, and no rtlsim: Verilator cannot read the RTL MVAU's SystemVerilog package `mvu_pkg` in that harness, so the INT8 throughput of the Pool route in a down block is not simulated -- the INT4 rtlsim of 2026-10-03 gave 72 cycles/pixel = the model).
 - 2026-10-15: every objective mode is now two-pass with the same shape (pass 1 optimises its objective, pass 2 minimises resources with that objective capped at (1 + eps) x its optimum, eps 0.001): the DEFAULT accuracy objective (pass 1 = mean normalised |sensitivity| x 1e6; `--max-accuracy-eps`), `--max-fps` (frame time) and `--min-stall` (total stall); `--min-resources` is the resource objective itself. Bits and folding are both free in pass 2. Removed `--lexicographic` (pass 2 pinned pass 1's bits and capped the resources at pass 1's use) and `--refine-bits` (built on it), with their stage1_/stage2_ outputs and the `lexicographic` / `stage1_*` / `stage2_*` columns of summary.csv and `pinned_fold`. Old scripts that pass `--lexicographic` / `--refine-bits` fail. Result in `_diagnostics.max_accuracy`.
 - 2026-10-15: the SWU line buffer (sliding window of every conv with a window) may sit in BRAM (`ram_style="block"`) or LUTRAM, a free per-layer choice (variant `rtl_dsp_noact1_swu_block`, `per_layer[...]["swu_ram_style"]`, default on, `SWU_BRAM`); the bridge writes `ram_style` onto the SWU node. PROVISIONAL: the BRAM count is FINN's own estimator (all 43 real SWU nodes in the calibration data are LUTRAM). Earlier solves (LUTRAM only) no longer reproduce. The frozen depthwise conv's SWU stays LUTRAM.
 - 2026-10-15: join thresholds (`skip_quant`, `residual_add`, `out_act`) take `block` or `distributed` freely (were LUTRAM only); the bridge already pins `depth_trigger_bram` from the chosen style.
@@ -565,7 +565,7 @@ cost model's calibration, not a certified hardware guarantee.
   `ram_style` changed from hard-coded `RAM_STYLE_BLOCK` to `RAM_STYLE_AUTO`
   (`pad_mvau`'s extra-node cost too). The old code's comment claimed
   block-always was "what real hardware does" — real per-node Vivado data
-  (`MILP/calibration.csv`'s `mvau_weight_bram` row) shows that was wrong:
+  (`ILP/calibration.csv`'s `mvau_weight_bram` row) shows that was wrong:
   179/189 real MVAU_rtl/VVAU_hls nodes actually built with `ram_style=auto`
   land in LUTRAM (0 real BRAM), which `RAM_STYLE_BLOCK`'s always-nonzero
   prediction never captured. See `finn_cost_model.md`'s new `RAM_STYLE_AUTO`
@@ -631,9 +631,9 @@ cost model's calibration, not a certified hardware guarantee.
   (`skip_quant`/`residual_add`/`out_act`) are LUTRAM-only. Removed `--tie-residual-bits`, `--joins-distributed`,
   `--allow-lut-mult`, `--require-simd-ge-pe`; renamed `--hard-*-fraction` -> `--max-*-fraction`; added `--min-dsr`.
 - 2026-10-05: new extra-node kind `pool_quant` (Thresholding_rtl, the InitialBlock's branch-quant threshold on the maxpool branch) UPSTREAM of the maxpool:
-  `Dup -> initial.pool_quant -> initial.pool -> Concat`. FINN's streamline step `MoveMaxPoolPastMultiThreshold` (hardware/finn_enet_build.py) swaps the exported
+  `Dup -> initial.pool_quant -> initial.pool -> Concat`. FINN's streamline step `MoveMaxPoolPastMultiThreshold` (dataflow/finn_enet_build.py) swaps the exported
   `MaxPool -> Quant` into `Quant -> MaxPool`, which the landed graphs of the init probes (FIFO edge lists, `Thresholding_rtl_1` ahead of the pool) confirm. It sees
   the full-resolution pool input, so it costs H_in*W_in cycles (4x the output pixels) and was missing from every solve before this date (the analytical
-  per-block model `MILP/analytical/int_bottleneck.py` already had it). Touches `layer_topology.compute_dataflow_graph`, `finn_milp.THRESHOLD_KINDS/_node_shape`,
-  `expand_layer_bits` (act-source rule only, no new quantizer site) and `test_dataflow_graph.py`. Old artifacts under `MILP/artifacts/` were solved without it
+  per-block model `ILP/analytical/int_bottleneck.py` already had it). Touches `layer_topology.compute_dataflow_graph`, `finn_milp.THRESHOLD_KINDS/_node_shape`,
+  `expand_layer_bits` (act-source rule only, no new quantizer site) and `test_dataflow_graph.py`. Old artifacts under `ILP/artifacts/` were solved without it
   (one node fewer, 88 LUT and 65,536 cycles less); the S12 bridge (`build_partition_folding_config`) does not apply a PE to it, like `input_quant` / `act`.

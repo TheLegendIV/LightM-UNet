@@ -4,7 +4,7 @@ architecture at the w8/16 width point (CHANNELS=(4, 8, 16, 8, 4)).
 CORRECTION: an earlier assumption that v4 was "pure new MILP solve, same
 export/checkpoint as w8_16_v2" was WRONG -- v4 has its OWN dedicated QAT
 checkpoint (nnUNetTrainerLayerQuantEnetFINN_..._w8_16_v4, see
-compression/slurm/qat_12_dense_relu_nearest_conv_upsample_256_w8_16_v4.job)
+nas/slurm/qat_12_dense_relu_nearest_conv_upsample_256_w8_16_v4.job)
 and its own export (finn_export_12_dense_relu_nearest_conv_upsample_256_w8_16_v4_trained.py).
 This is otherwise a byte-for-byte copy of
 finn_ooc_12_dense_relu_nearest_conv_upsample_256_w8_16_v2_trained_rtl_mvau_8way_full_v2_256x256.py
@@ -13,7 +13,7 @@ with these deltas:
   - MODEL_NAME/CONV_ORDER_FILE point at the w8_16_v4 export's own output +
     its own conv_order.json (finn_export_..._w8_16_v4_trained.py's output +
     finn_hawq_dump_conv_order_..._w8_16_v4.py's output).
-  - FOLDING_BLOCK_FILE points at the w8_16_v4 MILP solve: MILP/artifacts/
+  - FOLDING_BLOCK_FILE points at the w8_16_v4 MILP solve: ILP/artifacts/
     S12_dense_nn_upsample_256_w8_16_v4/layer_bits_folding_S12_dense_nn_
     upsample_256_w8_16_v4.json (hard-BRAM-fraction 0.2 vs v2's 0.5,
     target-fps 200 vs v2's 250, optimize-downstream-rate 2.5 vs v2's 2.25 --
@@ -25,10 +25,10 @@ with these deltas:
 
 Prerequisite: export the w8_16_v4 checkpoint and run its OWN preamble
 (NOT v2's -- this checkpoint/export is different):
-    python hardware/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/finn_export_12_dense_relu_nearest_conv_upsample_256_w8_16_v4_trained.py --skip-cross-test
-    python hardware/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/finn_hawq_dump_conv_order_12_dense_relu_nearest_conv_upsample_256_w8_16_v4.py
-    docker cp hardware/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/outputs/quantEnet_12_dense_relu_nearest_conv_upsample_256_w8_16_v4_trained.onnx <container>:/home/thelegendiv/finn/notebooks/enet/
-    docker cp hardware/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/outputs/quantEnet_12_dense_relu_nearest_conv_upsample_256_w8_16_v4_trained_conv_order.json <container>:/home/thelegendiv/finn/notebooks/enet/
+    python dataflow/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/finn_export_12_dense_relu_nearest_conv_upsample_256_w8_16_v4_trained.py --skip-cross-test
+    python dataflow/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/finn_hawq_dump_conv_order_12_dense_relu_nearest_conv_upsample_256_w8_16_v4.py
+    docker cp dataflow/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/outputs/quantEnet_12_dense_relu_nearest_conv_upsample_256_w8_16_v4_trained.onnx <container>:/home/thelegendiv/finn/notebooks/enet/
+    docker cp dataflow/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/outputs/quantEnet_12_dense_relu_nearest_conv_upsample_256_w8_16_v4_trained_conv_order.json <container>:/home/thelegendiv/finn/notebooks/enet/
     docker exec -e HOME=/tmp/home_dir <container> bash -c \\
         "cd /home/thelegendiv/finn/notebooks/enet && python3 finn_hawq_preamble_12_dense_relu_nearest_conv_upsample_256_w8_16_v4_trained_256x256.py"
 

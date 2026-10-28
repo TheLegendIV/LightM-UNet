@@ -7,8 +7,8 @@ reuse of w8_16_v2's export, see finn_export_..._w8_16_v4_trained.py's
 docstring for the correction of an earlier "pure new solve" assumption).
 
 Prerequisite (run inside the pytorch training container first):
-    python hardware/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/finn_export_12_dense_relu_nearest_conv_upsample_256_w8_16_v4_trained.py --skip-cross-test
-    docker cp hardware/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/outputs/quantEnet_12_dense_relu_nearest_conv_upsample_256_w8_16_v4_trained.onnx \\
+    python dataflow/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/finn_export_12_dense_relu_nearest_conv_upsample_256_w8_16_v4_trained.py --skip-cross-test
+    docker cp dataflow/builds/12_dense_relu_nearest_conv_upsample_256_w8_16_v4/outputs/quantEnet_12_dense_relu_nearest_conv_upsample_256_w8_16_v4_trained.onnx \\
         <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/
 
 Run inside the FINN container:

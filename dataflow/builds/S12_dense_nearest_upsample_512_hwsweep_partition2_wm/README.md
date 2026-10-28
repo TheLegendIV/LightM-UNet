@@ -1,6 +1,6 @@
 # S12_dense_nearest_upsample_512_hwsweep_partition2_wm -- MILP dsr/pbi-ratio hardware validation
 
-Real Vivado OOC-synth validation of `MILP/artifacts/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/`'s
+Real Vivado OOC-synth validation of `ILP/artifacts/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/`'s
 5 sweep points (`baseline_both_off`, `dsrSweep_pbiOff_dsr{1.5,3.0,5.0}`, `pbiSweep_dsrOff_pbi1.5`),
 partition 2 only, PLUS one extra build for `baseline_both_off` using FINN's own
 auto-fold instead of the MILP-chosen (`per_layer` pe/simd) folding -- 6 builds total.
@@ -36,7 +36,7 @@ that the 8-way full builds use -- all FIFOs stay at FINN's default
 
 Steps 1-4 are cheap (no Vivado) and run sequentially per tag; step 5 is the
 expensive real-synth step and is launched for all 6 tags in parallel (see
-`run_sweep.sh`), following the precedent in `hardware/temp/run_partitions_3456_parallel.sh`.
+`run_sweep.sh`), following the precedent in `dataflow/temp/run_partitions_3456_parallel.sh`.
 
 Deployment: scripts are `docker cp`-ed flat into the FINN container's
 `finn/notebooks/enet/` (see AGENTS.md) -- this folder's layout is git

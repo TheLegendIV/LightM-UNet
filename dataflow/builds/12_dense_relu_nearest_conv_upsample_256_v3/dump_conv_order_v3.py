@@ -3,9 +3,9 @@ checkpoint/bits/architecture -- does NOT re-run calibration or re-export the onn
 bit-independent, so this is safe to produce standalone against the onnx already on disk).
 
 Usage (pytorch container):
-    docker exec <container> python3 hardware/builds/12_dense_relu_nearest_conv_upsample_256_v3/dump_conv_order_v3.py
+    docker exec <container> python3 dataflow/builds/12_dense_relu_nearest_conv_upsample_256_v3/dump_conv_order_v3.py
 
-Output: hardware/builds/12_dense_relu_nearest_conv_upsample_256_v3/outputs/quantEnet_12_dense_relu_nearest_conv_upsample_256_v3_trained_conv_order.json
+Output: dataflow/builds/12_dense_relu_nearest_conv_upsample_256_v3/outputs/quantEnet_12_dense_relu_nearest_conv_upsample_256_v3_trained_conv_order.json
 """
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
-sys.path.insert(0, str(REPO_ROOT / "hardware"))
-sys.path.insert(0, str(REPO_ROOT / "hardware" / "builds" / "12_dense_relu_nearest_conv_upsample_256"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow" / "builds" / "12_dense_relu_nearest_conv_upsample_256"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from nnunetv2.nets.LayerQuantENet import layer_names_for  # noqa: E402

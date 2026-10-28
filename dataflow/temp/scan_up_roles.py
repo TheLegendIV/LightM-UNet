@@ -2,7 +2,7 @@ import json
 import glob
 
 base = (
-    r"C:\DEV\repos\LightM-UNet\hardware\builds\S12_dense_256_u4_analytical_v1\outputs\int6_fps250_lat200_milpfold_8way_20261005_235400"
+    r"C:\DEV\repos\LightM-UNet\dataflow\builds\S12_dense_256_u4_analytical_v1\outputs\int6_fps250_lat200_milpfold_8way_20261005_235400"
     r"\intermediate_models_listing_only\supported_op_partitions"
 )
 

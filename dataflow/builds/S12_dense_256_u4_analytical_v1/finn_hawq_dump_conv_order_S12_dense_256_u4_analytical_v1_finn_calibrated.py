@@ -4,9 +4,9 @@ to the sibling w8_16_v4 dump script, just pointed at this job's own export modul
 BOTTLENECKS_PER_STAGE / CONTEXT_PATTERN / DECODER_TYPE / DEFAULT_BITS_FILE.
 
 Usage (run inside the pytorch training container):
-    python hardware/builds/S12_dense_256_u4_analytical_v1/finn_hawq_dump_conv_order_S12_dense_256_u4_analytical_v1_finn_calibrated.py
+    python dataflow/builds/S12_dense_256_u4_analytical_v1/finn_hawq_dump_conv_order_S12_dense_256_u4_analytical_v1_finn_calibrated.py
 
-Output: hardware/builds/S12_dense_256_u4_analytical_v1/outputs/
+Output: dataflow/builds/S12_dense_256_u4_analytical_v1/outputs/
     quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated_conv_order.json
 """
 from __future__ import annotations
@@ -22,7 +22,7 @@ import brevitas.nn as qnn
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
-sys.path.insert(0, str(REPO_ROOT / "hardware"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from finn_export_S12_dense_256_u4_analytical_v1_finn_calibrated import (  # noqa: E402

@@ -1,12 +1,12 @@
 # 256x256 variant of config_12_dense_relu_nearest_upsample (U4 widths (4, 16, 32, 16, 4), bottlenecks (4, 8, 8, 2, 1), plain nearest decoder, dense dilation
-# pattern): the network the analytical per-block flow (MILP/analytical/net_fold.py) assembles. Only INPUT_HW and NET_NAME differ from the 512 config; its
+# pattern): the network the analytical per-block flow (ILP/analytical/net_fold.py) assembles. Only INPUT_HW and NET_NAME differ from the 512 config; its
 # docstring below is kept verbatim for provenance.
 """Shared constants for nnUNetTrainerENet_12_dense_relu_nearest_upsample's
 ("S12-dense, bare nearest-neighbor decoder") HAWQ per-layer W/A search -- the
-already-trained checkpoint (compression/results.csv's own
+already-trained checkpoint (nas/results.csv's own
 nnUNetTrainerENet_12_dense_relu_nearest_upsample row, stage
 "12_dense_relu_nearest_upsample", dice=0.7734, 140/150 epochs, see
-compression/slurm/stage_12_dense_relu_nearest_upsample_warmstart150ep.job's
+nas/slurm/stage_12_dense_relu_nearest_upsample_warmstart150ep.job's
 header for this checkpoint's own training status). 512x512 patch size,
 confirmed via this net's own plans.json (`patch_size: [512, 512]`).
 

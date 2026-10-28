@@ -1,6 +1,6 @@
 """Collect real per-partition + aggregate resource/timing results from an
 8-way partitioned FINN OOC-synth build and append/update rows in
-hardware/results.csv, following the schema/conventions already established
+dataflow/results.csv, following the schema/conventions already established
 in that file (see any `*_8way_partitioned_ooc_synth_TOTAL` row + its 8
 sibling `*_partition_N_ooc_synth` rows for the reference format this script
 reproduces).
@@ -26,7 +26,7 @@ ooc_synth_and_timing_per_partition.json comes from a Tcl query
 essentially every build so far regardless of whether resType=dsp was forced
 and actually synthesized to real DSP48E2 primitives -- confirmed wrong by
 manual cross-check against the raw Vivado-generated utilization_placed.rpt
-in several past builds (see hardware/results.csv notes on the w16/w24 HAWQ
+in several past builds (see dataflow/results.csv notes on the w16/w24 HAWQ
 rows). Two ways to correct it (pick whichever is easier to stage locally):
   --dsp-build-tmp-dir  A LOCAL copy of the whole build's
       finn_build_tmp/<job>/ dir (e.g. `docker cp <container>:.../finn_build_tmp/<job> <local_dir>`,
@@ -48,7 +48,7 @@ is stopped/removed or this correction is lost for good (this has happened
 at least once).
 
 Usage:
-    python hardware/collect_results.py \\
+    python dataflow/collect_results.py \\
         --report-dir /path/to/local/copy/of/OUTPUT_DIR/report \\
         --model-name quantEnet_12_separable_dense_relu_min4_hawq_trained_int8 \\
         --config hawq_12_sep_dense_relu_min4_trained_hardcap131_8way \\
@@ -292,7 +292,7 @@ def build_total_row(partitions: list[dict], base: dict, estimate: dict | None, r
 
 def upsert_rows(rows: list[dict]) -> None:
     """Read-modify-write on the shared results.csv, mirroring
-    compression/collect_results.py's upsert_row locking/retry pattern.
+    nas/collect_results.py's upsert_row locking/retry pattern.
     Dedupes on (model_name, config) so re-running this script for the same
     build updates its existing rows instead of duplicating them."""
     rows = [{col: row.get(col) for col in RESULTS_COLUMNS} for row in rows]

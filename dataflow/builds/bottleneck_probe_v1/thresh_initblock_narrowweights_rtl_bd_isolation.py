@@ -87,7 +87,7 @@ from finn.transformation.fpgadataflow.synth_ooc import SynthOutOfContext  # noqa
 
 
 def _move_transpose_past_concat(model: ModelWrapper, perm=(0, 3, 1, 2)):
-    """Trimmed copy of hardware/finn_enet_build.py's free function of the same name (kept
+    """Trimmed copy of dataflow/finn_enet_build.py's free function of the same name (kept
     self-contained here on purpose). Rewrites an axis=1 Concat whose every input is produced by
     an identical, non-forked Transpose(perm) into an axis=-1 Concat + a single trailing
     Transpose(perm)."""

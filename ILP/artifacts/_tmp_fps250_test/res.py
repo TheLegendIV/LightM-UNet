@@ -1,5 +1,5 @@
 import csv
-rows=list(csv.DictReader(open('/workspace/LightM-UNet/compression/results.csv')))
+rows=list(csv.DictReader(open('/workspace/LightM-UNet/nas/results.csv')))
 for r in rows:
     n=r['config_name']
     if 'nearest_upsample_wm_' in n and 'ft15ep' in n and ('uniform' in n or 'joint' in n):

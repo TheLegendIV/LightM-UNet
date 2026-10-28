@@ -1,6 +1,6 @@
 """Folding + FIFO config (and the model's prediction) for the downsampling probes. Standard library only.
 
-    python3 hardware/builds/bottleneck_probe_v1/make_dn_folding_configs.py [--bits 4 6 8] [--variants fmpad mvau]
+    python3 dataflow/builds/bottleneck_probe_v1/make_dn_folding_configs.py [--bits 4 6 8] [--variants fmpad mvau]
 
 Same case as export_dn_probe.py (16 -> 32, 64x64 input, T_out = 72). Both variants use the "pad_thr" skip order, matching the
 exported graph (the residual add's shared input quantizer thresholds the PADDED skip). Writes
@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_ROOT / "MILP" / "analytical"))
+sys.path.insert(0, str(REPO_ROOT / "ILP" / "analytical"))
 
 from dn_bottleneck import model_dn_bottleneck, to_folding_config, verify_with_sim  # noqa: E402
 

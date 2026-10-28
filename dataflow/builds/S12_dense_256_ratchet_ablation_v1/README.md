@@ -1,7 +1,7 @@
 # S12_dense_256_ratchet_ablation_v1 (hardware side)
 
 Standalone partition-2 OOC builds (`PARTS="2 5"` selects other partitions) for the DSR (formerly "ratchet") ablation of the 256x256 S12 dense nearest-upsample (noconv) ReLU net, uniform INT6. The MILP arms live in
-`MILP/artifacts/S12_dense_256_ratchet_ablation_v1/` (see its README for the arms, the DSR rule and the results). Written but NOT launched: the FINN container is run by hand.
+`ILP/artifacts/S12_dense_256_ratchet_ablation_v1/` (see its README for the arms, the DSR rule and the results). Written but NOT launched: the FINN container is run by hand.
 
 ## What gets built (partition 2, one build per distinct MILP folding + the control)
 
@@ -14,18 +14,18 @@ Standalone partition-2 OOC builds (`PARTS="2 5"` selects other partitions) for t
 | `ratchet_off` | MILP folding E | ratchet_off |
 | `analytical_25pct` | analytical-flow folding F (net_fold.py), FIFO depths forced from the analytical simulation | analytical_25pct |
 | `analytical_25pct_finnfifo` | same folding F, folding json WITHOUT the FIFO lists (the bridge prints "no inter_block_fifos/intra_block_fifos" and forces nothing): FINN's rtlsim FIFO autosizer decides every depth | analytical_25pct_finnfifo |
-| `ratchet_<arm>_simfifo` (5 builds) | the SAME foldings A-E as the MILP arms, FIFO lists replaced by the simulated ones (`MILP/analytical/net_explicit.py`, every FIFO of the block simulation, grown until the whole-net chain passes) | ratchet_<arm>_simfifo |
+| `ratchet_<arm>_simfifo` (5 builds) | the SAME foldings A-E as the MILP arms, FIFO lists replaced by the simulated ones (`ILP/analytical/net_explicit.py`, every FIFO of the block simulation, grown until the whole-net chain passes) | ratchet_<arm>_simfifo |
 | `ratchet_ablation_finn_autofold` | none: FINN `step_target_fps_parallelization`, `--target-fps 250 --mvau-wwidth-max 72` | FINN auto-fold control |
 
-`arms_to_build.txt` lists ONLY the five `ratchet_<arm>_simfifo` builds (the other rows were built earlier for partition 2). The control `ratchet_ablation_finn_autofold` (FINN auto-fold + FINN's rtlsim FIFO autosizer, same `--target-fps 250 --mvau-wwidth-max 72`) is queued for partition 2 by `run_arms.sh`. The list comes from `MILP/artifacts/S12_dense_256_ratchet_ablation_v1/arms_to_build.txt` (rerun `summarize_arms.py` after re-solving: if two arms stop sharing a folding they get their own build).
+`arms_to_build.txt` lists ONLY the five `ratchet_<arm>_simfifo` builds (the other rows were built earlier for partition 2). The control `ratchet_ablation_finn_autofold` (FINN auto-fold + FINN's rtlsim FIFO autosizer, same `--target-fps 250 --mvau-wwidth-max 72`) is queued for partition 2 by `run_arms.sh`. The list comes from `ILP/artifacts/S12_dense_256_ratchet_ablation_v1/arms_to_build.txt` (rerun `summarize_arms.py` after re-solving: if two arms stop sharing a folding they get their own build).
 Partition 2 = stage2.0 .. stage2.4 (dilations 2, 4, 8, 16, 2); confirm with the conv order before trusting the label.
 
 ## Inputs (docker cp into the flat `/home/thelegendiv/finn/notebooks/enet/`)
 
-* `hardware/builds/S12_dense_256_u4_analytical_v1/outputs/quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated_ft15ep_u8in.onnx` (+ `.onnx.data`) - the QAT'd uint8-input export (`MODEL` in the script).
+* `dataflow/builds/S12_dense_256_u4_analytical_v1/outputs/quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated_ft15ep_u8in.onnx` (+ `.onnx.data`) - the QAT'd uint8-input export (`MODEL` in the script).
 * `.../outputs/quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated_conv_order.json` (shared by both exports).
-* `MILP/artifacts/S12_dense_256_ratchet_ablation_v1/<arm>/layer_bits_folding_<arm>.json` for every arm in `arms_to_build.txt`, and `arms_to_build.txt` itself.
-* The active build scripts: `hardware/finn_s12_preamble.py`, `finn_s12_build.py`, `finn_s12_build_steps.py`, `dump_milpfold_landed_partition.py`, `checks/check_milp_vs_landed_folding.py`
+* `ILP/artifacts/S12_dense_256_ratchet_ablation_v1/<arm>/layer_bits_folding_<arm>.json` for every arm in `arms_to_build.txt`, and `arms_to_build.txt` itself.
+* The active build scripts: `dataflow/finn_s12_preamble.py`, `finn_s12_build.py`, `finn_s12_build_steps.py`, `dump_milpfold_landed_partition.py`, `checks/check_milp_vs_landed_folding.py`
   (plus the modules they import, already in the container if the S12 flow ran before).
 * `run_arms.sh` from this folder.
 
@@ -44,8 +44,8 @@ Read the first run before launching builds:
 ## Collect
 
 Copy `finn_deployment_outputs/*_partition<N>_*` out of the container, then run the collector once per partition:
-`python3 hardware/builds/S12_dense_256_ratchet_ablation_v1/collect_results_partitions.py --partition <N> --deployment-root <copy> --arm-map MILP/artifacts/S12_dense_256_ratchet_ablation_v1/arm_build_map.csv [--dsp-overrides-json real_dsp.json]`
-upserts one row per arm (identical foldings share the build and say so in `notes`) into `hardware/results.csv` as `model_name=S12_dense_256_u4_analytical_v1`, `config=<arm>_milpfold_partition_2_ooc_synth`
+`python3 dataflow/builds/S12_dense_256_ratchet_ablation_v1/collect_results_partitions.py --partition <N> --deployment-root <copy> --arm-map ILP/artifacts/S12_dense_256_ratchet_ablation_v1/arm_build_map.csv [--dsp-overrides-json real_dsp.json]`
+upserts one row per arm (identical foldings share the build and say so in `notes`) into `dataflow/results.csv` as `model_name=S12_dense_256_u4_analytical_v1`, `config=<arm>_milpfold_partition_2_ooc_synth`
 (control: `ratchet_ablation_finn_autofold_autofold_partition_2_ooc_synth`). FINN's DSP field is unreliable (known parser bug): pass the real DSP counts from each build's `vivado.log` via `--dsp-overrides-json`
 (`{"<tag>_milpfold": 123, ...}`).
 
@@ -60,5 +60,5 @@ upserts one row per arm (identical foldings share the build and say so in `notes
   comparing BRAM across arms: the 6 fixed2 arms' unmatched-FIFO BRAM is near-zero by construction, the 2
   rtlsim arms' is real/measured.
 * The bridge does not apply the argmax PE (`final.argmax`) and the FMPadding_Pixel SIMD: irrelevant for partition 2, relevant for partitions 5-7.
-* `hardware/README.md` and `hardware/builds/README.md` describe an older flow; this folder describes the unified `finn_s12_*` flow.
+* `dataflow/README.md` and `dataflow/builds/README.md` describe an older flow; this folder describes the unified `finn_s12_*` flow.
 * Nothing here has been run: `bash -n` and `py_compile` only.

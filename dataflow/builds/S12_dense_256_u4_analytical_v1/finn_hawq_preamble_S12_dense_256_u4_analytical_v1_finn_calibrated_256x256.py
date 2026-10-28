@@ -4,8 +4,8 @@ detection, architecture-shape-agnostic); only MODEL_NAME/OUTPUT_DIR differ, poin
 job's own PTQ-calibrated export (see finn_export_S12_dense_256_u4_analytical_v1_finn_calibrated.py).
 
 Prerequisite (run inside the pytorch training container first):
-    python hardware/builds/S12_dense_256_u4_analytical_v1/finn_export_S12_dense_256_u4_analytical_v1_finn_calibrated.py --skip-cross-test
-    docker cp hardware/builds/S12_dense_256_u4_analytical_v1/outputs/quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated.onnx \\
+    python dataflow/builds/S12_dense_256_u4_analytical_v1/finn_export_S12_dense_256_u4_analytical_v1_finn_calibrated.py --skip-cross-test
+    docker cp dataflow/builds/S12_dense_256_u4_analytical_v1/outputs/quantEnet_S12_dense_256_u4_analytical_v1_finn_calibrated.onnx \\
         <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/
 
 Run inside the FINN container:

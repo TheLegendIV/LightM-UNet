@@ -1,7 +1,7 @@
 """Export the REAL, QAT fine-tuned nnUNetTrainerLayerQuantENet_12_dense_relu_
 nearest_conv_upsample_256_perlayer checkpoint (256x256, decoder_type=
 "nearest_conv_upsample", context_pattern="dense_dilation_half", Dataset510_
-ARCADE_256_4c, dice=0.7819 per compression/results.csv) to a FINN-safe
+ARCADE_256_4c, dice=0.7819 per nas/results.csv) to a FINN-safe
 LayerQuantEnetFINN (see enet/nnunetv2/nets/LayerQuantEnetFINN.py) via its own
 from_pretrained, then QONNX-export it.
 
@@ -31,9 +31,9 @@ is the exact same computation nnUNetv2_predict_from_modelfolder performs for
 this dataset, not an approximation of it.
 
 Usage (inside the pytorch training container):
-    docker exec lightm_pytorch python /workspace/LightM-UNet/hardware/finn_export_12_dense_relu_nearest_conv_upsample_256_trained.py
+    docker exec lightm_pytorch python /workspace/LightM-UNet/dataflow/finn_export_12_dense_relu_nearest_conv_upsample_256_trained.py
 
-Output: hardware/outputs/finn_exports/quantEnet_12_dense_relu_nearest_conv_upsample_256_trained_int8.onnx
+Output: dataflow/outputs/finn_exports/quantEnet_12_dense_relu_nearest_conv_upsample_256_trained_int8.onnx
 """
 from __future__ import annotations
 
@@ -49,8 +49,8 @@ from PIL import Image
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
-sys.path.insert(0, str(REPO_ROOT / "analysis" / "501_ARCADE"))
-sys.path.insert(0, str(REPO_ROOT / "hardware"))  # shared infra (finn_enet_prod_export.py, etc.)
+sys.path.insert(0, str(REPO_ROOT / "nas"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow"))  # shared infra (finn_enet_prod_export.py, etc.)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from nnunetv2.nets.LayerQuantENet import layer_names_for  # noqa: E402
 from nnunetv2.nets.LayerQuantEnetFINN import LayerQuantEnetFINN  # noqa: E402
@@ -74,7 +74,7 @@ DEFAULT_CHECKPOINT = (
     / f"{NET_NAME}__nnUNetPlans__2d" / "fold_0" / "checkpoint_best.pth"
 )
 DEFAULT_BITS_FILE = (
-    REPO_ROOT / "MILP" / "artifacts" / "S12_dense_nn_upsample_256_v1"
+    REPO_ROOT / "ILP" / "artifacts" / "S12_dense_nn_upsample_256_v1"
     / "layer_bits_SITES_12_dense_relu_nearest_conv_upsample_256_joint_alpha1.0_"
       "candidatebits468_forcedsp_lut50_bram50_dsp90_fps250.json"
 )
@@ -165,7 +165,7 @@ def foreground_class_ids_and_names(labels: dict[str, int]) -> list[tuple[int, st
 
 
 def evaluate(predictions: dict[str, np.ndarray], labels_ts_dir: Path) -> dict:
-    """Same per-class + binary dice convention as compression/collect_results.py's
+    """Same per-class + binary dice convention as nas/collect_results.py's
     compute_eval_metrics, applied directly to an in-memory prediction dict
     instead of a labelsPr_* directory of PNGs."""
     class_ids_names = foreground_class_ids_and_names(read_dataset_labels(DATASET_NAME))
@@ -265,7 +265,7 @@ def main() -> None:
         name = "quantEnet_12_dense_relu_nearest_conv_upsample_256_trained_int8"
         export_model(model, name, dummy)
         print(f"\nExported. Copy to FINN container with:")
-        print(f"  docker cp hardware/outputs/finn_exports/{name}.onnx <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/")
+        print(f"  docker cp dataflow/outputs/finn_exports/{name}.onnx <finn_container_id>:/home/thelegendiv/finn/notebooks/enet/")
 
     if not args.skip_cross_test:
         print("\n=== Cross test: FINN mirror vs. real model, full imagesTs/labelsTs (300 cases) ===")
@@ -278,7 +278,7 @@ def main() -> None:
         for k, v in finn_metrics.items():
             if k != "n_cases":
                 print(f"  {k}: {v:.4f}")
-        print(f"\nReference (real LayerQuantENet, official pipeline, from compression/results.csv): dice=0.7819")
+        print(f"\nReference (real LayerQuantENet, official pipeline, from nas/results.csv): dice=0.7819")
 
         real_pred_dir = Path(args.real_pred_dir)
         if real_pred_dir.exists():

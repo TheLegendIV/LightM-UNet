@@ -1,5 +1,5 @@
 import json
-d='/workspace/LightM-UNet/MILP/artifacts/'
+d='/workspace/LightM-UNet/ILP/artifacts/'
 L=lambda p: json.load(open(d+p))
 c=L('_tmp_fps250_test/control.json'); f=L('_tmp_fps250_test/fps250.json')
 pc,pf=c['per_layer'],f['per_layer']

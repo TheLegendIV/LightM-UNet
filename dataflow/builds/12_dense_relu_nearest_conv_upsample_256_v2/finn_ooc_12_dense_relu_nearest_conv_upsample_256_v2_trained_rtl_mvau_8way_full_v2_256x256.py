@@ -9,7 +9,7 @@ widening/URAM-budget-per-partition-share fix; only deltas vs v1:
   - MODEL_NAME/CONV_ORDER_FILE point at the v2 export
     (finn_export_12_dense_relu_nearest_conv_upsample_256_v2_trained.py's
     output + its conv_order.json), not v1's.
-  - FOLDING_BLOCK_FILE points at the v2 MILP solve: MILP/artifacts/
+  - FOLDING_BLOCK_FILE points at the v2 MILP solve: ILP/artifacts/
     S12_dense_nn_upsample_256_v2/layer_bits_folding_12_dense_relu_nearest_
     conv_upsample_256_joint_alpha1.0_candidatebits468_forcedsp_lut50_bram50_
     dsp90_fps250_dsrate1.5.json (same hard caps as v1 PLUS

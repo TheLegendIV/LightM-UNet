@@ -1,7 +1,7 @@
 """v1 (dummy-weight) 8-way full build for the NEW
 12_dense_relu_nearest_conv_upsample architecture (decoder_type=
 "nearest_conv_upsample" -- see enet/nnunetv2/nets/LayerQuantEnetFINN.py's
-FINNUpsamplingBottleneck docstring and MILP/config_12_dense_relu_
+FINNUpsamplingBottleneck docstring and ILP/config_12_dense_relu_
 nearest_conv_upsample.py), 512x512 input, adapted directly from the last
 known-good reference build,
 finn_ooc_12_dense_relu_warmstart150ep_alpha05_trained_rtl_mvau_8way_full_v4_512x512.py

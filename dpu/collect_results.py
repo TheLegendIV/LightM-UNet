@@ -1,6 +1,6 @@
 """Benchmark the compiled DPU model on the ZCU104 (2x B4096) and upsert Dice / speed / energy rows into the shared
-benchmark table analysis/report/MILP/final_results/benchmark_s12_512.csv (same schema, modes and timing rules as
-analysis/benchmark/benchmark_int8_cpu_gpu.py and the FPGA row).
+benchmark table report/MILP/final_results/benchmark_s12_512.csv (same schema, modes and timing rules as
+report/MILP/benchmark/benchmark_int8_cpu_gpu.py and the FPGA row).
 
   python dpu/collect_results.py [--job 12_dense_relu_warmstart150ep_fp32] [--threads 2] [--repeats 5]
   python dpu/collect_results.py --no-run     # re-score the stored board outputs, keep the stored timing / power
@@ -19,7 +19,7 @@ Per run (dpu/bench_board.py on the board):
                 ~100 Hz, as the FINN ZCU106 rows sum their INA226 rails (deployment/.../power_mon.c): post-regulator, so
                 regulator losses and unmonitored loads (fan, PHY, ...) are excluded. Idle windows with the model loaded
                 before and after the streams, energy over exactly the timed streams, dynamic energy above idle
-                (analysis/benchmark/power_meter.summarize). The 12 V input INA226 is sampled in the same sweep and reported
+                (report/MILP/benchmark/power_meter.summarize). The 12 V input INA226 is sampled in the same sweep and reported
                 in the env JSON (energy_12v_input) only.
   accuracy      untimed pass over all test images, same Dice definitions as deployment/collect_results.py.
 """
@@ -40,7 +40,7 @@ from PIL import Image
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
-sys.path.insert(0, str(REPO / "analysis" / "benchmark"))
+sys.path.insert(0, str(REPO / "report" / "MILP" / "benchmark"))
 import benchmark_common as bench  # noqa: E402
 import power_meter as pm  # noqa: E402
 from img_intf.utils.preprocess import case_id  # noqa: E402

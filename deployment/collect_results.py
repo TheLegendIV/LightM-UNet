@@ -11,7 +11,7 @@ Per image of data/nnUNet_raw/<dataset>/imagesTs:
      --repeats timed passes over the whole split (unlimited source, unlimited sink, no network in the timed part),
      download the 512x512 class-id maps into deployment/img_intf/output/<model-name>/raw/<case>.raw
   3. score the maps against data/nnUNet_raw/<dataset>/labelsTs (same per-class dice / clDice / dice_binary
-     definition as compression/collect_results.py: mean over images, 'dice' = mean of the 4 foreground classes)
+     definition as nas/collect_results.py: mean over images, 'dice' = mean of the 4 foreground classes)
 and upsert one row keyed by (model_name, config) into deployment/results.csv (idempotent: re-running replaces
 the row). --no-send only re-scores stored outputs and keeps the earlier speed columns.
 
@@ -63,7 +63,7 @@ import numpy as np
 DEPLOYMENT = Path(__file__).resolve().parent
 REPO_ROOT = DEPLOYMENT.parent
 sys.path.insert(0, str(DEPLOYMENT))
-sys.path.insert(0, str(REPO_ROOT / "analysis" / "501_ARCADE"))
+sys.path.insert(0, str(REPO_ROOT / "nas"))
 import segmentation_topology as topo  # noqa: E402
 from img_intf.interfaces.collect_split import (  # noqa: E402
     DMA_MODE_BATCH, DMA_MODE_FRAME, HandshakeError, PowerPlan, run_split_benchmark, ticks_to_intervals,

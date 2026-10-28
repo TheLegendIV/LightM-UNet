@@ -5,11 +5,11 @@ only the formulas and short comments needed to read them; everything about
 *why* a constant has the value it has, what real hardware it was fit against,
 and what regimes/branches came and went lives here.
 
-## 2026-10-17 recalibration from the INT8 512 v2 build (`hardware/utils/fit_cost_model_from_node_csv.py`)
+## 2026-10-17 recalibration from the INT8 512 v2 build (`dataflow/utils/fit_cost_model_from_node_csv.py`)
 
 The first full-INT8 512x512 build (S12_dense_512_bilinear_int8_v2, 1,091 real nodes) showed the LUT model 26.5 % low on the kinds it prices (76k against 104k real; every earlier
 INT4/INT6 build had it 3-17 % HIGH), and the MILP's total 37 % low against the 178k LUT of the OOC synthesis. All constants below were refitted with one reusable script (OLS through the
-origin per node kind, datasets pooled, leave-one-dataset-out checks; see `hardware/README.md` for the workflow). Fits are logged in `MILP/calibration.csv` (rows dated 2026-10-17).
+origin per node kind, datasets pooled, leave-one-dataset-out checks; see `dataflow/README.md` for the workflow). Fits are logged in `ILP/calibration.csv` (rows dated 2026-10-17).
 
 | component | before | after | evidence |
 |---|---|---|---|
@@ -37,7 +37,7 @@ many output channels / reduction elements are computed in parallel per
 cycle), instead of hardcoded 8x8 bits and a single fixed folding.
 
 These are the same formulas already used to produce this repo's real FINN
-estimate reports (e.g. `hardware/outputs/quantEnet_original_int8_unfolded_
+estimate reports (e.g. `dataflow/outputs/quantEnet_original_int8_unfolded_
 report/files/enet_finn_fully_unfolded_M1_stage_summary.csv` and its sibling
 `finn_cost_formulae.md`, source: Blott et al., "FINN-R: An End-to-End
 Deep-Learning Framework for Fast Exploration of Quantized Neural Networks",
@@ -104,21 +104,21 @@ Empirical, bit-width-dependent LUT/BRAM_18K derating factors
 (real_synthesis / this_model's_own_estimate).
 
 Originally (2026-08-25) a single flat factor calibrated against ONE real
-data point (S19 at uniform W8A8, `hardware/results.csv`'s
+data point (S19 at uniform W8A8, `dataflow/results.csv`'s
 `s19_double_mid_8way_partitioned_ooc_synth_TOTAL` row, vs. this model
 evaluated at the real build's own resolved per-layer PE/SIMD —
-`hardware/outputs/s19_8way_partitioned_ooc_20260820_101224/
+`dataflow/outputs/s19_8way_partitioned_ooc_20260820_101224/
 final_hw_config.json`, PE=SIMD=1 on effectively every MVAU node, i.e.
 avg_bits=8 uniform):
 - LUT: 830,689 real vs. 100,996 this-model raw -> 8.225x
 - BRAM_18K: 906 real vs. 1,495 this-model raw -> 0.606x
 
 A second real data point (same day) proved the flat-factor assumption
-wrong: `hardware/results.csv`'s `s19_hawq_block_partition_2_ooc_synth` row
+wrong: `dataflow/results.csv`'s `s19_hawq_block_partition_2_ooc_synth` row
 is a real OOC synthesis of partition_id=2 (down2 + stage2.0-2.4 +
 stage2.5.reduce.0 — the largest of the 8-way S19 partitions, 23 real MVAU
 nodes) built at a real per-block HAWQ bit assignment AND its own real
-resolved per-layer folding (`hardware/outputs/
+resolved per-layer folding (`dataflow/outputs/
 s19_hawq_block_partition_2_ooc_synth_20260824_220316/
 hawq_folding_config_partition2.json`, PE=1 but SIMD in {4,6,8,12} — NOT
 `FOLDING_SERIAL`).
@@ -193,7 +193,7 @@ as the only derate applied for this regime.
 
 2026-09-05: two real S12 8-way-partitioned OOC builds, both forcing DSP on
 every MVAU/VVAU node — a different regime from the auto-resType anchors
-above (see `compression/hawq/fit_forced_dsp_derating.py` for the full
+above (see `nas/hawq/fit_forced_dsp_derating.py` for the full
 fitting script and provenance; plan:
 `C:\Users\win32\.claude\plans\nested-singing-flurry.md`).
 
@@ -267,7 +267,7 @@ lut_factor, 14 partitions both builds, partition 0 excluded, avg_bits in
 ### S12 dense (non-separable) refit, 2026-09-15
 
 See `fit_forced_dsp_derating_s12_dense.py` and its own output
-`compression/hawq/artifacts/archive/forced_dsp_derating_fit_s12_dense.json`. One
+`nas/hawq/artifacts/archive/forced_dsp_derating_fit_s12_dense.json`. One
 real build (`quantEnet_12_dense_relu_warmstart150ep_alpha025_finn_calibrated_
 int8`, 8 partitions, no second build to pool against unlike separable's 16
 points) — weaker statistically than the separable fit. avg_bits range
@@ -303,16 +303,16 @@ made FINN pick HLS over RTL and produced the 4-6x LUT blow-up). The model
 now assumes `noActivation=1` + `MVAU_rtl` and prices the standalone
 `Thresholding_rtl` explicitly, so those factors no longer describe the
 regime being estimated; the six real noActivation/RTL probes in
-`hardware/results.csv` sit at 1.1-1.7x of the raw model. Superseded below
+`dataflow/results.csv` sit at 1.1-1.7x of the raw model. Superseded below
 now that the RTL production rebuild has real per-node data.
 
 ### Superseded same day: S12 dense 256x256 v2 bundle refit (2026-09-28)
 
-`hardware/build_node_resource_calibration_csv.py` was run against the real
+`dataflow/build_node_resource_calibration_csv.py` was run against the real
 routed `.dcp` for `S12_dense_nn_upsample_256_v2`
 (dsrate1.5/forcedsp/noActivation=1/MVAU_rtl — the SAME regime the identity
 placeholder above was waiting on), producing
-`hardware/builds/12_dense_relu_nearest_conv_upsample_256_v2/results/
+`dataflow/builds/12_dense_relu_nearest_conv_upsample_256_v2/results/
 mvau_lut_calibration_dataset_12_dense_relu_nearest_conv_upsample_256_v2_full.csv`
 (921 real per-node rows, all 8 partitions). Excluding `StreamingFIFO_rtl`
 rows (never modeled, see "Not modeled" below) and summing every real
@@ -320,7 +320,7 @@ rows (never modeled, see "Not modeled" below) and summing every real
 real_LUT=66,632, real_BRAM18-equivalent (`BRAM18 + 2*BRAM36`)=427.0.
 
 Compared against this SAME build's `layer_bits_folding_*.json` solve
-(`MILP/artifacts/S12_dense_nn_upsample_256_v2/layer_bits_folding_
+(`ILP/artifacts/S12_dense_nn_upsample_256_v2/layer_bits_folding_
 12_dense_relu_nearest_conv_upsample_256_joint_alpha1.0_candidatebits468_
 forcedsp_lut50_bram50_dsp90_fps250_dsrate1.5.json`) — every `per_layer` entry
 PLUS every `extra_nodes` entry whose kind is a standalone join-threshold
@@ -367,7 +367,7 @@ architecture. No per-geometry selector exists yet.
 ### Active default: per-component calibration, identity bundle (2026-09-28, later)
 
 New real per-node datasets landed for both `S12_dense_256_v1` and `_v2`
-(`hardware/build_node_resource_calibration_csv.py` extended to also capture
+(`dataflow/build_node_resource_calibration_csv.py` extended to also capture
 `DWC`/`FMPadding`, see "Not yet real-data-backed" below and the DWC section).
 With real per-node PE/SIMD/MH/MW/geometry available, the bundle-level ratio
 above could finally be decomposed into its actual components by calling
@@ -395,7 +395,7 @@ now-corrected sub-formulas would double-correct.
 
 `_FORCED_DSP_LUT_FACTOR = _FORCED_DSP_BRAM_FACTOR = 1.0` (identity). Full
 per-component fit numbers (method, dataset, n, R², caveats) are tracked in
-`MILP/calibration.csv`, one row per constant per date — check there before
+`ILP/calibration.csv`, one row per constant per date — check there before
 re-deriving a fit from scratch.
 
 A second, separate finding from this same per-node pass: **MVAU weight-memory
@@ -407,7 +407,7 @@ primitive, which `_finn_wm_bram18` never accounts for. No factor can
 represent "usually zero, sometimes small nonzero" correctly; this needs
 FINN's actual auto-resType decision logic ported in (a local FINN source
 checkout exists for exactly this kind of lookup), not calibration. Left
-unfixed — see `MILP/calibration.csv`'s `mvau_weight_bram` row.
+unfixed — see `ILP/calibration.csv`'s `mvau_weight_bram` row.
 
 Not yet real-data-backed at all (still whatever's documented under "Stream
 nodes" below, or genuinely unmodeled): `AddStreams_hls`/`DuplicateStreams_hls`/
@@ -464,7 +464,7 @@ same data shows that's false (179/189 real `auto`-style nodes land in
 LUTRAM, not block). Changed to `RAM_STYLE_AUTO`. Re-validated end-to-end
 against all 226 real MVAU/VVAU rows: aggregate real/raw BRAM ratio went from
 0.028 to 0.987, and zero-real rows went from 0/181 correctly predicted to
-179/181. See `MILP/calibration.csv`'s `mvau_weight_bram` row and
+179/181. See `ILP/calibration.csv`'s `mvau_weight_bram` row and
 `finn_milp.md`'s history for the `finn_milp.py` side of this fix.
 
 ## Impl style (`ImplStyle` / `IMPL_STYLE_HLS` / `IMPL_STYLE_RTL`)
@@ -492,10 +492,10 @@ approximation used elsewhere in this file for the fused-threshold case (no
 separate output-precision axis exists).
 
 **Refit 2026-09-17** on 168 real Thresholding_rtl nodes
-(`hardware/datasets/mvau_lut_calibration_dataset_12_dense_relu_warmstart150ep_
+(`dataflow/datasets/mvau_lut_calibration_dataset_12_dense_relu_warmstart150ep_
 alpha025_rtl_mvau_noact1_extended.csv` — the real S12-dense-warmstart
 alpha=0.25 8-way production build), TRAIN split;
-`hardware/datasets/mvau_variant_matrix_dataset_extended.csv`'s
+`dataflow/datasets/mvau_variant_matrix_dataset_extended.csv`'s
 `noact1_auto_*` rows (n=18, but PE=1/numSteps=255 for every single row —
 zero variance in either axis, so this slice cannot validate a PE or
 numSteps dependence, only the overall level at that one point) held out as
@@ -532,7 +532,7 @@ above: `_THR_RTL_BRAM18_PER_PE_NUMSTEP = 0.013378` (OLS through origin,
 uncentered R²=0.753, median abs error 43.1% — real per-node scatter here is
 higher than the LUT fit's R²=0.966, a single-term model doesn't fully
 capture it). Improved the v2-only aggregate threshold-BRAM error from −37.3%
-to −26.7%, a real gain but not a full close — see `MILP/calibration.csv`.
+to −26.7%, a real gain but not a full close — see `ILP/calibration.csv`.
 `real_URAM` confirmed exactly 0 across all 430 rows (consistent with the
 "`ultra` is a dead path" note above); `_THR_RTL_URAM_PER_PE_NUMSTEP`/
 `_THR_RTL_LUTRAM_PER_PE_NUMSTEP` recompute automatically from this constant,
@@ -553,7 +553,7 @@ there. Only the older 168-node set has genuine PE variation (1/2/4/8). This
 refit is therefore properly validated across PE thanks to that older set
 still being included — a fit using only the two new builds would have been
 PE=1-only and blind to the formula's PE-scaling assumption entirely. See
-`MILP/calibration.csv`.
+`ILP/calibration.csv`.
 
 **Cutoff added — `_THR_RTL_BRAM_MIN_CHANNELS_NUMSTEP` (2026-09-28, later
 still)**: every prior BRAM refit above applied its rate to EVERY threshold
@@ -568,7 +568,7 @@ plausibly explains why the BRAM error flips sign between builds (-26.7% v2
 vs +47.4% v4 under the old unconditional rate): different real threshold-
 size mixes land on different sides of an unmodeled boundary.
 
-`hardware/fit_threshold_bram_cutoff.py` searched `PE*numSteps`,
+`dataflow/fit_threshold_bram_cutoff.py` searched `PE*numSteps`,
 `NumChannels*numSteps`, and `PE*NumChannels*numSteps` as candidate 1-D
 classifiers (decision-stump scan for the misclassification-minimizing
 threshold). `PE*numSteps` is **useless** here — PE=1 for every row, so it
@@ -589,15 +589,15 @@ cutoff+refit: v2 -26.7%→-29.2% (slightly worse), v4 +47.4%→+22.5% (nearly
 halved). Net: total absolute error across both builds improved, but the
 sign flip is **not** closed — v2 still under-predicts, v4 still
 over-predicts, just by less. Marked `applied_partial` in
-`MILP/calibration.csv`, not `resolved` — this is a genuine, data-backed
+`ILP/calibration.csv`, not `resolved` — this is a genuine, data-backed
 improvement, not a fully-solved gap.
 
 Physical grounding (not ported, only motivating): `Thresholding_rtl`'s real
 memory placement is controlled by `depth_trigger_bram`/`depth_trigger_uram`
-(see `hardware/temp/thresholding_rtl.py`'s `get_memory_estimate()`), not a
+(see `dataflow/temp/thresholding_rtl.py`'s `get_memory_estimate()`), not a
 `ram_style` enum — but this repo's own build scripts set
 `depth_trigger_bram` to a fixed value (e.g.
-`hardware/builds/12_dense_relu_nearest_conv_upsample_512/finn_ooc_..._v1_512x512.py:446`),
+`dataflow/builds/12_dense_relu_nearest_conv_upsample_512/finn_ooc_..._v1_512x512.py:446`),
 so FINN's own internal decision boundary isn't directly recoverable from
 that value alone; the cutoff above is reverse-engineered from real
 post-synthesis data, same epistemic status as `_WM_BRAM_AUTO_MIN_WMEM`'s own
@@ -672,7 +672,7 @@ layer, unlike a fixed local rule.
 Until 2026-09-26 the cost model only priced thresholds that follow a conv
 (each conv's own `thr_*` under `noActivation=1`). Decoding the checked-in
 partition graphs of the real current-regime build
-(`hardware/outputs/12_dense_relu_warmstart150ep_alpha025_trained_rtl_mvau_8way_full_v3_20260918_144349/intermediate_models/supported_op_partitions/partition_*.onnx`,
+(`dataflow/outputs/12_dense_relu_warmstart150ep_alpha025_trained_rtl_mvau_8way_full_v3_20260918_144349/intermediate_models/supported_op_partitions/partition_*.onnx`,
 MVAU_rtl, `noActivation=1`) shows every residual block has extra standalone
 `Thresholding_rtl` nodes around its `AddStreams_hls` that nothing priced.
 A regular block:
@@ -759,12 +759,12 @@ convs).
 convs aren't a supported VVAU shape and no config in this repo ever
 produces one) — the shape that becomes a FINN VVAU node instead of an MVAU,
 with its own PE/SIMD folding domain and preceding SWU/FMPadding coupling
-constraint (`compression/hawq/folding_ilp.py`'s `solve_folding_nodewise`).
+constraint (`nas/hawq/folding_ilp.py`'s `solve_folding_nodewise`).
 
 `swu_max_simd_depthwise`: the preceding ConvolutionInputGenerator's (SWU's)
 own SIMD must divide `IFMChannels` — for a depthwise layer that's
 `cin==cout==groups`, NOT `cin*kh*kw` (that's the MVAU-SIMD constraint for a
-dense conv, a different axis — see `hardware/finn_native_cost_
+dense conv, a different axis — see `dataflow/finn_native_cost_
 estimator.py`'s own module docstring for the real-FINN-source-derived note
 on this mismatch). Deliberately the same domain as this layer's own VVAU PE
 (`max_pe(layer)==layer.cout`) — `solve_folding_nodewise`'s coupling
@@ -785,7 +785,7 @@ Returns `(swu_lut, swu_bram18, swu_uram18, swu_cycles)`.
 
 **A 1x1 kernel gets NO SWU NODE AT ALL** — confirmed structurally, not
 numerically: across every real node in
-`hardware/mvau_swu_threshold_calibration_dataset.csv` (production
+`dataflow/mvau_swu_threshold_calibration_dataset.csv` (production
 S12-separable partitions + the int6_pemh probe, whose exact per-layer
 kernel sizes are known), MVAU (MH,MW) pairs where `MW==IFMChannels`
 (kh=kw=1, e.g. every ENet bottleneck's 1x1 reduce/expand) are NEVER
@@ -821,7 +821,7 @@ function did exactly that).
 streams the SAME padded feature map `fmpad_cycles` already accounts for
 (FMPadding sits immediately upstream of the SWU), so this undercounted for
 any padded/dilated layer, worse as padding grew with dilation. Caught via
-`hardware/checks/check_milp_vs_landed_folding.py` on the S12-dense
+`dataflow/checks/check_milp_vs_landed_folding.py` on the S12-dense
 `dense_dilation` context block (per-layer dilation 1..N -> per-layer
 padding grows too): landed cycles for 5 real `stage2.*.conv` SWU nodes were
 13%-125% above the old formula's prediction, and matched `fmpad_cycles`
@@ -889,7 +889,7 @@ transcription, not a fitted/verified formula (same status as
 
 Original (2026-09-17ish): OLS-through-origin fit, n=43 real
 `ConvolutionInputGenerator_rtl` nodes
-(`hardware/mvau_swu_threshold_calibration_dataset.csv`) — real Vivado LUT
+(`dataflow/mvau_swu_threshold_calibration_dataset.csv`) — real Vivado LUT
 came in 51-104% of this formula's estimate (mean 70%), same direction as
 `_RTL_MVU_LUT_DERATE` (real RTL synthesis under FINN's own analytical
 estimate). Flagged "refit once the full production rebuild lands."
@@ -1042,7 +1042,7 @@ root cause" section). `thr_luts`/`comp_luts` (fused-threshold LUTs,
 `(2^B-1)*acc_bits` per PE) are 0.0 whenever `no_activation=True` (the
 module default) or `ram_style_thresholds != "distributed"` (also the
 default). Note pre-2026-09-17 production builds did NOT satisfy that:
-172/173 nodes in `hardware/mvau_lut_calibration_dataset*.csv` have
+172/173 nodes in `dataflow/mvau_lut_calibration_dataset*.csv` have
 `outputDataType=UINTx`, i.e. fused thresholds -> forced MVAU_hls (RTL needs
 noActivation=1) and a `PE*2^B`-scaled LUT blow-up that the former
 "imbalance_luts" term was chasing empirically. Standalone-threshold builds
@@ -1080,13 +1080,13 @@ folds accumulation into the DSP58 cascade chain, doing in hardware what
 `addertree_luts`/`acc_luts` assume needs separate LUT logic.
 
 First fit (2026-09-17, briefly): n=7, one probe
-(`hardware/mvau_lut_calibration_dataset_s12_context_dense_int6_pemh_simd1.csv`),
+(`dataflow/mvau_lut_calibration_dataset_s12_context_dense_int6_pemh_simd1.csv`),
 one architecture, one folding pattern (PE=MH/SIMD=1, W6A6) — OLS-through-
 origin gave 0.581, R²=0.747, explicitly flagged provisional pending the
 full production rebuild.
 
 **Refit (2026-09-18)**: that production rebuild now exists
-(`hardware/datasets/mvau_lut_calibration_dataset_12_dense_relu_warmstart150ep_
+(`dataflow/datasets/mvau_lut_calibration_dataset_12_dense_relu_warmstart150ep_
 alpha025_rtl_mvau_noact1_extended.csv`, 88 real MVAU_rtl nodes, many (PE,
 SIMD, weight_bits, act_bits, MW) combinations from the real 8-way deployed
 build) — refitting on it (same OLS-through-origin convention) gives 0.4868,
@@ -1106,7 +1106,7 @@ same bias applies).
 **Refit — avg_bits-dependent (2026-09-28, later still)**: 0.4868 was fit and
 only ever validated against a single dataset (warmstart150ep, avg_bits mean
 5.64). A held-out check feeding two OTHER real builds' own per-node PE/SIMD/
-bits into `conv_cost_pe_simd` (via `hardware/compare_model_vs_real_resources_from_dataset.py`)
+bits into `conv_cost_pe_simd` (via `dataflow/compare_model_vs_real_resources_from_dataset.py`)
 found real MVAU LUT error swinging from -9.0% (`S12_dense_nn_upsample_256_v2`,
 avg_bits mean 4.53) to +72.4% (`12_dense_relu_nearest_conv_upsample_256_w8_16_v4`,
 avg_bits mean 6.69) under the SAME flat 0.4868 — and a third build
@@ -1115,7 +1115,7 @@ previously checked at all) turned out to be off by +69.7%, similarly large
 to v4. The pattern: flat 0.4868 is only accurate near its own fit dataset's
 avg_bits (~5.6); builds with a higher avg_bits mix are badly over-predicted.
 
-Refit (`hardware/fit_rtl_mvu_lut_derate.py`) pools all 4 real RTL/
+Refit (`dataflow/fit_rtl_mvu_lut_derate.py`) pools all 4 real RTL/
 noActivation=1 datasets available (v1 n=48, v2 n=88, v4 n=88, warmstart150ep
 n=88 — VVAU_hls rows excluded from all, see above; total **n=312**, pooled
 avg_bits range **[3.5, 8.0]**, each build occupying a visibly different part
@@ -1155,7 +1155,7 @@ genuine holdout check, not an assumed-correct extrapolation.
 `MVAU_hls.lut_estimation()` (this formula) is a real FINN model, unlike
 MVAU_rtl's `return 0` stand-in above — but it's still an analytical
 estimate, and real synthesis diverges from it too. First real per-node
-ground truth (`hardware/datasets/mvau_variant_matrix_dataset_extended.csv`,
+ground truth (`dataflow/datasets/mvau_variant_matrix_dataset_extended.csv`,
 the `noact1_hls_lut_*` combos: standalone Thresholding_rtl + MVAU_hls
 forced `resType=lut`, 3 real conv layers (MH/MW = 8/32, 8/72, 32/8) x 3
 fold strategies (pemh_simd1/balanced/pe1_simdmw) = 9 real MVAU_hls nodes,
@@ -1201,7 +1201,7 @@ RTL: FINN's own `MVAU_rtl.dsp_estimation()` source
 (DSP48E1/E2, which is what xczu7ev-ffvc1156-2-e resolves to) ->
 `ceil(P/4)*Q`, no bit-width dependence at all) says 4 PE lanes per DSP48E2,
 unconditional on W/A. Real per-node ground truth
-(`hardware/probes/mvau_lut_calibration_dataset_s12_context_dense_int6_pemh_
+(`dataflow/probes/mvau_lut_calibration_dataset_s12_context_dense_int6_pemh_
 simd1.csv`, 7 real MVAU_rtl nodes, W6A6) shows `real_DSP = ceil(P/2)*Q`
 exactly on every node (16/4/4/16/4/4/16) — exactly 2x FINN's own formula,
 at every (P,Q) pair tested. A previous version of this code branched on
@@ -1299,9 +1299,9 @@ which no FINN rule describes (every earlier build used it; the 1020 cutoff miscl
 
 ## 2026-10-11 derate from the real bilinear-256 OOC utilization
 
-Source: `hardware/builds/S12_dense_256_u4_bilinear_analytical_v1/results/node_resource_calibration_..._dwfix.csv` (1016 post-route nodes, 8 partitions; INT6, 250 fps, analytical folding,
-all Thresholding / Add / Dup nodes at PE=1). Scored per row with `hardware/checks/compare_model_vs_real_resources_from_dataset.py` (each row priced from its OWN real attributes; `--rows-out`
-writes the per-row model-vs-real CSV). Every constant below has a `MILP/calibration.csv` row dated 2026-10-11.
+Source: `dataflow/builds/S12_dense_256_u4_bilinear_analytical_v1/results/node_resource_calibration_..._dwfix.csv` (1016 post-route nodes, 8 partitions; INT6, 250 fps, analytical folding,
+all Thresholding / Add / Dup nodes at PE=1). Scored per row with `dataflow/checks/compare_model_vs_real_resources_from_dataset.py` (each row priced from its OWN real attributes; `--rows-out`
+writes the per-row model-vs-real CSV). Every constant below has a `ILP/calibration.csv` row dated 2026-10-11.
 
 Per-kind LUT error of the model against real (bilinear / nn-up v2 / w8_16 v4), before -> after:
 
@@ -1331,4 +1331,4 @@ Per-kind LUT error of the model against real (bilinear / nn-up v2 / w8_16 v4), b
 The 1 LUT per 64 bits of every stage ("LUTRAM", `_LUTRAM_BITS_PER_LUT`) is removed. A LUTRAM is a LUT, so the budget never distinguished them; the problem was the count. In the real v4 build 48 conv thresholds were pinned to
 `depth_trigger_bram = 999999` (joined to the pinned folding config by partition + node name): they used 8,009 LUT and 5 BRAM18eq in total, `real_LUTRAM` = 0 (the constant ROM is synthesised as logic), while the removed term predicted 18,912
 (2.36x, median error 84 %). Now `PE * (4.6881 * in_bits + 0.5926 * numSteps)` (OLS through the origin on those 48 nodes, median error 10.0 %, leave-one-out 10.4 %); BRAM placement is unchanged. Caveats: all PE=1, in_bits 12-19 (the residual-join
-thresholds, 7-10 bits, were never built pinned: extrapolation). Effect on the 512 nearest net at 250 fps, no DSR: see MILP/artifacts/S12_dense_512_dsr_ablation_v1/ (INT8 LUT 230.3k = 100 % before).
+thresholds, 7-10 bits, were never built pinned: extrapolation). Effect on the 512 nearest net at 250 fps, no DSR: see ILP/artifacts/S12_dense_512_dsr_ablation_v1/ (INT8 LUT 230.3k = 100 % before).

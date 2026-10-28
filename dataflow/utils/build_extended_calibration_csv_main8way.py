@@ -3,12 +3,12 @@
 trained_rtl_mvau_8way_full_20260917_011115`), covering MVAU/VVAU AND the
 standalone Thresholding_hls/_rtl + ConvolutionInputGenerator_hls/_rtl
 (SWU) nodes -- see repo memory `finn-container-env.md` STANDING
-CONVENTION note. Joins already-generated hier reports (`hardware/temp/
+CONVENTION note. Joins already-generated hier reports (`dataflow/temp/
 rtl_mvau_8way_ext/hier_partition_N.rpt`, from the original DSP-correction
 pipeline) against `dump_node_attrs_ext.py` output (`attrs/attrs_ext_
 partition_N.json`) -- no Vivado re-run needed.
 
-Output: hardware/datasets/mvau_lut_calibration_dataset_12_dense_relu_warmstart150ep_alpha025_rtl_mvau_extended.csv
+Output: dataflow/datasets/mvau_lut_calibration_dataset_12_dense_relu_warmstart150ep_alpha025_rtl_mvau_extended.csv
 """
 import csv
 import json

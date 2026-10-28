@@ -159,7 +159,7 @@ DENSE_DILATION_D8_D16_PROJECTED_PATTERN: tuple[dict, ...] = (
     {"reg_bottleneck": True, "padding": 16, "dilation": 16},
 )
 
-# "Schedule A" from compression/gridding_investigation/: replaces DENSE_
+# "Schedule A" from nas/gridding_investigation/: replaces DENSE_
 # DILATION_PATTERN's (2,4,8,16) -- every consecutive pair of which shares a
 # factor of 2 -- with the fully pairwise-coprime (1,5,7,17). Same sum (30),
 # so identical theoretical receptive field (61x61) and identical params/
@@ -170,7 +170,7 @@ DENSE_DILATION_D8_D16_PROJECTED_PATTERN: tuple[dict, ...] = (
 # textbook gridding checkerboard -- every layer's sample grid aligns with
 # every other's, from the shared factor of 2), vs. 87.3% for this schedule
 # (near-solid fill, no shared factors anywhere). See
-# compression/gridding_investigation/gridding_investigation_summary.md for
+# nas/gridding_investigation/gridding_investigation_summary.md for
 # the full writeup (task1_structural_results.json has the exact numbers) --
 # structurally confirmed as a real fix, empirically inconclusive on
 # whether it's *this model's* dominant error driver, hence retraining with
@@ -331,7 +331,7 @@ DENSE_DILATION_REGNOPROJ_TRAILING_PATTERN: tuple[dict, ...] = (
 # PATTERN's reg slots do) -- reg,16,reg,16,reg,16,reg,16,reg (9 slots).
 # Motivated directly by the pruning-sensitivity sweep on S8-ReLU
 # (dense_dilation_reg_interleaved): d=16 slots were consistently the
-# steepest individual-block drops in both stages (see compression/
+# steepest individual-block drops in both stages (see nas/
 # results_pruning.csv), and reg-bookends were mostly redundant when they
 # had a neighboring reg to fall back on -- this pattern bets everything on
 # what the sweep found actually mattered (d=16) while keeping a reg
@@ -435,7 +435,7 @@ class NonNegativePReLU(nn.Module):
     sign-flipping behavior real PReLU is otherwise free to learn -- a
     negative `a` maps negative inputs to POSITIVE outputs (`a*x` with both
     factors negative), which trained checkpoints in this project actually
-    do learn at some sites (see compression/plot_prelu_activations.py's
+    do learn at some sites (see nas/plot_prelu_activations.py's
     findings, e.g. RegInterleaved's stage2.5.conv_bn_act.2 learning
     a=-0.12). Clamping happens on `weight` at forward time, not by
     reparameterizing the stored parameter itself, so the underlying
@@ -474,7 +474,7 @@ class NonNegativePReLU(nn.Module):
 # globally or per-block, via apply_leaky_slope_overrides applied to a
 # "leaky"-variant model) was tried and measured to be badly lossy (S5-
 # SeparableDense's real dice 0.7985 -> ~0.38-0.41 after averaging, see
-# compression/results.csv's experiment_leaky_from_prelu_global/_perblock
+# nas/results.csv's experiment_leaky_from_prelu_global/_perblock
 # rows) -- forcing a per-channel-trained network into a block-uniform slope
 # AFTER the fact throws away too much. "nonneg_block" instead bakes the
 # block-uniform constraint in from the start of training (warm-started from
@@ -1963,7 +1963,7 @@ def apply_block_pruning(model: nn.Module, block_names: list) -> int:
     leaving every OTHER block's already-trained weights untouched. No
     retraining involved; this is meant for measuring how much a single
     already-trained block actually contributes by removing it after the
-    fact and re-running real inference (see compression/results.csv's
+    fact and re-running real inference (see nas/results.csv's
     experiment_* rows for the established pattern of this kind of ad-hoc
     post-hoc probe).
 
@@ -2382,7 +2382,7 @@ if __name__ == "__main__":
 
     print("ENet Stage-5 architecture-probe-PAIRS self-test PASSED: 8 pairs.")
 
-    # Stage 6 -- DscNoProjDense variants (compression/gridding_investigation/'s
+    # Stage 6 -- DscNoProjDense variants (nas/gridding_investigation/'s
     # follow-up): dense_dilation_a swaps in the coprime (1,5,7,17) schedule;
     # dense_dilation_reg_interleaved bookends each (2,4,8,16) cycle with a
     # full RegularBottleneck, at bumped stage2/3 depth (11, not the native 8).
@@ -2511,7 +2511,7 @@ if __name__ == "__main__":
     print("ENet Stage-8 RegInterleaved-isolation self-test PASSED: 2 new flags (dsc_no_projection_context_only, reg_bookend_dsc).")
 
     # Stage 9 -- DSC-WITH-projection dense_dilation variants (probing the
-    # buffer-memory analysis in compression/: does dsc_no_projection's full-
+    # buffer-memory analysis in nas/: does dsc_no_projection's full-
     # channel-width DSC cost accuracy, or just memory?). All three keep
     # RegularBottleneck's own reduce/expand (use_dsc=True only swaps the
     # INNER conv for depthwise+pointwise, still at internal_channels) --
@@ -2656,7 +2656,7 @@ if __name__ == "__main__":
     # "leaky" -> fixed nn.LeakyReLU(0.01), no learnable params at all.
     # "nonneg" -> NonNegativePReLU, learnable but clamped to a>=0 every
     # forward pass -- rules out the sign-flipping behavior real PReLU
-    # sometimes learns (compression/plot_prelu_activations.py found
+    # sometimes learns (nas/plot_prelu_activations.py found
     # negative slopes at a few sites in real trained checkpoints).
     for variant, expected_cls in (("leaky", nn.LeakyReLU), ("nonneg", NonNegativePReLU)):
         m = ENet(
@@ -2714,7 +2714,7 @@ if __name__ == "__main__":
 
     # Stage 12: apply_leaky_slope_overrides / collect_prelu_global_mean /
     # collect_prelu_block_means -- the FINN-motivated follow-up (see
-    # PReluVariant's deprecation note and compression/slurm/archive/
+    # PReluVariant's deprecation note and nas/slurm/archive/
     # README.md's stage_11 entry). Hand-set known PReLU weights on a real
     # "standard" model, verify the collected means match a by-hand
     # calculation exactly, then verify a "leaky" twin gets patched to those

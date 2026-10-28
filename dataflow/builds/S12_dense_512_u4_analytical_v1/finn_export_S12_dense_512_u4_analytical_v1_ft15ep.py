@@ -9,9 +9,9 @@ decoder_type="nearest_upsample", 5 output classes). The checkpoint ships as chec
 --check-keys only compares the checkpoint's state dict with the model (missing / unexpected / shape-mismatched keys).
 
 Usage (repo root, .venv with torch+brevitas):
-    .venv\\Scripts\\python.exe hardware/builds/S12_dense_512_u4_analytical_v1/finn_export_S12_dense_512_u4_analytical_v1_ft15ep.py [--check-keys]
+    .venv\\Scripts\\python.exe dataflow/builds/S12_dense_512_u4_analytical_v1/finn_export_S12_dense_512_u4_analytical_v1_ft15ep.py [--check-keys]
 
-Output: hardware/builds/S12_dense_512_u4_analytical_v1/outputs/quantEnet_S12_dense_512_u4_analytical_v1_ft15ep_u8in.onnx
+Output: dataflow/builds/S12_dense_512_u4_analytical_v1/outputs/quantEnet_S12_dense_512_u4_analytical_v1_ft15ep_u8in.onnx
         .../outputs/quantEnet_S12_dense_512_u4_analytical_v1_conv_order.json
         .../outputs/quantEnet_S12_dense_512_u4_analytical_v1_ft15ep_u8in_verify_ref.npz
 """
@@ -25,7 +25,7 @@ import torch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
-sys.path.insert(0, str(REPO_ROOT / "hardware"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow"))
 
 import finn_enet_prod_export  # noqa: E402
 from nnunetv2.nets.LayerQuantENet import layer_names_for  # noqa: E402
@@ -50,7 +50,7 @@ _CKPT_DIR = REPO_ROOT / "data" / "nnUNet_results" / DATASET_NAME / f"{NET_NAME}_
 DEFAULT_CHECKPOINT = _CKPT_DIR / ("checkpoint_best.pth" if (_CKPT_DIR / "checkpoint_best.pth").is_file() else "checkpoint_best.pth.txt")
 # the per-site bits file the QAT job trained with (all 6 / 6)
 DEFAULT_BITS_FILE = (
-    REPO_ROOT / "MILP" / "artifacts" / "S12_dense_nearest_upsample_wm_v1_uniform_samefolding"
+    REPO_ROOT / "ILP" / "artifacts" / "S12_dense_nearest_upsample_wm_v1_uniform_samefolding"
     / "layer_bits_SITES_uniform_int6_samefolding.json"
 )
 DEFAULT_PREPROCESSED_DIR = REPO_ROOT / "data" / "nnUNet_preprocessed" / DATASET_NAME / "nnUNetPlans_2d"
@@ -85,7 +85,7 @@ def main() -> None:
     parser.add_argument("--preprocessed-dir", default=str(DEFAULT_PREPROCESSED_DIR))
     parser.add_argument("--check-keys", action="store_true", help="only compare checkpoint vs model keys/shapes, then exit")
     parser.add_argument("--skip-verify", action="store_true",
-                         help="skip the mandatory post-export Dice/agreement gate (hardware/verify_export.py)")
+                         help="skip the mandatory post-export Dice/agreement gate (dataflow/verify_export.py)")
     parser.add_argument("--min-fg-dice", type=float, default=0.5,
                          help="gate: minimum foreground Dice of the PyTorch model on the val split")
     parser.add_argument("--skip-export", action="store_true")
@@ -135,7 +135,7 @@ def main() -> None:
 
     if not args.skip_verify:
         import verify_export  # noqa: E402
-        print("\n=== Post-export verification gate (hardware/verify_export.py) ===")
+        print("\n=== Post-export verification gate (dataflow/verify_export.py) ===")
         ref_npz = OUT_DIR / f"{NET_NAME_SHORT}_verify_ref.npz"
         verify_export.build_reference(model, Path(args.preprocessed_dir), ref_npz, min_fg_dice=args.min_fg_dice, hw=HW)
         if not args.skip_export:

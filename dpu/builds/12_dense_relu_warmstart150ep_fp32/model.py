@@ -1,7 +1,7 @@
 """S12 dense ReLU warm-start (150ep) float ENet for the Vitis AI flow.
 
 Uses the repo's own plain-PyTorch ENet (vendored as ENet.py, no Brevitas) with
-the exact trainer settings from compression/slurm/stage_12_dense_relu_warmstart150ep.job.
+the exact trainer settings from nas/slurm/stage_12_dense_relu_warmstart150ep.job.
 The Vitis AI container is Python 3.7, where typing.Literal does not exist, so it
 is aliased from typing_extensions before ENet.py is imported.
 """

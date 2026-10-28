@@ -6,7 +6,7 @@ for the full per-site naming scheme). Byte-for-byte the same mechanism as
 nnUNetTrainerLayerQuantENet_12_dense_relu_warmstart150ep_perlayer, just for
 the "nearest_conv_upsample" decoder architecture (nearest-neighbor resize +
 a learned 3x3 conv+BN+act on the decoder's skip/main branch, instead of
-"upsample_conv"'s bare bilinear resize -- see MILP/
+"upsample_conv"'s bare bilinear resize -- see ILP/
 config_12_dense_relu_nearest_conv_upsample.py and LayerQuantENet.py's own
 LayerQuantUpsamplingBottleneck). Same construction/Brevitas-device-fix
 pattern as every other CombinedQuantENet_*/LayerQuantENet_* trainer.

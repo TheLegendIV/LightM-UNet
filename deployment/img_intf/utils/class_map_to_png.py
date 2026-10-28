@@ -1,6 +1,6 @@
 """Render a class-id segmentation map (as produced by the FINN accelerator /
 run.c's on-device argmax) into a color PNG, using the same 5-class palette
-as compression/analysis/notebook/preview_predictions.ipynb
+as nas/analysis/notebook/preview_predictions.ipynb
 (Dataset509_ARCADE_1x1_4c: 0=Background, 1=LAD, 2=RCA, 3=LCX, 4=LM).
 
 Usage:

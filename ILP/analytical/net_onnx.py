@@ -11,7 +11,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))      # MILP/ (node_names)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))      # ILP/ (node_names)
 import finn_cost_model as fcm  # noqa: E402
 from bottleneck import fifo_memory  # noqa: E402
 from node_names import block_output_name, milp_role, table_kind  # noqa: E402

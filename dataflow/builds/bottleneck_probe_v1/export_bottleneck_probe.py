@@ -8,7 +8,7 @@ Model = QuantIdentity (unsigned, b bits; stand-in for the previous block's Thr_o
 So the FINN graph is:  Thr_in -> Dup -> reduce/conv/expand MVAUs (+ thresholds) -> Add -> Thr(residual_add) -> Thr(out_act).
 
 Run (from repo root, inside lightmunet_dev):
-    python3 hardware/builds/bottleneck_probe_v1/export_bottleneck_probe.py [--dilations 1 2 4 8 16] [--bits 4 6 8]
+    python3 dataflow/builds/bottleneck_probe_v1/export_bottleneck_probe.py [--dilations 1 2 4 8 16] [--bits 4 6 8]
 Writes inputs/bottleneck_cin32_d{d}_int{b}.onnx and inputs/bottleneck_cin32_d{d}_int{b}_probe.json.
 """
 from __future__ import annotations

@@ -215,7 +215,7 @@ ones are kept on disk for history but are superseded.
    rejoined by a channel-axis `Concat` -- mirroring the real initial
    block's "pool branch + conv branch, concatenated on channel axis"
    topology. Lowering Concat requires axis=-1 (HW `StreamingConcat` only
-   supports channel-last), so reused `hardware/finn_enet_build.py`'s
+   supports channel-last), so reused `dataflow/finn_enet_build.py`'s
    `_move_transpose_past_concat` trick (inlined self-contained, no
    cross-import) to push both branches' trailing Transposes past the
    axis=1 Concat first. Confirmed final HW graph via the real pipeline:
@@ -273,7 +273,7 @@ a folding/parallelization gap rather than a crash:
 
 None of these three have been root-caused yet — they're folding/config gaps
 in `make_up_folding_configs.py` / `make_int_folding_configs.py` /
-`make_fnl_folding_configs.py` (or the underlying `MILP/analytical` cost
+`make_fnl_folding_configs.py` (or the underlying `ILP/analytical` cost
 model), not confirmed hardware/toolchain bugs like items 1-3 above. Next step
 for whoever picks this up: diff each case's `stages.folding` (landed PE/SIMD)
 against `predicted.nodes` (see `probe_result.json`) to find which node(s)

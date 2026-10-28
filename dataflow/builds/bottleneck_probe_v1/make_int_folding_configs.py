@@ -1,7 +1,7 @@
 """Folding + FIFO config (and the model's prediction) for the initial-block probes. Standard library only.
 
-    python3 hardware/builds/bottleneck_probe_v1/make_int_folding_configs.py [--bits 4 6 8]      # StreamingMaxPool route, F = 81920
-    python3 hardware/builds/bottleneck_probe_v1/make_int_folding_configs.py --pool-set           # the 3 InferPool-route probes, INT4
+    python3 dataflow/builds/bottleneck_probe_v1/make_int_folding_configs.py [--bits 4 6 8]      # StreamingMaxPool route, F = 81920
+    python3 dataflow/builds/bottleneck_probe_v1/make_int_folding_configs.py --pool-set           # the 3 InferPool-route probes, INT4
 
 Same case as export_int_probe.py (1 -> 4 channels, 256x256 -> 128x128). The model has Thr_m UPSTREAM of the maxpool (the landed FINN graph, see
 int_bottleneck.py), so every case is a `_thrpre` twin: it shares the ONNX of `init_cin1_cout4_in256_int{b}`, whose own folding jsons / results are the
@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_ROOT / "MILP" / "analytical"))
+sys.path.insert(0, str(REPO_ROOT / "ILP" / "analytical"))
 
 from int_bottleneck import model_int_bottleneck, to_folding_config, verify_with_sim  # noqa: E402
 

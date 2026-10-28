@@ -8,7 +8,7 @@
 #     "IODMA_hls_0" top modules (and their submodules) don't collide
 #
 # No BD / IP Integrator is used anywhere (see
-# hardware/finn_partition_build_steps.py step_combine_partitions docstring
+# dataflow/finn_partition_build_steps.py step_combine_partitions docstring
 # for why combining FINN's partition stitched IPs via BD is unreliable).
 # Wiring the PS, IODMAs and finn_design_wrapper together is left to you.
 

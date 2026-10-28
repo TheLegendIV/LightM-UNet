@@ -2,7 +2,7 @@
 nnUNetTrainerENet_23_1_s19_warmstart_4c: Hutchinson-trace Hessian estimation
 (weights AND activations) combined with per-candidate-bit-width
 quantization error, producing the sensitivity_23_1.json that
-compression/hawq/ilp_search.py consumes.
+nas/hawq/ilp_search.py consumes.
 
 Runs entirely on the plain FP32 ENet (23_1 config, prelu_variant=
 "nonneg_block", loaded from its own checkpoint) -- NOT on QuantENet23_1 --
@@ -44,11 +44,11 @@ compares meaningfully across b in {2,4,8} for THAT tensor), not bit-exact
 parity with the eventual deployed quantizer.
 
 Usage:
-    python compression/hawq/sensitivity.py \\
+    python nas/hawq/sensitivity.py \\
         --net-name nnUNetTrainerENet_23_1_s19_warmstart_4c \\
         --checkpoint-name checkpoint_best.pth \\
         --n-batches 8 --n-probes 10 \\
-        --out-file compression/hawq/artifacts/sensitivity_23_1.json
+        --out-file nas/hawq/artifacts/sensitivity_23_1.json
 """
 from __future__ import annotations
 
@@ -77,7 +77,7 @@ NNUNET_RESULTS = REPO_ROOT / "data" / "nnUNet_results"
 
 
 def load_config(config_module: str) -> None:
-    """Dynamically imports one of MILP/configs/config_*.py (one per
+    """Dynamically imports one of ILP/configs/config_*.py (one per
     architecture -- e.g. config_23_1 for the S19/23_1 recipe at native
     width, config_21_2 for the same recipe's U8 width) and injects its
     constants (CHANNELS, BOTTLENECKS_PER_STAGE, STAGE_NAMES, NET_NAME, ...)
@@ -114,7 +114,7 @@ def build_fp32_model(checkpoint_path: Path) -> ENet:
 
 def load_real_batches(dataset_name: str, n_batches: int, seed: int = 0) -> list[tuple[torch.Tensor, torch.Tensor]]:
     """Real preprocessed (image, seg) pairs, batch size 1 -- same rationale
-    as compression/post-quantization/ptq.py's load_calibration_batches
+    as nas/post-quantization/ptq.py's load_calibration_batches
     (varying H/W across real cases, ENet's forward pass is fully
     convolutional so tolerates it directly). seg's raw -1 ("no label",
     pre-augmentation encoding) is replaced with 0 here, replicating the
@@ -253,7 +253,7 @@ def run_sensitivity(
             # Some real preprocessed images have H/W not evenly divisible by
             # ENet's stride-8 downsample factor, tripping a shape mismatch
             # in the upsample_conv decoder's residual add -- same real
-            # architectural sensitivity compression/post-quantization/
+            # architectural sensitivity nas/post-quantization/
             # ptq.py's calibrate() already documents and skips, independent
             # of quantization. A representative SAMPLE is enough here too.
             print(f"  [skip] batch {batch_i + 1}/{len(batches)} (shape {tuple(img.shape)}) failed forward pass: {error}")
@@ -319,7 +319,7 @@ def run_sensitivity(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--config", default="config_23_1",
-                         help="Which MILP/configs/config_*.py to load (one per architecture) -- "
+                         help="Which ILP/configs/config_*.py to load (one per architecture) -- "
                               "e.g. config_23_1 (S19/23_1 native width) or config_21_2 (same recipe, U8 width).")
     parser.add_argument("--net-name", default=None, help="Defaults to the loaded config's own NET_NAME.")
     parser.add_argument("--dataset-name", default="Dataset509_ARCADE_1x1_4c")
@@ -332,12 +332,12 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--out-file", type=Path, default=None,
-                         help="Defaults to compression/hawq/sensitivity_<config suffix>.json.")
+                         help="Defaults to nas/hawq/sensitivity_<config suffix>.json.")
     args = parser.parse_args()
 
     load_config(args.config)  # populates CHANNELS/BOTTLENECKS_PER_STAGE/STAGE_NAMES/NET_NAME/... as module globals
     net_name = args.net_name or NET_NAME
-    out_file = args.out_file or Path(f"compression/hawq/artifacts/sensitivity_{args.config.removeprefix('config_')}.json")
+    out_file = args.out_file or Path(f"nas/hawq/artifacts/sensitivity_{args.config.removeprefix('config_')}.json")
 
     checkpoint_path = (
         NNUNET_RESULTS / args.dataset_name / f"{net_name}__{args.plans_name}__{args.configuration}"

@@ -5,13 +5,13 @@
 #   uniform_int4 / uniform_int6 / uniform_int8   --min-resources, every resource cap 1.0 of the device (LUT / BRAM / DSP / URAM)
 #   mixed_68                                     bits 6 or 8 per layer, the accuracy objective (--lexicographic: least sensitivity, then least resources) with the 0.5 caps of the earlier
 #                                                mixed_468 arm -- the caps are what forces a mix (all-INT8 needs 55 % LUT, all-INT6 44.8 %)
-# Stage 1 solves the arms (MILP/finn_milp.py, ~1 min each), stage 2 simulates every OPTIMAL arm in the analytical block models (MILP/analytical/net_explicit.py): the sizing STARTS from the MILP's
+# Stage 1 solves the arms (ILP/finn_milp.py, ~1 min each), stage 2 simulates every OPTIMAL arm in the analytical block models (ILP/analytical/net_explicit.py): the sizing STARTS from the MILP's
 # FIFO depths, may raise or lower any FIFO to reach each block's MILP cycles (<= +500 % of the starting depth), the whole net is chained. A block beyond 5 % of its MILP cycles is a WARNING.
 # Writes <arm>/ (folding json, summary.csv, solve.log) and <arm>_simfifo/ (simulated FIFO lists, run.log).
-# Run in lightmunet_dev:   bash MILP/artifacts/S12_dense_512_uniform_cap1_v2/run_arms.sh [solve|sim|all] [arm ...]       (default: all four arms; sim ~0.5-1 h, arms in parallel, --workers 2 each)
+# Run in lightmunet_dev:   bash ILP/artifacts/S12_dense_512_uniform_cap1_v2/run_arms.sh [solve|sim|all] [arm ...]       (default: all four arms; sim ~0.5-1 h, arms in parallel, --workers 2 each)
 set -u
 cd /workspace/LightM-UNet
-HERE=MILP/artifacts/S12_dense_512_uniform_cap1_v2
+HERE=ILP/artifacts/S12_dense_512_uniform_cap1_v2
 CONFIG=config_12_dense_relu_warmstart150ep
 STAGE=${1:-all}; shift || true
 ARMS=("$@")
@@ -21,14 +21,14 @@ solve() {
   local arm=$1 bits=${1#uniform_int} obj="--min-resources" cap=1.0
   if [ "$arm" = mixed_68 ]; then bits="6,8"; obj="--lexicographic"; cap=0.5; fi
   mkdir -p "$HERE/$arm"
-  python3 MILP/finn_milp.py --config $CONFIG --sensitivity-file MILP/artifacts/layer_sensitivity_12_dense_relu_warmstart150ep.json \
+  python3 ILP/finn_milp.py --config $CONFIG --sensitivity-file ILP/artifacts/layer_sensitivity_12_dense_relu_warmstart150ep.json \
     --candidate-bits "$bits" --force-dsp $obj --max-lut-fraction $cap --max-bram-fraction $cap --max-dsp-fraction $cap --max-uram-fraction $cap \
     --target-fps 250 --clock-mhz 100 --time-limit 900 --gap-rel 0.001 --out-file "$HERE/$arm/layer_bits_folding_$arm.json" > "$HERE/$arm/solve.log" 2>&1
 }
 simulate() {
   local arm=$1
   mkdir -p "$HERE/${arm}_simfifo"
-  python3 MILP/analytical/net_explicit.py "$HERE/$arm/layer_bits_folding_$arm.json" --out-dir "$HERE/${arm}_simfifo" --tag "${arm}_simfifo" --config $CONFIG --workers 2 ${NE_ARGS:-} > "$HERE/${arm}_simfifo/run.log" 2>&1
+  python3 ILP/analytical/net_explicit.py "$HERE/$arm/layer_bits_folding_$arm.json" --out-dir "$HERE/${arm}_simfifo" --tag "${arm}_simfifo" --config $CONFIG --workers 2 ${NE_ARGS:-} > "$HERE/${arm}_simfifo/run.log" 2>&1
 }
 status() { python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['status'])" "$HERE/$1/layer_bits_folding_$1.json" 2>/dev/null || echo "none"; }
 

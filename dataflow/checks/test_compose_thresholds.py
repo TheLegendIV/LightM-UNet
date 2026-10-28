@@ -1,6 +1,6 @@
-"""Tests for hardware/finn_compose_thresholds.py (needs numpy, onnx, qonnx; run in lightmunet_dev or the FINN container):
+"""Tests for dataflow/finn_compose_thresholds.py (needs numpy, onnx, qonnx; run in lightmunet_dev or the FINN container):
 
-    python3 hardware/checks/test_compose_thresholds.py
+    python3 dataflow/checks/test_compose_thresholds.py
 """
 import sys
 import unittest

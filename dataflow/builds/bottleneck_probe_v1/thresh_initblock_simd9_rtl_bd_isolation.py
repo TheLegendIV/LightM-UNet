@@ -1,7 +1,7 @@
 """Real-folding retest of thresh_initblock_narrowweights_rtl_bd_isolation.py's RTL MVAU. That
 script refuted the narrow_weights hypothesis (identical mvu_4sx4u.sv part-select/conditional-
 expression crash, same line numbers, even with true narrow-range [-7,7] weights). Checking the
-REAL once-crashing probe's own landed folding (hardware/builds/bottleneck_probe_v1/results/
+REAL once-crashing probe's own landed folding (dataflow/builds/bottleneck_probe_v1/results/
 init_cin1_cout4_in256_int4_pool_merged_20261003_221514/probe_result.json) found the actual
 differentiator instead: the real probe's MVAU_rtl folding is **PE=1, SIMD=9** (SIMD == MW, full
 input-parallel), not PE=1/SIMD=1 like every isolation script in this family so far (all of which
@@ -84,7 +84,7 @@ from finn.transformation.fpgadataflow.synth_ooc import SynthOutOfContext  # noqa
 
 
 def _move_transpose_past_concat(model: ModelWrapper, perm=(0, 3, 1, 2)):
-    """Trimmed copy of hardware/finn_enet_build.py's free function of the same name (kept
+    """Trimmed copy of dataflow/finn_enet_build.py's free function of the same name (kept
     self-contained here on purpose)."""
     graph = model.graph
     graph_modified = False

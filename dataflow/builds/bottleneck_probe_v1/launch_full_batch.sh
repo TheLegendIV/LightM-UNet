@@ -1,6 +1,6 @@
 #!/bin/bash
 set -u
-cd /mnt/c/DEV/repos/LightM-UNet/hardware/builds/bottleneck_probe_v1
+cd /mnt/c/DEV/repos/LightM-UNet/dataflow/builds/bottleneck_probe_v1
 export CONTAINER=finn_persistent
 export JOBS=4
 export EXTRA="--ooc"

@@ -2,7 +2,7 @@
 # Runs inside finn_persistent. Copy of s12_512_analytical whose FINN partition IPs come from the
 # bilinear mixed68 build. This build has no IODMA IPs, so the repackaged p0_input/p7_output IODMA
 # IPs from the 512 analytical build are kept (same I/O geometry: UINT8 in, UINT8 class map out).
-# Needs /tmp/make_project_512.tcl (hardware/builds/S12_dense_512_u4_analytical_v1/vivado/).
+# Needs /tmp/make_project_512.tcl (dataflow/builds/S12_dense_512_u4_analytical_v1/vivado/).
 source /tools/Xilinx/Vivado/2022.2/settings64.sh
 set -u
 FINN=/home/thelegendiv/finn

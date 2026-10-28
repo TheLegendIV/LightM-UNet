@@ -204,9 +204,9 @@ The rate balance is necessary, not sufficient. With a depth-2 FIFO on every edge
    then the next row jumps). The FIFO feeding FMPadding must hold >= pad+1 pixels, and the upstream must be faster than T to refill it.
 2. MVAU_r reads its SF input words in a burst and then idles NF*SF-SF cycles; its feed FIFO needs more than 2 words.
 3. The skip FIFO must hold what the skip branch delivers during the main-branch latency (dominated by the SWG fill, ~(k_eff-1)*W_pad+k_eff pixels).
-With those three sized (see MILP/analytical/bottleneck.py verify_with_sim) and every other edge at 2 words, the simulated block holds 72.00 cyc/px.
+With those three sized (see ILP/analytical/bottleneck.py verify_with_sim) and every other edge at 2 words, the simulated block holds 72.00 cyc/px.
 Depth 1 would be a combinational ready path; real FINN FIFOs are >= 2 (skid buffer).
-Hardware check of this claim: hardware/builds/bottleneck_probe_v1/ (see FINN_AGENT_HANDOFF.md).
+Hardware check of this claim: dataflow/builds/bottleneck_probe_v1/ (see FINN_AGENT_HANDOFF.md).
 
 
 Downsampling bottleneck (dn_bottleneck.py, dn_bottleneck_sim.py, test_dn_bottleneck.py)
@@ -289,7 +289,7 @@ Final deconvolution (fnl_block.py, fnl_block_sim.py, test_fnl_block.py; not a bo
 
     FMPadPix (zero insertion) -> FMPad_u (pad 1) -> SWG_u (2x2) -> [DWC] -> MVAU_f (4*Cin -> Cout) -> [Bias (ChannelwiseOp add)] -> LabelSelect (argmax over the 5 channels)
 
-  Update 2026-10-06, after the real FINN build of this network (hardware/builds/S12_dense_256_u4_analytical_v1/probes/partition7_fifo_check_20261005_222226): FINN lowers the transposed conv to
+  Update 2026-10-06, after the real FINN build of this network (dataflow/builds/S12_dense_256_u4_analytical_v1/probes/partition7_fifo_check_20261005_222226): FINN lowers the transposed conv to
   FMPadding_Pixel (zero insertion only, (2H-1)^2 grid) followed by a separate FMPadding_rtl (pad 1, (2H+1)^2) -> the model has both (`FMPadPix`, `FMPad_u`; the up blocks too);
   the bias IS lowered (ChannelwiseOp, INT16 -> INT17); the network ends in a `LabelSelect` argmax (`argmax=True`, role `label_select`): foldable PE | 5, ceil(5/PE) cycles per pixel
   (327,680 per frame at PE 1, 65,536 at PE 5), UINT8 label out, one word per pixel at the sink. In parallel_window mode (MVAU SIMD > Cin: `initial.conv`, `final`) the SWG emits a whole KxK window per word
@@ -327,7 +327,7 @@ work during phase 1 unless buffering lets it run ahead. Per input row, with no r
   (depth 2 / 4 / 8 / 16 -> 20.58 / 19.58 / 17.58 / 16.0); the hardware behaved like depth ~2. A rule of thumb that follows: size FIFOs to the node-limited rate (here 16.0), not to the looser target.
 
 Initial block: Thr_m upstream of the maxpool (updated model). The first init probes showed the landed graph is Dup -> Thr_m -> MaxPool -> Concat, not the exported MaxPool -> Quant: FINN's
-`MoveMaxPoolPastMultiThreshold` (hardware/finn_enet_build.py) swaps MaxPool -> MultiThreshold into MultiThreshold -> MaxPool, which pays when the pool follows a wide accumulator but is pointless here
+`MoveMaxPoolPastMultiThreshold` (dataflow/finn_enet_build.py) swaps MaxPool -> MultiThreshold into MultiThreshold -> MaxPool, which pays when the pool follows a wide accumulator but is pointless here
 because the pool already reads the INT-A input stream. Consequences in the model: Thr_m runs on H*W pixels (65,536 cycles at PE 1, 80% of F), the skip FIFO sits at the pool output (maxpool -> concat), and
 the DWCs are Dup->Thr_m, Thr_m->pool, pool->Concat. Rate and totals are unchanged (the sim still gives 5.02 cyc/px, MaxPool at 100% of F), so the order alone does not explain the 15.78 cyc/px measured in
 hardware. What the first probes got wrong is where the join FIFO was forced: on thr_m -> concat, an edge that does not exist in hardware, leaving the real join edge (maxpool -> concat) at FINN's 2 words.

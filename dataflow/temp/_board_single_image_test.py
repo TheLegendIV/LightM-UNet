@@ -1,6 +1,6 @@
 """Send one reference u8 input to the board server and compare the returned class map with the PyTorch reference.
 
-Run: .venv\\Scripts\\python.exe hardware/temp/_board_single_image_test.py [test_1_p0000_0000]
+Run: .venv\\Scripts\\python.exe dataflow/temp/_board_single_image_test.py [test_1_p0000_0000]
 """
 import sys
 from pathlib import Path

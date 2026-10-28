@@ -13,8 +13,8 @@ Writes <out-dir>/<name>.onnx and <out-dir>/<name>_conv_order.json (the
 latter is what finn_s12_build.py --conv-order needs; it is bit-independent).
 
 Example (reproduces the S12_dense_dsr_ablation_v1 dsr_off export):
-    python hardware/s12_export.py --resolution 512 --tag dsr_off \\
-        --bits-file MILP/artifacts/S12_dense_dsr_ablation_v1/dsr_off/layer_bits_SITES_dsr_off.json \\
+    python dataflow/s12_export.py --resolution 512 --tag dsr_off \\
+        --bits-file ILP/artifacts/S12_dense_dsr_ablation_v1/dsr_off/layer_bits_SITES_dsr_off.json \\
         --checkpoint data/nnUNet_results/Dataset509_ARCADE_1x1_4c/nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_nearest_upsample_perlayer_12_dense_relu_nearest_upsample_wm_joint_alpha1.0_perlayer_candidatebits468_forcedsp_lut50_bram50_dsp90_ft15ep__nnUNetPlans__2d/fold_0/checkpoint_best.pth.txt
 Then: docker cp <onnx> <container>:/home/thelegendiv/finn/notebooks/enet/
 """
@@ -31,7 +31,7 @@ from torch import nn
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "enet"))
-sys.path.insert(0, str(REPO_ROOT / "hardware"))
+sys.path.insert(0, str(REPO_ROOT / "dataflow"))
 
 import brevitas.nn as qnn  # noqa: E402
 import finn_enet_prod_export  # noqa: E402
@@ -112,7 +112,7 @@ def _zscore(arr: np.ndarray) -> np.ndarray:
 def cross_test(model, dataset: str, real_pred_dir: Path | None) -> None:
     """FINN-mirror Dice on imagesTs/labelsTs (+ agreement vs. the real model's predictions)."""
     from PIL import Image
-    sys.path.insert(0, str(REPO_ROOT / "analysis" / "501_ARCADE"))
+    sys.path.insert(0, str(REPO_ROOT / "nas"))
     import segmentation_topology as topo
 
     raw = REPO_ROOT / "data" / "nnUNet_raw" / dataset
@@ -152,7 +152,7 @@ def main() -> None:
     p.add_argument("--bits-file", required=True, help="MILP layer_bits_SITES_*.json")
     p.add_argument("--checkpoint", required=True, help="nnU-Net checkpoint_best.pth[.txt]")
     p.add_argument("--name", help="override onnx basename (default <stem>_{trained|dummy}_<tag>_<R>x<R>)")
-    p.add_argument("--out-dir", default=str(REPO_ROOT / "hardware" / "outputs"))
+    p.add_argument("--out-dir", default=str(REPO_ROOT / "dataflow" / "outputs"))
     p.add_argument("--decoder")
     p.add_argument("--context-pattern")
     p.add_argument("--channels", type=int, nargs=5)

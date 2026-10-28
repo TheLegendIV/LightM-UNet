@@ -1,5 +1,5 @@
 """Cheap (no-Vivado, no-HLS) landed-folding dump for one S12-dense 8-way partition,
-generalized sibling of hardware/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/
+generalized sibling of dataflow/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/
 dump_milpfold_landed_partition2.py (parametrized partition index, any tag/preamble).
 
 Re-derives the given partition exactly like finn_s12_build.py does up through

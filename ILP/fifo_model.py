@@ -1,6 +1,6 @@
-"""FIFO and DWC estimates for the MILP (finn_milp.py), derived from the analytical block models (MILP/analytical/).
+"""FIFO and DWC estimates for the MILP (finn_milp.py), derived from the analytical block models (ILP/analytical/).
 
-What the analytical models showed (see MILP/analytical/analytical.md and the S12-256 artifact):
+What the analytical models showed (see ILP/analytical/analytical.md and the S12-256 artifact):
   * The memory that matters is a handful of FIFOs per block: the SKIP FIFO of every residual diamond (depth ~ n_fill + a few pixels, n_fill = pad*W + pad + 1 of the diamond's
     windowed conv) and the PREFETCH FIFO in front of every padded conv's FMPadding ((pad*W + pad + 1)*cf + 2 words). Their size in BITS is almost fixed by the geometry
     (dilation, width, channels); folding only changes the stream width (-> BRAM aspect / pow2 rounding) and a few pixels of latency. Every other FIFO of a verified block
@@ -16,7 +16,7 @@ UP_SKIP_ROWS / UP_MAIN_ROWS) are priced like the regular skip FIFO. Every intra-
 budget and the zero insertion / strided window / upsampler move whole rows in bursts, so 2-word FIFOs couple the phases (512x512 INT6: down1 +29 %, down2 +26 %, up4 +81 %, up5 +48 % over the MILP cycles,
 on target at 32; bottleneck.BLOCK_FIFO_DEPTH). 32 words is the last depth at which fifo_memory's SRL FIFO costs the same, so the term is a per-width constant. The cycles stay the nodes'; the FIFOs that make them
 true are priced. Simulation-only FIFOs without a closed form (down feed into SWG_r, init `FIFO main`, dup outputs) are NOT priced in the solve:
-MILP/analytical's verify_with_sim sizes them after the fact (net_fold.py). Mixed precision works since 2026-10-11: every width uses the bits of the option that owns the FIFO (FifoModel._bits); neighbours with different bits then see a width mismatch (a small spurious DWC term, the real stream carries one dtype), and bit-less nodes use the largest candidate.
+ILP/analytical's verify_with_sim sizes them after the fact (net_fold.py). Mixed precision works since 2026-10-11: every width uses the bits of the option that owns the FIFO (FifoModel._bits); neighbours with different bits then see a width mismatch (a small spurious DWC term, the real stream carries one dtype), and bit-less nodes use the largest candidate.
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ from layer_topology import find_fork_join_diamonds  # noqa: E402
 SKIP_DELTA_MIN_PX = 4         # delta = verified skip depth - n_fill, in pixels: 2..11 px in the 25 verified residual blocks (2-3% of n_fill, 8.5% at 128 px wide, 6% at 64 px / d=1);
 SKIP_DELTA_FRAC = 0.085       # the bound max(4, 8.5% of n_fill) covers all of them (it is the fold-dependent term ceil(R / T) of bottleneck.py, bilinear in the fold)
 DN_SKIP_MARGIN = 1.10         # the downsampling block's analytic skip depth is 8-10% below the simulated need
-UP_SKIP_ROWS = 1.0            # up block, ext-end skip FIFO: ONE input row of the block (W px of the ext stream). Simulation with the real row-buffer UpsampleNearestNeighbour (MILP/analytical,
+UP_SKIP_ROWS = 1.0            # up block, ext-end skip FIFO: ONE input row of the block (W px of the ext stream). Simulation with the real row-buffer UpsampleNearestNeighbour (ILP/analytical,
                               # up_bottleneck_sim.UpNNNode, 2026-10-08): paced need = W-1 px for every fold swept (up4 27-31 px of W=32, up5 58.5-63 px of W=64), final depth need + 1 px = W px exactly.
 UP_MAIN_ROWS = 3.0            # up block, `FIFO main` (proj -> UpNN -> Thr_s end): bound 3 x W px of the main stream. The paced need depends on the Thr_s fold and the rate (1 px .. 89 px at W=32, 5 .. 145 px
                               # at W=64 over budgets 16..96 / 4..24 cycles per output px; max 2.75 W); the MILP's own up4 / up5 folds need 22 / 40.5 px. It is a deadlock bound, cheap in memory (one BRAM18).
@@ -243,7 +243,7 @@ class FifoModel:
                                 producer=node, consumer=d["join"], role_kind="skip")
 
     def _build_edge_fifos(self) -> None:
-        """The real build (hardware/finn_s12_build_steps.step_set_fifo_depths_fixed2) keeps ONE depth-2 StreamingFIFO on EVERY dataflow edge (no RemoveShallowFIFOs); it is a few LUTs of SRL
+        """The real build (dataflow/finn_s12_build_steps.step_set_fifo_depths_fixed2) keeps ONE depth-2 StreamingFIFO on EVERY dataflow edge (no RemoveShallowFIFOs); it is a few LUTs of SRL
         per FIFO (bottleneck.fifo_memory: 6.3 + 1.0*width), 8.6k LUT over the 440 of the bilinear-256 build. The width is the producer's output stream -> a per-option constant of the
         producer, one per outgoing edge; edges carrying a deeper skip / prefetch FIFO (self.replaced_edges) are priced by that FIFO instead."""
         for consumer, preds in self.dmap.items():
@@ -391,7 +391,7 @@ class FifoModel:
         return dict(fifos=fifos, dwcs=dwcs, totals=tot)
 
     def _bridge_entry(self, it: dict, chosen: dict) -> dict:
-        """One entry of the flat `intra_block_fifos` list in the schema (and role vocabulary) net_fold.py writes and hardware/finn_s12_build_steps.py reads:
+        """One entry of the flat `intra_block_fifos` list in the schema (and role vocabulary) net_fold.py writes and dataflow/finn_s12_build_steps.py reads:
         producer / consumer = '<stage>.<analytical role>' (skip: thr_s => add; prefetch: dwc or thr_r => fmpad, initial block: dup => fmpad); the MILP names ride along as *_milp."""
         stage = it["stage"]
         if it["role_kind"] == "skip":

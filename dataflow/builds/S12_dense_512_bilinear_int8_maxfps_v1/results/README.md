@@ -11,7 +11,7 @@ This is the **v1** INT8 design, the one before the v2 re-fold (`S12_dense_512_bi
 | 1, 5, 7 | `p157fix_probe1_5_7_20261016_014355/` | `p157fix_milpfold_probe1_5_7_20261016_014355` | name-stable FIFO insertion (p1 deadlock / p5 mis-sized up4 FIFOs), LabelSelect PE = labels, final bias PE, final FMPadding_Pixel SIMD (p7) |
 | 2, 3, 4, 6 | `8way_pairs_20261015_210334/` | `pairs_milpfold_8way_20261015_210334` | the full 8-way run (partitions 0, 1, 5, 7 of this run are superseded by the rows above) |
 
-Same composition as `_launch_golden_int8.sh` (per-partition golden check of the assembled design). Folding: `layer_bits_folding_S12_512_bilin_int8_maxfps_pairs.json` (in `MILP/artifacts/S12_512_bilin_int8_maxfps/simfifo_pairs/`). `logs/` has the build, preamble and bridge logs of the three runs.
+Same composition as `_launch_golden_int8.sh` (per-partition golden check of the assembled design). Folding: `layer_bits_folding_S12_512_bilin_int8_maxfps_pairs.json` (in `ILP/artifacts/S12_512_bilin_int8_maxfps/simfifo_pairs/`). `logs/` has the build, preamble and bridge logs of the three runs.
 
 ## Final per-partition results (OOC synthesis, 100 MHz target; DSP column reads 0 in OOC reports)
 

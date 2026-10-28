@@ -9531,7 +9531,7 @@
       ]
     },
     "bilinear_dw": {
-      "note": "frozen depthwise 3x3 conv of the bilinear decoder, folded after the solve (MILP/analytical/add_frozen_dw_fold.py); width converters to its neighbours are not priced",
+      "note": "frozen depthwise 3x3 conv of the bilinear decoder, folded after the solve (ILP/analytical/add_frozen_dw_fold.py); width converters to its neighbours are not priced",
       "budget_cycles": 400000,
       "layers": {
         "up4.main_up.1": {

@@ -1,5 +1,5 @@
 import json
-d='/workspace/LightM-UNet/MILP/artifacts/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/dsrSweep_pbiOff_dsr1.5/'
+d='/workspace/LightM-UNet/ILP/artifacts/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/dsrSweep_pbiOff_dsr1.5/'
 import glob
 f=[p for p in glob.glob(d+'layer_bits_folding_*.json')][0]
 j=json.load(open(f))

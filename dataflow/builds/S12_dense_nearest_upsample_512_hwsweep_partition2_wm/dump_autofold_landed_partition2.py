@@ -3,7 +3,7 @@ the control variant for the S12_dense_dsr_ablation_v1 MILP sweep. Lets FINN's
 own SetFolding choose PE/SIMD (step_target_fps_parallelization only, no
 step_apply_folding_config) at the SAME target_fps/mvau_wwidth_max the MILP
 solve used (target_fps=305.17, mvau_wwidth_max=80 per
-MILP/artifacts/S12_dense_dsr_ablation_v1/run_ablation.sh), then saves a landed
+ILP/artifacts/S12_dense_dsr_ablation_v1/run_ablation.sh), then saves a landed
 checkpoint with cycles_estimate annotated -- same recipe as
 dump_milpfold_landed_partition2.py minus the folding-config override.
 

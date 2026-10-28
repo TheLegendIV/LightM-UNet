@@ -1,4 +1,4 @@
-"""Host-runnable (no qonnx needed) clone of hardware/utils/dump_node_attrs_all.py.
+"""Host-runnable (no qonnx needed) clone of dataflow/utils/dump_node_attrs_all.py.
 
 Reads the same op_type/nodeattr superset directly off the ONNX protobuf
 AttributeProto fields instead of going through qonnx's get_nodeattr() (which

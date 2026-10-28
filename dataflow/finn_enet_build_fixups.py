@@ -28,7 +28,7 @@ calibration where qonnx's Quant->MultiThreshold conversion leaves
 out_bias=0 instead of the correct -(2**(bits-1)), which trips FINN's
 `assert (not odt.signed()) or (actval < 0)` in convert_to_hw_layers.py.
 Exact same root cause + fix already proven in
-hardware/_tmp_prelu_investigation2.py's minimal 2-block test harness; see
+dataflow/_tmp_prelu_investigation2.py's minimal 2-block test harness; see
 that file's _fixup_degenerate_signed_bias docstring for the full analysis.
 
 Run inside the FINN container:
@@ -93,7 +93,7 @@ OUTPUT_DIR = os.path.join(ENET_DIR, "finn_deployment_outputs", f"estimates_{MODE
 
 def _fixup_degenerate_signed_bias(model: ModelWrapper, cfg: DataflowBuildConfig = None) -> ModelWrapper:
     """Copied verbatim (module-load-safe signature) from
-    hardware/_tmp_prelu_investigation2.py -- see that file for the full
+    dataflow/_tmp_prelu_investigation2.py -- see that file for the full
     root-cause analysis. Corrects any signed-output MultiThreshold node
     whose out_bias attribute was left at the degenerate fallback 0 instead
     of the correct -(2**(bits-1)); a no-op for any node that's already

@@ -8,7 +8,7 @@ depth/decoder/context_pattern/flags -- with exactly ONE change: CHANNELS=
 width (channel width never changes a module's attribute path, only its
 tensor shapes), but a layer_bits_*.json solved for the base width is NOT
 shape-compatible here -- this width needs its own ILP solve (see
-MILP/configs/config_12_dense_relu_nearest_conv_upsample_256_w8_16.py).
+ILP/configs/config_12_dense_relu_nearest_conv_upsample_256_w8_16.py).
 """
 from __future__ import annotations
 

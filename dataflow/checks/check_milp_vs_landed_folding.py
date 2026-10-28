@@ -1,6 +1,6 @@
 """Check that a MILP folding JSON landed unchanged in FINN's built graph.
 
-Compares MILP/finn_milp.py's layer_bits_folding_<tag>.json ("per_layer") against
+Compares ILP/finn_milp.py's layer_bits_folding_<tag>.json ("per_layer") against
 a FINN partition checkpoint (e.g. post_fifo_autosize_checkpoints/
 partition*_<tag>_milpfold_prefifo_autosize.onnx). Per MVAU node (in graph order):
   - PE, SIMD, cycles_estimate  vs MILP pe, simd, mvu_cycles
@@ -11,10 +11,10 @@ partition is a contiguous run of the MILP's MVAU-type layers, so the offset
 with the most MVAU matches is used.
 
 Needs only `onnx` (no FINN). Example, from the repo root:
-    python hardware/checks/check_milp_vs_landed_folding.py \\
-        MILP/artifacts/<dir>/<tag>/layer_bits_folding_<tag>.json \\
-        hardware/builds/<build>/post_fifo_autosize_checkpoints/partition2_<tag>_milpfold_prefifo_autosize.onnx \\
-        --conv-order hardware/outputs/<model>_conv_order.json
+    python dataflow/checks/check_milp_vs_landed_folding.py \\
+        ILP/artifacts/<dir>/<tag>/layer_bits_folding_<tag>.json \\
+        dataflow/builds/<build>/post_fifo_autosize_checkpoints/partition2_<tag>_milpfold_prefifo_autosize.onnx \\
+        --conv-order dataflow/outputs/<model>_conv_order.json
 Run in `docker exec lightmunet_dev python3 ...` if the host python has no onnx.
 
 The matching between MILP per_layer keys (file order) and landed MVAU nodes

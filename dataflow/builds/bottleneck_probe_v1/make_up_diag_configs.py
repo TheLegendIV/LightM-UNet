@@ -1,6 +1,6 @@
 """Diagnostic twins of the INT4 `noconv` up4 probe (32 -> 16, 32x32 -> 64x64, T_out = 18). Standard library only.
 
-    python3 hardware/builds/bottleneck_probe_v1/make_up_diag_configs.py
+    python3 dataflow/builds/bottleneck_probe_v1/make_up_diag_configs.py
 
 Why: `up_cin32_cout16_in32_int4_noconv` landed every PE/SIMD as predicted but measured 20.5 cyc/px against the 18 target (model: 17.6). Two groups
 of suspects, one probe each (all share the ONNX of the baseline; only the folding json and the `_probe.json` differ):
@@ -26,7 +26,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO_ROOT / "MILP" / "analytical"))
+sys.path.insert(0, str(REPO_ROOT / "ILP" / "analytical"))
 
 from up_bottleneck import model_up_bottleneck, to_folding_config, verify_with_sim  # noqa: E402
 

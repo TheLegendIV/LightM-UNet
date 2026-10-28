@@ -1,6 +1,6 @@
-# MILP/utils — occasional tools (not part of the MILP flow)
+# ILP/utils — occasional tools (not part of the MILP flow)
 
-Maintained and runnable; each imports the core modules from `MILP/`.
+Maintained and runnable; each imports the core modules from `ILP/`.
 
 | script | use |
 |---|---|

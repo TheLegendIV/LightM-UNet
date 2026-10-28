@@ -1,6 +1,6 @@
 """Shared constants for nnUNetTrainerENet_12_separable_dense_relu's ("S12.1")
 HAWQ per-block W/A search -- the already-trained S12.1 checkpoint
-(compression/results.csv's own nnUNetTrainerENet_12_separable_dense_relu
+(nas/results.csv's own nnUNetTrainerENet_12_separable_dense_relu
 row, stage=12_separable_dense_relu, dice=0.7729, 144 epochs). S5.6's own
 separable_dilated+dense_dilation recipe (see config_5_6.py) but with plain
 ReLU (use_prelu=0) instead of per-channel PReLU -- i.e. separable_dilated

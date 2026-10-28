@@ -1,6 +1,6 @@
 import onnx
 
-m = onnx.load(r"c:\DEV\repos\LightM-UNet\hardware\temp\p5_p6_diag\partition_5_prefifo_autosize.onnx")
+m = onnx.load(r"c:\DEV\repos\LightM-UNet\dataflow\temp\p5_p6_diag\partition_5_prefifo_autosize.onnx")
 graph = m.graph
 by_output = {}
 for n in graph.node:

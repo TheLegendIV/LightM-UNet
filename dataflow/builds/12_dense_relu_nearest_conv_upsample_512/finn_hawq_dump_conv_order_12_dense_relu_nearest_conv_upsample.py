@@ -3,7 +3,7 @@ every weight-bearing / pool node in the PER-LAYER HAWQ, alpha=1.0
 12_dense_relu_nearest_conv_upsample FINN-safe model (`LayerQuantEnetFINN`,
 from finn_export_12_dense_relu_nearest_conv_upsample_dummy.py), in
 named_modules() registration order -- see
-hardware/finn_hawq_dump_conv_order_12_dense_relu_warmstart150ep_alpha025.py
+dataflow/finn_hawq_dump_conv_order_12_dense_relu_warmstart150ep_alpha025.py
 (the decoder_type="upsample_conv" sibling this mirrors) for the full
 rationale. Only real change vs. that sibling: up4/up5 now each contribute
 one EXTRA real weight-bearing module call, "up{4,5}.skip_resize_conv.0"
@@ -14,13 +14,13 @@ own main_proj and reduce/up/expand calls.
 This ordered list is the positional bridge between the FINN dataflow
 graph's weight-like nodes (MVAU/VVAU/MaxPool, in forward-execution order)
 and this architecture's real per-layer folding config
-(MILP/artifacts/S12_dense_nn_upsample_v1/layer_bits_folding_..._alpha1.0_..._maxlat200ms_joinbalance1.1.json's
+(ILP/artifacts/S12_dense_nn_upsample_v1/layer_bits_folding_..._alpha1.0_..._maxlat200ms_joinbalance1.1.json's
 "per_layer" dict, keyed by these same logical dotted names).
 
 Usage (run inside the pytorch training container):
-    python hardware/finn_hawq_dump_conv_order_12_dense_relu_nearest_conv_upsample.py
+    python dataflow/finn_hawq_dump_conv_order_12_dense_relu_nearest_conv_upsample.py
 
-Output: hardware/outputs/finn_exports/
+Output: dataflow/outputs/finn_exports/
     quantEnet_12_dense_relu_nearest_conv_upsample_dummy_int8_conv_order.json
 """
 from __future__ import annotations

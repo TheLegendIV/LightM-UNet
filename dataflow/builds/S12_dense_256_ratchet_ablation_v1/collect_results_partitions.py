@@ -1,17 +1,17 @@
-"""Collect the partition-only OOC-synth results of the S12 256x256 DSR ablation (folder and arm names keep the old word "ratchet") into hardware/results.csv.
+"""Collect the partition-only OOC-synth results of the S12 256x256 DSR ablation (folder and arm names keep the old word "ratchet") into dataflow/results.csv.
 
-Parametrised sibling of hardware/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/collect_results_partition2.py (same schema and upsert key = (model_name, config)),
+Parametrised sibling of dataflow/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/collect_results_partition2.py (same schema and upsert key = (model_name, config)),
 for builds made by finn_s12_build.py --partitions N: <tag>_{milpfold,autofold}_partition<N>_<ts>/report/ooc_synth_and_timing.json.
 
-Arms with an identical MILP folding share one build (MILP/artifacts/S12_dense_256_ratchet_ablation_v1/arm_build_map.csv, written by summarize_arms.py): pass --arm-map and every arm
+Arms with an identical MILP folding share one build (ILP/artifacts/S12_dense_256_ratchet_ablation_v1/arm_build_map.csv, written by summarize_arms.py): pass --arm-map and every arm
 gets its own results row (config = <arm>_milpfold_partition_<N>_ooc_synth) with a note naming the build it shares.
 
-FINN's DSP field in ooc_synth_and_timing.json is unreliable (known Tcl-filter parser bug, see hardware/collect_results.py): pass --dsp-overrides-json {"<tag>_<milpfold|autofold>": real_dsp}
+FINN's DSP field in ooc_synth_and_timing.json is unreliable (known Tcl-filter parser bug, see dataflow/collect_results.py): pass --dsp-overrides-json {"<tag>_<milpfold|autofold>": real_dsp}
 read from the build's vivado.log "| DSPs |" row.
 
 Usage (local copy of finn_deployment_outputs):
     python3 collect_results_partitions.py --deployment-root <dir with the *_partition2_* build dirs> \\
-        --arm-map MILP/artifacts/S12_dense_256_ratchet_ablation_v1/arm_build_map.csv [--dsp-overrides-json real_dsp.json] [--partition 2]
+        --arm-map ILP/artifacts/S12_dense_256_ratchet_ablation_v1/arm_build_map.csv [--dsp-overrides-json real_dsp.json] [--partition 2]
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from pathlib import Path
 import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-RESULTS_CSV = REPO_ROOT / "hardware" / "results.csv"
+RESULTS_CSV = REPO_ROOT / "dataflow" / "results.csv"
 
 RESULTS_COLUMNS = [
     "model_name", "config", "channels", "bottlenecks", "bit_width",
@@ -63,7 +63,7 @@ def describe(tag: str) -> str:
     if base == "analytical_25pct_finnfifo":
         return "Analytical-flow folding (as analytical_25pct) with FINN's OWN FIFO autosizing (largefifo_rtlsim): no FIFO depths forced by the bridge."
     if base == "analytical_25pct":
-        return "Analytical-flow folding (MILP/analytical/net_fold.py): block DSR 25% floor 0.33, mvau_wwidth_max 72, FIFOs / DWCs sized by simulation, inter-block FIFOs depth 2."
+        return "Analytical-flow folding (ILP/analytical/net_fold.py): block DSR 25% floor 0.33, mvau_wwidth_max 72, FIFOs / DWCs sized by simulation, inter-block FIFOs depth 2."
     m = re.fullmatch(r"ratchet_(\d+)pct", base)
     if m:
         return f"MILP folding, downstream-rate rule (DSR) {m.group(1)}% (floor 0.33), FIFO model on, min-resources."

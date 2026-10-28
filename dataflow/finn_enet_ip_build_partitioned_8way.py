@@ -7,7 +7,7 @@ absorbs the down2 downsample even though that breaks exact symmetry).
 Verified analytically first (no Vivado) via finn_verify_8way_stage23_split.py
 against the existing step_enet_convert_to_hw.onnx checkpoint: the 4 new
 stage2/3 quarters come out to ~105 nodes / ~34-35k LUT (~15% of xczu7ev)
-each, well balanced (see hardware/outputs/verify_8way_stage23_split_result.json).
+each, well balanced (see dataflow/outputs/verify_8way_stage23_split_result.json).
 
 Identical to finn_enet_ip_build_partitioned.py except:
   - imports assign_stage_partition_ids_8way instead of assign_stage_partition_ids

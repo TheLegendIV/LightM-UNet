@@ -1,4 +1,4 @@
-"""Shared constants for nnUNetTrainerENet_12_dense_relu_300ep (compression/slurm/stage_12_dense_relu_300ep.job): the S12 dense bilinear-decoder net trained FROM SCRATCH
+"""Shared constants for nnUNetTrainerENet_12_dense_relu_300ep (nas/slurm/stage_12_dense_relu_300ep.job): the S12 dense bilinear-decoder net trained FROM SCRATCH
 with one 300-epoch PolyLR schedule (no warm start). Byte-for-byte config_12_dense_relu_warmstart150ep.py's architecture; only NET_NAME differs (this checkpoint). Used to re-measure
 the per-layer HAWQ sensitivity and see whether the negative Hessian traces of the warmstart150ep checkpoint persist.
 """

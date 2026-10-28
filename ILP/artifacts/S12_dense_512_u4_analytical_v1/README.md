@@ -5,7 +5,7 @@
 `UpsampleNearestNeighbour` model). The only change is the config (`config_12_dense_relu_nearest_upsample`, `INPUT_HW` 512). Analytical flow and block simulation only, no MILP.
 
 ```
-python3 MILP/analytical/net_fold.py --config config_12_dense_relu_nearest_upsample --bits 6 --fps 250 --clock-mhz 100 --max-latency-ms 200 --workers 6 --out-dir MILP/artifacts/S12_dense_512_u4_analytical_v1/int6_fps250_lat200
+python3 ILP/analytical/net_fold.py --config config_12_dense_relu_nearest_upsample --bits 6 --fps 250 --clock-mhz 100 --max-latency-ms 200 --workers 6 --out-dir ILP/artifacts/S12_dense_512_u4_analytical_v1/int6_fps250_lat200
 ```
 
 Files per run as in the 256 artifacts: `layer_bits_folding_final.json`, `layer_bits_SITES_final.json` (85 weight / 110 activation sites), `block_profile_final.csv`, `enet_dataflow_final.onnx`, `run_args.json`, `run.log`.

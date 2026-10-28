@@ -19,7 +19,7 @@ Stages, each gated (non-zero exit / AssertionError on failure):
 build_reference() writes <ref>.npz (u inputs, PyTorch preds, ground truth) so the later stages can run
 without torch/brevitas, e.g. inside the FINN container against the preamble's intermediate models:
 
-    python hardware/verify_export.py --ref <ref>.npz \\
+    python dataflow/verify_export.py --ref <ref>.npz \\
         --onnx qonnx=<name>.onnx streamline=<preamble>/intermediate_models/step_enet_streamline.onnx \\
         --first-thresholds <preamble>/intermediate_models/step_enet_streamline.onnx
 """

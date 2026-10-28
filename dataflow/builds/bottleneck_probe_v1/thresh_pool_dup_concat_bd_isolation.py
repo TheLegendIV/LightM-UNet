@@ -15,7 +15,7 @@ same as production). The Concat starts out axis=1 (channel axis, NCHW) because e
 branch's to_hw.InferPool lowering ends in a NHWC->NCHW Transpose(perm=[0,3,1,2]) -- but
 to_hw.InferConcatLayer only lowers Concats at axis=-1 (its StreamingConcat HW op only supports
 channel-last concatenation), so _move_transpose_past_concat (copied from
-hardware/finn_enet_build.py's MoveTransposePastJoinConcat, trimmed, no other repo deps) pushes
+dataflow/finn_enet_build.py's MoveTransposePastJoinConcat, trimmed, no other repo deps) pushes
 both trailing Transposes past the Concat first, rewriting it to axis=-1 with a single trailing
 Transpose back to NCHW -- exactly the real initial block's Concat-prep trick.
 
@@ -84,7 +84,7 @@ from finn.transformation.fpgadataflow.synth_ooc import SynthOutOfContext  # noqa
 
 
 def _move_transpose_past_concat(model: ModelWrapper, perm=(0, 3, 1, 2)):
-    """Trimmed copy of hardware/finn_enet_build.py's free function of the same name (kept
+    """Trimmed copy of dataflow/finn_enet_build.py's free function of the same name (kept
     self-contained here on purpose -- see module docstring). Rewrites an axis=1 Concat whose
     every input is produced by an identical, non-forked Transpose(perm) into an axis=-1 Concat
     followed by a single trailing Transpose(perm)."""

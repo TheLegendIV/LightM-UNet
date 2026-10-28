@@ -31,7 +31,7 @@ def class_map(out):
 
 
 def _dice(g, p):
-    # Same as analysis/501_ARCADE/segmentation_topology.dice_score: 1.0 when both masks are empty.
+    # Same as nas/segmentation_topology.dice_score: 1.0 when both masks are empty.
     tp = (g & p).sum().item()
     fp = (~g & p).sum().item()
     fn = (g & ~p).sum().item()
@@ -41,7 +41,7 @@ def _dice(g, p):
 
 
 def dice_per_class(pred, lab, n_classes=5):
-    """[LAD, RCA, LCX, LM, binary(vessel vs background)] as in compression/collect_results.py."""
+    """[LAD, RCA, LCX, LM, binary(vessel vs background)] as in nas/collect_results.py."""
     return [_dice(lab == c, pred == c) for c in range(1, n_classes)] + [_dice(lab > 0, pred > 0)]
 
 

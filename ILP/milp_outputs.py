@@ -12,7 +12,7 @@
 
 Both are written automatically by finn_milp.py for an Optimal solve. To
 regenerate from an existing result:
-    python MILP/milp_outputs.py --result <layer_bits_folding_*.json> --sensitivity-file <layer_sensitivity_*.json>
+    python ILP/milp_outputs.py --result <layer_bits_folding_*.json> --sensitivity-file <layer_sensitivity_*.json>
 """
 from __future__ import annotations
 

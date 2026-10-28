@@ -10,7 +10,7 @@ WHY THIS EXISTS: finn_milp.py's cost model is normally driven by this repo's
 own Python architecture config (layer_topology.py + the nnU-Net model
 definition) plus a SOLVED MILP `per_layer` dict -- there was no way to run
 the SAME cost formulas against a folding FINN chose entirely on its own (e.g.
-hardware/builds/.../autofold_config_partition2.json, produced by FINN's
+dataflow/builds/.../autofold_config_partition2.json, produced by FINN's
 `step_target_fps_parallelization` auto-fold heuristic, never by finn_milp.py).
 This script closes that gap by reading geometry, datatypes, AND (optionally)
 the PE/SIMD folding directly off a real ONNX graph's own node attributes --
@@ -33,7 +33,7 @@ real graph they always already are).
 
 VALIDATED (2026-09-30) with NO folding-config override (i.e. pricing each
 node at its own baked-in PE/SIMD) against
-hardware/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/
+dataflow/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/
 post_fifo_autosize_checkpoints/partition2_baseline_both_off_milpfold_
 prefifo_autosize.onnx's own real `cycles_estimate` attributes -- exact
 matches, 0 error: MVAU_rtl_10 2,359,296 cycles, ConvolutionInputGenerator_
@@ -44,14 +44,14 @@ Usage (any environment with the `onnx` package -- lightmunet_dev container,
 or the FINN container with -e HOME=/tmp/home_dir, or plain host Python):
     # Self-check: does our model reproduce FINN's own measured cycles,
     # using each node's own baked-in PE/SIMD (no folding-config override)?
-    python MILP/utils/apply_folding_config_cost.py --onnx <checkpoint.onnx> --self-check
+    python ILP/utils/apply_folding_config_cost.py --onnx <checkpoint.onnx> --self-check
 
     # Apply a FINN-chosen (or hand-written) folding_config.json's PE/SIMD to
     # the SAME checkpoint's geometry/datatypes, e.g. to get a LUT/BRAM/DSP
     # estimate FINN's own auto-fold never produces on its own:
-    python MILP/utils/apply_folding_config_cost.py \\
-        --onnx hardware/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/post_fifo_autosize_checkpoints/partition2_baseline_both_off_autofold_prefifo_autosize.onnx \\
-        --folding-config hardware/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/autofold_config_partition2.json \\
+    python ILP/utils/apply_folding_config_cost.py \\
+        --onnx dataflow/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/post_fifo_autosize_checkpoints/partition2_baseline_both_off_autofold_prefifo_autosize.onnx \\
+        --folding-config dataflow/builds/S12_dense_nearest_upsample_512_hwsweep_partition2_wm/autofold_config_partition2.json \\
         --clock-mhz 100
 """
 from __future__ import annotations

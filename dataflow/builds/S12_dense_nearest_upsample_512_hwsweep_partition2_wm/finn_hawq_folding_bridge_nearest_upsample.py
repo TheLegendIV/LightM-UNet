@@ -1,8 +1,8 @@
-"""Bridge a MILP/finn_milp.py-produced layer_bits_folding_<tag>.json's
+"""Bridge a ILP/finn_milp.py-produced layer_bits_folding_<tag>.json's
 "per_layer" (pe/simd/thr_ram_style/...) values into a FINN
 apply_folding_config-compatible JSON keyed by the ACTUAL generated node names
 of partition 2 of the S12_dense_nearest_upsample_512_hwsweep_partition2_wm
-sweep -- adapted from hardware/archive/finn_hawq_folding_bridge.py (the S19
+sweep -- adapted from dataflow/archive/finn_hawq_folding_bridge.py (the S19
 original); see that file's docstring for the full rationale on WHY a bridge
 is needed at all (FINN's post-specialize_layers node names have no direct
 link back to the logical layer names the MILP solve was computed against).
@@ -18,7 +18,7 @@ Deltas vs. the S19 original:
     find_stage_boundaries -- required here since this is a fresh process
     and the preamble's own monkeypatch does not persist across processes.
   - FOLDING_BLOCK_FILE has no S19-specific default; always pass it explicitly
-    (2nd CLI arg) -- MILP/finn_milp.py's per_layer entries observed for this
+    (2nd CLI arg) -- ILP/finn_milp.py's per_layer entries observed for this
     sweep are all flat {"pe","simd",...} (no "node_type":"depthwise_vvau_slot"
     nesting), but that handling is kept dormant/harmless for forward
     compatibility.
@@ -117,7 +117,7 @@ SWU_OP_TYPES = ("ConvolutionInputGenerator_hls", "ConvolutionInputGenerator_rtl"
 FMPAD_OP_TYPES = ("FMPadding_hls", "FMPadding_rtl", "FMPadding_Pixel")
 THRESH_OP_TYPES = ("Thresholding_hls", "Thresholding_rtl")
 # Pinned Thresholding_rtl memory placement (thresholding.sv: stage depth >= trigger -> BRAM, else LUTRAM;
-# 0 = Vivado "auto"). MUST match MILP/finn_cost_model.py THR_DEPTH_TRIGGER_BRAM / THR_DEPTH_TRIGGER_DISTRIBUTED,
+# 0 = Vivado "auto"). MUST match ILP/finn_cost_model.py THR_DEPTH_TRIGGER_BRAM / THR_DEPTH_TRIGGER_DISTRIBUTED,
 # which is what the MILP priced: ram_style "block" -> 1024, "distributed" -> 999999 (everything LUTRAM).
 THRESH_BRAM_TRIGGER = 1024
 THRESH_DISTRIBUTED_BRAM_TRIGGER = 999999

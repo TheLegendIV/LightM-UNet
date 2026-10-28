@@ -3,7 +3,7 @@
 "nearest_conv_upsample", 256x256 input -- see
 enet/nnunetv2/nets/LayerQuantEnetFINN.py's FINNUpsamplingBottleneck
 docstring), adapted directly from the 512x512 dummy-weight reference build,
-hardware/archive/pre_builds_refactor_20260926/12_dense_relu_nearest_conv_upsample_512/
+dataflow/archive/pre_builds_refactor_20260926/12_dense_relu_nearest_conv_upsample_512/
 finn_ooc_12_dense_relu_nearest_conv_upsample_dummy_rtl_mvau_8way_full_v1_512x512.py.
 Same channels/bottleneck-depths/context-pattern/8-way-partitioning/
 DSP-forcing/BIPOLAR-weight-dtype-fix/standalone-threshold-aware accumulator
@@ -12,7 +12,7 @@ widening as that sibling; only deltas vs the 512x512 dummy build:
     (finn_export_12_dense_relu_nearest_conv_upsample_256_trained.py's
     output + its conv_order.json), not a dummy-weight export.
   - FOLDING_BLOCK_FILE points at the confirmed target-deployment MILP solve
-    for this architecture: MILP/artifacts/S12_dense_nn_upsample_256_v1/
+    for this architecture: ILP/artifacts/S12_dense_nn_upsample_256_v1/
     layer_bits_folding_12_dense_relu_nearest_conv_upsample_256_joint_alpha1.0_
     candidatebits468_forcedsp_lut50_bram50_dsp90_fps250.json (alpha=1.0, hard
     caps LUT<=50%/BRAM<=50%/DSP<=90%, target 250 fps @ 100MHz).

@@ -5,12 +5,12 @@ at weight_bit_width = b), 128x128 input -> 256x256 output, dummy weights with to
 regular5's Thr_out) -> final layer. Two variants per bit width (6 probes):
 
   bias    bias=True, bias_quant=Int32Bias  [LayerQuantEnetFINN default, final_bias=True]
-  nobias  bias=False                        [what hardware/finn_enet_prod_export.py exports today: "bias requires extra handling"]
+  nobias  bias=False                        [what dataflow/finn_enet_prod_export.py exports today: "bias requires extra handling"]
 
 The output is the raw logit (no output quantizer, no threshold); the graph output is tagged INT8 like finn_enet_prod_export.export_model does.
 Frame budget used by the folding configs: F = 73728 cycles (T_out = 1.125 per output pixel), the same F as the other U4 probes.
 
-    python3 hardware/builds/bottleneck_probe_v1/export_fnl_probe.py [--bits 4 6 8] [--variants bias nobias]
+    python3 dataflow/builds/bottleneck_probe_v1/export_fnl_probe.py [--bits 4 6 8] [--variants bias nobias]
 Writes inputs/fnl_cin4_cout5_in128_int{b}_{variant}.onnx and ..._probe.json.
 """
 from __future__ import annotations

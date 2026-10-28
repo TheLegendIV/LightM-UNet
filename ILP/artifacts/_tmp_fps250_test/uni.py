@@ -1,5 +1,5 @@
 import csv,os
-b='/workspace/LightM-UNet/MILP/artifacts/S12_dense_arms_bc_v1/'
+b='/workspace/LightM-UNet/ILP/artifacts/S12_dense_arms_bc_v1/'
 def row(label,path):
     if not os.path.exists(path+'/summary.csv'):
         st=[l.strip() for l in open(path+'/solve.log') if 'ILP status' in l]; print(label.ljust(34),st or 'no summary'); return

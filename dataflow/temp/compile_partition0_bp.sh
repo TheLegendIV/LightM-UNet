@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build partition 0's OWN standalone stitched-IP top module
 # (GenericPartition_0_wrapper) with Verilator 5.x (same working recipe as
-# hardware/temp/compile_v5.sh for the combined design), using the
+# dataflow/temp/compile_v5.sh for the combined design), using the
 # backpressure-capable testbench driver instead of the stock
 # always-ready one.
 set -e
