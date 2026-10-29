@@ -57,7 +57,7 @@ export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
 export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
 
 # -- ENet trainer knobs -- the baseline's own recipe, PReLU in encoder AND decoder --------------------------
-export ENET_CHANNELS="4,16,32,32,16,4"
+export ENET_CHANNELS="4,16,32,16,4"
 export ENET_BOTTLENECKS="4,8,8,2,1"
 export ENET_CONTEXT_PATTERN="dense_dilation"
 export ENET_DECODER_TYPE="upsample_conv"
