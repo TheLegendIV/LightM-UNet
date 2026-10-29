@@ -129,7 +129,10 @@ class FINNInitialBlockConcat(nn.Module):
     this substitute adds, bit-width chosen to match the chain (see below)
     rather than a flat fallback."""
 
-    def __init__(self, in_channels: int, out_channels: int, weight_bits: dict[str, int], act_bits: dict[str, int]):
+    def __init__(
+        self, in_channels: int, out_channels: int, weight_bits: dict[str, int], act_bits: dict[str, int],
+        prelu: bool = False,
+    ):
         super().__init__()
         if out_channels <= in_channels:
             raise ValueError("FINNInitialBlockConcat out_channels must exceed in_channels.")
@@ -144,7 +147,7 @@ class FINNInitialBlockConcat(nn.Module):
         branch_bits = max(act_bits["input_quant"], act_bits["act"])
         self.branch_quant = qnn.QuantIdentity(bit_width=branch_bits, act_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
         self.bn = nn.BatchNorm2d(out_channels)
-        self.act = _quant_block_act(out_channels, act_bits["act"], None)
+        self.act = _quant_block_act(out_channels, act_bits["act"], None, prelu=prelu)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.input_quant(x)
@@ -219,7 +222,7 @@ class FINNDownsamplingBottleneck(nn.Module):
 
     def __init__(
         self, in_channels: int, out_channels: int, weight_bits: dict[str, int], act_bits: dict[str, int],
-        internal_ratio: int = 4, dropout_p: float = 0.01,
+        internal_ratio: int = 4, dropout_p: float = 0.01, prelu: bool = False,
     ):
         super().__init__()
         internal_channels = max(1, out_channels // internal_ratio)
@@ -229,11 +232,11 @@ class FINNDownsamplingBottleneck(nn.Module):
 
         self.reduce = nn.Sequential(
             _quant_conv2d(in_channels, internal_channels, weight_bits["reduce.0"], kernel_size=2, stride=2),
-            nn.BatchNorm2d(internal_channels), _quant_act(act_bits["reduce.2"]),
+            nn.BatchNorm2d(internal_channels), _quant_block_act(internal_channels, act_bits["reduce.2"], None, prelu=prelu),
         )
         self.conv = nn.Sequential(
             _quant_conv2d(internal_channels, internal_channels, weight_bits["conv.0"], kernel_size=3, padding=1),
-            nn.BatchNorm2d(internal_channels), _quant_act(act_bits["conv.2"]),
+            nn.BatchNorm2d(internal_channels), _quant_block_act(internal_channels, act_bits["conv.2"], None, prelu=prelu),
         )
         self.expand = nn.Sequential(
             _quant_conv2d(internal_channels, out_channels, weight_bits["expand.0"], kernel_size=1),
@@ -241,7 +244,7 @@ class FINNDownsamplingBottleneck(nn.Module):
         )
         self.dropout = nn.Dropout2d(p=dropout_p)
         self.residual_add = _residual_add_quant(act_bits["residual_add"])
-        self.out_act = _quant_act(act_bits["out_act"])
+        self.out_act = _quant_block_act(out_channels, act_bits["out_act"], None, prelu=prelu)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         main = self.shortcut_proj(self.shortcut_pool(x))
@@ -285,7 +288,7 @@ class FINNUpsamplingBottleneck(nn.Module):
 
     def __init__(
         self, in_channels: int, out_channels: int, weight_bits: dict[str, int], act_bits: dict[str, int],
-        internal_ratio: int = 4, decoder_type: str = "upsample_conv",
+        internal_ratio: int = 4, decoder_type: str = "upsample_conv", prelu: bool = False,
     ):
         super().__init__()
         if decoder_type not in ("upsample_conv", "nearest_conv_upsample", "nearest_upsample"):
@@ -321,7 +324,8 @@ class FINNUpsamplingBottleneck(nn.Module):
             self.skip_resize_conv = (
                 nn.Sequential(
                     _quant_conv2d(out_channels, out_channels, weight_bits["skip_resize_conv.0"], kernel_size=3, padding=1),
-                    nn.BatchNorm2d(out_channels), _quant_act(act_bits["skip_resize_conv.2"]),
+                    nn.BatchNorm2d(out_channels),
+                    _quant_block_act(out_channels, act_bits["skip_resize_conv.2"], None, prelu=prelu),
                 )
                 if decoder_type == "nearest_conv_upsample"
                 else None
@@ -332,14 +336,14 @@ class FINNUpsamplingBottleneck(nn.Module):
 
         self.reduce = nn.Sequential(
             _quant_conv2d(in_channels, internal_channels, weight_bits["reduce.0"], kernel_size=1),
-            nn.BatchNorm2d(internal_channels), _quant_act(act_bits["reduce.2"]),
+            nn.BatchNorm2d(internal_channels), _quant_block_act(internal_channels, act_bits["reduce.2"], None, prelu=prelu),
         )
         self.up = nn.Sequential(
             qnn.QuantConvTranspose2d(
                 internal_channels, internal_channels, kernel_size=2, stride=2, bias=False,
                 weight_bit_width=weight_bits["up.0"], weight_quant=Int8WeightPerTensorFloat,
             ),
-            nn.BatchNorm2d(internal_channels), _quant_act(act_bits["up.2"]),
+            nn.BatchNorm2d(internal_channels), _quant_block_act(internal_channels, act_bits["up.2"], None, prelu=prelu),
         )
         self.expand = nn.Sequential(
             _quant_conv2d(internal_channels, out_channels, weight_bits["expand.0"], kernel_size=1),
@@ -347,7 +351,7 @@ class FINNUpsamplingBottleneck(nn.Module):
         )
         self.dropout = nn.Dropout2d(p=0.1)
         self.residual_add = _residual_add_quant(act_bits["residual_add"])
-        self.out_act = _quant_act(act_bits["out_act"])
+        self.out_act = _quant_block_act(out_channels, act_bits["out_act"], None, prelu=prelu)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         main = self.main_up(self.main_act(self.main_proj(x)))
@@ -397,8 +401,15 @@ class LayerQuantEnetFINN(nn.Module):
         channels: tuple[int, int, int, int, int], bottlenecks_per_stage: tuple[int, int, int, int, int],
         context_pattern: str, final_bias: bool = True, separable_dilated: bool = False,
         decoder_type: str = "upsample_conv", uint8_input: bool = False,
+        prelu: bool = False, decoder_prelu: bool = True,
     ):
+        """prelu=True replaces every QuantReLU act site with QuantPReLU (real per-channel PReLU + one signed output
+        quantizer; same site names, so the same per-site bits JSON applies and the FP32 alphas transfer by key through
+        from_pretrained). decoder_prelu=False keeps up4/regular4/up5/regular5 on QuantReLU, matching an encoder-only
+        PReLU FP32 checkpoint (e.g. 4_8_dense_dilation); the default True matches the all-PReLU net. Accuracy-only:
+        QuantPReLU is not FINN-mappable (see its docstring). prelu=False is byte-identical to before."""
         super().__init__()
+        dec_prelu = prelu and decoder_prelu
         # Hardware input contract (see forward). Non-persistent buffer: never in state_dict, so
         # existing checkpoints/trainers are unaffected; filled by bind_input_scale().
         self.uint8_input = uint8_input
@@ -408,37 +419,37 @@ class LayerQuantEnetFINN(nn.Module):
         n1, n2, n3, n4, n5 = bottlenecks_per_stage
 
         self.initial = FINNInitialBlockConcat(
-            in_channels, c0, _local_single(layer_weight_bits, "initial"), _local_single(layer_act_bits, "initial"),
+            in_channels, c0, _local_single(layer_weight_bits, "initial"), _local_single(layer_act_bits, "initial"), prelu=prelu,
         )
 
         self.down1 = FINNDownsamplingBottleneck(
-            c0, c1, _local_single(layer_weight_bits, "down1"), _local_single(layer_act_bits, "down1"), dropout_p=0.01,
+            c0, c1, _local_single(layer_weight_bits, "down1"), _local_single(layer_act_bits, "down1"), dropout_p=0.01, prelu=prelu,
         )
-        self.regular1 = _make_layer_shallow_stage(c1, n1, layer_weight_bits, layer_act_bits, 0.01, "regular1", {})
+        self.regular1 = _make_layer_shallow_stage(c1, n1, layer_weight_bits, layer_act_bits, 0.01, "regular1", {}, prelu=prelu)
 
         self.down2 = FINNDownsamplingBottleneck(
-            c1, c23, _local_single(layer_weight_bits, "down2"), _local_single(layer_act_bits, "down2"), dropout_p=0.1,
+            c1, c23, _local_single(layer_weight_bits, "down2"), _local_single(layer_act_bits, "down2"), dropout_p=0.1, prelu=prelu,
         )
         self.stage2 = _make_layer_context_stage(
             c23, n2, layer_weight_bits, layer_act_bits, "stage2", {}, context_pattern,
-            separable_dilated=separable_dilated,
+            separable_dilated=separable_dilated, prelu=prelu,
         )
         self.stage3 = _make_layer_context_stage(
             c23, n3, layer_weight_bits, layer_act_bits, "stage3", {}, context_pattern,
-            separable_dilated=separable_dilated,
+            separable_dilated=separable_dilated, prelu=prelu,
         )
 
         self.up4 = FINNUpsamplingBottleneck(
             c23, c4, _local_single(layer_weight_bits, "up4"), _local_single(layer_act_bits, "up4"),
-            decoder_type=decoder_type,
+            decoder_type=decoder_type, prelu=dec_prelu,
         )
-        self.regular4 = _make_layer_shallow_stage(c4, n4, layer_weight_bits, layer_act_bits, 0.1, "regular4", {})
+        self.regular4 = _make_layer_shallow_stage(c4, n4, layer_weight_bits, layer_act_bits, 0.1, "regular4", {}, prelu=dec_prelu)
 
         self.up5 = FINNUpsamplingBottleneck(
             c4, c5, _local_single(layer_weight_bits, "up5"), _local_single(layer_act_bits, "up5"),
-            decoder_type=decoder_type,
+            decoder_type=decoder_type, prelu=dec_prelu,
         )
-        self.regular5 = _make_layer_shallow_stage(c5, n5, layer_weight_bits, layer_act_bits, 0.1, "regular5", {})
+        self.regular5 = _make_layer_shallow_stage(c5, n5, layer_weight_bits, layer_act_bits, 0.1, "regular5", {}, prelu=dec_prelu)
 
         self.final = qnn.QuantConvTranspose2d(
             c5, out_channels, kernel_size=2, stride=2, bias=final_bias,

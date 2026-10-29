@@ -104,6 +104,29 @@ def _quant_act(bit_width: int) -> qnn.QuantReLU:
     )
 
 
+class QuantPReLU(nn.PReLU):
+    """Real per-channel PReLU followed by ONE signed output quantizer (Brevitas has no QuantPReLU).
+
+    Subclasses nn.PReLU on purpose: the learnable alpha stays the module's own `weight`, so its state-dict key is
+    byte-identical to the FP32 ENet's PReLU at the same position (e.g. `down1.reduce.2.weight`) and
+    `from_pretrained`'s name+shape transfer carries the trained alphas over with no mapping code. The quantizer
+    replaces QuantReLU's unsigned Uint8 one with a signed Int8 one (PReLU output can be negative), so at the same
+    bit-width this site has one bit less positive range than the ReLU site -- a real part of what a ReLU-vs-PReLU
+    QAT comparison measures. Same site name / same bit-width entry as the QuantReLU it replaces, so the existing
+    per-site layer_bits JSONs apply unchanged.
+
+    NOT FINN-mappable: a literal PRelu node has no hardware op and alpha <= 0 or >= 1 cannot be fused into a single
+    MultiThreshold (see QuantDecomposedLeakyAct for the decomposition that can). Training/accuracy only."""
+
+    def __init__(self, channels: int, act_bit_width: int, init: float = 0.25):
+        super().__init__(num_parameters=channels, init=init)
+        self.out_quant = qnn.QuantIdentity(bit_width=act_bit_width, act_quant=Int8ActPerTensorFloat, return_quant_tensor=True)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x.value if hasattr(x, "value") else x
+        return self.out_quant(super().forward(x))
+
+
 class QuantDecomposedLeakyAct(nn.Module):
     # NOTE: this module has no conv weights at all (pre_quant/act_pos/
     # out_quant are all activation quantizers) -- its bit-width is an
@@ -462,9 +485,12 @@ class QuantFusedLeakyAct(nn.Module):
 def _quant_block_act(
     channels: int, act_bit_width: int, negative_slope: float | None, trainable_slope: bool = False,
     internal_bit_width: int | None = None, fused_leaky: bool = False, alpha_bit_width: int = 8,
-    out_bit_width: int | None = None,
+    out_bit_width: int | None = None, prelu: bool = False,
 ) -> nn.Module:
-    """Picks plain QuantReLU (negative_slope=None, the default -- matches
+    """prelu=True (negative_slope None) builds QuantPReLU -- real per-channel PReLU + one signed output quantizer,
+    accuracy-only (not FINN-mappable); every other argument is unchanged and prelu=False is byte-identical to before.
+
+    Picks plain QuantReLU (negative_slope=None, the default -- matches
     every existing QuantENet config), the FINN-verified decomposed-leaky
     stand-in (negative_slope set, fused_leaky=False, the default), or the
     single-quantizer QuantFusedLeakyAct (negative_slope set, fused_leaky=True)
@@ -474,7 +500,7 @@ def _quant_block_act(
     QuantDecomposedLeakyAct's/QuantFusedLeakyAct's own docstrings for what
     each does otherwise."""
     if negative_slope is None:
-        return _quant_act(act_bit_width)
+        return QuantPReLU(channels, act_bit_width) if prelu else _quant_act(act_bit_width)
     if fused_leaky:
         return QuantFusedLeakyAct(
             channels, act_bit_width, negative_slope, trainable_slope=trainable_slope, alpha_bit_width=alpha_bit_width,

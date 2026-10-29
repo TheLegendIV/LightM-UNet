@@ -217,7 +217,7 @@ class LayerQuantRegularBottleneck(nn.Module):
         asymmetric: bool = False, dropout_p: float = 0.1, use_dsc: bool = False,
         separable_dilated: bool = False, negative_slope: float | None = None, trainable_slope: bool = False,
         internal_bit_width: int | None = None, fused_leaky: bool = False, alpha_bit_width: int = 8,
-        out_bit_width: int | None = None,
+        out_bit_width: int | None = None, prelu: bool = False,
     ):
         super().__init__()
         internal_channels = max(1, channels // internal_ratio)
@@ -226,7 +226,7 @@ class LayerQuantRegularBottleneck(nn.Module):
             return _quant_block_act(
                 ch, act_bits[key], negative_slope, trainable_slope=trainable_slope,
                 internal_bit_width=internal_bit_width, fused_leaky=fused_leaky,
-                alpha_bit_width=alpha_bit_width, out_bit_width=out_bit_width,
+                alpha_bit_width=alpha_bit_width, out_bit_width=out_bit_width, prelu=prelu,
             )
 
         self.reduce = nn.Sequential(
@@ -460,12 +460,14 @@ def _make_layer_shallow_stage(
     channels: int, n_ops: int, layer_weight_bits: dict[str, int], layer_act_bits: dict[str, int], dropout_p: float,
     name_prefix: str, slope_map: dict[str, float], use_dsc: bool = False, dsc_no_projection: bool = False,
     dsc_no_projection_context_only: bool = False, trainable_slope: bool = True,
-    discovery_placeholder: int | None = None,
+    discovery_placeholder: int | None = None, prelu: bool = False,
 ) -> nn.Sequential:
     """Per-site generalization of CombinedQuantENet._make_block_shallow_stage
     -- looks up a LOCAL per-site dict per loop index via _local(...) instead
-    of a single scalar (w, a) pair."""
+    of a single scalar (w, a) pair. prelu=True (LayerQuantRegularBottleneck stages only) builds QuantPReLU sites."""
     slope_map = slope_map or {}
+    if prelu and dsc_no_projection and not dsc_no_projection_context_only:
+        raise NotImplementedError("prelu=True is only wired for LayerQuantRegularBottleneck stages.")
     if dsc_no_projection and not dsc_no_projection_context_only:
         return nn.Sequential(*[
             LayerQuantDSCNoProjectionBottleneck(
@@ -481,7 +483,7 @@ def _make_layer_shallow_stage(
             channels, _local(layer_weight_bits, name_prefix, i, discovery_placeholder),
             _local(layer_act_bits, name_prefix, i, discovery_placeholder),
             dropout_p=dropout_p, use_dsc=use_dsc, negative_slope=slope_map.get(f"{name_prefix}.{i}"),
-            trainable_slope=trainable_slope,
+            trainable_slope=trainable_slope, prelu=prelu,
         )
         for i in range(n_ops)
     ])
@@ -492,6 +494,7 @@ def _make_layer_context_stage(
     name_prefix: str, slope_map: dict[str, float], context_pattern: str, use_dilated: bool = True,
     use_asymmetric: bool = False, use_dsc: bool = False, dsc_no_projection: bool = False,
     separable_dilated: bool = True, trainable_slope: bool = True, discovery_placeholder: int | None = None,
+    prelu: bool = False,
 ) -> nn.Sequential:
     """Per-site generalization of CombinedQuantENet._make_block_context_stage
     -- same dilation-pattern selection / dsc_no_projection bookend handling /
@@ -519,6 +522,8 @@ def _make_layer_context_stage(
         pattern = CONTEXT_STAGE_PATTERN
 
     slope_map = slope_map or {}
+    if prelu and dsc_no_projection:
+        raise NotImplementedError("prelu=True is only wired for LayerQuantRegularBottleneck stages.")
 
     if dsc_no_projection:
         ops = []
@@ -561,7 +566,7 @@ def _make_layer_context_stage(
             channels, _local(layer_weight_bits, name_prefix, i, discovery_placeholder),
             _local(layer_act_bits, name_prefix, i, discovery_placeholder),
             dropout_p=0.1, use_dsc=use_dsc_here, separable_dilated=separable_dilated,
-            negative_slope=slope_map.get(block_name), trainable_slope=trainable_slope, **kwargs,
+            negative_slope=slope_map.get(block_name), trainable_slope=trainable_slope, prelu=prelu, **kwargs,
         ))
     return nn.Sequential(*ops)
 
