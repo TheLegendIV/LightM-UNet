@@ -14,12 +14,12 @@
 set -e
 
 # QAT fine-tune at UNIFORM INT4 / INT6 / INT8 (array 0 / 1 / 2; every conv weight and every activation at that bit width) of the ALL-PReLU S12-dense BILINEAR-decoder net at 512x512
-# (Dataset509_ARCADE_1x1_4c): the PReLU twin of nas/slurm/qat_12_dense_prelu_all_warmstart150ep_bilinear_uniform_int468_ft15ep_array.job, trained directly on LayerQuantEnetFINN with prelu=True. Every
+# (Dataset509_ARCADE_1x1_4c): the PReLU twin of nas/slurm/qat_12_dense_relu_warmstart150ep_bilinear_uniform_int468_ft15ep_array.job, trained directly on LayerQuantEnetFINN with prelu=True. Every
 # activation site (encoder AND decoder, 82) is a QuantPReLU = real per-channel PReLU + ONE signed Int8-type output quantizer (instead of the ReLU arm's unsigned QuantReLU); same 85 weight / 110
 # activation site names and the SAME per-site bits (report/hw/activation/bits/, copied from the ReLU arm's S12_dense_bilinear_512_uniform_v1), so the two arms differ only in the activation.
 # ACCURACY-ONLY: QuantPReLU is not FINN-mappable (FINN mapping deliberately ignored for now).
 #
-# FP32 source (warm start): nnUNetTrainerENet_12_dense_prelu_all_warmstart150ep (report/hw/activation/stage_12_dense_prelu_all.job, then ..._warmstart150ep.job -- 150 cold + 150 at LR 1e-4,
+# FP32 source (warm start): nnUNetTrainerENet_12_dense_prelu_all_warmstart150ep_v2 (report/hw/activation/stage_12_dense_prelu_all.job, then ..._warmstart150ep_v2.job -- 150 cold + 150 at LR 1e-4,
 # exactly the ReLU arm's nnUNetTrainerENet_12_dense_relu_warmstart150ep path). The trained alphas transfer by key through LayerQuantEnetFINN.from_pretrained.
 #
 # Pipeline per array task (identical to the ReLU job):
@@ -37,7 +37,7 @@ CALIBRATION_SEED=0
 DATASET_ID=509
 DATASET_NAME="Dataset509_ARCADE_1x1_4c"
 TRAINER_CLASS="nnUNetTrainerLayerQuantEnetFINN_12_dense_prelu_bilinear_upsample_perlayer"
-FP32_SOURCE_NET_NAME="nnUNetTrainerENet_12_dense_prelu_all_warmstart150ep"
+FP32_SOURCE_NET_NAME="nnUNetTrainerENet_12_dense_prelu_all_warmstart150ep_v2"
 BITS_DIR="report/hw/activation/bits"
 
 BITS_ARR=(4 6 8)
@@ -87,7 +87,7 @@ echo "CALIBRATION_SEED=${CALIBRATION_SEED}"
 FP32_CHECKPOINT="$nnUNet_results/${DATASET_NAME}/${FP32_SOURCE_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
 echo "=== Checking FP32 source checkpoint exists ==="
 if [ ! -f "$FP32_CHECKPOINT" ]; then
-    echo "ERROR: FP32 source checkpoint not found: $FP32_CHECKPOINT -- run report/hw/activation/stage_12_dense_prelu_all_warmstart150ep.job first." >&2
+    echo "ERROR: FP32 source checkpoint not found: $FP32_CHECKPOINT -- run report/hw/activation/stage_12_dense_prelu_all_warmstart150ep_v2.job first." >&2
     exit 1
 fi
 

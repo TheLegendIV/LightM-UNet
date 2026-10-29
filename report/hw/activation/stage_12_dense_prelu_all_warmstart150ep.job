@@ -1,4 +1,5 @@
 #!/bin/bash
+# SUPERSEDED by stage_12_dense_prelu_all_warmstart150ep_v2.job: this v1 was submitted while phase 1 was still running and warm-started from its epoch-~27 checkpoint (dice 0.7621). Do not reuse.
 #SBATCH --job-name=stage_12_dense_prelu_all_warmstart150ep
 #SBATCH --partition=gpu_mig
 #SBATCH --nodes=1

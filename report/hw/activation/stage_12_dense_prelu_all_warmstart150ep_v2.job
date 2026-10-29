@@ -1,0 +1,182 @@
+#!/bin/bash
+#SBATCH --job-name=stage_12_dense_prelu_all_warmstart150ep_v2
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
+
+set -e
+
+# v2 of the all-PReLU warm-start (phase 2 of the hardware-baseline PReLU FP32 model): the exact analogue of nas/slurm/stage_12_dense_relu_warmstart150ep.job (the FP32 source of every ReLU QAT arm).
+# ANOTHER full 150-epoch PolyLR schedule, warm-started from the FINISHED nnUNetTrainerENet_12_dense_prelu_all (stage_12_dense_prelu_all.job, 150 epochs) via nnU-Net's `-pretrained_weights` at
+# ENET_LR=1e-4 (10x below the trainer default: refine, don't re-heat). Total = 300 epochs, like the ReLU path. Differences from the ReLU job: ONLY ENET_USE_PRELU=1 and ENET_DECODER_PRELU=1
+# (PReLU in encoder AND decoder), plus the source/run names. Resumed runs use --c, so pretrained_weights is never re-applied mid-schedule. Partition gpu_mig, as the ReLU job.
+#
+# WHY v2: the first attempt (stage_12_dense_prelu_all_warmstart150ep.job, run name ..._warmstart150ep) was submitted while phase 1 was still training and warm-started from phase 1's epoch-~27
+# checkpoint_best.pth (dice 0.7621 vs 0.7979 for the finished source); it only checked that the file existed. This job refuses to start unless
+#   (1) the source run is COMPLETE (checkpoint_final.pth at epoch >= 150), and
+#   (2) report/hw/activation/check_warmstart_transfer.py confirms EVERY parameter and buffer -- conv, BN incl. running stats, all 82 PReLU alphas -- transfers bit-exactly through nnU-Net's
+#       load_pretrained_weights (that loader only WARNS on a mismatch and silently keeps the fresh init, e.g. alphas whose decoder flag differs).
+# Both run on a fresh start only; a resumed (--c) run skips them. The old run's folder/row (..._warmstart150ep) is left untouched; this one has its own name so nothing resumes or overwrites it.
+#
+# Results: nas/results.csv as nnUNetTrainerENet_12_dense_prelu_all_warmstart150ep_v2, stage "12_dense_prelu_all_warmstart150ep_v2". The QAT array job reads this run's checkpoint_best.pth.
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+TRAINER_CLASS="nnUNetTrainerENet"
+RUN_NAME="12_dense_prelu_all_warmstart150ep_v2"
+SOURCE_NET_NAME="nnUNetTrainerENet_12_dense_prelu_all"
+SOURCE_EPOCHS=150
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- ENet trainer knobs -- byte-for-byte the all-PReLU phase-1 recipe, plus
+#    a fresh 150-epoch schedule at a reduced LR ------------------------------
+export ENET_CHANNELS="4,16,32,16,4"
+export ENET_BOTTLENECKS="4,8,8,2,1"
+export ENET_CONTEXT_PATTERN="dense_dilation"
+export ENET_DECODER_TYPE="upsample_conv"
+export ENET_USE_PRELU=1
+export ENET_DECODER_PRELU=1
+export ENET_USE_DILATED=1
+export ENET_USE_ASYMMETRIC=0
+export ENET_USE_STRIDED=1
+export ENET_USE_DSC=0
+export ENET_SEPARABLE_DILATED=0
+export ENET_DSC_NO_PROJECTION=0
+export ENET_EPOCHS=150
+export ENET_LR=1e-4
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+SOURCE_CHECKPOINT="$nnUNet_results/${DATASET_NAME}/${SOURCE_NET_NAME}__nnUNetPlans__2d/fold_0/checkpoint_best.pth"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Run: ${RUN_NAME} (warm-started from ${SOURCE_CHECKPOINT}, ENET_LR=${ENET_LR})"
+echo "Output folder: ${ENET_OUTPUT_FOLDER}"
+
+echo "=== Checking source checkpoint exists and the source run is COMPLETE ==="
+SOURCE_FINAL="$(dirname "$SOURCE_CHECKPOINT")/checkpoint_final.pth"
+if [ ! -f "$SOURCE_CHECKPOINT" ] || [ ! -f "$SOURCE_FINAL" ]; then
+    echo "ERROR: source checkpoint_best.pth / checkpoint_final.pth not found under $(dirname "$SOURCE_CHECKPOINT") -- run report/hw/activation/stage_12_dense_prelu_all.job to completion first." >&2
+    exit 1
+fi
+SOURCE_DONE_EPOCH=$(cd "$HOME/LightM-UNet" && python -c "import torch; print(torch.load('${SOURCE_FINAL}', map_location='cpu', weights_only=False)['current_epoch'])")
+if [ "$SOURCE_DONE_EPOCH" -lt "$SOURCE_EPOCHS" ]; then
+    echo "ERROR: source run is at epoch ${SOURCE_DONE_EPOCH}/${SOURCE_EPOCHS} -- not finished, refusing to warm-start from a partial checkpoint (the v1 mistake)." >&2
+    exit 1
+fi
+echo "Source run complete (epoch ${SOURCE_DONE_EPOCH}/${SOURCE_EPOCHS})."
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Self-healing check: promote checkpoint_latest.pth over a STALE checkpoint_final.pth ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ] && [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
+    FINAL_EPOCH_CHECK=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)['current_epoch'])")
+    LATEST_EPOCH_CHECK=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth', map_location='cpu', weights_only=False)['current_epoch'])")
+    if [ "$LATEST_EPOCH_CHECK" -gt "$FINAL_EPOCH_CHECK" ]; then
+        echo "checkpoint_final.pth (epoch ${FINAL_EPOCH_CHECK}) is STALE relative to checkpoint_latest.pth (epoch ${LATEST_EPOCH_CHECK}) -- promoting latest, backing up the stale final."
+        cp "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" "${ENET_OUTPUT_FOLDER}/checkpoint_final_STALE_epoch${FINAL_EPOCH_CHECK}_backup.pth"
+        cp "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth"
+    fi
+fi
+
+echo "=== Checking training progress for ${RUN_NAME} ==="
+EXISTING_CHECKPOINT=""
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ]; then
+    EXISTING_CHECKPOINT="${ENET_OUTPUT_FOLDER}/checkpoint_final.pth"
+elif [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth" ]; then
+    EXISTING_CHECKPOINT="${ENET_OUTPUT_FOLDER}/checkpoint_latest.pth"
+fi
+
+if [ -z "$EXISTING_CHECKPOINT" ]; then
+    echo "=== Pre-flight: conv, BN, and every PReLU alpha must transfer bit-exactly (aborts the job otherwise) ==="
+    (cd "$HOME/LightM-UNet" && python report/hw/activation/check_warmstart_transfer.py --source "${SOURCE_CHECKPOINT}")
+    echo "=== Start training (fresh, warm-started from ${SOURCE_NET_NAME}): ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}" -pretrained_weights "${SOURCE_CHECKPOINT}"
+else
+    CURRENT_EPOCH=$(cd "$HOME/LightM-UNet" && python -c "import torch; print(torch.load('${EXISTING_CHECKPOINT}', map_location='cpu', weights_only=False)['current_epoch'])")
+    echo "Existing checkpoint (${EXISTING_CHECKPOINT}) is at epoch ${CURRENT_EPOCH}/${ENET_EPOCHS}."
+    if [ "$CURRENT_EPOCH" -ge "$ENET_EPOCHS" ]; then
+        echo "Real 150-epoch schedule already complete -- skipping training."
+    else
+        echo "=== Resuming training with --c (continues the SAME 150-epoch LR schedule from epoch ${CURRENT_EPOCH} -- pretrained_weights NOT re-applied, this run's own progress already carries the warm-started weights) ==="
+        nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}" --c
+    fi
+fi
+echo "Training step finished for ${RUN_NAME} (this submission's epoch budget)."
+
+echo "=== Archiving checkpoints + logs to \$HOME/models (only once the real 150-epoch schedule is complete) ==="
+FINAL_EPOCH=$(python -c "import torch; print(torch.load('${ENET_OUTPUT_FOLDER}/checkpoint_final.pth', map_location='cpu', weights_only=False)['current_epoch'])" 2>/dev/null || echo -1)
+if [ "$FINAL_EPOCH" -ge "$ENET_EPOCHS" ]; then
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+
+    echo "=== Collecting results into nas/results.csv ==="
+    cd "$HOME/LightM-UNet"
+    python nas/collect_results.py \
+        --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+        --stage "12_dense_prelu_all_warmstart150ep_v2" \
+        --dataset-name "${DATASET_NAME}" \
+        --dataset-id "${DATASET_ID}" \
+        --channels "${ENET_CHANNELS}" \
+        --bottlenecks "${ENET_BOTTLENECKS}" \
+        --decoder-type "${ENET_DECODER_TYPE}" \
+        --use-dilated "${ENET_USE_DILATED}" \
+        --use-asymmetric "${ENET_USE_ASYMMETRIC}" \
+        --use-strided "${ENET_USE_STRIDED}" \
+        --use-dsc "${ENET_USE_DSC}" \
+        --separable-dilated "${ENET_SEPARABLE_DILATED}" \
+        --context-pattern "${ENET_CONTEXT_PATTERN}" \
+        --use-prelu "${ENET_USE_PRELU}" \
+        --decoder-prelu "${ENET_DECODER_PRELU}" \
+        --dsc-no-projection "${ENET_DSC_NO_PROJECTION}" \
+        --trainer-class "${TRAINER_CLASS}"
+else
+    echo "Only at epoch ${FINAL_EPOCH}/${ENET_EPOCHS} -- skipping archive/collect_results.py (resubmit to continue training)."
+fi
+
+echo "Done: ${RUN_NAME}."

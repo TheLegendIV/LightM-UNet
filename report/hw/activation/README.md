@@ -7,13 +7,15 @@ Question: PReLU raises FP32 accuracy; what does it do after QAT, and what does i
 | File | What |
 |---|---|
 | `stage_12_dense_prelu_all.job` | FP32 phase 1: hardware baseline with PReLU in encoder AND decoder, 150 epochs cold start |
-| `stage_12_dense_prelu_all_warmstart150ep.job` | FP32 phase 2: +150 epochs at LR 1e-4 from phase 1 (the ReLU QAT arms start from the same 300-epoch recipe). Run after phase 1 |
+| `stage_12_dense_prelu_all_warmstart150ep_v2.job` | FP32 phase 2 (gpu_mig): +150 epochs at LR 1e-4 warm-started from the FINISHED phase 1 (the ReLU QAT arms use the same 300-epoch recipe). Refuses to start unless phase 1 is at epoch 150 and `check_warmstart_transfer.py` confirms every parameter incl. all 82 PReLU alphas transfers bit-exactly |
+| `check_warmstart_transfer.py` | Pre-flight for the warm start (nnU-Net's loader only warns when a key does not transfer) |
+| `stage_12_dense_prelu_all_warmstart150ep.job` | SUPERSEDED v1 of phase 2: submitted while phase 1 was still running, it warm-started from phase 1's epoch-~27 checkpoint (dice 0.7621). Kept for the record; its results row is not comparable |
 | `calibrate_prelu.py`, `bits/` | PTQ + calibration of the PReLU `LayerQuantEnetFINN`; uniform INT4/6/8 per-site bits (copied from the ReLU arm; the originals are gitignored under `ILP/artifacts/archive/`) |
 | `qat_12_dense_prelu_all_warmstart150ep_bilinear_uniform_int468_ft15ep_array.job` | QAT INT4/6/8, 15 epochs, twin of the ReLU job. Trainer: `nnUNetTrainerLayerQuantEnetFINN_12_dense_prelu_bilinear_upsample_perlayer`; `QuantPReLU` in `enet/nnunetv2/nets/QuantENet.py` |
 | `plot_prelu_alpha.py`, `4_8_dense_dilation_alpha.{png,csv}` | Learned alphas of the existing encoder-only PReLU checkpoint (per channel / per site) |
 | `prelu_hw_cost.py`, `prelu_hw_cost_summary.csv`, `prelu_hw_cost_int{4,6,8}_sites.csv` | Hardware cost model below |
 
-Run order: phase 1 -> phase 2 (`sbatch --dependency=afterok:`) -> QAT array. Nothing has been submitted yet.
+Run order: phase 1 -> phase 2 v2 (`sbatch --dependency=afterok:<phase1 id>`; the job also guards itself) -> QAT array (reads the v2 checkpoint). Phase 1 is done (dice 0.7979, vs 0.7876 ReLU baseline and 0.7960 encoder-only PReLU); v2 and the QAT array have not been submitted.
 
 ## Hardware cost model: assumptions (variant v1)
 
