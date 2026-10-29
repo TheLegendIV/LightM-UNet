@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=stage_1_seed_replicates
+#SBATCH --job-name=stage_1_prelu_maxunpool_U4_seeds
 #SBATCH --partition=gpu_mig
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -7,55 +7,35 @@
 #SBATCH --gpus=1
 #SBATCH --mem=32G
 #SBATCH --time=04:00:00
-#SBATCH --array=0-11
+#SBATCH --array=0-2
 #SBATCH --output=logs/%x_%a_%j.out
 #SBATCH --error=logs/%x_%a_%j.err
 
 set -e
 
-# Seed replicates for the Stage 1 PReLU max_unpool vs PReLU upsample_conv
-# (bilinear) width sweeps at U4 and U8. Question: is the large max_unpool vs
-# bilinear gap at <=1/4 width (0.591 vs 0.774 at U4, 0.502 vs 0.664 at U8, one
-# seed each) real, or single-seed class-collapse noise? Per-class Dice there is
+# Seed replicates for the Stage 1 PReLU max_unpool U4 point (channels 4,16,32,16,4).
+# Question: is max_unpool's large gap to bilinear at U4 (Dice 0.591 vs 0.774, one seed
+# each) real, or single-seed class-collapse noise? Per-class Dice there is
 # non-monotonic (max_unpool RCA 0.917, 0.868, 0.485, 0.831, 0.173 across widths).
 #
-# Recipe is IDENTICAL to stage_1_naive_baseline_prelu_maxunpool_array.job and
-# stage_1_naive_baseline_prelu_upsample_conv_array.job; only ENET_SEED differs.
-# Seeds 1-3 (seed 0 is the existing run; bilinear U4 seed 0 is
-# 2_special_ops_prelu, which is unseeded).
-#
-# 12 tasks = 2 curves x 2 widths x 3 seeds, task id -> (curve, width, seed):
-#   0-2   maxunpool U4 seeds 1,2,3     6-8   bilinear U4 seeds 1,2,3
-#   3-5   maxunpool U8 seeds 1,2,3     9-11  bilinear U8 seeds 1,2,3
+# Recipe is IDENTICAL to stage_1_naive_baseline_prelu_maxunpool_array.job (task U4);
+# only ENET_SEED differs. Seeds 1-3 (seed 0 is the existing
+# 1_naive_baseline_prelu_maxunpool_U4 run). Task id 0,1,2 -> seed 1,2,3.
 #
 # Run names carry the seed ("..._U4_seed1") so collect_results.py's upsert on
-# (config_name) does NOT overwrite the seed-0 rows. Results land in
+# (config_name) does NOT overwrite the seed-0 row. Results land in
 # nas/results.csv under stage "1_seed_replicates".
 
 DATASET_ID=509
 DATASET_NAME="Dataset509_ARCADE_1x1_4c"
 
 TASK_ID=${SLURM_ARRAY_TASK_ID}
-SEED=$(( TASK_ID % 3 + 1 ))
-WIDTH_IDX=$(( (TASK_ID / 3) % 2 ))
-CURVE_IDX=$(( TASK_ID / 6 ))
+SEED=$(( TASK_ID + 1 ))
+CONFIG_NAME="U4"
+CHANNELS="4,16,32,16,4"
+DECODER="max_unpool"
 
-CURVES=(maxunpool upsample_conv)
-WIDTHS=(U4 U8)
-CURVE="${CURVES[$CURVE_IDX]}"
-CONFIG_NAME="${WIDTHS[$WIDTH_IDX]}"
-
-case "$CONFIG_NAME" in
-  U4) CHANNELS="4,16,32,16,4" ;;
-  U8) CHANNELS="4,8,16,8,4" ;;
-esac
-
-case "$CURVE" in
-  maxunpool)     DECODER="max_unpool" ;;
-  upsample_conv) DECODER="upsample_conv" ;;
-esac
-
-RUN_NAME="1_naive_baseline_prelu_${CURVE}_${CONFIG_NAME}_seed${SEED}"
+RUN_NAME="1_naive_baseline_prelu_maxunpool_${CONFIG_NAME}_seed${SEED}"
 TRAINER_CLASS="nnUNetTrainerENet"
 
 mkdir -p logs
