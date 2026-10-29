@@ -1,0 +1,9 @@
+curve,divisor,run_name,class,n_cases,gt_empty,spurious,missed,dice_gt_present,dice_mean
+maxunpool,4,1_naive_baseline_prelu_maxunpool_U4,LAD,300,112,11,16,0.4872,0.642
+maxunpool,4,1_naive_baseline_prelu_maxunpool_U4,RCA,300,200,131,0,0.7739,0.488
+maxunpool,4,1_naive_baseline_prelu_maxunpool_U4,LCX,300,181,104,0,0.5703,0.4829
+maxunpool,4,1_naive_baseline_prelu_maxunpool_U4,LM,300,105,8,15,0.6601,0.7524
+bilinear,4,2_special_ops_prelu,LAD,300,112,19,10,0.5821,0.6748
+bilinear,4,2_special_ops_prelu,RCA,300,200,15,0,0.7718,0.8739
+bilinear,4,2_special_ops_prelu,LCX,300,181,24,1,0.6381,0.7765
+bilinear,4,2_special_ops_prelu,LM,300,105,5,15,0.6747,0.7719

@@ -1,0 +1,11 @@
+curve,divisor,run_name,gt,pred_BG,pred_LAD,pred_RCA,pred_LCX,pred_LM
+maxunpool,4,1_naive_baseline_prelu_maxunpool_U4,BG,75199358,205523,140226,255466,25523
+maxunpool,4,1_naive_baseline_prelu_maxunpool_U4,LAD,280724,458598,1615,75700,10351
+maxunpool,4,1_naive_baseline_prelu_maxunpool_U4,RCA,200935,4,691144,27504,2801
+maxunpool,4,1_naive_baseline_prelu_maxunpool_U4,LCX,327823,36297,4987,466259,2759
+maxunpool,4,1_naive_baseline_prelu_maxunpool_U4,LM,21159,18143,571,40523,149207
+bilinear,4,2_special_ops_prelu,BG,75224394,235782,121751,211986,32183
+bilinear,4,2_special_ops_prelu,LAD,274927,517347,108,22763,11843
+bilinear,4,2_special_ops_prelu,RCA,214180,5063,680426,19410,3309
+bilinear,4,2_special_ops_prelu,LCX,291684,6469,2191,533814,3967
+bilinear,4,2_special_ops_prelu,LM,41879,18329,155,10371,158869
