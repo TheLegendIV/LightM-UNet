@@ -83,6 +83,12 @@ def main() -> int:
                     linewidth=0, label="Site Min-Max", zorder=1)
     for y in (0, 1):
         ax.axhline(y, color="#898781", linestyle="--", linewidth=1.2, zorder=1)
+    dec_start = next((i for i, (n, _) in enumerate(sites) if n.startswith("up")), None)   # first decoder site (up4); encoder-only checkpoints have none
+    if dec_start is not None:
+        ax.axvline(dec_start - 0.5, color=INK, linestyle="-", linewidth=1.6, zorder=2)
+        ytop = ax.get_ylim()[1]
+        ax.text(dec_start - 1.5, ytop * 0.96, "Encoder", ha="right", va="top", fontsize=13, fontweight="bold")
+        ax.text(dec_start + 0.5, ytop * 0.96, "Decoder", ha="left", va="top", fontsize=13, fontweight="bold")
     ax.set_xlim(-1, len(sites))
     ax.set_xlabel("PReLU Index", fontsize=14)
     ax.set_ylabel("Alpha", fontsize=14)

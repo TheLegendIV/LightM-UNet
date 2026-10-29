@@ -52,3 +52,15 @@ The fork + add overhead (10,994 LUT) is fixed across bit widths; the threshold p
 ## Deployability caveat (read before trusting the cost numbers)
 
 The cost model above prices a fork -> two thresholds -> add structure that has **never been built in FINN**. The repo's own history says the closest attempts failed: the Mul/ReLU/Add decomposition (`QuantDecomposedLeakyAct`, "v1" of `dataflow/finn_export_s5_dscnoproj_dense.py`) died at FINN's `step_create_dataflow_partition` ("cycle-free graph violated"), because no FINN transform absorbs a non-integer Mul/Add across a dynamic-dynamic Add join (see the note in `dataflow/archive/finn_export_s13_leaky_frozen.py`; the class docstring claiming it is FINN-proven is contradicted there). The only PReLU-like path that ever built is the **frozen per-block LeakyReLU**: `Quant -> LeakyRelu(alpha) -> Quant` fused into ONE `MultiThreshold` by `step_fuse_leaky_relu_to_threshold` (`dataflow/finn_enet_build_fixups.py`), exact for 0 < alpha < 1 (a scalar `alpha` attribute per site; alpha = 0 -> plain QuantReLU). That path costs the same as ReLU (one Thresholding per site). Unclamped per-channel PReLU (alpha <= 0 somewhere) has no demonstrated FINN path; the delta in the table is a model estimate for a structure that would need new FINN work, not a deployable design.
+
+## FP32 and QAT results (QAT: warm-started FP32 source, 15 epochs, uniform bits, `checkpoint_best.pth`, single seed)
+
+| Bits | ReLU dice (clDice) | PReLU dice (clDice) | Delta dice | Components ReLU / PReLU |
+|---|---|---|---|---|
+| FP32 cold (150 ep) | 0.7876 (0.7975) | 0.7979 (0.8068) | +0.010 | 7.1 / 7.4 |
+| FP32 warm (150 + 150 ep) | 0.7954 (0.8054) | 0.8032 (0.8121) | +0.008 | 7.0 / 7.3 |
+| INT8 | 0.7930 (0.8021) | 0.7945 (0.8034) | +0.0015 | 8.9 / 8.9 |
+| INT6 | 0.7712 (0.7745) | 0.7926 (0.7997) | +0.021 | 22.3 / 11.2 |
+| INT4 | 0.6433 (0.6434) | 0.5840 (0.5850) | -0.059 | 14.2 / 29.9 |
+
+Confounds: the PReLU arm's signed output quantizer has one bit less positive range than the ReLU arm's unsigned `QuantReLU`; the alphas are NOT quantized (float per-channel); one seed, 15 epochs (INT4 ReLU runs vary 0.68-0.73 across sibling configs). Treat the INT4/INT6 gaps as confounded.

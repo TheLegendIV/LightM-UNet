@@ -1,0 +1,156 @@
+#!/bin/bash
+#SBATCH --job-name=stage_1_seed_replicates
+#SBATCH --partition=gpu_mig
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gpus=1
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+#SBATCH --array=0-11
+#SBATCH --output=logs/%x_%a_%j.out
+#SBATCH --error=logs/%x_%a_%j.err
+
+set -e
+
+# Seed replicates for the Stage 1 PReLU max_unpool vs PReLU upsample_conv
+# (bilinear) width sweeps at U4 and U8. Question: is the large max_unpool vs
+# bilinear gap at <=1/4 width (0.591 vs 0.774 at U4, 0.502 vs 0.664 at U8, one
+# seed each) real, or single-seed class-collapse noise? Per-class Dice there is
+# non-monotonic (max_unpool RCA 0.917, 0.868, 0.485, 0.831, 0.173 across widths).
+#
+# Recipe is IDENTICAL to stage_1_naive_baseline_prelu_maxunpool_array.job and
+# stage_1_naive_baseline_prelu_upsample_conv_array.job; only ENET_SEED differs.
+# Seeds 1-3 (seed 0 is the existing run; bilinear U4 seed 0 is
+# 2_special_ops_prelu, which is unseeded).
+#
+# 12 tasks = 2 curves x 2 widths x 3 seeds, task id -> (curve, width, seed):
+#   0-2   maxunpool U4 seeds 1,2,3     6-8   bilinear U4 seeds 1,2,3
+#   3-5   maxunpool U8 seeds 1,2,3     9-11  bilinear U8 seeds 1,2,3
+#
+# Run names carry the seed ("..._U4_seed1") so collect_results.py's upsert on
+# (config_name) does NOT overwrite the seed-0 rows. Results land in
+# nas/results.csv under stage "1_seed_replicates".
+
+DATASET_ID=509
+DATASET_NAME="Dataset509_ARCADE_1x1_4c"
+
+TASK_ID=${SLURM_ARRAY_TASK_ID}
+SEED=$(( TASK_ID % 3 + 1 ))
+WIDTH_IDX=$(( (TASK_ID / 3) % 2 ))
+CURVE_IDX=$(( TASK_ID / 6 ))
+
+CURVES=(maxunpool upsample_conv)
+WIDTHS=(U4 U8)
+CURVE="${CURVES[$CURVE_IDX]}"
+CONFIG_NAME="${WIDTHS[$WIDTH_IDX]}"
+
+case "$CONFIG_NAME" in
+  U4) CHANNELS="4,16,32,16,4" ;;
+  U8) CHANNELS="4,8,16,8,4" ;;
+esac
+
+case "$CURVE" in
+  maxunpool)     DECODER="max_unpool" ;;
+  upsample_conv) DECODER="upsample_conv" ;;
+esac
+
+RUN_NAME="1_naive_baseline_prelu_${CURVE}_${CONFIG_NAME}_seed${SEED}"
+TRAINER_CLASS="nnUNetTrainerENet"
+
+mkdir -p logs
+
+# -- HPC environment ----------------------------------------------------------
+module purge
+module load 2023
+module load CUDA/12.1.1
+
+# -- Activate Conda environment -----------------------------------------------
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda activate "$HOME/conda-envs/lightmunet"
+
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+export LD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
+
+# -- General settings ---------------------------------------------------------
+unset PYTHONPATH
+export PYTHONHASHSEED=42
+export MAX_JOBS=4
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+
+# -- nnU-Net paths ------------------------------------------------------------
+export nnUNet_raw="$HOME/LightM-UNet/data/nnUNet_raw"
+export nnUNet_preprocessed="$HOME/LightM-UNet/data/nnUNet_preprocessed"
+export nnUNet_results="$HOME/LightM-UNet/data/nnUNet_results"
+
+# -- ENet trainer knobs -- PReLU + {max_unpool | upsample_conv} ---------------
+export ENET_CHANNELS="${CHANNELS}"
+export ENET_BOTTLENECKS="4,8,8,2,1"
+export ENET_DECODER_TYPE="${DECODER}"
+export ENET_CONTEXT_PATTERN="default"
+export ENET_USE_DILATED=1
+export ENET_USE_ASYMMETRIC=1
+export ENET_USE_STRIDED=1
+export ENET_USE_DSC=0
+export ENET_USE_PRELU=1
+export ENET_SEED="${SEED}"
+export ENET_EPOCHS=150
+export ENET_OUTPUT_FOLDER="$nnUNet_results/${DATASET_NAME}/${TRAINER_CLASS}_${RUN_NAME}__nnUNetPlans__2d/fold_0"
+
+echo "=== Job info ==="
+echo "Host: $(hostname)"
+echo "Date: $(date)"
+echo "Array task: ${TASK_ID} -> ${RUN_NAME}"
+echo "ENET_CHANNELS=${ENET_CHANNELS} ENET_BOTTLENECKS=${ENET_BOTTLENECKS}"
+echo "ENET_DECODER_TYPE=${ENET_DECODER_TYPE} ENET_USE_PRELU=${ENET_USE_PRELU} ENET_SEED=${ENET_SEED}"
+echo "Output folder: ${ENET_OUTPUT_FOLDER}"
+
+echo "=== GPU info ==="
+nvidia-smi
+
+cd "$HOME/LightM-UNet/enet"
+
+echo "=== Plan + preprocess (skipped if already done) ==="
+if [ ! -f "$nnUNet_preprocessed/${DATASET_NAME}/nnUNetPlans.json" ]; then
+    nnUNetv2_plan_and_preprocess -d "${DATASET_ID}" --verify_dataset_integrity
+else
+    echo "Plans already exist, skipping."
+fi
+if [ -f "$nnUNet_raw/${DATASET_NAME}/splits_final.json" ]; then
+    cp "$nnUNet_raw/${DATASET_NAME}/splits_final.json" \
+       "$nnUNet_preprocessed/${DATASET_NAME}/splits_final.json"
+fi
+
+echo "=== Checking for an existing checkpoint for ${RUN_NAME} ==="
+if [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_final.pth" ] || [ -f "${ENET_OUTPUT_FOLDER}/checkpoint_best.pth" ]; then
+    echo "Checkpoint already exists at ${ENET_OUTPUT_FOLDER} -- skipping training, going straight to collect_results.py."
+else
+    echo "=== Start training: ${RUN_NAME} ==="
+    nnUNetv2_train "${DATASET_NAME}" 2d 0 -tr "${TRAINER_CLASS}"
+    echo "Training finished for ${RUN_NAME}."
+
+    echo "=== Archiving checkpoints + logs to \$HOME/models ==="
+    bash "$HOME/LightM-UNet/scripts/archive_checkpoint.sh" "${DATASET_NAME}" "${TRAINER_CLASS}_${RUN_NAME}" 2d 0
+fi
+
+echo "=== Collecting results into nas/results.csv ==="
+cd "$HOME/LightM-UNet"
+python nas/collect_results.py \
+    --net-name "${TRAINER_CLASS}_${RUN_NAME}" \
+    --stage 1_seed_replicates \
+    --dataset-name "${DATASET_NAME}" \
+    --dataset-id "${DATASET_ID}" \
+    --channels "${ENET_CHANNELS}" \
+    --bottlenecks "${ENET_BOTTLENECKS}" \
+    --decoder-type "${ENET_DECODER_TYPE}" \
+    --use-dilated "${ENET_USE_DILATED}" \
+    --use-asymmetric "${ENET_USE_ASYMMETRIC}" \
+    --use-strided "${ENET_USE_STRIDED}" \
+    --use-dsc "${ENET_USE_DSC}" \
+    --context-pattern "${ENET_CONTEXT_PATTERN}" \
+    --use-prelu "${ENET_USE_PRELU}" \
+    --seed "${ENET_SEED}" \
+    --trainer-class "${TRAINER_CLASS}"
+
+echo "Done: ${RUN_NAME}."
