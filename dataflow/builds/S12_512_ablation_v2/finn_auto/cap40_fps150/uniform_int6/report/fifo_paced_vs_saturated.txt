@@ -1,0 +1,107 @@
+
+=== partition 0: folding mismatches 0 | FIFOs sat 15 paced 15 | total sat 6.57 Mbit -> paced 2.64 Mbit (-59.8%)
+edge                                                                   width       sat     paced
+FMPadding_rtl_0->ConvolutionInputGenerator_rtl_0                           6    524288      1024
+Thresholding_rtl_1->StreamingMaxPool_hls_0                                 6    262144    262144
+StreamingDataWidthConverter_rtl_1->StreamingConcat_hls_0                  18     65536     65536
+DuplicateStreams_hls_0->Thresholding_rtl_1                                 6    131072         2
+DuplicateStreams_hls_0->FMPadding_rtl_0                                    6     32768       512
+
+=== partition 1: folding mismatches 0 | FIFOs sat 118 paced 118 | total sat 2.57 Mbit -> paced 0.25 Mbit (-90.4%)
+edge                                                                   width       sat     paced
+StreamingDataWidthConverter_rtl_1->MVAU_rtl_0                             12    131072       512
+StreamingDataWidthConverter_rtl_2->MVAU_rtl_1                             12     32768       240
+Thresholding_rtl_1->AddStreams_hls_0                                       6     65536      2048
+StreamingDataWidthConverter_rtl_4->ConvolutionInputGenerator_rtl_1         6     16384      2048
+Thresholding_rtl_10->AddStreams_hls_2                                      6      4096      4096
+Thresholding_rtl_15->AddStreams_hls_3                                      6      4096      4096
+Thresholding_rtl_20->AddStreams_hls_4                                      6      4096      4096
+Thresholding_rtl_5->AddStreams_hls_1                                       6      4096      4096
+
+=== partition 2: folding mismatches 0 | FIFOs sat 91 paced 91 | total sat 5.49 Mbit -> paced 2.21 Mbit (-59.7%)
+edge                                                                   width       sat     paced
+DuplicateStreams_hls_0->Thresholding_rtl_1                                 6    131072         2
+StreamingDataWidthConverter_rtl_0->MVAU_rtl_0                             12     65536        32
+StreamingDataWidthConverter_rtl_3->MVAU_rtl_1                             24     32768      2048
+Thresholding_rtl_1->AddStreams_hls_0                                       6    131072      8192
+DuplicateStreams_hls_0->StreamingDataWidthConverter_rtl_0                  6     65536         2
+StreamingDataWidthConverter_rtl_18->MVAU_rtl_10                           24     16384     16384
+Thresholding_rtl_16->AddStreams_hls_3                                      6     65536     65536
+FMPadding_rtl_3->StreamingDataWidthConverter_rtl_17                       48      4096      4096
+StreamingDataWidthConverter_rtl_13->MVAU_rtl_7                            24      8192      8192
+StreamingDataWidthConverter_rtl_17->ConvolutionInputGenerator_rtl_3        6     32768     32768
+Thresholding_rtl_11->AddStreams_hls_2                                      6     32768     32768
+StreamingDataWidthConverter_rtl_12->ConvolutionInputGenerator_rtl_2        6     16384     16384
+StreamingDataWidthConverter_rtl_8->MVAU_rtl_4                             24      4096      4096
+Thresholding_rtl_6->AddStreams_hls_1                                       6     16384     16384
+StreamingDataWidthConverter_rtl_7->ConvolutionInputGenerator_rtl_1         6      8192      8192
+Thresholding_rtl_21->AddStreams_hls_4                                      6      8192      8192
+
+=== partition 3: folding mismatches 0 | FIFOs sat 73 paced 73 | total sat 5.28 Mbit -> paced 2.09 Mbit (-60.4%)
+edge                                                                   width       sat     paced
+DuplicateStreams_hls_0->Thresholding_rtl_1                                 6    131072         2
+StreamingDataWidthConverter_rtl_0->MVAU_rtl_0                             12     65536        32
+StreamingDataWidthConverter_rtl_3->MVAU_rtl_1                             24     32768      4096
+Thresholding_rtl_1->AddStreams_hls_0                                       6    131072     16384
+DuplicateStreams_hls_0->StreamingDataWidthConverter_rtl_0                  6     65536         2
+StreamingDataWidthConverter_rtl_13->MVAU_rtl_7                            24     16384     16384
+Thresholding_rtl_11->AddStreams_hls_2                                      6     65536     65536
+FMPadding_rtl_2->StreamingDataWidthConverter_rtl_12                       48      4096      4096
+StreamingDataWidthConverter_rtl_12->ConvolutionInputGenerator_rtl_2        6     32768     32768
+StreamingDataWidthConverter_rtl_8->MVAU_rtl_4                             24      8192      8192
+Thresholding_rtl_6->AddStreams_hls_1                                       6     32768     32768
+StreamingDataWidthConverter_rtl_7->ConvolutionInputGenerator_rtl_1         6     16384     16384
+StreamingDataWidthConverter_rtl_2->ConvolutionInputGenerator_rtl_0         6      8192      8192
+Thresholding_rtl_16->AddStreams_hls_3                                      6      8192      8192
+
+=== partition 4: folding mismatches 0 | FIFOs sat 91 paced 91 | total sat 5.56 Mbit -> paced 2.38 Mbit (-57.3%)
+edge                                                                   width       sat     paced
+DuplicateStreams_hls_0->Thresholding_rtl_1                                 6    131072         2
+StreamingDataWidthConverter_rtl_0->MVAU_rtl_0                             12     65536        32
+StreamingDataWidthConverter_rtl_3->MVAU_rtl_1                             24     32768      4096
+Thresholding_rtl_1->AddStreams_hls_0                                       6    131072     16384
+DuplicateStreams_hls_0->StreamingDataWidthConverter_rtl_0                  6     65536         2
+StreamingDataWidthConverter_rtl_13->MVAU_rtl_7                            24     16384     16384
+Thresholding_rtl_11->AddStreams_hls_2                                      6     65536     65536
+FMPadding_rtl_2->StreamingDataWidthConverter_rtl_12                       48      4096      4096
+StreamingDataWidthConverter_rtl_12->ConvolutionInputGenerator_rtl_2        6     32768     32768
+StreamingDataWidthConverter_rtl_8->MVAU_rtl_4                             24      8192      8192
+Thresholding_rtl_6->AddStreams_hls_1                                       6     32768     32768
+StreamingDataWidthConverter_rtl_23->MVAU_rtl_13                           24      4096      4096
+StreamingDataWidthConverter_rtl_7->ConvolutionInputGenerator_rtl_1         6     16384     16384
+Thresholding_rtl_21->AddStreams_hls_4                                      6     16384     16384
+StreamingDataWidthConverter_rtl_2->ConvolutionInputGenerator_rtl_0         6      8192      8192
+StreamingDataWidthConverter_rtl_22->ConvolutionInputGenerator_rtl_4        6      8192      8192
+Thresholding_rtl_16->AddStreams_hls_3                                      6      8192      8192
+
+=== partition 5: folding mismatches 0 | FIFOs sat 66 paced 66 | total sat 4.84 Mbit -> paced 1.84 Mbit (-62.0%)
+edge                                                                   width       sat     paced
+DuplicateStreams_hls_0->Thresholding_rtl_1                                 6    131072         2
+StreamingDataWidthConverter_rtl_0->MVAU_rtl_0                             12     65536        32
+StreamingDataWidthConverter_rtl_3->MVAU_rtl_1                             24     32768      8192
+Thresholding_rtl_1->AddStreams_hls_0                                       6    131072     32768
+DuplicateStreams_hls_0->StreamingDataWidthConverter_rtl_0                  6     65536         2
+StreamingDataWidthConverter_rtl_8->MVAU_rtl_4                             24     16384     16384
+Thresholding_rtl_6->AddStreams_hls_1                                       6     65536     65536
+FMPadding_rtl_1->StreamingDataWidthConverter_rtl_7                        48      4096      4096
+StreamingDataWidthConverter_rtl_7->ConvolutionInputGenerator_rtl_1         6     32768     32768
+StreamingDataWidthConverter_rtl_2->ConvolutionInputGenerator_rtl_0         6     16384     16384
+Thresholding_rtl_15->AddStreams_hls_2                                      6      4096      4096
+
+=== partition 6: folding mismatches 0 | FIFOs sat 65 paced 65 | total sat 3.38 Mbit -> paced 0.14 Mbit (-95.9%)
+edge                                                                   width       sat     paced
+StreamingDataWidthConverter_rtl_0->MVAU_rtl_0                             12    131072        32
+Thresholding_rtl_1->AddStreams_hls_0                                       6    262144      4096
+DuplicateStreams_hls_0->Thresholding_rtl_1                                 6     32768         2
+StreamingDataWidthConverter_rtl_2->ConvolutionInputGenerator_rtl_0         6     16384      2048
+Thresholding_rtl_6->AddStreams_hls_1                                       6      4096      4096
+
+=== partition 7: folding mismatches 0 | FIFOs sat 25 paced 25 | total sat 56.88 Mbit -> paced 54.41 Mbit (-4.3%)
+edge                                                                   width       sat     paced
+StreamingDataWidthConverter_rtl_3->LabelSelect_hls_0                      16   2097152   2097152
+ChannelwiseOp_hls_0->StreamingDataWidthConverter_rtl_3                    80    262144    262144
+MVAU_rtl_2->ChannelwiseOp_hls_0                                           75     32768     32768
+Thresholding_rtl_1->AddStreams_hls_0                                       6    262144      2048
+FMPadding_rtl_0->ConvolutionInputGenerator_rtl_0                           6    131072      1024
+DuplicateStreams_hls_0->Thresholding_rtl_1                                 6     32768         2
+Thresholding_rtl_2->FMPadding_rtl_0                                        6      8192        56
