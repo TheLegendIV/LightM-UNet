@@ -55,11 +55,40 @@ Per-class numbers, pixel fill, norm ratios and activation stats: `dice_by_width.
    experiments. The mean-Dice drop from U2 to U8/U16 is mostly classes disappearing, which these ablations do not touch.
 2. **Inference-time swaps show what a trained net relies on, not what is learnable.** Any difference between
    max-unpool and bilinear that arises during training (e.g. sparse gradients into `main_proj`) is invisible here.
-   A zero-skip ablation (skip removed entirely) was not run; it is the most direct reliance test.
+   The zero-skip ablation (skip removed entirely) is in `skip_ablation/` (test split, below).
 3. **The decoder activations are ReLU, not PReLU.** `ENET_DECODER_PRELU` is unset in the sweep jobs, so
    `decoder_relu = True`; "PReLU" applies to the encoder only.
 4. One random-index draw (seed 0); `--seeds` and `--random-mode per_channel` are supported but not run.
 5. The predictor runs under CUDA autocast (fp16); stats are cast to fp32 before aggregation.
+
+## Five-arm skip ablation on the TEST split (`skip_ablation/`)
+
+Same nets, inference-time only, scored like `nas/collect_results.py` (300 test cases, mean per-class Dice).
+Arms: `MaxUnpool` (control); `No Skip` (`main_proj(x)` replaced by zeros); `Random` (independent random 2x2 slot
+per channel and window, so the per-channel sparsity/coverage of the real indices is kept, mean of 3 draws);
+`v/4` (nearest, same per-window SUM); `v/2` (nearest, same per-window L2 norm).
+
+| width | MaxUnpool | No Skip | Random | v/4 | v/2 |
+|---|---|---|---|---|---|
+| 1 | 0.809 | 0.785 | 0.805 | 0.806 | 0.810 |
+| 1/2 | 0.788 | 0.765 | 0.781 | 0.791 | 0.798 |
+| 1/4 | 0.591 | 0.607 | 0.582 | 0.607 | 0.589 |
+| 1/8 | 0.502 | 0.498 | 0.498 | 0.457 | 0.495 |
+| 1/16 | 0.331 | 0.329 | 0.318 | 0.352 | 0.315 |
+
+Versus control, in Dice points: No Skip -2.4, -2.3, +1.5, -0.4, -0.2; Random -0.5, -0.7, -0.9, -0.4, -1.4
+(min-max over the 3 draws is at most 0.9 pt); v/4 -0.3, +0.3, +1.6, -4.5, +2.1; v/2 +0.1, +1.0, -0.2, -0.7, -1.7.
+
+- Removing the skip entirely costs at most 2.4 pts at any width, and nothing at 1/4 and below: the trained
+  max-unpool decoders do not use their skip branch. (Bilinear nets lose 29-66% of Dice under the same test,
+  see `dice_drop_vs_width.png`.)
+- Random indices are slightly worse than the real ones at all five widths (-0.4 to -1.4), so real indices carry
+  at most a small signal; at 1/16 random is below No Skip.
+- Dense replacements (v/4, v/2) do not consistently beat the sparse control, so these tests do not show sparsity
+  to be harmful. The one large deviation is v/4 at 1/8 (-4.5); not investigated.
+- One trained net per width (seed 0), inference-time swaps only: this shows what these nets rely on, not what is
+  learnable. Figures: `skip_ablation/dice_vs_width.png`, `dice_delta_vs_width.png`; data
+  `skip_ablation/skip_ablation_results.csv`, `maxunpool_arms.csv`.
 
 ## Harness check against `nas/results.csv`
 

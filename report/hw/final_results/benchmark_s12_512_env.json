@@ -124,40 +124,40 @@
     "checkpoint": "nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_bilinear_upsample_256_perlayer_12_dense_relu_warmstart150ep_bilinear_uniform_int8_perlayer_ft15ep",
     "input": "uint8 levels as float32, profile s12_512_bilinear_int8_maxfps",
     "warm_runs_s": [
-      3.147049110964872,
-      3.202695084037259,
-      3.13260052195983,
-      3.1237134099937975,
-      3.026568627974484
+      3.2185404010815546,
+      3.098798298975453,
+      3.015893917065114,
+      3.0259163299342617,
+      3.077556059928611
     ],
     "warmup": 10,
     "batch_size": 1,
-    "timestamp": "2026-10-22T20:44:37",
+    "timestamp": "2026-10-30T17:26:50",
     "runtime": "onnxruntime 1.23.2",
     "threads": 0,
     "providers": [
       "CPUExecutionProvider"
     ],
     "energy": {
-      "energy_dyn_j_per_image_mean": 0.37058522886940315,
-      "energy_dyn_j_per_image_std": 0.017433828298956993,
+      "energy_dyn_j_per_image_mean": 0.3755159766417445,
+      "energy_dyn_j_per_image_std": 0.00864709631427057,
       "energy_dyn_j_per_image_runs": [
-        0.34045150886817394,
-        0.3734688663023748,
-        0.3738332918631479,
-        0.38321815860165137,
-        0.3819543187116677
+        0.3874455558896725,
+        0.3669931994844709,
+        0.36897867309569254,
+        0.3728092167284453,
+        0.38135323801044135
       ],
       "energy_j_per_image_runs": [
-        0.46132314041256905,
-        0.49647760403342545,
-        0.4941498647847523,
-        0.5030954188543061,
-        0.49819840138157206
+        0.49276194990302125,
+        0.4683904482672612,
+        0.46766164612645905,
+        0.47182028628264866,
+        0.4819747164224585
       ],
-      "power_idle_before_w": 12.695014366941344,
-      "power_idle_after_w": 10.34962410675599,
-      "idle_window_s": 30.02771782875061,
+      "power_idle_before_w": 9.733613132286825,
+      "power_idle_after_w": 9.89883655224635,
+      "idle_window_s": 20.01838207244873,
       "energy_source": "Windows Energy Meter RAPL_Package0_PKG (CPU package incl. iGPU, no DRAM / wall)"
     }
   },
@@ -166,38 +166,38 @@
     "checkpoint": "nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_bilinear_upsample_256_perlayer_12_dense_relu_warmstart150ep_bilinear_uniform_int8_perlayer_ft15ep",
     "input": "uint8 levels as float32, profile s12_512_bilinear_int8_maxfps",
     "warm_runs_s": [
-      0.8805826416015625,
-      0.88478515625,
-      1.0059386596679687,
-      1.0218700561523437,
-      1.113555908203125
+      0.882545654296875,
+      1.0944910888671875,
+      1.106145263671875,
+      1.13343798828125,
+      1.10847900390625
     ],
     "warmup": 10,
     "batch_size": 1,
-    "timestamp": "2026-10-27T13:09:13",
+    "timestamp": "2026-10-30T16:55:36",
     "runtime": "TensorRT 10.3.0",
     "builder_flags": "INT8",
     "engine_layers": 159,
     "energy": {
-      "energy_dyn_j_per_image_mean": 0.08828491022088497,
-      "energy_dyn_j_per_image_std": 0.009937429240656352,
+      "energy_dyn_j_per_image_mean": 0.07086888406949547,
+      "energy_dyn_j_per_image_std": 0.004839732966710522,
       "energy_dyn_j_per_image_runs": [
-        0.08017982142570089,
-        0.07706814538014176,
-        0.10181043044644836,
-        0.08981134737770825,
-        0.09255480647442567
+        0.07947753582334631,
+        0.06828909168203166,
+        0.0691795943223408,
+        0.0681254203928992,
+        0.06927277812685939
       ],
       "energy_j_per_image_runs": [
-        0.09454666666667132,
-        0.0914900000000489,
-        0.11821333333326038,
-        0.10647333333336671,
-        0.11070666666666512
+        0.09439666666672565,
+        0.08682666666669926,
+        0.08793666666664648,
+        0.08730999999999767,
+        0.0880266666666527
       ],
-      "power_idle_before_w": 4.4007799623057675,
-      "power_idle_after_w": 5.371607081818329,
-      "idle_window_s": 20.019633054733276,
+      "power_idle_before_w": 4.925186983359762,
+      "power_idle_after_w": 5.204151070876086,
+      "idle_window_s": 20.02035665512085,
       "energy_source": "NVML nvmlDeviceGetTotalEnergyConsumption (RTX 2050 board energy)"
     }
   },

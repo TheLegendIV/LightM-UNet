@@ -13,7 +13,7 @@ sys.path.insert(0, str(REPO / "deployment"))
 sys.path.insert(0, str(REPO / "nas"))
 
 DATASET = "Dataset509_ARCADE_1x1_4c"
-OUT_DIR = REPO / "report" / "MILP" / "final_results"
+OUT_DIR = REPO / "report" / "hw" / "final_results"
 OUT_CSV = OUT_DIR / "benchmark_s12_512.csv"
 OUT_ENV = OUT_DIR / "benchmark_s12_512_env.json"
 CLASSES = ["LAD", "RCA", "LCX", "LM"]

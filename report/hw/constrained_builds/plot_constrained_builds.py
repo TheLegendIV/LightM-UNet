@@ -4,7 +4,7 @@
   s12_512_constrained_bram.png   Dice vs BRAM18K %
   s12_512_constrained_dsp.png    Dice vs DSP %
   s12_512_constrained_combined.png  Dice vs the equal-weight mean of the LUT %, BRAM18K % and DSP %
-  s12_512_constrained_estimated.png  (light-blue hatched "Infeasible" region right of the cap) Dice vs modelled LUT (open circle) / BRAM18K (x) / DSP (+) %, three markers per scheme on one horizontal line, no real points
+  s12_512_constrained_estimated.png  (light-blue hatched "Infeasible" region right of the cap) Dice vs modelled LUT (x) / BRAM (+) / DSP (asterisk) %, three markers per scheme on one horizontal line, no real points
   s12_512_constrained_ff.png     Dice vs FF % (real synthesis only: the ILP does not model flip-flops; 460,800 FF in the XCZU7EV; no cap line for now)
 
 Per scheme (INT4, INT6, INT8, mixed 4/6/8; the FINN auto-fold INT6 build is not shown), two markers joined by a line:
@@ -43,7 +43,8 @@ CAP_PCT = 40.0
 INFEASIBLE_BG, INFEASIBLE_HATCH = "#cfe3f5", "#9a9a9a"      # shaded region beyond the resource cap
 INFEASIBLE_COLOR = "#c0392b"
 MIXED_COLOR = ALPHA_COLORS.get(0.25)
-EST_MARK_SIZE, EST_MARK_WIDTH = 7, 1.2      # estimated plot: hollow markers, a bit larger than the error plot's so the outlines read
+EST_MARK_SIZE, EST_MARK_WIDTH = 7, 1.3     # estimated plot: line-only markers (x, +, asterisk), larger than the error plot's so the strokes read
+EST_RESOURCE_STYLE = {"lut": ("x", "LUT"), "bram": ("+", "BRAM"), "dsp": ((6, 2, 0), "DSP")}      # estimated plot only (the error plot keeps plot_style.RESOURCE_STYLE): x, +, asterisk; "BRAM" = BRAM18K in the legend
 INT4_COLOR = "#2a78d6"      # INT4 and INT6 are both feasible uniform builds; own hue for INT4 so the two lines are told apart (INT6 keeps UNIFORM_COLOR)
 
 
@@ -186,10 +187,10 @@ def plot_estimated(costs: dict, dice: dict, fp32: float, out_path: Path) -> None
         y = dice[key]
         c = costs[key]
         color = scheme_color(key)
-        xs = {r: pct(c, "model", r) for r in RESOURCE_STYLE}
+        xs = {r: pct(c, "model", r) for r in EST_RESOURCE_STYLE}
         ax.plot([min(xs.values()), max(xs.values())], [y, y], color=color, linestyle=CAL_STYLE, linewidth=LINE_WIDTH, alpha=LINE_ALPHA, zorder=3)
-        for z, (r, (m, _, _)) in enumerate(RESOURCE_STYLE.items()):
-            ax.plot([xs[r]], [y], marker=m, markersize=EST_MARK_SIZE, markerfacecolor="none", markeredgecolor=color, markeredgewidth=EST_MARK_WIDTH, alpha=MARK_ALPHA, linestyle="none", zorder=5 + z)
+        for z, (r, (m, _)) in enumerate(EST_RESOURCE_STYLE.items()):
+            ax.plot([xs[r]], [y], marker=m, markersize=EST_MARK_SIZE, markeredgecolor=color, markeredgewidth=EST_MARK_WIDTH, alpha=MARK_ALPHA, linestyle="none", zorder=5 + z)
         if key == "mixed468":        # sits just under the INT8 line and above the INT6 line, so its label goes right of its markers
             ax.annotate(c["label"], (max(xs.values()), y), xytext=(14, 0), textcoords="offset points", ha="left", va="center", color=color, fontsize=10, fontweight="bold")
         else:
@@ -208,8 +209,8 @@ def plot_estimated(costs: dict, dice: dict, fp32: float, out_path: Path) -> None
     for t in ax.get_xticklabels() + ax.get_yticklabels():
         t.set_fontweight("bold")
     handles, labels = ax.get_legend_handles_labels()
-    for m, name, _ in RESOURCE_STYLE.values():
-        handles.append(Line2D([], [], marker=m, color="none", markerfacecolor="none", markeredgecolor=SECONDARY_INK, markeredgewidth=EST_MARK_WIDTH, markersize=EST_MARK_SIZE))
+    for m, name in EST_RESOURCE_STYLE.values():
+        handles.append(Line2D([], [], marker=m, color="none", markeredgecolor=SECONDARY_INK, markeredgewidth=EST_MARK_WIDTH, markersize=EST_MARK_SIZE))
         labels.append(name)
     leg = ax.legend(handles, labels, loc="lower right", frameon=True, facecolor=SURFACE, edgecolor=GUIDE_COLOR, fontsize=7.5, markerscale=0.75, borderpad=0.5, labelspacing=0.35, labelcolor=SECONDARY_INK)
     for t in leg.get_texts():

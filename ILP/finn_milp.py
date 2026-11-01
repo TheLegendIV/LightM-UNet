@@ -448,6 +448,7 @@ def solve_joint_perlayer(
     max_fps: bool = False,
     max_fps_eps: float = 0.001,
     max_accuracy_eps: float = 0.001,
+    first_pass_only: bool = False,
 ) -> dict:
     """Build and solve the MILP. Formulation: finn_milp.md "Formulation".
     feasibility_only: zero objective (any feasible point is Optimal)."""
@@ -803,20 +804,24 @@ def solve_joint_perlayer(
     accuracy_mode = not (feasibility_only or max_fps or min_stall or min_bram or min_resources)       # the default objective: maximum accuracy, then the cheapest design within eps of it
     if accuracy_mode and status_name == "Optimal":
         sens1 = pulp.value(SENSITIVITY_OBJ_SCALE * sensitivity_term)
-        prob += SENSITIVITY_OBJ_SCALE * sensitivity_term <= sens1 * (1 + max_accuracy_eps) + 1e-6, "max_accuracy_roof"
-        prob.setObjective(resources_obj)                      # pass 2: cheapest bits + fold among those within (1 + eps) of the best achievable accuracy proxy (bits are NOT pinned)
-        pass1_values = {v.name: v.varValue for v in prob.variables()}
-        status = solve_warm()
-        status_name = pulp.LpStatus[status]
         pass2_failed = None
-        if status_name != "Optimal":
+        if first_pass_only:
+            # --first-pass-only: stop at the accuracy-optimal solution of pass 1; folding is whatever CBC found feasible (resources NOT minimised)
+            print("--first-pass-only: skipping the resource-minimising pass 2 -- keeping the pass-1 solution (accuracy-optimal, resources NOT minimised).")
+        else:
+            prob += SENSITIVITY_OBJ_SCALE * sensitivity_term <= sens1 * (1 + max_accuracy_eps) + 1e-6, "max_accuracy_roof"
+            prob.setObjective(resources_obj)                  # pass 2: cheapest bits + fold among those within (1 + eps) of the best achievable accuracy proxy (bits are NOT pinned)
+            pass1_values = {v.name: v.varValue for v in prob.variables()}
+            status = solve_warm()
+            status_name = pulp.LpStatus[status]
+        if not first_pass_only and status_name != "Optimal":
             # pass 2 found no point within the time limit (a tight accuracy roof leaves CBC no incumbent): keep pass 1's accuracy-optimal solution, resources not minimised
             pass2_failed = status_name
             print(f"WARNING: accuracy-mode pass 2 is {status_name!r} although pass 1 was Optimal -- keeping the pass-1 solution (accuracy-optimal, resources NOT minimised).")
             for v in prob.variables():
                 v.varValue = pass1_values[v.name]
             status_name = "Optimal"
-        max_accuracy_info = {"pass1_sensitivity_norm_mean": sens1 / SENSITIVITY_OBJ_SCALE, "eps": max_accuracy_eps, **({"pass2_failed": pass2_failed} if pass2_failed else {})}
+        max_accuracy_info = {"pass1_sensitivity_norm_mean": sens1 / SENSITIVITY_OBJ_SCALE, "eps": max_accuracy_eps, **({"pass2_failed": pass2_failed} if pass2_failed else {}), **({"first_pass_only": True} if first_pass_only else {})}
 
     n_binary_vars = len(y) + len(z)
     n_constraints = (
@@ -1103,6 +1108,7 @@ def _write_run_summary(
         "max-dsp-fraction": args.max_dsp_fraction, "max-uram-fraction": args.max_uram_fraction, "force-dsp": args.force_dsp,
         "max-latency-ms": args.max_latency_ms, "clock-mhz": args.clock_mhz, "target-fps": args.target_fps,
         "dsr-pct": args.dsr_pct, "min-stall": args.min_stall, "min-bram": args.min_bram, "max-fps": args.max_fps, "max-fps-eps": args.max_fps_eps, "max-accuracy-eps": args.max_accuracy_eps,
+        "first-pass-only": args.first_pass_only,
         "mvau-wwidth-max": args.mvau_wwidth_max, "min-resources": args.min_resources,
         "time-limit": args.time_limit, "gap-rel": args.gap_rel,
     }
@@ -1230,6 +1236,8 @@ def main() -> None:
                               "(the --min-resources objective) with the BRAM18 count capped at (1 + MIN_BRAM_EPS = 0.001) x pass 1's optimum. Same shape as --max-fps / --min-stall.")
     parser.add_argument("--max-accuracy-eps", type=float, default=0.001, help="default objective (maximum accuracy): pass 1 minimises the accuracy proxy (mean normalised |sensitivity|); pass 2 minimises resources with the proxy capped at (1 + eps) x pass 1's optimum, bits and folding free "
                               "(default 0.001, as --max-fps-eps / MIN_STALL_EPS). Every objective mode has this shape: --max-fps (frame time), --min-stall (stall), default (accuracy); --min-resources is the resource objective itself.")
+    parser.add_argument("--first-pass-only", action="store_true",
+                         help="default objective (maximum accuracy) only: stop after pass 1. The accuracy-optimal bits are kept as solved; folding is whatever CBC found feasible (resources NOT minimised). Roughly halves the solve time.")
     parser.add_argument("--mvau-wwidth-max", type=int, default=None,
                          help="Hard cap on weight_bits * SIMD of every dense layer's fold (FINN SetFolding's "
                               "mvau_wwidth_max quantity). Pass the SAME value to FINN's build config so the MILP "
@@ -1352,6 +1360,7 @@ def main() -> None:
         extra_nodes=extra_nodes, dataflow_map=dataflow_map,
         dsr_pct=args.dsr_pct, min_stall=args.min_stall, min_bram=args.min_bram,
         max_fps=args.max_fps, max_fps_eps=args.max_fps_eps, max_accuracy_eps=args.max_accuracy_eps,
+        first_pass_only=args.first_pass_only,
     )
     if args.min_stall and args.pin_bits_file:
         raise SystemExit("--min-stall is its own two-pass mode (stall, then resources): drop --pin-bits-file.")

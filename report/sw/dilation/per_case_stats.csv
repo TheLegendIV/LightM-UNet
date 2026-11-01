@@ -1,0 +1,13 @@
+net,run_name,class,n_cases,gt_empty,spurious,missed,dice_gt_present,dice_mean
+s12,12_dense_relu,LAD,300,112,24,4,0.5728,0.6523
+s12,12_dense_relu,RCA,300,200,4,2,0.7662,0.9087
+s12,12_dense_relu,LCX,300,181,13,4,0.6277,0.809
+s12,12_dense_relu,LM,300,105,6,6,0.6929,0.7804
+enet_ctx,1_naive_baseline_U4,LAD,300,112,29,6,0.5613,0.6284
+enet_ctx,1_naive_baseline_U4,RCA,300,200,17,1,0.7599,0.8633
+enet_ctx,1_naive_baseline_U4,LCX,300,181,31,2,0.6136,0.7434
+enet_ctx,1_naive_baseline_U4,LM,300,105,14,11,0.6922,0.7532
+no_dilated,2_special_ops_no_dilated,LAD,300,112,63,16,0.3472,0.3809
+no_dilated,2_special_ops_no_dilated,RCA,300,200,146,0,0.5941,0.378
+no_dilated,2_special_ops_no_dilated,LCX,300,181,169,0,0.4723,0.2274
+no_dilated,2_special_ops_no_dilated,LM,300,105,22,40,0.5101,0.6082

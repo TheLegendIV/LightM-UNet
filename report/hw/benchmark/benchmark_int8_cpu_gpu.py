@@ -7,7 +7,8 @@ The ONNX files are report/MILP/benchmark/export_int8_qcdq.py's QDQ conversion of
 network + argmax, as everywhere else). The input is the board's UINT8 input contract (z-score, quantize with the input_profiles.json scale, +128) computed on the host BEFORE timing, as the FPGA host does.
 
 Timing (as the FP32 benchmark and the FPGA window): all 300 inputs resident on the device, ONE timed region from the first to the last inference (stream_warm, after --warmup untimed runs), batch 1,
-no host-to-device or result transfer inside it; single_image = one image, synchronized per run (mean/std/median/min/p95/p99). Accuracy: separate untimed pass, same Dice definitions as deployment/collect_results.py.
+no host-to-device or result transfer inside it; single_image = livestream of single images: each run is a different resident image (cold input; weights may stay on chip), the device is synchronized before it,
+and only the compute (launch -> synchronize) is timed (mean/std/median/min/p95/p99). Accuracy: separate untimed pass, same Dice definitions as deployment/collect_results.py.
 
 Usage (lightmunet_dev; TensorRT is installed to /opt/trt_pkgs, see TRT_PKGS):
     python report/MILP/benchmark/benchmark_int8_cpu_gpu.py --backend ort-cpu
@@ -55,7 +56,6 @@ class OrtCpu:
         self.threads = threads or so.intra_op_num_threads or 0
         self.in_name, self.out_name = self.sess.get_inputs()[0].name, self.sess.get_outputs()[0].name
         self.out = ort.OrtValue.ortvalue_from_shape_and_type([1, 512, 512], np.int64, "cpu", 0)
-
     def prepare(self, x):
         self.inputs = [self.ort.OrtValue.ortvalue_from_numpy(np.ascontiguousarray(x[i:i + 1])) for i in range(x.shape[0])]
         self.io = self.sess.io_binding()
@@ -120,7 +120,6 @@ class TrtGpu:
         self.out = torch.empty(tuple(engine.get_tensor_shape(self.out_name)), dtype=out_dtype, device="cuda")
         self.ctx.set_tensor_address(self.out_name, self.out.data_ptr())
         self.stream = torch.cuda.Stream()
-
     def prepare(self, x):
         self.inputs = [self.torch.from_numpy(np.ascontiguousarray(x[i:i + 1])).cuda() for i in range(x.shape[0])]
         self.torch.cuda.synchronize()
@@ -152,12 +151,16 @@ class TrtGpu:
         return {"runtime": f"TensorRT {self.trt.__version__}", "builder_flags": "INT8", "engine_layers": self.engine.num_layers}
 
 
-def single_latencies(be, warmup, n):
+def single_latencies(be, warmup, n, n_images):
+    """Livestream model: every run is a different image (cycling through the resident set, 300 x 1 MB >> L2 / L3, so the input is always cold); weights may stay on chip, and the previous
+    frame's activations are never read (each layer writes before the next reads), so no flush is needed."""
+    if warmup + n > n_images:
+        raise ValueError(f"single_image needs {warmup + n} distinct images (warmup + runs) but only {n_images} are loaded: an image would be run twice; lower --single-n / --warmup or raise --limit")
     lat = []
     for k in range(warmup + n):
         be.sync()
         t0 = time.perf_counter()
-        be.run_one(0)
+        be.run_one(k % n_images)
         be.sync()
         if k >= warmup:
             lat.append((time.perf_counter() - t0) * 1000.0)
@@ -194,6 +197,7 @@ def main() -> None:
     ap.add_argument("--skip-accuracy", action="store_true")
     ap.add_argument("--power", action="store_true", help="also measure energy per image above idle (power_meter.py; cpu needs host_rapl_sampler.ps1 running on the Windows host)")
     ap.add_argument("--idle-s", type=float, default=20.0)
+    ap.add_argument("--cooldown-s", type=float, default=0.0, help="idle pause before every timed stream after the first and before the single-image latencies, so each starts from the same thermal state (0 = back to back)")
     a = ap.parse_args()
 
     files, x = load_inputs(a.limit)
@@ -213,6 +217,9 @@ def main() -> None:
     be.sync()
     runs, windows = [], []
     for k in range(a.repeats):
+        if k and a.cooldown_s:
+            be.sync()
+            time.sleep(a.cooldown_s)
         if a.power:
             windows.append([meter.mark()])
         runs.append(be.stream_run(n))
@@ -223,7 +230,9 @@ def main() -> None:
     if a.power:
         energy = pm.summarize(meter, windows, idle1, pm.idle_window(meter, a.idle_s), n)
         meter.stop()
-    lat = single_latencies(be, a.warmup, a.single_n)
+    if a.cooldown_s:
+        time.sleep(a.cooldown_s)
+    lat = single_latencies(be, a.warmup, a.single_n, n)
     acc = {} if a.skip_accuracy else accuracy(be, files)
     if acc:
         print(f"accuracy ({n} images): dice {acc['dice']:.4f}  binary {acc['dice_binary']:.4f}  " + "  ".join(f"{c} {acc[f'dice_{c}']:.4f}" for c in bench.CLASSES), flush=True)

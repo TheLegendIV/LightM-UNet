@@ -414,6 +414,7 @@ Every run so far passed `--force-dsp`, which masked this.
 | `--max-lut-fraction` / `--max-bram-fraction` / `--max-dsp-fraction` / `--max-uram-fraction` | maximum fraction of the device (renamed from `--hard-*-fraction`, 2026-10-02). |
 | `--time-limit` / `--gap-rel` | CBC limits (default 1800 s, 2%). |
 | `--pin-bits-file` | TEST-ONLY: pin `y` to a `layer_bits_*.json`, skipping the bit-choice search; folding is still solved. |
+| `--first-pass-only` | default (maximum-accuracy) objective only: stop after pass 1. Bits are accuracy-optimal; folding is whatever CBC found feasible, resources NOT minimised (LUT/BRAM then usually sit at the caps). Halves the solve time. `run_args.json` key `first-pass-only`; `_diagnostics.max_accuracy.first_pass_only`. |
 
 ## Outputs
 
@@ -506,6 +507,8 @@ quantizes per site (reduce.2 / conv_bn_act.2 / residual_add / out_act …);
 cost model's calibration, not a certified hardware guarantee.
 
 ## History
+
+- 2026-10-31: `--first-pass-only` (opt-in, default off): the default accuracy objective stops after pass 1 and skips the resource-minimising pass 2 (no `max_accuracy_roof`). Used for quick caps/feasibility probes of a mixed-bits solve; the stored `cap40_fps30/mixed_468`-style artifacts without the flag are unchanged.
 
 - 2026-10-14: `--refine-bits` (needs `--lexicographic`): third pass = pass 2's folding pinned (`solve_joint_perlayer(pinned_fold=...)`: every other fold option of every node switched off), bits freed, accuracy objective under the ORIGINAL caps; pass 2 is written as `stage2_<out>`, the final output is pass 3. On S12 bilinear-512 at 300 FPS (caps 0.7 / 0.9 / 0.9) it changed the sensitivity sum by <0.15 % (`ILP/artifacts/S12_dense_bilinear_512_fps300_v1/*_refine`): the accuracy objective is already saturated, the caps were not what limited the bits.
 
