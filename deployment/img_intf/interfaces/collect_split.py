@@ -4,7 +4,9 @@ Not for live streaming (use stream_images.py with lwip_stream for that). One ses
 
   0. POWER    (only with a PowerPlan) idle window: the board's INA226 rails sampled with the accelerator idle
   1. LOAD     upload every image into the board's DDR          (network, not timed as inference)
-  2. LATENCY  every image alone through the empty pipeline; the PL latency monitor gives per-image ticks
+  2. LATENCY  `warmup` images alone through the empty pipeline (not recorded), then `latency_images` further, different
+              images alone through it; the PL latency monitor gives per-image ticks (default 10 warm-up + 200 recorded,
+              the whole pass repeated 5 times to report run-to-run deviation)
   3. RUN      the whole split back-to-back, `repeats` times; the monitor gives, per pass, the PL ticks from the first
               input beat to the last output beat of the split (no network, no CPU in the timed part for dma_mode 0)
   3b. POWER   (only with a PowerPlan) inference window: the split runs back-to-back while the rails are sampled, then
@@ -152,9 +154,11 @@ def power_window(sock: socket.socket, mode: int, warmup_s: int, window_s: int, c
 def run_split_benchmark(ip: str, port: int, frames: Sequence[bytes], dma_mode: int = DMA_MODE_BATCH,
                         repeats: int = 5, width: int = 0, height: int = 0, connect_retries: int = 10,
                         log: Callable[[str], None] = print, calibrate: bool = False,
-                        power: PowerPlan | None = None) -> dict:
+                        power: PowerPlan | None = None, latency_warmup: int = 10, latency_images: int = 200,
+                        latency_repeats: int = 5) -> dict:
     """Run the whole split on the board and return
-    {"outputs": [bytes per image], "latency_ticks": (n, 3) int64, "run_ticks": (passes, 3) int64,
+    {"outputs": [bytes per image], "latency_ticks": (latency_repeats * <= latency_images, 3) int64 (all repeats
+     concatenated), "latency_repeat_ticks": [(<= latency_images, 3) int64 per repeat], "run_ticks": (passes, 3) int64,
      "run_calls": [{"reps", "wall_s", "ticks"}, ...], "upload_s", "fetch_s", "power": None or {"idle": ..., "load": ...,
      "idle_after": ... or None} (each a power_window() result)}.
     With `calibrate`, a short RUN of 2 passes precedes the main RUN of `repeats` passes (all passes count as
@@ -162,9 +166,14 @@ def run_split_benchmark(ip: str, port: int, frames: Sequence[bytes], dma_mode: i
     seconds per pass on the PC's clock, independent of the PL clock assumption (see implied_pl_clock_mhz).
     With `power`, the board's rails are sampled around the benchmark: an idle window first (before the images are
     loaded), then, after the RUN, the inference window (split back-to-back) and an optional second idle window.
-    Raises ConnectionError on a server that is not lwip_collect_results."""
+    Raises ConnectionError on a server that is not lwip_collect_results.
+    The LATENCY pass runs `latency_warmup` images unrecorded, then records the next `latency_images` different images
+    (both clamped to the split size). The pass is repeated `latency_repeats` times (every repeat re-does the warm-up
+    and records the same images) so run-to-run deviation can be reported."""
     n = len(frames)
     payload = len(frames[0])
+    lat_warmup = min(latency_warmup, n // 2)  # on a small split (smoke test) the warm-up shrinks so some images are still recorded
+    lat_count = min(latency_images, n - lat_warmup)
     sock = None
     for attempt in range(connect_retries):  # the server refuses a new session while the previous one is closing
         try:
@@ -198,10 +207,13 @@ def run_split_benchmark(ip: str, port: int, frames: Sequence[bytes], dma_mode: i
         t0 = time.perf_counter()
         for frame in frames:
             sock.sendall(struct.pack("!B", MARKER_LOAD) + frame)
-        sock.sendall(struct.pack("!B", MARKER_LATENCY))  # in-order: the server finishes the loads first
-        latency_ticks = _ticks(sock, b"LAT")
+        latency_repeats_ticks = []
+        for rep in range(max(latency_repeats, 1)):  # each repeat = the whole warm-up + record pass, in-order after the loads
+            sock.sendall(struct.pack("!BBH", MARKER_LATENCY, lat_warmup, lat_count))
+            latency_repeats_ticks.append(_ticks(sock, b"LAT"))
+        latency_ticks = np.concatenate(latency_repeats_ticks)
         upload_s = time.perf_counter() - t0
-        log(f"[COLLECT] {n} images loaded, latency pass done ({upload_s:.1f} s incl. network)")
+        log(f"[COLLECT] {n} images loaded, latency pass x{len(latency_repeats_ticks)} done ({upload_s:.1f} s incl. network)")
 
         run_calls = []
         plan = [2, repeats] if calibrate and repeats > 2 else [repeats]
@@ -237,7 +249,8 @@ def run_split_benchmark(ip: str, port: int, frames: Sequence[bytes], dma_mode: i
         _recv_exact(sock, 3)
     finally:
         sock.close()
-    return {"outputs": outputs, "latency_ticks": latency_ticks, "run_ticks": run_ticks, "run_calls": run_calls,
+    return {"outputs": outputs, "latency_ticks": latency_ticks, "latency_repeat_ticks": latency_repeats_ticks,
+            "run_ticks": run_ticks, "run_calls": run_calls,
             "upload_s": upload_s, "fetch_s": fetch_s, "power": power_result}
 
 

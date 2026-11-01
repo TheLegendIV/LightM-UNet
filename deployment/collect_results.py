@@ -20,8 +20,14 @@ PL_CLOCK_MHZ = 187.481262 MHz:
   split_seconds (+_std, split_repeats)  first input beat -> last output beat of the whole split, mean over the passes
   split_fps                             images / split_seconds (includes pipeline fill)
   hw_infer_ms / hw_infer_fps            steady-state time per image: (split time - latency of one image) / (n - 1)
-  hw_first_output_ms                    mean over all images of input_first -> output_first (one image alone)
-  hw_latency_ms / hw_latency_max_ms     mean / slowest single-image latency (input_first -> output_last)
+  hw_first_output_ms                    mean over the recorded latency images of input_first -> output_first (one image alone)
+  hw_latency_ms / hw_latency_max_ms     mean / slowest single-image latency (input_first -> output_last) over the recorded
+                                        latency images (--latency-images different images after --latency-warmup unrecorded
+                                        ones), all --latency-repeats repeats pooled
+  hw_latency_min_ms / hw_latency_images / hw_latency_repeats   fastest measurement, images per repeat, number of repeats
+  hw_latency_repeat_std_ms / _range_ms  std / max-min of the per-repeat mean latency (run-to-run deviation)
+  hw_latency_img_std_max_ms             largest std of one image's latency across the repeats (every measurement is also
+                                        stored in img_intf/output/<model-name>/latency_ticks.csv)
   milp_bottleneck_node / milp_pred_interval_ms / milp_pred_error_pct   only with --milp-json: the MILP's predicted slowest node, its cycles per frame at PL_CLOCK_MHZ
                                         and how far that is from hw_infer_ms (the model-vs-hardware check)
 (send_seconds is a legacy column: host time of the older lockstep runs; it is kept, not written any more.)
@@ -86,7 +92,8 @@ CLASSES = ["LAD", "RCA", "LCX", "LM"]  # label ids 1..4 of Dataset509_ARCADE_1x1
 # PL_CLOCK_MHZ (accelerator clock of the current bitstream, converts PL ticks to time) is defined in img_intf/utils/power_report.py
 
 PERF_COLUMNS = ["split_repeats", "split_seconds", "split_seconds_std", "split_fps", "hw_infer_ms", "hw_infer_fps",
-                "hw_first_output_ms", "hw_latency_ms", "hw_latency_max_ms",
+                "hw_first_output_ms", "hw_latency_ms", "hw_latency_max_ms", "hw_latency_min_ms", "hw_latency_images",
+                "hw_latency_repeats", "hw_latency_repeat_std_ms", "hw_latency_repeat_range_ms", "hw_latency_img_std_max_ms",
                 "milp_bottleneck_node", "milp_pred_interval_ms", "milp_pred_error_pct"]
 LEGACY_COLUMNS = ["send_seconds"]  # written by the older lockstep runs; carried over, never overwritten
 COLUMNS = (
@@ -148,15 +155,18 @@ def upsert_row(row: dict) -> None:
 
 
 def run_on_board(inputs: list[Path], raw_dir: Path, ip: str, port: int, dma_mode: int, repeats: int,
-                 power_plan: PowerPlan | None = None) -> tuple[dict, dict | None]:
-    """One session on lwip_collect_results: upload the split, per-image latency pass, `repeats` timed passes over the
+                 power_plan: PowerPlan | None = None, latency_warmup: int = 10, latency_images: int = 200,
+                 latency_repeats: int = 5) -> tuple[dict, dict | None]:
+    """One session on lwip_collect_results: upload the split, latency pass (`latency_warmup` unrecorded images, then
+    `latency_images` recorded ones), `repeats` timed passes over the
     whole split, download the class maps (stored as <raw_dir>/<input stem>.raw). With `power_plan` the board's rails are
     sampled around it too. Returns (the speed columns, the raw POWER replies or None)."""
     frames = [p.read_bytes() for p in inputs]
     n = len(frames)
     try:
         r = run_split_benchmark(ip, port, frames, dma_mode=dma_mode, repeats=repeats, width=IMAGE_W, height=IMAGE_H,
-                                power=power_plan)
+                                power=power_plan, latency_warmup=latency_warmup, latency_images=latency_images,
+                                latency_repeats=latency_repeats)
     except HandshakeError:
         raise
     except (ConnectionError, OSError) as exc:
@@ -182,9 +192,32 @@ def run_on_board(inputs: list[Path], raw_dir: Path, ip: str, port: int, dma_mode
         perf.update({"hw_first_output_ms": round(float(ms(lat_first.mean())), 3),
                      "hw_latency_ms": round(float(ms(lat_full.mean())), 3),
                      "hw_latency_max_ms": round(float(ms(lat_full.max())), 3)})
-        print(f"[BENCH] single-image hardware latency over {len(lat_full)} images @ {PL_CLOCK_MHZ} MHz: "
+        print(f"[BENCH] single-image hardware latency over {len(lat_full)} measurements @ {PL_CLOCK_MHZ} MHz: "
               f"full image mean {ms(lat_full.mean()):.3f} ms (min {ms(lat_full.min()):.3f}, "
               f"max {ms(lat_full.max()):.3f}); first output mean {ms(lat_first.mean()):.3f} ms")
+        rep_full = [ticks_to_intervals(t)[1] for t in r["latency_repeat_ticks"]]
+        rep_means = ms(np.array([x.mean() for x in rep_full]))
+        perf.update({"hw_latency_repeats": len(rep_full), "hw_latency_images": len(rep_full[0]),
+                     "hw_latency_min_ms": round(float(ms(lat_full.min())), 3),
+                     "hw_latency_repeat_std_ms": round(float(rep_means.std()), 5),
+                     "hw_latency_repeat_range_ms": round(float(rep_means.max() - rep_means.min()), 5)})
+        print(f"[BENCH] latency repeats: {len(rep_full)} x {len(rep_full[0])} images; per-repeat mean ms "
+              + ", ".join(f"{m:.4f}" for m in rep_means)
+              + f" (std {rep_means.std():.5f}, range {rep_means.max() - rep_means.min():.5f} ms)")
+        if len({len(x) for x in rep_full}) == 1 and len(rep_full) > 1:
+            per_img = ms(np.stack(rep_full)).std(axis=0)  # same image, different repeat
+            perf["hw_latency_img_std_max_ms"] = round(float(per_img.max()), 5)
+            print(f"[BENCH] same-image deviation across repeats: mean std {per_img.mean():.5f} ms, max {per_img.max():.5f} ms "
+                  f"(image #{int(per_img.argmax())} of the recorded set)")
+        lat_csv = raw_dir.parent / "latency_ticks.csv"  # every recorded measurement, to look at any deviation later
+        with open(lat_csv, "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["repeat", "image_index", "input_first_tick", "output_first_tick", "output_last_tick", "latency_ticks"])
+            for k, t in enumerate(r["latency_repeat_ticks"]):
+                _, full = ticks_to_intervals(t)
+                for i, row_t in enumerate(t):
+                    w.writerow([k, i, *(int(v) for v in row_t), int(full[i])])
+        print(f"[INFO] per-measurement latency ticks stored in {lat_csv}")
     else:
         print("[WARN] no valid latency ticks from the board (latency monitor missing or not armed)")
 
@@ -232,6 +265,12 @@ def main() -> None:
     ap.add_argument("--limit", type=int, help="only the first N images (smoke test)")
     ap.add_argument("--no-send", action="store_true", help="skip the board; score stored outputs only")
     ap.add_argument("--repeats", type=int, default=10, help="timed passes over the whole split (more = more accurate)")
+    ap.add_argument("--latency-warmup", type=int, default=10,
+                    help="images run alone through the pipeline before the latency recording starts (not recorded; default 10)")
+    ap.add_argument("--latency-images", type=int, default=200,
+                    help="different images recorded for the single-image latency, taken after the warm-up images (default 200)")
+    ap.add_argument("--latency-repeats", type=int, default=5,
+                    help="how often the whole latency pass (warm-up + recorded images) is repeated, to report the deviation (default 5)")
     ap.add_argument("--dma-mode", choices=["batch", "frame"], default="batch",
                     help="batch: one idma/odma start for the whole split (numReps = n); frame: one start per image")
     ap.add_argument("--milp-json", type=Path,
@@ -265,7 +304,8 @@ def main() -> None:
     power_raw = None
     if not a.no_send:
         perf, power_raw = run_on_board(inputs, raw_dir, a.ip, a.port,
-                                       DMA_MODE_BATCH if a.dma_mode == "batch" else DMA_MODE_FRAME, a.repeats, power_plan)
+                                       DMA_MODE_BATCH if a.dma_mode == "batch" else DMA_MODE_FRAME, a.repeats, power_plan,
+                                       a.latency_warmup, a.latency_images, a.latency_repeats)
 
     labels_dir = Path(a.labels_dir) if a.labels_dir else NNUNET_RAW / a.dataset / "labelsTs"
     if not labels_dir.is_dir():
