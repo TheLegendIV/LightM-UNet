@@ -39,6 +39,7 @@ class CollectSimServer:
         self.absent_rails = set(absent_rails)       # (channel, addr) of monitors that do not answer
         self.power_bus_dead = power_bus_dead        # the mux does not answer: every monitor reports n = 0
         self.power_commands = []                    # (mode, warmup_s, window_s) as received
+        self.latency_commands = []                  # (warmup images, recorded images) as received
         self.error = None
         self._server = None
 
@@ -84,8 +85,12 @@ class CollectSimServer:
                 if marker == MARKER_LOAD:
                     images.append(await reader.readexactly(self.payload_length))
                 elif marker == MARKER_LATENCY:
+                    warmup, count = struct.unpack("!BH", await reader.readexactly(3))
+                    self.latency_commands.append((warmup, count))
+                    warmup = min(warmup, len(images))
+                    n_rec = min(count, len(images) - warmup)
                     t = self._pack(self.latency_ticks // 2, self.latency_ticks)
-                    writer.write(b"LAT" + struct.pack("!I", len(images)) + t * len(images))
+                    writer.write(b"LAT" + struct.pack("!I", n_rec) + t * n_rec)
                 elif marker == MARKER_RUN:
                     _mode, reps = await reader.readexactly(2)
                     t = self._pack(self.latency_ticks // 2, self.latency_ticks + (len(images) - 1) * self.interval_ticks)

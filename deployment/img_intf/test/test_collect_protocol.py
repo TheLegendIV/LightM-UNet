@@ -37,7 +37,8 @@ class CollectProtocolTest(unittest.TestCase):
         r, srv = self._run(frames)
         self.assertEqual(r["outputs"], [process_frame(f) for f in frames])
         first, full = ticks_to_intervals(r["latency_ticks"])
-        self.assertEqual(len(full), 5)
+        self.assertEqual(len(full), 15)  # 5 images: the default 10 warm-up shrinks to 2, 3 are recorded, x5 repeats
+        self.assertEqual(srv.latency_commands, [(2, 3)] * 5)
         self.assertTrue((full == 1696933).all())
         _, run_full = ticks_to_intervals(r["run_ticks"])
         self.assertEqual(len(run_full), 3)
@@ -45,6 +46,22 @@ class CollectProtocolTest(unittest.TestCase):
         self.assertIsNone(srv.error)
         self.assertIsNone(r["power"])
         self.assertEqual(srv.power_commands, [])
+
+    def test_latency_warmup_and_record_count(self):
+        frames = [bytes([i]) * 64 for i in range(30)]
+        r, srv = self._run(frames, bench={"latency_warmup": 10, "latency_images": 15, "latency_repeats": 1})
+        self.assertEqual(srv.latency_commands, [(10, 15)])
+        self.assertEqual(len(r["latency_ticks"]), 15)
+        self.assertEqual(len(r["outputs"]), 30)  # the warm-up images are still processed and returned
+        self.assertIsNone(srv.error)
+
+    def test_latency_repeats(self):
+        frames = [bytes([i]) * 64 for i in range(30)]
+        r, srv = self._run(frames, bench={"latency_warmup": 10, "latency_images": 15, "latency_repeats": 5})
+        self.assertEqual(srv.latency_commands, [(10, 15)] * 5)
+        self.assertEqual(len(r["latency_repeat_ticks"]), 5)
+        self.assertEqual(len(r["latency_ticks"]), 75)
+        self.assertIsNone(srv.error)
 
     def test_tick_counter_wrap(self):
         frames = [b"\x01" * 16, b"\x02" * 16]

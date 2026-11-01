@@ -1,0 +1,61 @@
+{
+ "merge_count_sizer": 28,
+ "A_main_merge_fifo": {
+  "sizer_nominal": {
+   "words": 59,
+   "kbit": 0.4
+  },
+  "sizer_pow2": {
+   "words": 59,
+   "kbit": 0.4
+  },
+  "auto_saturated": {
+   "words": 56,
+   "kbit": 0.3
+  },
+  "auto_paced": {
+   "words": 56,
+   "kbit": 0.3
+  }
+ },
+ "B_all_non_skip": {
+  "sizer_nominal": {
+   "words": 56104,
+   "kbit": 455.0
+  },
+  "sizer_pow2": {
+   "words": 105813,
+   "kbit": 841.8
+  },
+  "sizer_nominal_intra_only": {
+   "words": 55538,
+   "kbit": 451.7
+  },
+  "sizer_pow2_intra_only": {
+   "words": 105247,
+   "kbit": 838.5
+  },
+  "auto_saturated_excl_p7_head": {
+   "words": 3088563,
+   "kbit": 29200.4
+  },
+  "auto_saturated": {
+   "words": 5447859,
+   "kbit": 82448.4,
+   "total_all_fifos_words": 7073971,
+   "total_all_fifos_kbit": 92744.4,
+   "n_fifos": 544
+  },
+  "auto_paced_excl_p7_head": {
+   "words": 713290,
+   "kbit": 10042.8
+  },
+  "auto_paced": {
+   "words": 3072586,
+   "kbit": 63290.8,
+   "total_all_fifos_words": 3666506,
+   "total_all_fifos_kbit": 67538.8,
+   "n_fifos": 544
+  }
+ }
+}

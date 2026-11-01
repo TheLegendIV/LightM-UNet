@@ -1,0 +1,416 @@
+{
+ "per_partition": {
+  "sizer_nominal": {
+   "0": {
+    "skip": {
+     "words": 257,
+     "kbit": 1.5
+    },
+    "nonskip": {
+     "words": 544,
+     "kbit": 3.4
+    }
+   },
+   "1": {
+    "skip": {
+     "words": 11626,
+     "kbit": 82.6
+    },
+    "nonskip": {
+     "words": 3727,
+     "kbit": 41.5
+    }
+   },
+   "2": {
+    "skip": {
+     "words": 68494,
+     "kbit": 427.5
+    },
+    "nonskip": {
+     "words": 12670,
+     "kbit": 100.2
+    }
+   },
+   "3": {
+    "skip": {
+     "words": 66262,
+     "kbit": 401.3
+    },
+    "nonskip": {
+     "words": 12110,
+     "kbit": 93.5
+    }
+   },
+   "4": {
+    "skip": {
+     "words": 75132,
+     "kbit": 453.3
+    },
+    "nonskip": {
+     "words": 13186,
+     "kbit": 106.2
+    }
+   },
+   "5": {
+    "skip": {
+     "words": 58249,
+     "kbit": 341.3
+    },
+    "nonskip": {
+     "words": 11695,
+     "kbit": 89.1
+    }
+   },
+   "6": {
+    "skip": {
+     "words": 6114,
+     "kbit": 35.8
+    },
+    "nonskip": {
+     "words": 1364,
+     "kbit": 15.8
+    }
+   }
+  },
+  "sizer_hw_realised": {
+   "0": {
+    "skip": {
+     "words": 257,
+     "kbit": 1.5
+    },
+    "nonskip": {
+     "words": 1052,
+     "kbit": 6.3
+    }
+   },
+   "1": {
+    "skip": {
+     "words": 20480,
+     "kbit": 144.0
+    },
+    "nonskip": {
+     "words": 4248,
+     "kbit": 46.1
+    }
+   },
+   "2": {
+    "skip": {
+     "words": 122880,
+     "kbit": 768.0
+    },
+    "nonskip": {
+     "words": 24732,
+     "kbit": 194.3
+    }
+   },
+   "3": {
+    "skip": {
+     "words": 118784,
+     "kbit": 720.0
+    },
+    "nonskip": {
+     "words": 23674,
+     "kbit": 181.8
+    }
+   },
+   "4": {
+    "skip": {
+     "words": 135168,
+     "kbit": 816.0
+    },
+    "nonskip": {
+     "words": 25752,
+     "kbit": 206.3
+    }
+   },
+   "5": {
+    "skip": {
+     "words": 102400,
+     "kbit": 600.0
+    },
+    "nonskip": {
+     "words": 21874,
+     "kbit": 160.5
+    }
+   },
+   "6": {
+    "skip": {
+     "words": 10240,
+     "kbit": 60.0
+    },
+    "nonskip": {
+     "words": 1364,
+     "kbit": 15.8
+    }
+   }
+  },
+  "sizer_pow2_all_gt256": {
+   "0": {
+    "skip": {
+     "words": 512,
+     "kbit": 3.0
+    },
+    "nonskip": {
+     "words": 1052,
+     "kbit": 6.3
+    }
+   },
+   "1": {
+    "skip": {
+     "words": 20480,
+     "kbit": 144.0
+    },
+    "nonskip": {
+     "words": 5744,
+     "kbit": 63.6
+    }
+   },
+   "2": {
+    "skip": {
+     "words": 122880,
+     "kbit": 768.0
+    },
+    "nonskip": {
+     "words": 24732,
+     "kbit": 194.3
+    }
+   },
+   "3": {
+    "skip": {
+     "words": 118784,
+     "kbit": 720.0
+    },
+    "nonskip": {
+     "words": 23674,
+     "kbit": 181.8
+    }
+   },
+   "4": {
+    "skip": {
+     "words": 135168,
+     "kbit": 816.0
+    },
+    "nonskip": {
+     "words": 25752,
+     "kbit": 206.3
+    }
+   },
+   "5": {
+    "skip": {
+     "words": 102400,
+     "kbit": 600.0
+    },
+    "nonskip": {
+     "words": 21874,
+     "kbit": 160.5
+    }
+   },
+   "6": {
+    "skip": {
+     "words": 10240,
+     "kbit": 60.0
+    },
+    "nonskip": {
+     "words": 1925,
+     "kbit": 22.0
+    }
+   }
+  },
+  "auto_saturated": {
+   "0": {
+    "skip": {
+     "words": 65536,
+     "kbit": 1152.0
+    },
+    "nonskip": {
+     "words": 950482,
+     "kbit": 5572.6
+    }
+   },
+   "1": {
+    "skip": {
+     "words": 83968,
+     "kbit": 492.0
+    },
+    "nonskip": {
+     "words": 189799,
+     "kbit": 2134.7
+    }
+   },
+   "2": {
+    "skip": {
+     "words": 253952,
+     "kbit": 1488.0
+    },
+    "nonskip": {
+     "words": 395223,
+     "kbit": 4135.8
+    }
+   },
+   "3": {
+    "skip": {
+     "words": 237568,
+     "kbit": 1392.0
+    },
+    "nonskip": {
+     "words": 388747,
+     "kbit": 4015.3
+    }
+   },
+   "4": {
+    "skip": {
+     "words": 253952,
+     "kbit": 1488.0
+    },
+    "nonskip": {
+     "words": 402177,
+     "kbit": 4209.8
+    }
+   },
+   "5": {
+    "skip": {
+     "words": 200704,
+     "kbit": 1176.0
+    },
+    "nonskip": {
+     "words": 371852,
+     "kbit": 3778.0
+    }
+   },
+   "6": {
+    "skip": {
+     "words": 268288,
+     "kbit": 1572.0
+    },
+    "nonskip": {
+     "words": 184603,
+     "kbit": 1892.5
+    }
+   }
+  },
+  "auto_paced": {
+   "0": {
+    "skip": {
+     "words": 65536,
+     "kbit": 1152.0
+    },
+    "nonskip": {
+     "words": 263892,
+     "kbit": 1549.7
+    }
+   },
+   "1": {
+    "skip": {
+     "words": 20480,
+     "kbit": 120.0
+    },
+    "nonskip": {
+     "words": 11284,
+     "kbit": 131.9
+    }
+   },
+   "2": {
+    "skip": {
+     "words": 131072,
+     "kbit": 768.0
+    },
+    "nonskip": {
+     "words": 102394,
+     "kbit": 1496.2
+    }
+   },
+   "3": {
+    "skip": {
+     "words": 122880,
+     "kbit": 720.0
+    },
+    "nonskip": {
+     "words": 97967,
+     "kbit": 1423.7
+    }
+   },
+   "4": {
+    "skip": {
+     "words": 139264,
+     "kbit": 816.0
+    },
+    "nonskip": {
+     "words": 111397,
+     "kbit": 1618.2
+    }
+   },
+   "5": {
+    "skip": {
+     "words": 102400,
+     "kbit": 600.0
+    },
+    "nonskip": {
+     "words": 85166,
+     "kbit": 1282.3
+    }
+   },
+   "6": {
+    "skip": {
+     "words": 10240,
+     "kbit": 60.0
+    },
+    "nonskip": {
+     "words": 6460,
+     "kbit": 80.9
+    }
+   }
+  }
+ },
+ "total": {
+  "sizer_nominal": {
+   "skip": {
+    "words": 286134,
+    "kbit": 1743.4
+   },
+   "nonskip": {
+    "words": 55296,
+    "kbit": 449.6
+   }
+  },
+  "sizer_hw_realised": {
+   "skip": {
+    "words": 510209,
+    "kbit": 3109.5
+   },
+   "nonskip": {
+    "words": 102696,
+    "kbit": 811.1
+   }
+  },
+  "sizer_pow2_all_gt256": {
+   "skip": {
+    "words": 510464,
+    "kbit": 3111.0
+   },
+   "nonskip": {
+    "words": 104753,
+    "kbit": 834.9
+   }
+  },
+  "auto_saturated": {
+   "skip": {
+    "words": 1363968,
+    "kbit": 8760.0
+   },
+   "nonskip": {
+    "words": 2882883,
+    "kbit": 25738.8
+   }
+  },
+  "auto_paced": {
+   "skip": {
+    "words": 591872,
+    "kbit": 4236.0
+   },
+   "nonskip": {
+    "words": 678560,
+    "kbit": 7582.8
+   }
+  }
+ }
+}

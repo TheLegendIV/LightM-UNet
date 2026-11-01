@@ -41,7 +41,8 @@ MARKER_STOP = 0x00
 MARKER_IMAGE = 0x01
 # lwip_collect_results commands (see img_intf/interfaces/collect_split.py and the server's run.c):
 #   MARKER_LOAD    + payload          : upload one image into board DDR (no reply)
-#   MARKER_LATENCY                    : lockstep per image; reply "LAT" + u32 n + n x 3 u32 PL ticks
+#   MARKER_LATENCY + u8 warmup + u16 count : lockstep per image; the first `warmup` images are not recorded, the next
+#                     `count` (clamped to the load) are; reply "LAT" + u32 n + n x 3 u32 PL ticks
 #   MARKER_RUN     + u8 mode + u8 reps: run the whole split `reps` times; reply "RUN" + u32 reps + reps x 3 u32 PL ticks
 #   MARKER_FETCH                      : reply "OUT" + u32 n, then n class maps
 #   MARKER_POWER   + u8 mode + u8 warmup_s + u8 window_s : sample the board's INA226 rails (mode 0: accelerator idle,

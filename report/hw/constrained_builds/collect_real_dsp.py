@@ -32,21 +32,24 @@ int4, int4_7 = load("int4_cap40_v1"), load("int4_cap40_v1_p7fix")
 int6, int6_7 = load("int6_cap40_v1"), load("int6_cap40_v1_p7fix")
 mixed, fauto = load("mixed468_cap40_v1"), load("int6_cap40_finnauto_v1")
 int8_150 = load("int8_fps150_v1")
+fauto_paced = merge(load("int6_cap40_finnauto_pacedprobe_v1"))
 fauto = merge(fauto)
-assert fauto[7] is None
+assert fauto[7] is None and fauto_paced[7] is None
 fauto[7] = 27  # synth_1 report, see docstring
+fauto_paced[7] = 27  # same, its own synth_1 report
 out = {
-    "_source": "dataflow/utils/dump_real_dsp_utilization.py (| DSPs | row of each partition's Vivado report_utilization); partition 7 of int6_cap40_finnauto: synth_1 report",
+    "_source": "dataflow/utils/dump_real_dsp_utilization.py (| DSPs | row of each partition's Vivado report_utilization); partition 7 of the finnauto builds: synth_1 report",
     "int4_cap40": merge(int4, int4_7["partition_7"]),
     "int6_cap40": merge(int6, int6_7["partition_7"]),
     "mixed468_cap40": merge(mixed),
     "int6_cap40_finnauto": fauto,
+    "int6_cap40_finnauto_pacedfifo": fauto_paced,
     "int8_caps100_fps150": merge(int8_150),
 }
 for k, v in out.items():
     if not k.startswith("_"):
         print(k, dict(sorted(v.items())), "sum", sum(v.values()))
-dst = os.path.join(r"C:\DEV\repos\LightM-UNet\analysis\report\MILP\constrained_builds", "real_dsp_per_partition.json")
+dst = os.path.join(os.path.dirname(os.path.abspath(__file__)), "real_dsp_per_partition.json")
 with open(dst, "w") as f:
     json.dump(out, f, indent=1)
 print("wrote", dst)

@@ -1,0 +1,358 @@
+{
+ "summary": {
+  "sizer_nominal": {
+   "words": 287280,
+   "kbit": 1750.1
+  },
+  "sizer_pow2": {
+   "words": 512512,
+   "kbit": 3123.0
+  },
+  "auto_saturated": {
+   "words": 1626112,
+   "kbit": 10296.0
+  },
+  "auto_paced": {
+   "words": 593920,
+   "kbit": 4248.0
+  }
+ },
+ "per_merge": [
+  {
+   "sizer_name": "initial.skip_FIFO",
+   "part": 0,
+   "node": "StreamingConcat_hls_0",
+   "sizer_depth": 257,
+   "sizer_pow2": 512,
+   "sizer_w": 6,
+   "sat_depth": 65536,
+   "sat_w": 18,
+   "paced_depth": 65536,
+   "paced_w": 18
+  },
+  {
+   "sizer_name": "down1.skip_FIFO",
+   "part": 1,
+   "node": "AddStreams_hls_0",
+   "sizer_depth": 1251,
+   "sizer_pow2": 2048,
+   "sizer_w": 12,
+   "sat_depth": 65536,
+   "sat_w": 6,
+   "paced_depth": 2048,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "regular1.0.skip_FIFO",
+   "part": 1,
+   "node": "AddStreams_hls_1",
+   "sizer_depth": 2288,
+   "sizer_pow2": 4096,
+   "sizer_w": 6,
+   "sat_depth": 4096,
+   "sat_w": 6,
+   "paced_depth": 4096,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "regular1.1.skip_FIFO",
+   "part": 1,
+   "node": "AddStreams_hls_2",
+   "sizer_depth": 2288,
+   "sizer_pow2": 4096,
+   "sizer_w": 6,
+   "sat_depth": 4096,
+   "sat_w": 6,
+   "paced_depth": 4096,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "regular1.2.skip_FIFO",
+   "part": 1,
+   "node": "AddStreams_hls_3",
+   "sizer_depth": 2288,
+   "sizer_pow2": 4096,
+   "sizer_w": 6,
+   "sat_depth": 4096,
+   "sat_w": 6,
+   "paced_depth": 4096,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "regular1.3.skip_FIFO",
+   "part": 1,
+   "node": "AddStreams_hls_4",
+   "sizer_depth": 2288,
+   "sizer_pow2": 4096,
+   "sizer_w": 6,
+   "sat_depth": 4096,
+   "sat_w": 6,
+   "paced_depth": 4096,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "down2.skip_FIFO",
+   "part": 1,
+   "node": "AddStreams_hls_5",
+   "sizer_depth": 1223,
+   "sizer_pow2": 2048,
+   "sizer_w": 12,
+   "sat_depth": 2048,
+   "sat_w": 6,
+   "paced_depth": 2048,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "stage2.0.skip_FIFO",
+   "part": 2,
+   "node": "AddStreams_hls_0",
+   "sizer_depth": 2232,
+   "sizer_pow2": 4096,
+   "sizer_w": 12,
+   "sat_depth": 131072,
+   "sat_w": 6,
+   "paced_depth": 8192,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "stage2.1.skip_FIFO",
+   "part": 2,
+   "node": "AddStreams_hls_1",
+   "sizer_depth": 8870,
+   "sizer_pow2": 16384,
+   "sizer_w": 6,
+   "sat_depth": 16384,
+   "sat_w": 6,
+   "paced_depth": 16384,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "stage2.2.skip_FIFO",
+   "part": 2,
+   "node": "AddStreams_hls_2",
+   "sizer_depth": 17630,
+   "sizer_pow2": 32768,
+   "sizer_w": 6,
+   "sat_depth": 32768,
+   "sat_w": 6,
+   "paced_depth": 32768,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "stage2.3.skip_FIFO",
+   "part": 2,
+   "node": "AddStreams_hls_3",
+   "sizer_depth": 37530,
+   "sizer_pow2": 65536,
+   "sizer_w": 6,
+   "sat_depth": 65536,
+   "sat_w": 6,
+   "paced_depth": 65536,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "stage2.4.skip_FIFO",
+   "part": 2,
+   "node": "AddStreams_hls_4",
+   "sizer_depth": 2232,
+   "sizer_pow2": 4096,
+   "sizer_w": 12,
+   "sat_depth": 8192,
+   "sat_w": 6,
+   "paced_depth": 8192,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "stage2.5.skip_FIFO",
+   "part": 3,
+   "node": "AddStreams_hls_0",
+   "sizer_depth": 8870,
+   "sizer_pow2": 16384,
+   "sizer_w": 6,
+   "sat_depth": 131072,
+   "sat_w": 6,
+   "paced_depth": 16384,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "stage2.6.skip_FIFO",
+   "part": 3,
+   "node": "AddStreams_hls_1",
+   "sizer_depth": 17630,
+   "sizer_pow2": 32768,
+   "sizer_w": 6,
+   "sat_depth": 32768,
+   "sat_w": 6,
+   "paced_depth": 32768,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "stage2.7.skip_FIFO",
+   "part": 3,
+   "node": "AddStreams_hls_2",
+   "sizer_depth": 37530,
+   "sizer_pow2": 65536,
+   "sizer_w": 6,
+   "sat_depth": 65536,
+   "sat_w": 6,
+   "paced_depth": 65536,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "stage3.0.skip_FIFO",
+   "part": 3,
+   "node": "AddStreams_hls_3",
+   "sizer_depth": 2232,
+   "sizer_pow2": 4096,
+   "sizer_w": 12,
+   "sat_depth": 8192,
+   "sat_w": 6,
+   "paced_depth": 8192,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "stage3.1.skip_FIFO",
+   "part": 4,
+   "node": "AddStreams_hls_0",
+   "sizer_depth": 8870,
+   "sizer_pow2": 16384,
+   "sizer_w": 6,
+   "sat_depth": 131072,
+   "sat_w": 6,
+   "paced_depth": 16384,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "stage3.2.skip_FIFO",
+   "part": 4,
+   "node": "AddStreams_hls_1",
+   "sizer_depth": 17630,
+   "sizer_pow2": 32768,
+   "sizer_w": 6,
+   "sat_depth": 32768,
+   "sat_w": 6,
+   "paced_depth": 32768,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "stage3.3.skip_FIFO",
+   "part": 4,
+   "node": "AddStreams_hls_2",
+   "sizer_depth": 37530,
+   "sizer_pow2": 65536,
+   "sizer_w": 6,
+   "sat_depth": 65536,
+   "sat_w": 6,
+   "paced_depth": 65536,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "stage3.4.skip_FIFO",
+   "part": 4,
+   "node": "AddStreams_hls_3",
+   "sizer_depth": 2232,
+   "sizer_pow2": 4096,
+   "sizer_w": 12,
+   "sat_depth": 8192,
+   "sat_w": 6,
+   "paced_depth": 8192,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "stage3.5.skip_FIFO",
+   "part": 4,
+   "node": "AddStreams_hls_4",
+   "sizer_depth": 8870,
+   "sizer_pow2": 16384,
+   "sizer_w": 6,
+   "sat_depth": 16384,
+   "sat_w": 6,
+   "paced_depth": 16384,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "stage3.6.skip_FIFO",
+   "part": 5,
+   "node": "AddStreams_hls_0",
+   "sizer_depth": 17630,
+   "sizer_pow2": 32768,
+   "sizer_w": 6,
+   "sat_depth": 131072,
+   "sat_w": 6,
+   "paced_depth": 32768,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "stage3.7.skip_FIFO",
+   "part": 5,
+   "node": "AddStreams_hls_1",
+   "sizer_depth": 37530,
+   "sizer_pow2": 65536,
+   "sizer_w": 6,
+   "sat_depth": 65536,
+   "sat_w": 6,
+   "paced_depth": 65536,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "up4.skip_FIFO",
+   "part": 5,
+   "node": "AddStreams_hls_2",
+   "sizer_depth": 3089,
+   "sizer_pow2": 4096,
+   "sizer_w": 6,
+   "sat_depth": 4096,
+   "sat_w": 6,
+   "paced_depth": 4096,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "regular4.0.skip_FIFO",
+   "part": 6,
+   "node": "AddStreams_hls_0",
+   "sizer_depth": 2288,
+   "sizer_pow2": 4096,
+   "sizer_w": 6,
+   "sat_depth": 262144,
+   "sat_w": 6,
+   "paced_depth": 4096,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "regular4.1.skip_FIFO",
+   "part": 6,
+   "node": "AddStreams_hls_1",
+   "sizer_depth": 2288,
+   "sizer_pow2": 4096,
+   "sizer_w": 6,
+   "sat_depth": 4096,
+   "sat_w": 6,
+   "paced_depth": 4096,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "up5.skip_FIFO",
+   "part": 6,
+   "node": "AddStreams_hls_2",
+   "sizer_depth": 1538,
+   "sizer_pow2": 2048,
+   "sizer_w": 6,
+   "sat_depth": 2048,
+   "sat_w": 6,
+   "paced_depth": 2048,
+   "paced_w": 6
+  },
+  {
+   "sizer_name": "regular5.0.skip_FIFO",
+   "part": 7,
+   "node": "AddStreams_hls_0",
+   "sizer_depth": 1146,
+   "sizer_pow2": 2048,
+   "sizer_w": 6,
+   "sat_depth": 262144,
+   "sat_w": 6,
+   "paced_depth": 2048,
+   "paced_w": 6
+  }
+ ]
+}

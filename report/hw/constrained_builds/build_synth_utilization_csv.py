@@ -1,16 +1,17 @@
 """Synthesized (out-of-context, 100 MHz target, xczu7ev) per-partition utilization of the constrained 150 FPS builds -> synth_utilization.csv.
 
 Sources: dataflow/builds/S12_512_ablation_v2/<solve>/<arm>/{8way,p7fix}/report/ooc_synth_partition_<i>.json (MILP builds) and
-finn_auto/cap40_fps150/uniform_int6/report (FINN auto-fold + FINN FIFO autosize; partition 7 is post-synthesis only, it cannot be placed).
+finn_auto/cap40_fps150/uniform_int6{,_pacedfifo}/report (FINN auto-fold + FINN FIFO autosize with a saturated / paced rtlsim source;
+partition 7 is post-synthesis only, it cannot be placed).
 The INT4 / INT6 builds use the partition 7 rebuild that lands the 512-deep inter-block FIFO (partitions 0-6 from the 8-way build).
 DSP is the REAL DSP48E2 count from real_dsp_per_partition.json (collect_real_dsp.py): the `DSP` field of FINN's OOC reports is always 0.
-Run:  python report/MILP/constrained_builds/build_synth_utilization_csv.py
+Run:  python report/hw/constrained_builds/build_synth_utilization_csv.py
 """
 import csv
 import json
 import os
 
-REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
+REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 B = os.path.join(REPO, "dataflow", "builds", "S12_512_ablation_v2")
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "synth_utilization.csv")
 with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "real_dsp_per_partition.json")) as _f:
@@ -27,6 +28,8 @@ BUILDS = [
     ("mixed468_cap40", "mixed 4/6/8", "milp", 150, "cap40_fps150/mixed_468", None, "caps 0.4; inter-block FIFO left at depth 2 (the 0.4 caps rejected the grown FIFO)"),
     ("int6_cap40_finnauto", "INT6", "finn_auto", 150, "finn_auto/cap40_fps150/uniform_int6", None,
      "FINN auto-fold + FINN rtlsim FIFO autosize; partition 7 is post-synthesis only (placement fails, UTLZ-1), no timing for it"),
+    ("int6_cap40_finnauto_pacedfifo", "INT6", "finn_auto", 150, "finn_auto/cap40_fps150/uniform_int6_pacedfifo", None,
+     "same folding as int6_cap40_finnauto, FINN FIFO autosize with a paced source instead of the saturated one; partition 7 is post-synthesis only (placement fails), no timing for it"),
     ("int8_caps100_fps150", "INT8", "milp", 150, "relaxed_fps150/uniform_int8", None,
      "caps 1.0 (INT8 is infeasible at 0.4 caps); built with the fixed bridge, 512-deep inter-block FIFO landed; Fmax < 187.5 MHz board clock"),
 ]

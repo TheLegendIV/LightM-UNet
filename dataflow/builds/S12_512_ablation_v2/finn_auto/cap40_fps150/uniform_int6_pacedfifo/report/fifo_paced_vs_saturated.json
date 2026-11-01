@@ -1,0 +1,4426 @@
+{
+ "0": {
+  "folding_mismatch_nodes": [],
+  "sat_mbit": 6.567039489746094,
+  "paced_mbit": 2.6383399963378906,
+  "n_fifos_sat": 15,
+  "n_fifos_paced": 15,
+  "edges": [
+   {
+    "edge": "ConvolutionInputGenerator_rtl_0->StreamingDataWidthConverter_rtl_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_0->FMPadding_rtl_0",
+    "sat_depth": 32768,
+    "paced_depth": 512,
+    "width_bits": 6,
+    "sat_kbit": 192.0,
+    "paced_kbit": 3.0
+   },
+   {
+    "edge": "DuplicateStreams_hls_0->Thresholding_rtl_1",
+    "sat_depth": 131072,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 768.0,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "FMPadding_rtl_0->ConvolutionInputGenerator_rtl_0",
+    "sat_depth": 524288,
+    "paced_depth": 1024,
+    "width_bits": 6,
+    "sat_kbit": 3072.0,
+    "paced_kbit": 6.0
+   },
+   {
+    "edge": "IN->Thresholding_rtl_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 8,
+    "sat_kbit": 0.015625,
+    "paced_kbit": 0.015625
+   },
+   {
+    "edge": "MVAU_rtl_0->Thresholding_rtl_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 14,
+    "sat_kbit": 0.02734375,
+    "paced_kbit": 0.02734375
+   },
+   {
+    "edge": "StreamingConcat_hls_0->StreamingDataWidthConverter_rtl_2",
+    "sat_depth": 192,
+    "paced_depth": 192,
+    "width_bits": 24,
+    "sat_kbit": 4.5,
+    "paced_kbit": 4.5
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_0->MVAU_rtl_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 18,
+    "sat_kbit": 0.03515625,
+    "paced_kbit": 0.03515625
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_1->StreamingConcat_hls_0",
+    "sat_depth": 65536,
+    "paced_depth": 65536,
+    "width_bits": 18,
+    "sat_kbit": 1152.0,
+    "paced_kbit": 1152.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_2->Thresholding_rtl_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "StreamingMaxPool_hls_0->StreamingConcat_hls_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_0->DuplicateStreams_hls_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_1->StreamingMaxPool_hls_0",
+    "sat_depth": 262144,
+    "paced_depth": 262144,
+    "width_bits": 6,
+    "sat_kbit": 1536.0,
+    "paced_kbit": 1536.0
+   },
+   {
+    "edge": "Thresholding_rtl_2->StreamingDataWidthConverter_rtl_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_3->OUT",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   }
+  ]
+ },
+ "1": {
+  "folding_mismatch_nodes": [],
+  "sat_mbit": 2.565114974975586,
+  "paced_mbit": 0.24598121643066406,
+  "n_fifos_sat": 118,
+  "n_fifos_paced": 118,
+  "edges": [
+   {
+    "edge": "AddStreams_hls_0->Thresholding_rtl_4",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "AddStreams_hls_1->Thresholding_rtl_9",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "AddStreams_hls_2->Thresholding_rtl_14",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "AddStreams_hls_3->Thresholding_rtl_19",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "AddStreams_hls_4->Thresholding_rtl_24",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "AddStreams_hls_5->OUT",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_0->StreamingDataWidthConverter_rtl_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_1->StreamingDataWidthConverter_rtl_5",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_2->StreamingDataWidthConverter_rtl_10",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_3->StreamingDataWidthConverter_rtl_15",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_4->StreamingDataWidthConverter_rtl_20",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_5->StreamingDataWidthConverter_rtl_25",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_6->StreamingDataWidthConverter_rtl_28",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_7->StreamingDataWidthConverter_rtl_32",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_0->ConvolutionInputGenerator_rtl_0",
+    "sat_depth": 1024,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 6.0,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_0->StreamingDataWidthConverter_rtl_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_1->StreamingDataWidthConverter_rtl_7",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_1->Thresholding_rtl_5",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_2->StreamingDataWidthConverter_rtl_12",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_2->Thresholding_rtl_10",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_3->StreamingDataWidthConverter_rtl_17",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_3->Thresholding_rtl_15",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_4->StreamingDataWidthConverter_rtl_22",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_4->Thresholding_rtl_20",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_5->ConvolutionInputGenerator_rtl_6",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_5->StreamingDataWidthConverter_rtl_27",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "FMPadding_rtl_0->StreamingDataWidthConverter_rtl_4",
+    "sat_depth": 203,
+    "paced_depth": 197,
+    "width_bits": 24,
+    "sat_kbit": 4.7578125,
+    "paced_kbit": 4.6171875
+   },
+   {
+    "edge": "FMPadding_rtl_1->StreamingDataWidthConverter_rtl_9",
+    "sat_depth": 197,
+    "paced_depth": 197,
+    "width_bits": 24,
+    "sat_kbit": 4.6171875,
+    "paced_kbit": 4.6171875
+   },
+   {
+    "edge": "FMPadding_rtl_2->StreamingDataWidthConverter_rtl_14",
+    "sat_depth": 197,
+    "paced_depth": 197,
+    "width_bits": 24,
+    "sat_kbit": 4.6171875,
+    "paced_kbit": 4.6171875
+   },
+   {
+    "edge": "FMPadding_rtl_3->StreamingDataWidthConverter_rtl_19",
+    "sat_depth": 197,
+    "paced_depth": 197,
+    "width_bits": 24,
+    "sat_kbit": 4.6171875,
+    "paced_kbit": 4.6171875
+   },
+   {
+    "edge": "FMPadding_rtl_4->StreamingDataWidthConverter_rtl_24",
+    "sat_depth": 197,
+    "paced_depth": 197,
+    "width_bits": 24,
+    "sat_kbit": 4.6171875,
+    "paced_kbit": 4.6171875
+   },
+   {
+    "edge": "FMPadding_rtl_5->StreamingDataWidthConverter_rtl_31",
+    "sat_depth": 118,
+    "paced_depth": 118,
+    "width_bits": 48,
+    "sat_kbit": 5.53125,
+    "paced_kbit": 5.53125
+   },
+   {
+    "edge": "IN->DuplicateStreams_hls_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "MVAU_rtl_0->Thresholding_rtl_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 14,
+    "sat_kbit": 0.02734375,
+    "paced_kbit": 0.02734375
+   },
+   {
+    "edge": "MVAU_rtl_1->Thresholding_rtl_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 14,
+    "sat_kbit": 0.02734375,
+    "paced_kbit": 0.02734375
+   },
+   {
+    "edge": "MVAU_rtl_10->Thresholding_rtl_16",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_11->Thresholding_rtl_17",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_12->Thresholding_rtl_18",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_13->Thresholding_rtl_21",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 14,
+    "sat_kbit": 0.02734375,
+    "paced_kbit": 0.02734375
+   },
+   {
+    "edge": "MVAU_rtl_14->Thresholding_rtl_22",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_15->Thresholding_rtl_23",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_16->Thresholding_rtl_25",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_17->Thresholding_rtl_26",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 14,
+    "sat_kbit": 0.02734375,
+    "paced_kbit": 0.02734375
+   },
+   {
+    "edge": "MVAU_rtl_18->Thresholding_rtl_27",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_19->Thresholding_rtl_28",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_2->Thresholding_rtl_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_3->Thresholding_rtl_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 13,
+    "sat_kbit": 0.025390625,
+    "paced_kbit": 0.025390625
+   },
+   {
+    "edge": "MVAU_rtl_4->Thresholding_rtl_6",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_5->Thresholding_rtl_7",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_6->Thresholding_rtl_8",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 14,
+    "sat_kbit": 0.02734375,
+    "paced_kbit": 0.02734375
+   },
+   {
+    "edge": "MVAU_rtl_7->Thresholding_rtl_11",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_8->Thresholding_rtl_12",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_9->Thresholding_rtl_13",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 14,
+    "sat_kbit": 0.02734375,
+    "paced_kbit": 0.02734375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_0->StreamingMaxPool_hls_0",
+    "sat_depth": 65,
+    "paced_depth": 32,
+    "width_bits": 24,
+    "sat_kbit": 1.5234375,
+    "paced_kbit": 0.75
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_1->MVAU_rtl_0",
+    "sat_depth": 131072,
+    "paced_depth": 512,
+    "width_bits": 12,
+    "sat_kbit": 1536.0,
+    "paced_kbit": 6.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_10->MVAU_rtl_5",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 24,
+    "sat_kbit": 0.046875,
+    "paced_kbit": 0.046875
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_11->MVAU_rtl_6",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 12,
+    "sat_kbit": 0.0234375,
+    "paced_kbit": 0.0234375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_12->MVAU_rtl_7",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_13->FMPadding_rtl_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 24,
+    "sat_kbit": 0.046875,
+    "paced_kbit": 0.046875
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_14->ConvolutionInputGenerator_rtl_3",
+    "sat_depth": 1024,
+    "paced_depth": 1024,
+    "width_bits": 6,
+    "sat_kbit": 6.0,
+    "paced_kbit": 6.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_15->MVAU_rtl_8",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 24,
+    "sat_kbit": 0.046875,
+    "paced_kbit": 0.046875
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_16->MVAU_rtl_9",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 12,
+    "sat_kbit": 0.0234375,
+    "paced_kbit": 0.0234375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_17->MVAU_rtl_10",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_18->FMPadding_rtl_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 24,
+    "sat_kbit": 0.046875,
+    "paced_kbit": 0.046875
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_19->ConvolutionInputGenerator_rtl_4",
+    "sat_depth": 1024,
+    "paced_depth": 1024,
+    "width_bits": 6,
+    "sat_kbit": 6.0,
+    "paced_kbit": 6.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_2->MVAU_rtl_1",
+    "sat_depth": 32768,
+    "paced_depth": 240,
+    "width_bits": 12,
+    "sat_kbit": 384.0,
+    "paced_kbit": 2.8125
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_20->MVAU_rtl_11",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 24,
+    "sat_kbit": 0.046875,
+    "paced_kbit": 0.046875
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_21->MVAU_rtl_12",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 12,
+    "sat_kbit": 0.0234375,
+    "paced_kbit": 0.0234375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_22->MVAU_rtl_13",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_23->FMPadding_rtl_4",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 24,
+    "sat_kbit": 0.046875,
+    "paced_kbit": 0.046875
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_24->ConvolutionInputGenerator_rtl_5",
+    "sat_depth": 1024,
+    "paced_depth": 1024,
+    "width_bits": 6,
+    "sat_kbit": 6.0,
+    "paced_kbit": 6.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_25->MVAU_rtl_14",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 24,
+    "sat_kbit": 0.046875,
+    "paced_kbit": 0.046875
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_26->MVAU_rtl_15",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 12,
+    "sat_kbit": 0.0234375,
+    "paced_kbit": 0.0234375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_27->StreamingMaxPool_hls_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 96,
+    "sat_kbit": 0.1875,
+    "paced_kbit": 0.1875
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_28->MVAU_rtl_16",
+    "sat_depth": 512,
+    "paced_depth": 512,
+    "width_bits": 24,
+    "sat_kbit": 12.0,
+    "paced_kbit": 12.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_29->MVAU_rtl_17",
+    "sat_depth": 247,
+    "paced_depth": 247,
+    "width_bits": 24,
+    "sat_kbit": 5.7890625,
+    "paced_kbit": 5.7890625
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_3->FMPadding_rtl_0",
+    "sat_depth": 32,
+    "paced_depth": 2,
+    "width_bits": 24,
+    "sat_kbit": 0.75,
+    "paced_kbit": 0.046875
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_30->FMPadding_rtl_5",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 48,
+    "sat_kbit": 0.09375,
+    "paced_kbit": 0.09375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_31->ConvolutionInputGenerator_rtl_7",
+    "sat_depth": 1024,
+    "paced_depth": 1024,
+    "width_bits": 6,
+    "sat_kbit": 6.0,
+    "paced_kbit": 6.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_32->MVAU_rtl_18",
+    "sat_depth": 1024,
+    "paced_depth": 1024,
+    "width_bits": 24,
+    "sat_kbit": 24.0,
+    "paced_kbit": 24.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_33->MVAU_rtl_19",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_4->ConvolutionInputGenerator_rtl_1",
+    "sat_depth": 16384,
+    "paced_depth": 2048,
+    "width_bits": 6,
+    "sat_kbit": 96.0,
+    "paced_kbit": 12.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_5->MVAU_rtl_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 24,
+    "sat_kbit": 0.046875,
+    "paced_kbit": 0.046875
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_6->MVAU_rtl_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 12,
+    "sat_kbit": 0.0234375,
+    "paced_kbit": 0.0234375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_7->MVAU_rtl_4",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_8->FMPadding_rtl_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 24,
+    "sat_kbit": 0.046875,
+    "paced_kbit": 0.046875
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_9->ConvolutionInputGenerator_rtl_2",
+    "sat_depth": 1024,
+    "paced_depth": 1024,
+    "width_bits": 6,
+    "sat_kbit": 6.0,
+    "paced_kbit": 6.0
+   },
+   {
+    "edge": "StreamingMaxPool_hls_0->StreamingDataWidthConverter_rtl_2",
+    "sat_depth": 64,
+    "paced_depth": 64,
+    "width_bits": 24,
+    "sat_kbit": 1.5,
+    "paced_kbit": 1.5
+   },
+   {
+    "edge": "StreamingMaxPool_hls_1->StreamingDataWidthConverter_rtl_29",
+    "sat_depth": 48,
+    "paced_depth": 48,
+    "width_bits": 96,
+    "sat_kbit": 4.5,
+    "paced_kbit": 4.5
+   },
+   {
+    "edge": "Thresholding_rtl_0->StreamingDataWidthConverter_rtl_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_1->AddStreams_hls_0",
+    "sat_depth": 65536,
+    "paced_depth": 2048,
+    "width_bits": 6,
+    "sat_kbit": 384.0,
+    "paced_kbit": 12.0
+   },
+   {
+    "edge": "Thresholding_rtl_10->AddStreams_hls_2",
+    "sat_depth": 4096,
+    "paced_depth": 4096,
+    "width_bits": 6,
+    "sat_kbit": 24.0,
+    "paced_kbit": 24.0
+   },
+   {
+    "edge": "Thresholding_rtl_11->StreamingDataWidthConverter_rtl_13",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_12->StreamingDataWidthConverter_rtl_16",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_13->AddStreams_hls_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_14->DuplicateStreams_hls_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_15->AddStreams_hls_3",
+    "sat_depth": 4096,
+    "paced_depth": 4096,
+    "width_bits": 6,
+    "sat_kbit": 24.0,
+    "paced_kbit": 24.0
+   },
+   {
+    "edge": "Thresholding_rtl_16->StreamingDataWidthConverter_rtl_18",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_17->StreamingDataWidthConverter_rtl_21",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_18->AddStreams_hls_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_19->DuplicateStreams_hls_4",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_2->StreamingDataWidthConverter_rtl_6",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_20->AddStreams_hls_4",
+    "sat_depth": 4096,
+    "paced_depth": 4096,
+    "width_bits": 6,
+    "sat_kbit": 24.0,
+    "paced_kbit": 24.0
+   },
+   {
+    "edge": "Thresholding_rtl_21->StreamingDataWidthConverter_rtl_23",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_22->StreamingDataWidthConverter_rtl_26",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_23->AddStreams_hls_4",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_24->DuplicateStreams_hls_5",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_25->StreamingDataWidthConverter_rtl_30",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_26->AddStreams_hls_5",
+    "sat_depth": 2048,
+    "paced_depth": 2048,
+    "width_bits": 6,
+    "sat_kbit": 12.0,
+    "paced_kbit": 12.0
+   },
+   {
+    "edge": "Thresholding_rtl_27->StreamingDataWidthConverter_rtl_33",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_28->AddStreams_hls_5",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_3->AddStreams_hls_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_4->DuplicateStreams_hls_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_5->AddStreams_hls_1",
+    "sat_depth": 4096,
+    "paced_depth": 4096,
+    "width_bits": 6,
+    "sat_kbit": 24.0,
+    "paced_kbit": 24.0
+   },
+   {
+    "edge": "Thresholding_rtl_6->StreamingDataWidthConverter_rtl_8",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_7->StreamingDataWidthConverter_rtl_11",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_8->AddStreams_hls_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_9->DuplicateStreams_hls_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   }
+  ]
+ },
+ "2": {
+  "folding_mismatch_nodes": [],
+  "sat_mbit": 5.491994857788086,
+  "paced_mbit": 2.211088180541992,
+  "n_fifos_sat": 91,
+  "n_fifos_paced": 91,
+  "edges": [
+   {
+    "edge": "AddStreams_hls_0->Thresholding_rtl_5",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "AddStreams_hls_1->Thresholding_rtl_10",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "AddStreams_hls_2->Thresholding_rtl_15",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "AddStreams_hls_3->Thresholding_rtl_20",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "AddStreams_hls_4->OUT",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_0->StreamingDataWidthConverter_rtl_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_1->StreamingDataWidthConverter_rtl_8",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_2->StreamingDataWidthConverter_rtl_13",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_3->StreamingDataWidthConverter_rtl_18",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_4->StreamingDataWidthConverter_rtl_23",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_0->StreamingDataWidthConverter_rtl_0",
+    "sat_depth": 65536,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 384.0,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_0->Thresholding_rtl_1",
+    "sat_depth": 131072,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 768.0,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_1->StreamingDataWidthConverter_rtl_5",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_1->Thresholding_rtl_6",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_2->StreamingDataWidthConverter_rtl_10",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_2->Thresholding_rtl_11",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_3->StreamingDataWidthConverter_rtl_15",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_3->Thresholding_rtl_16",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_4->StreamingDataWidthConverter_rtl_20",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_4->Thresholding_rtl_21",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "FMPadding_rtl_0->StreamingDataWidthConverter_rtl_2",
+    "sat_depth": 244,
+    "paced_depth": 243,
+    "width_bits": 48,
+    "sat_kbit": 11.4375,
+    "paced_kbit": 11.390625
+   },
+   {
+    "edge": "FMPadding_rtl_1->StreamingDataWidthConverter_rtl_7",
+    "sat_depth": 1024,
+    "paced_depth": 1024,
+    "width_bits": 48,
+    "sat_kbit": 48.0,
+    "paced_kbit": 48.0
+   },
+   {
+    "edge": "FMPadding_rtl_2->StreamingDataWidthConverter_rtl_12",
+    "sat_depth": 2048,
+    "paced_depth": 2048,
+    "width_bits": 48,
+    "sat_kbit": 96.0,
+    "paced_kbit": 96.0
+   },
+   {
+    "edge": "FMPadding_rtl_3->StreamingDataWidthConverter_rtl_17",
+    "sat_depth": 4096,
+    "paced_depth": 4096,
+    "width_bits": 48,
+    "sat_kbit": 192.0,
+    "paced_kbit": 192.0
+   },
+   {
+    "edge": "FMPadding_rtl_4->StreamingDataWidthConverter_rtl_22",
+    "sat_depth": 243,
+    "paced_depth": 243,
+    "width_bits": 48,
+    "sat_kbit": 11.390625,
+    "paced_kbit": 11.390625
+   },
+   {
+    "edge": "IN->Thresholding_rtl_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "MVAU_rtl_0->Thresholding_rtl_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_1->Thresholding_rtl_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_10->Thresholding_rtl_18",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_11->Thresholding_rtl_19",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_12->Thresholding_rtl_22",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_13->Thresholding_rtl_23",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_14->Thresholding_rtl_24",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_2->Thresholding_rtl_4",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 14,
+    "sat_kbit": 0.02734375,
+    "paced_kbit": 0.02734375
+   },
+   {
+    "edge": "MVAU_rtl_3->Thresholding_rtl_7",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_4->Thresholding_rtl_8",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_5->Thresholding_rtl_9",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_6->Thresholding_rtl_12",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_7->Thresholding_rtl_13",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_8->Thresholding_rtl_14",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 14,
+    "sat_kbit": 0.02734375,
+    "paced_kbit": 0.02734375
+   },
+   {
+    "edge": "MVAU_rtl_9->Thresholding_rtl_17",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_0->MVAU_rtl_0",
+    "sat_depth": 65536,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 768.0,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_1->FMPadding_rtl_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 48,
+    "sat_kbit": 0.09375,
+    "paced_kbit": 0.09375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_10->MVAU_rtl_6",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_11->FMPadding_rtl_2",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 48,
+    "sat_kbit": 1.5,
+    "paced_kbit": 1.5
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_12->ConvolutionInputGenerator_rtl_2",
+    "sat_depth": 16384,
+    "paced_depth": 16384,
+    "width_bits": 6,
+    "sat_kbit": 96.0,
+    "paced_kbit": 96.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_13->MVAU_rtl_7",
+    "sat_depth": 8192,
+    "paced_depth": 8192,
+    "width_bits": 24,
+    "sat_kbit": 192.0,
+    "paced_kbit": 192.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_14->MVAU_rtl_8",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_15->MVAU_rtl_9",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_16->FMPadding_rtl_3",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 48,
+    "sat_kbit": 1.5,
+    "paced_kbit": 1.5
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_17->ConvolutionInputGenerator_rtl_3",
+    "sat_depth": 32768,
+    "paced_depth": 32768,
+    "width_bits": 6,
+    "sat_kbit": 192.0,
+    "paced_kbit": 192.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_18->MVAU_rtl_10",
+    "sat_depth": 16384,
+    "paced_depth": 16384,
+    "width_bits": 24,
+    "sat_kbit": 384.0,
+    "paced_kbit": 384.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_19->MVAU_rtl_11",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_2->ConvolutionInputGenerator_rtl_0",
+    "sat_depth": 2048,
+    "paced_depth": 2048,
+    "width_bits": 6,
+    "sat_kbit": 12.0,
+    "paced_kbit": 12.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_20->MVAU_rtl_12",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_21->FMPadding_rtl_4",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 48,
+    "sat_kbit": 0.09375,
+    "paced_kbit": 0.09375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_22->ConvolutionInputGenerator_rtl_4",
+    "sat_depth": 2048,
+    "paced_depth": 2048,
+    "width_bits": 6,
+    "sat_kbit": 12.0,
+    "paced_kbit": 12.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_23->MVAU_rtl_13",
+    "sat_depth": 2048,
+    "paced_depth": 2048,
+    "width_bits": 24,
+    "sat_kbit": 48.0,
+    "paced_kbit": 48.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_24->MVAU_rtl_14",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_3->MVAU_rtl_1",
+    "sat_depth": 32768,
+    "paced_depth": 2048,
+    "width_bits": 24,
+    "sat_kbit": 768.0,
+    "paced_kbit": 48.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_4->MVAU_rtl_2",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_5->MVAU_rtl_3",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_6->FMPadding_rtl_1",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 48,
+    "sat_kbit": 1.5,
+    "paced_kbit": 1.5
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_7->ConvolutionInputGenerator_rtl_1",
+    "sat_depth": 8192,
+    "paced_depth": 8192,
+    "width_bits": 6,
+    "sat_kbit": 48.0,
+    "paced_kbit": 48.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_8->MVAU_rtl_4",
+    "sat_depth": 4096,
+    "paced_depth": 4096,
+    "width_bits": 24,
+    "sat_kbit": 96.0,
+    "paced_kbit": 96.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_9->MVAU_rtl_5",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "Thresholding_rtl_0->DuplicateStreams_hls_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_1->AddStreams_hls_0",
+    "sat_depth": 131072,
+    "paced_depth": 8192,
+    "width_bits": 6,
+    "sat_kbit": 768.0,
+    "paced_kbit": 48.0
+   },
+   {
+    "edge": "Thresholding_rtl_10->DuplicateStreams_hls_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_11->AddStreams_hls_2",
+    "sat_depth": 32768,
+    "paced_depth": 32768,
+    "width_bits": 6,
+    "sat_kbit": 192.0,
+    "paced_kbit": 192.0
+   },
+   {
+    "edge": "Thresholding_rtl_12->StreamingDataWidthConverter_rtl_11",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_13->StreamingDataWidthConverter_rtl_14",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_14->AddStreams_hls_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_15->DuplicateStreams_hls_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_16->AddStreams_hls_3",
+    "sat_depth": 65536,
+    "paced_depth": 65536,
+    "width_bits": 6,
+    "sat_kbit": 384.0,
+    "paced_kbit": 384.0
+   },
+   {
+    "edge": "Thresholding_rtl_17->StreamingDataWidthConverter_rtl_16",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_18->StreamingDataWidthConverter_rtl_19",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_19->AddStreams_hls_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_2->StreamingDataWidthConverter_rtl_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_20->DuplicateStreams_hls_4",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_21->AddStreams_hls_4",
+    "sat_depth": 8192,
+    "paced_depth": 8192,
+    "width_bits": 6,
+    "sat_kbit": 48.0,
+    "paced_kbit": 48.0
+   },
+   {
+    "edge": "Thresholding_rtl_22->StreamingDataWidthConverter_rtl_21",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_23->StreamingDataWidthConverter_rtl_24",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_24->AddStreams_hls_4",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_3->StreamingDataWidthConverter_rtl_4",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_4->AddStreams_hls_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_5->DuplicateStreams_hls_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_6->AddStreams_hls_1",
+    "sat_depth": 16384,
+    "paced_depth": 16384,
+    "width_bits": 6,
+    "sat_kbit": 96.0,
+    "paced_kbit": 96.0
+   },
+   {
+    "edge": "Thresholding_rtl_7->StreamingDataWidthConverter_rtl_6",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_8->StreamingDataWidthConverter_rtl_9",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_9->AddStreams_hls_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   }
+  ]
+ },
+ "3": {
+  "folding_mismatch_nodes": [],
+  "sat_mbit": 5.280605316162109,
+  "paced_mbit": 2.093494415283203,
+  "n_fifos_sat": 73,
+  "n_fifos_paced": 73,
+  "edges": [
+   {
+    "edge": "AddStreams_hls_0->Thresholding_rtl_5",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "AddStreams_hls_1->Thresholding_rtl_10",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "AddStreams_hls_2->Thresholding_rtl_15",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "AddStreams_hls_3->OUT",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_0->StreamingDataWidthConverter_rtl_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_1->StreamingDataWidthConverter_rtl_8",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_2->StreamingDataWidthConverter_rtl_13",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_3->StreamingDataWidthConverter_rtl_18",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_0->StreamingDataWidthConverter_rtl_0",
+    "sat_depth": 65536,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 384.0,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_0->Thresholding_rtl_1",
+    "sat_depth": 131072,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 768.0,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_1->StreamingDataWidthConverter_rtl_5",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_1->Thresholding_rtl_6",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_2->StreamingDataWidthConverter_rtl_10",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_2->Thresholding_rtl_11",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_3->StreamingDataWidthConverter_rtl_15",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_3->Thresholding_rtl_16",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "FMPadding_rtl_0->StreamingDataWidthConverter_rtl_2",
+    "sat_depth": 1024,
+    "paced_depth": 1024,
+    "width_bits": 48,
+    "sat_kbit": 48.0,
+    "paced_kbit": 48.0
+   },
+   {
+    "edge": "FMPadding_rtl_1->StreamingDataWidthConverter_rtl_7",
+    "sat_depth": 2048,
+    "paced_depth": 2048,
+    "width_bits": 48,
+    "sat_kbit": 96.0,
+    "paced_kbit": 96.0
+   },
+   {
+    "edge": "FMPadding_rtl_2->StreamingDataWidthConverter_rtl_12",
+    "sat_depth": 4096,
+    "paced_depth": 4096,
+    "width_bits": 48,
+    "sat_kbit": 192.0,
+    "paced_kbit": 192.0
+   },
+   {
+    "edge": "FMPadding_rtl_3->StreamingDataWidthConverter_rtl_17",
+    "sat_depth": 243,
+    "paced_depth": 243,
+    "width_bits": 48,
+    "sat_kbit": 11.390625,
+    "paced_kbit": 11.390625
+   },
+   {
+    "edge": "IN->Thresholding_rtl_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "MVAU_rtl_0->Thresholding_rtl_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_1->Thresholding_rtl_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_10->Thresholding_rtl_18",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_11->Thresholding_rtl_19",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 14,
+    "sat_kbit": 0.02734375,
+    "paced_kbit": 0.02734375
+   },
+   {
+    "edge": "MVAU_rtl_2->Thresholding_rtl_4",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_3->Thresholding_rtl_7",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_4->Thresholding_rtl_8",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_5->Thresholding_rtl_9",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_6->Thresholding_rtl_12",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_7->Thresholding_rtl_13",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_8->Thresholding_rtl_14",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_9->Thresholding_rtl_17",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_0->MVAU_rtl_0",
+    "sat_depth": 65536,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 768.0,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_1->FMPadding_rtl_0",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 48,
+    "sat_kbit": 1.5,
+    "paced_kbit": 1.5
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_10->MVAU_rtl_6",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_11->FMPadding_rtl_2",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 48,
+    "sat_kbit": 1.5,
+    "paced_kbit": 1.5
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_12->ConvolutionInputGenerator_rtl_2",
+    "sat_depth": 32768,
+    "paced_depth": 32768,
+    "width_bits": 6,
+    "sat_kbit": 192.0,
+    "paced_kbit": 192.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_13->MVAU_rtl_7",
+    "sat_depth": 16384,
+    "paced_depth": 16384,
+    "width_bits": 24,
+    "sat_kbit": 384.0,
+    "paced_kbit": 384.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_14->MVAU_rtl_8",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_15->MVAU_rtl_9",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_16->FMPadding_rtl_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 48,
+    "sat_kbit": 0.09375,
+    "paced_kbit": 0.09375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_17->ConvolutionInputGenerator_rtl_3",
+    "sat_depth": 2048,
+    "paced_depth": 2048,
+    "width_bits": 6,
+    "sat_kbit": 12.0,
+    "paced_kbit": 12.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_18->MVAU_rtl_10",
+    "sat_depth": 2048,
+    "paced_depth": 2048,
+    "width_bits": 24,
+    "sat_kbit": 48.0,
+    "paced_kbit": 48.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_19->MVAU_rtl_11",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_2->ConvolutionInputGenerator_rtl_0",
+    "sat_depth": 8192,
+    "paced_depth": 8192,
+    "width_bits": 6,
+    "sat_kbit": 48.0,
+    "paced_kbit": 48.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_3->MVAU_rtl_1",
+    "sat_depth": 32768,
+    "paced_depth": 4096,
+    "width_bits": 24,
+    "sat_kbit": 768.0,
+    "paced_kbit": 96.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_4->MVAU_rtl_2",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_5->MVAU_rtl_3",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_6->FMPadding_rtl_1",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 48,
+    "sat_kbit": 1.5,
+    "paced_kbit": 1.5
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_7->ConvolutionInputGenerator_rtl_1",
+    "sat_depth": 16384,
+    "paced_depth": 16384,
+    "width_bits": 6,
+    "sat_kbit": 96.0,
+    "paced_kbit": 96.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_8->MVAU_rtl_4",
+    "sat_depth": 8192,
+    "paced_depth": 8192,
+    "width_bits": 24,
+    "sat_kbit": 192.0,
+    "paced_kbit": 192.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_9->MVAU_rtl_5",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "Thresholding_rtl_0->DuplicateStreams_hls_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_1->AddStreams_hls_0",
+    "sat_depth": 131072,
+    "paced_depth": 16384,
+    "width_bits": 6,
+    "sat_kbit": 768.0,
+    "paced_kbit": 96.0
+   },
+   {
+    "edge": "Thresholding_rtl_10->DuplicateStreams_hls_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_11->AddStreams_hls_2",
+    "sat_depth": 65536,
+    "paced_depth": 65536,
+    "width_bits": 6,
+    "sat_kbit": 384.0,
+    "paced_kbit": 384.0
+   },
+   {
+    "edge": "Thresholding_rtl_12->StreamingDataWidthConverter_rtl_11",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_13->StreamingDataWidthConverter_rtl_14",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_14->AddStreams_hls_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_15->DuplicateStreams_hls_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_16->AddStreams_hls_3",
+    "sat_depth": 8192,
+    "paced_depth": 8192,
+    "width_bits": 6,
+    "sat_kbit": 48.0,
+    "paced_kbit": 48.0
+   },
+   {
+    "edge": "Thresholding_rtl_17->StreamingDataWidthConverter_rtl_16",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_18->StreamingDataWidthConverter_rtl_19",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_19->AddStreams_hls_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_2->StreamingDataWidthConverter_rtl_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_3->StreamingDataWidthConverter_rtl_4",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_4->AddStreams_hls_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_5->DuplicateStreams_hls_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_6->AddStreams_hls_1",
+    "sat_depth": 32768,
+    "paced_depth": 32768,
+    "width_bits": 6,
+    "sat_kbit": 192.0,
+    "paced_kbit": 192.0
+   },
+   {
+    "edge": "Thresholding_rtl_7->StreamingDataWidthConverter_rtl_6",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_8->StreamingDataWidthConverter_rtl_9",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_9->AddStreams_hls_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   }
+  ]
+ },
+ "4": {
+  "folding_mismatch_nodes": [],
+  "sat_mbit": 5.564241409301758,
+  "paced_mbit": 2.3771305084228516,
+  "n_fifos_sat": 91,
+  "n_fifos_paced": 91,
+  "edges": [
+   {
+    "edge": "AddStreams_hls_0->Thresholding_rtl_5",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "AddStreams_hls_1->Thresholding_rtl_10",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "AddStreams_hls_2->Thresholding_rtl_15",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "AddStreams_hls_3->Thresholding_rtl_20",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "AddStreams_hls_4->OUT",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_0->StreamingDataWidthConverter_rtl_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_1->StreamingDataWidthConverter_rtl_8",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_2->StreamingDataWidthConverter_rtl_13",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_3->StreamingDataWidthConverter_rtl_18",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_4->StreamingDataWidthConverter_rtl_23",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_0->StreamingDataWidthConverter_rtl_0",
+    "sat_depth": 65536,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 384.0,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_0->Thresholding_rtl_1",
+    "sat_depth": 131072,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 768.0,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_1->StreamingDataWidthConverter_rtl_5",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_1->Thresholding_rtl_6",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_2->StreamingDataWidthConverter_rtl_10",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_2->Thresholding_rtl_11",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_3->StreamingDataWidthConverter_rtl_15",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_3->Thresholding_rtl_16",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_4->StreamingDataWidthConverter_rtl_20",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_4->Thresholding_rtl_21",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "FMPadding_rtl_0->StreamingDataWidthConverter_rtl_2",
+    "sat_depth": 1024,
+    "paced_depth": 1024,
+    "width_bits": 48,
+    "sat_kbit": 48.0,
+    "paced_kbit": 48.0
+   },
+   {
+    "edge": "FMPadding_rtl_1->StreamingDataWidthConverter_rtl_7",
+    "sat_depth": 2048,
+    "paced_depth": 2048,
+    "width_bits": 48,
+    "sat_kbit": 96.0,
+    "paced_kbit": 96.0
+   },
+   {
+    "edge": "FMPadding_rtl_2->StreamingDataWidthConverter_rtl_12",
+    "sat_depth": 4096,
+    "paced_depth": 4096,
+    "width_bits": 48,
+    "sat_kbit": 192.0,
+    "paced_kbit": 192.0
+   },
+   {
+    "edge": "FMPadding_rtl_3->StreamingDataWidthConverter_rtl_17",
+    "sat_depth": 243,
+    "paced_depth": 243,
+    "width_bits": 48,
+    "sat_kbit": 11.390625,
+    "paced_kbit": 11.390625
+   },
+   {
+    "edge": "FMPadding_rtl_4->StreamingDataWidthConverter_rtl_22",
+    "sat_depth": 1024,
+    "paced_depth": 1024,
+    "width_bits": 48,
+    "sat_kbit": 48.0,
+    "paced_kbit": 48.0
+   },
+   {
+    "edge": "IN->Thresholding_rtl_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "MVAU_rtl_0->Thresholding_rtl_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_1->Thresholding_rtl_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_10->Thresholding_rtl_18",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_11->Thresholding_rtl_19",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_12->Thresholding_rtl_22",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_13->Thresholding_rtl_23",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_14->Thresholding_rtl_24",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_2->Thresholding_rtl_4",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 14,
+    "sat_kbit": 0.02734375,
+    "paced_kbit": 0.02734375
+   },
+   {
+    "edge": "MVAU_rtl_3->Thresholding_rtl_7",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_4->Thresholding_rtl_8",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_5->Thresholding_rtl_9",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_6->Thresholding_rtl_12",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_7->Thresholding_rtl_13",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_8->Thresholding_rtl_14",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_9->Thresholding_rtl_17",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_0->MVAU_rtl_0",
+    "sat_depth": 65536,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 768.0,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_1->FMPadding_rtl_0",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 48,
+    "sat_kbit": 1.5,
+    "paced_kbit": 1.5
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_10->MVAU_rtl_6",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_11->FMPadding_rtl_2",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 48,
+    "sat_kbit": 1.5,
+    "paced_kbit": 1.5
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_12->ConvolutionInputGenerator_rtl_2",
+    "sat_depth": 32768,
+    "paced_depth": 32768,
+    "width_bits": 6,
+    "sat_kbit": 192.0,
+    "paced_kbit": 192.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_13->MVAU_rtl_7",
+    "sat_depth": 16384,
+    "paced_depth": 16384,
+    "width_bits": 24,
+    "sat_kbit": 384.0,
+    "paced_kbit": 384.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_14->MVAU_rtl_8",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_15->MVAU_rtl_9",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_16->FMPadding_rtl_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 48,
+    "sat_kbit": 0.09375,
+    "paced_kbit": 0.09375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_17->ConvolutionInputGenerator_rtl_3",
+    "sat_depth": 2048,
+    "paced_depth": 2048,
+    "width_bits": 6,
+    "sat_kbit": 12.0,
+    "paced_kbit": 12.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_18->MVAU_rtl_10",
+    "sat_depth": 2048,
+    "paced_depth": 2048,
+    "width_bits": 24,
+    "sat_kbit": 48.0,
+    "paced_kbit": 48.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_19->MVAU_rtl_11",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_2->ConvolutionInputGenerator_rtl_0",
+    "sat_depth": 8192,
+    "paced_depth": 8192,
+    "width_bits": 6,
+    "sat_kbit": 48.0,
+    "paced_kbit": 48.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_20->MVAU_rtl_12",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_21->FMPadding_rtl_4",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 48,
+    "sat_kbit": 1.5,
+    "paced_kbit": 1.5
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_22->ConvolutionInputGenerator_rtl_4",
+    "sat_depth": 8192,
+    "paced_depth": 8192,
+    "width_bits": 6,
+    "sat_kbit": 48.0,
+    "paced_kbit": 48.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_23->MVAU_rtl_13",
+    "sat_depth": 4096,
+    "paced_depth": 4096,
+    "width_bits": 24,
+    "sat_kbit": 96.0,
+    "paced_kbit": 96.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_24->MVAU_rtl_14",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_3->MVAU_rtl_1",
+    "sat_depth": 32768,
+    "paced_depth": 4096,
+    "width_bits": 24,
+    "sat_kbit": 768.0,
+    "paced_kbit": 96.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_4->MVAU_rtl_2",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_5->MVAU_rtl_3",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_6->FMPadding_rtl_1",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 48,
+    "sat_kbit": 1.5,
+    "paced_kbit": 1.5
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_7->ConvolutionInputGenerator_rtl_1",
+    "sat_depth": 16384,
+    "paced_depth": 16384,
+    "width_bits": 6,
+    "sat_kbit": 96.0,
+    "paced_kbit": 96.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_8->MVAU_rtl_4",
+    "sat_depth": 8192,
+    "paced_depth": 8192,
+    "width_bits": 24,
+    "sat_kbit": 192.0,
+    "paced_kbit": 192.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_9->MVAU_rtl_5",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "Thresholding_rtl_0->DuplicateStreams_hls_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_1->AddStreams_hls_0",
+    "sat_depth": 131072,
+    "paced_depth": 16384,
+    "width_bits": 6,
+    "sat_kbit": 768.0,
+    "paced_kbit": 96.0
+   },
+   {
+    "edge": "Thresholding_rtl_10->DuplicateStreams_hls_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_11->AddStreams_hls_2",
+    "sat_depth": 65536,
+    "paced_depth": 65536,
+    "width_bits": 6,
+    "sat_kbit": 384.0,
+    "paced_kbit": 384.0
+   },
+   {
+    "edge": "Thresholding_rtl_12->StreamingDataWidthConverter_rtl_11",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_13->StreamingDataWidthConverter_rtl_14",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_14->AddStreams_hls_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_15->DuplicateStreams_hls_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_16->AddStreams_hls_3",
+    "sat_depth": 8192,
+    "paced_depth": 8192,
+    "width_bits": 6,
+    "sat_kbit": 48.0,
+    "paced_kbit": 48.0
+   },
+   {
+    "edge": "Thresholding_rtl_17->StreamingDataWidthConverter_rtl_16",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_18->StreamingDataWidthConverter_rtl_19",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_19->AddStreams_hls_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_2->StreamingDataWidthConverter_rtl_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_20->DuplicateStreams_hls_4",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_21->AddStreams_hls_4",
+    "sat_depth": 16384,
+    "paced_depth": 16384,
+    "width_bits": 6,
+    "sat_kbit": 96.0,
+    "paced_kbit": 96.0
+   },
+   {
+    "edge": "Thresholding_rtl_22->StreamingDataWidthConverter_rtl_21",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_23->StreamingDataWidthConverter_rtl_24",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_24->AddStreams_hls_4",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_3->StreamingDataWidthConverter_rtl_4",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_4->AddStreams_hls_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_5->DuplicateStreams_hls_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_6->AddStreams_hls_1",
+    "sat_depth": 32768,
+    "paced_depth": 32768,
+    "width_bits": 6,
+    "sat_kbit": 192.0,
+    "paced_kbit": 192.0
+   },
+   {
+    "edge": "Thresholding_rtl_7->StreamingDataWidthConverter_rtl_6",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_8->StreamingDataWidthConverter_rtl_9",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_9->AddStreams_hls_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   }
+  ]
+ },
+ "5": {
+  "folding_mismatch_nodes": [],
+  "sat_mbit": 4.837850570678711,
+  "paced_mbit": 1.8381481170654297,
+  "n_fifos_sat": 66,
+  "n_fifos_paced": 66,
+  "edges": [
+   {
+    "edge": "AddStreams_hls_0->Thresholding_rtl_5",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "AddStreams_hls_1->Thresholding_rtl_10",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "AddStreams_hls_2->OUT",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_0->StreamingDataWidthConverter_rtl_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_1->StreamingDataWidthConverter_rtl_8",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_2->StreamingDataWidthConverter_rtl_16",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_3->VVAU_hls_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 24,
+    "sat_kbit": 0.046875,
+    "paced_kbit": 0.046875
+   },
+   {
+    "edge": "DuplicateStreams_hls_0->StreamingDataWidthConverter_rtl_0",
+    "sat_depth": 65536,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 384.0,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_0->Thresholding_rtl_1",
+    "sat_depth": 131072,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 768.0,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_1->StreamingDataWidthConverter_rtl_5",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_1->Thresholding_rtl_6",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_2->StreamingDataWidthConverter_rtl_10",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_2->StreamingDataWidthConverter_rtl_11",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "FMPadding_Pixel_hls_0->StreamingDataWidthConverter_rtl_13",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "FMPadding_rtl_0->StreamingDataWidthConverter_rtl_2",
+    "sat_depth": 2048,
+    "paced_depth": 2048,
+    "width_bits": 48,
+    "sat_kbit": 96.0,
+    "paced_kbit": 96.0
+   },
+   {
+    "edge": "FMPadding_rtl_1->StreamingDataWidthConverter_rtl_7",
+    "sat_depth": 4096,
+    "paced_depth": 4096,
+    "width_bits": 48,
+    "sat_kbit": 192.0,
+    "paced_kbit": 192.0
+   },
+   {
+    "edge": "FMPadding_rtl_2->StreamingDataWidthConverter_rtl_14",
+    "sat_depth": 230,
+    "paced_depth": 228,
+    "width_bits": 48,
+    "sat_kbit": 10.78125,
+    "paced_kbit": 10.6875
+   },
+   {
+    "edge": "FMPadding_rtl_3->StreamingDataWidthConverter_rtl_15",
+    "sat_depth": 512,
+    "paced_depth": 512,
+    "width_bits": 96,
+    "sat_kbit": 48.0,
+    "paced_kbit": 48.0
+   },
+   {
+    "edge": "IN->Thresholding_rtl_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "MVAU_rtl_0->Thresholding_rtl_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_1->Thresholding_rtl_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_2->Thresholding_rtl_4",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 17,
+    "sat_kbit": 0.033203125,
+    "paced_kbit": 0.033203125
+   },
+   {
+    "edge": "MVAU_rtl_3->Thresholding_rtl_7",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_4->Thresholding_rtl_8",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_5->Thresholding_rtl_9",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_6->Thresholding_rtl_12",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_7->Thresholding_rtl_11",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_8->Thresholding_rtl_14",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_9->Thresholding_rtl_15",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 14,
+    "sat_kbit": 0.02734375,
+    "paced_kbit": 0.02734375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_0->MVAU_rtl_0",
+    "sat_depth": 65536,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 768.0,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_1->FMPadding_rtl_0",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 48,
+    "sat_kbit": 1.5,
+    "paced_kbit": 1.5
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_10->MVAU_rtl_7",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_11->MVAU_rtl_6",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 24,
+    "sat_kbit": 0.75,
+    "paced_kbit": 0.75
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_12->UpsampleNearestNeighbour_hls_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 96,
+    "sat_kbit": 0.1875,
+    "paced_kbit": 0.1875
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_13->FMPadding_rtl_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 48,
+    "sat_kbit": 0.09375,
+    "paced_kbit": 0.09375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_14->ConvolutionInputGenerator_rtl_2",
+    "sat_depth": 2048,
+    "paced_depth": 2048,
+    "width_bits": 6,
+    "sat_kbit": 12.0,
+    "paced_kbit": 12.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_15->ConvolutionInputGenerator_rtl_3",
+    "sat_depth": 2048,
+    "paced_depth": 2048,
+    "width_bits": 24,
+    "sat_kbit": 48.0,
+    "paced_kbit": 48.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_16->MVAU_rtl_8",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 48,
+    "sat_kbit": 1.5,
+    "paced_kbit": 1.5
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_17->Thresholding_rtl_13",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_18->MVAU_rtl_9",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 24,
+    "sat_kbit": 0.046875,
+    "paced_kbit": 0.046875
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_2->ConvolutionInputGenerator_rtl_0",
+    "sat_depth": 16384,
+    "paced_depth": 16384,
+    "width_bits": 6,
+    "sat_kbit": 96.0,
+    "paced_kbit": 96.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_3->MVAU_rtl_1",
+    "sat_depth": 32768,
+    "paced_depth": 8192,
+    "width_bits": 24,
+    "sat_kbit": 768.0,
+    "paced_kbit": 192.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_4->MVAU_rtl_2",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_5->MVAU_rtl_3",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_6->FMPadding_rtl_1",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 48,
+    "sat_kbit": 1.5,
+    "paced_kbit": 1.5
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_7->ConvolutionInputGenerator_rtl_1",
+    "sat_depth": 32768,
+    "paced_depth": 32768,
+    "width_bits": 6,
+    "sat_kbit": 192.0,
+    "paced_kbit": 192.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_8->MVAU_rtl_4",
+    "sat_depth": 16384,
+    "paced_depth": 16384,
+    "width_bits": 24,
+    "sat_kbit": 384.0,
+    "paced_kbit": 384.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_9->MVAU_rtl_5",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "Thresholding_rtl_0->DuplicateStreams_hls_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_1->AddStreams_hls_0",
+    "sat_depth": 131072,
+    "paced_depth": 32768,
+    "width_bits": 6,
+    "sat_kbit": 768.0,
+    "paced_kbit": 192.0
+   },
+   {
+    "edge": "Thresholding_rtl_10->DuplicateStreams_hls_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_11->FMPadding_Pixel_hls_0",
+    "sat_depth": 54,
+    "paced_depth": 54,
+    "width_bits": 6,
+    "sat_kbit": 0.31640625,
+    "paced_kbit": 0.31640625
+   },
+   {
+    "edge": "Thresholding_rtl_12->StreamingDataWidthConverter_rtl_12",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_13->AddStreams_hls_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_14->StreamingDataWidthConverter_rtl_18",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_15->AddStreams_hls_2",
+    "sat_depth": 4096,
+    "paced_depth": 4096,
+    "width_bits": 6,
+    "sat_kbit": 24.0,
+    "paced_kbit": 24.0
+   },
+   {
+    "edge": "Thresholding_rtl_2->StreamingDataWidthConverter_rtl_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_3->StreamingDataWidthConverter_rtl_4",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_4->AddStreams_hls_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_5->DuplicateStreams_hls_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_6->AddStreams_hls_1",
+    "sat_depth": 65536,
+    "paced_depth": 65536,
+    "width_bits": 6,
+    "sat_kbit": 384.0,
+    "paced_kbit": 384.0
+   },
+   {
+    "edge": "Thresholding_rtl_7->StreamingDataWidthConverter_rtl_6",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_8->StreamingDataWidthConverter_rtl_9",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_9->AddStreams_hls_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "UpsampleNearestNeighbour_hls_0->FMPadding_rtl_3",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 96,
+    "sat_kbit": 3.0,
+    "paced_kbit": 3.0
+   },
+   {
+    "edge": "VVAU_hls_0->StreamingDataWidthConverter_rtl_17",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 60,
+    "sat_kbit": 0.1171875,
+    "paced_kbit": 0.1171875
+   }
+  ]
+ },
+ "6": {
+  "folding_mismatch_nodes": [],
+  "sat_mbit": 3.3833465576171875,
+  "paced_mbit": 0.13760757446289062,
+  "n_fifos_sat": 65,
+  "n_fifos_paced": 65,
+  "edges": [
+   {
+    "edge": "AddStreams_hls_0->Thresholding_rtl_5",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "AddStreams_hls_1->Thresholding_rtl_10",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "AddStreams_hls_2->OUT",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_0->StreamingDataWidthConverter_rtl_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_1->StreamingDataWidthConverter_rtl_8",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_2->VVAU_hls_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 24,
+    "sat_kbit": 0.046875,
+    "paced_kbit": 0.046875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_3->StreamingDataWidthConverter_rtl_15",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 12,
+    "sat_kbit": 0.0234375,
+    "paced_kbit": 0.0234375
+   },
+   {
+    "edge": "DuplicateStreams_hls_0->StreamingDataWidthConverter_rtl_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_0->Thresholding_rtl_1",
+    "sat_depth": 32768,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 192.0,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_1->StreamingDataWidthConverter_rtl_5",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_1->Thresholding_rtl_6",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_2->StreamingDataWidthConverter_rtl_10",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_2->StreamingDataWidthConverter_rtl_11",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "FMPadding_Pixel_hls_0->StreamingDataWidthConverter_rtl_13",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "FMPadding_rtl_0->StreamingDataWidthConverter_rtl_2",
+    "sat_depth": 203,
+    "paced_depth": 202,
+    "width_bits": 24,
+    "sat_kbit": 4.7578125,
+    "paced_kbit": 4.734375
+   },
+   {
+    "edge": "FMPadding_rtl_1->StreamingDataWidthConverter_rtl_7",
+    "sat_depth": 197,
+    "paced_depth": 197,
+    "width_bits": 24,
+    "sat_kbit": 4.6171875,
+    "paced_kbit": 4.6171875
+   },
+   {
+    "edge": "FMPadding_rtl_2->StreamingDataWidthConverter_rtl_14",
+    "sat_depth": 512,
+    "paced_depth": 512,
+    "width_bits": 24,
+    "sat_kbit": 12.0,
+    "paced_kbit": 12.0
+   },
+   {
+    "edge": "FMPadding_rtl_3->ConvolutionInputGenerator_rtl_2",
+    "sat_depth": 1024,
+    "paced_depth": 1024,
+    "width_bits": 24,
+    "sat_kbit": 24.0,
+    "paced_kbit": 24.0
+   },
+   {
+    "edge": "IN->Thresholding_rtl_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "MVAU_rtl_0->Thresholding_rtl_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_1->Thresholding_rtl_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_2->Thresholding_rtl_4",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 16,
+    "sat_kbit": 0.03125,
+    "paced_kbit": 0.03125
+   },
+   {
+    "edge": "MVAU_rtl_3->Thresholding_rtl_7",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 14,
+    "sat_kbit": 0.02734375,
+    "paced_kbit": 0.02734375
+   },
+   {
+    "edge": "MVAU_rtl_4->Thresholding_rtl_8",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "MVAU_rtl_5->Thresholding_rtl_9",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 17,
+    "sat_kbit": 0.033203125,
+    "paced_kbit": 0.033203125
+   },
+   {
+    "edge": "MVAU_rtl_6->Thresholding_rtl_12",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 14,
+    "sat_kbit": 0.02734375,
+    "paced_kbit": 0.02734375
+   },
+   {
+    "edge": "MVAU_rtl_7->Thresholding_rtl_11",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 14,
+    "sat_kbit": 0.02734375,
+    "paced_kbit": 0.02734375
+   },
+   {
+    "edge": "MVAU_rtl_8->Thresholding_rtl_14",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 14,
+    "sat_kbit": 0.02734375,
+    "paced_kbit": 0.02734375
+   },
+   {
+    "edge": "MVAU_rtl_9->Thresholding_rtl_15",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 14,
+    "sat_kbit": 0.02734375,
+    "paced_kbit": 0.02734375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_0->MVAU_rtl_0",
+    "sat_depth": 131072,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 1536.0,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_1->FMPadding_rtl_0",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 24,
+    "sat_kbit": 0.75,
+    "paced_kbit": 0.75
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_10->MVAU_rtl_7",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_11->MVAU_rtl_6",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_12->UpsampleNearestNeighbour_hls_0",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 24,
+    "sat_kbit": 0.75,
+    "paced_kbit": 0.75
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_13->FMPadding_rtl_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 24,
+    "sat_kbit": 0.046875,
+    "paced_kbit": 0.046875
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_14->ConvolutionInputGenerator_rtl_3",
+    "sat_depth": 1024,
+    "paced_depth": 1024,
+    "width_bits": 12,
+    "sat_kbit": 12.0,
+    "paced_kbit": 12.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_15->MVAU_rtl_8",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 48,
+    "sat_kbit": 0.09375,
+    "paced_kbit": 0.09375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_16->Thresholding_rtl_13",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 15,
+    "sat_kbit": 0.029296875,
+    "paced_kbit": 0.029296875
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_17->MVAU_rtl_9",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 12,
+    "sat_kbit": 0.0234375,
+    "paced_kbit": 0.0234375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_2->ConvolutionInputGenerator_rtl_0",
+    "sat_depth": 16384,
+    "paced_depth": 2048,
+    "width_bits": 6,
+    "sat_kbit": 96.0,
+    "paced_kbit": 12.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_3->MVAU_rtl_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 24,
+    "sat_kbit": 0.046875,
+    "paced_kbit": 0.046875
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_4->MVAU_rtl_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 12,
+    "sat_kbit": 0.0234375,
+    "paced_kbit": 0.0234375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_5->MVAU_rtl_3",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 12,
+    "sat_kbit": 0.375,
+    "paced_kbit": 0.375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_6->FMPadding_rtl_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 24,
+    "sat_kbit": 0.046875,
+    "paced_kbit": 0.046875
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_7->ConvolutionInputGenerator_rtl_1",
+    "sat_depth": 1024,
+    "paced_depth": 1024,
+    "width_bits": 6,
+    "sat_kbit": 6.0,
+    "paced_kbit": 6.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_8->MVAU_rtl_4",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 24,
+    "sat_kbit": 0.046875,
+    "paced_kbit": 0.046875
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_9->MVAU_rtl_5",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 12,
+    "sat_kbit": 0.0234375,
+    "paced_kbit": 0.0234375
+   },
+   {
+    "edge": "Thresholding_rtl_0->DuplicateStreams_hls_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_1->AddStreams_hls_0",
+    "sat_depth": 262144,
+    "paced_depth": 4096,
+    "width_bits": 6,
+    "sat_kbit": 1536.0,
+    "paced_kbit": 24.0
+   },
+   {
+    "edge": "Thresholding_rtl_10->DuplicateStreams_hls_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_11->FMPadding_Pixel_hls_0",
+    "sat_depth": 111,
+    "paced_depth": 111,
+    "width_bits": 6,
+    "sat_kbit": 0.650390625,
+    "paced_kbit": 0.650390625
+   },
+   {
+    "edge": "Thresholding_rtl_12->StreamingDataWidthConverter_rtl_12",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_13->AddStreams_hls_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_14->StreamingDataWidthConverter_rtl_17",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_15->AddStreams_hls_2",
+    "sat_depth": 2048,
+    "paced_depth": 2048,
+    "width_bits": 6,
+    "sat_kbit": 12.0,
+    "paced_kbit": 12.0
+   },
+   {
+    "edge": "Thresholding_rtl_2->StreamingDataWidthConverter_rtl_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_3->StreamingDataWidthConverter_rtl_4",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_4->AddStreams_hls_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_5->DuplicateStreams_hls_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_6->AddStreams_hls_1",
+    "sat_depth": 4096,
+    "paced_depth": 4096,
+    "width_bits": 6,
+    "sat_kbit": 24.0,
+    "paced_kbit": 24.0
+   },
+   {
+    "edge": "Thresholding_rtl_7->StreamingDataWidthConverter_rtl_6",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_8->StreamingDataWidthConverter_rtl_9",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_9->AddStreams_hls_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "UpsampleNearestNeighbour_hls_0->FMPadding_rtl_3",
+    "sat_depth": 32,
+    "paced_depth": 32,
+    "width_bits": 24,
+    "sat_kbit": 0.75,
+    "paced_kbit": 0.75
+   },
+   {
+    "edge": "VVAU_hls_0->StreamingDataWidthConverter_rtl_16",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 60,
+    "sat_kbit": 0.1171875,
+    "paced_kbit": 0.1171875
+   }
+  ]
+ },
+ "7": {
+  "folding_mismatch_nodes": [],
+  "sat_mbit": 56.880510330200195,
+  "paced_mbit": 54.414045333862305,
+  "n_fifos_sat": 25,
+  "n_fifos_paced": 25,
+  "edges": [
+   {
+    "edge": "AddStreams_hls_0->Thresholding_rtl_5",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "ChannelwiseOp_hls_0->StreamingDataWidthConverter_rtl_3",
+    "sat_depth": 262144,
+    "paced_depth": 262144,
+    "width_bits": 80,
+    "sat_kbit": 20480.0,
+    "paced_kbit": 20480.0
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_0->VVAU_hls_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "ConvolutionInputGenerator_rtl_1->StreamingDataWidthConverter_rtl_2",
+    "sat_depth": 512,
+    "paced_depth": 512,
+    "width_bits": 96,
+    "sat_kbit": 48.0,
+    "paced_kbit": 48.0
+   },
+   {
+    "edge": "DuplicateStreams_hls_0->MVAU_rtl_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "DuplicateStreams_hls_0->Thresholding_rtl_1",
+    "sat_depth": 32768,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 192.0,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "FMPadding_Pixel_hls_0->StreamingDataWidthConverter_rtl_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 12,
+    "sat_kbit": 0.0234375,
+    "paced_kbit": 0.0234375
+   },
+   {
+    "edge": "FMPadding_rtl_0->ConvolutionInputGenerator_rtl_0",
+    "sat_depth": 131072,
+    "paced_depth": 1024,
+    "width_bits": 6,
+    "sat_kbit": 768.0,
+    "paced_kbit": 6.0
+   },
+   {
+    "edge": "FMPadding_rtl_1->ConvolutionInputGenerator_rtl_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 24,
+    "sat_kbit": 0.046875,
+    "paced_kbit": 0.046875
+   },
+   {
+    "edge": "IN->Thresholding_rtl_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 7,
+    "sat_kbit": 0.013671875,
+    "paced_kbit": 0.013671875
+   },
+   {
+    "edge": "LabelSelect_hls_0->OUT",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 8,
+    "sat_kbit": 0.015625,
+    "paced_kbit": 0.015625
+   },
+   {
+    "edge": "MVAU_rtl_0->Thresholding_rtl_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 13,
+    "sat_kbit": 0.025390625,
+    "paced_kbit": 0.025390625
+   },
+   {
+    "edge": "MVAU_rtl_1->Thresholding_rtl_4",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 14,
+    "sat_kbit": 0.02734375,
+    "paced_kbit": 0.02734375
+   },
+   {
+    "edge": "MVAU_rtl_2->ChannelwiseOp_hls_0",
+    "sat_depth": 32768,
+    "paced_depth": 32768,
+    "width_bits": 75,
+    "sat_kbit": 2400.0,
+    "paced_kbit": 2400.0
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_0->FMPadding_Pixel_hls_0",
+    "sat_depth": 225,
+    "paced_depth": 225,
+    "width_bits": 12,
+    "sat_kbit": 2.63671875,
+    "paced_kbit": 2.63671875
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_1->FMPadding_rtl_1",
+    "sat_depth": 113,
+    "paced_depth": 113,
+    "width_bits": 24,
+    "sat_kbit": 2.6484375,
+    "paced_kbit": 2.6484375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_2->MVAU_rtl_2",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 48,
+    "sat_kbit": 0.09375,
+    "paced_kbit": 0.09375
+   },
+   {
+    "edge": "StreamingDataWidthConverter_rtl_3->LabelSelect_hls_0",
+    "sat_depth": 2097152,
+    "paced_depth": 2097152,
+    "width_bits": 16,
+    "sat_kbit": 32768.0,
+    "paced_kbit": 32768.0
+   },
+   {
+    "edge": "Thresholding_rtl_0->DuplicateStreams_hls_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_1->AddStreams_hls_0",
+    "sat_depth": 262144,
+    "paced_depth": 2048,
+    "width_bits": 6,
+    "sat_kbit": 1536.0,
+    "paced_kbit": 12.0
+   },
+   {
+    "edge": "Thresholding_rtl_2->FMPadding_rtl_0",
+    "sat_depth": 8192,
+    "paced_depth": 56,
+    "width_bits": 6,
+    "sat_kbit": 48.0,
+    "paced_kbit": 0.328125
+   },
+   {
+    "edge": "Thresholding_rtl_3->MVAU_rtl_1",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_4->AddStreams_hls_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "Thresholding_rtl_5->StreamingDataWidthConverter_rtl_0",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 6,
+    "sat_kbit": 0.01171875,
+    "paced_kbit": 0.01171875
+   },
+   {
+    "edge": "VVAU_hls_0->Thresholding_rtl_3",
+    "sat_depth": 2,
+    "paced_depth": 2,
+    "width_bits": 14,
+    "sat_kbit": 0.02734375,
+    "paced_kbit": 0.02734375
+   }
+  ]
+ }
+}
