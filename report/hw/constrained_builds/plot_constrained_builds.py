@@ -177,58 +177,71 @@ def plot_estimated(costs: dict, dice: dict, fp32: float, out_path: Path) -> None
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
 
+    # Report version: drawn at the final print width (3.5 in, one IEEE column) so the text below is its real size in the paper (no scaling down in LaTeX: \includegraphics[width=\columnwidth]).
+    fs_label, fs_tick, fs_note, fs_leg = 8.5, 8, 8, 7.5
     plt.rcParams["hatch.linewidth"] = 0.5       # thin hatch lines
-    fig, ax = plt.subplots(figsize=(7.5, 5.8), facecolor=SURFACE)
+    fig, ax = plt.subplots(figsize=(3.5, 3.4), facecolor=SURFACE)
     _style_axes(ax)
-    ax.axhline(fp32, color=INK, linestyle=":", linewidth=1.2, zorder=1, label=f"FP32 baseline ({fp32:.4f})")
-    ax.axvline(CAP_PCT, color=INK, linewidth=1.2, alpha=0.6, zorder=1, label="ILP resource cap (40%)")
+    ax.axhline(fp32, color=INK, linestyle=":", linewidth=1.0, zorder=1, label=f"FP32 ({fp32:.4f})")
+    ax.axvline(CAP_PCT, color=INK, linewidth=1.2, alpha=0.6, zorder=1, label=f"ILP cap ({CAP_PCT:.0f}%)")
     keys = list(costs)
     for key in keys:
         y = dice[key]
         c = costs[key]
         color = scheme_color(key)
         xs = {r: pct(c, "model", r) for r in EST_RESOURCE_STYLE}
-        ax.plot([min(xs.values()), max(xs.values())], [y, y], color=color, linestyle=CAL_STYLE, linewidth=LINE_WIDTH, alpha=LINE_ALPHA, zorder=3)
+        emphasis = 1.8 if key == "mixed468" else 1.0     # the mixed-precision solution is drawn heavier
+        ax.plot([min(xs.values()), max(xs.values())], [y, y], color=color, linestyle=CAL_STYLE, linewidth=LINE_WIDTH * emphasis, alpha=LINE_ALPHA, zorder=3)
         for z, (r, (m, _)) in enumerate(EST_RESOURCE_STYLE.items()):
-            ax.plot([xs[r]], [y], marker=m, markersize=EST_MARK_SIZE, markeredgecolor=color, markeredgewidth=EST_MARK_WIDTH, alpha=MARK_ALPHA, linestyle="none", zorder=5 + z)
+            ax.plot([xs[r]], [y], marker=m, markersize=EST_MARK_SIZE - 1, markeredgecolor=color, markeredgewidth=EST_MARK_WIDTH * emphasis, alpha=MARK_ALPHA, linestyle="none", zorder=5 + z)
+        name = f"{c['label']} ({y:.3f})"     # scheme and its post-QAT Dice, so the accuracy gain per scheme reads off the plot
         if key == "mixed468":        # sits just under the INT8 line and above the INT6 line, so its label goes right of its markers
-            ax.annotate(c["label"], (max(xs.values()), y), xytext=(14, 0), textcoords="offset points", ha="left", va="center", color=color, fontsize=10, fontweight="bold")
+            ax.annotate(name, (max(xs.values()), y), xytext=(7, 0), textcoords="offset points", ha="left", va="center", color=color, fontsize=fs_note, fontweight="bold")
         else:
-            ax.annotate(c["label"], (min(xs.values()), y), xytext=(0, 12), textcoords="offset points", ha="left", color=color, fontsize=10, fontweight="bold")
-    ax.set_xlabel("Estimated Resource Consumption (%)", color=INK, fontsize=11, fontweight="bold")
-    ax.set_ylabel("Dice", color=INK, fontsize=11, fontweight="bold")
-    ax.set_title("Dice vs. Estimated Resource Consumption", color=INK, fontsize=12, fontweight="bold")
+            ax.annotate(name, (min(xs.values()), y), xytext=(0, 5), textcoords="offset points", ha="left", color=color, fontsize=fs_note, fontweight="bold")
+    ax.set_xlabel("Estimated resource use (% of device)", color=INK, fontsize=fs_label, fontweight="bold")
+    ax.set_ylabel("Dice", color=INK, fontsize=fs_label, fontweight="bold")
     lo, hi = ax.get_xlim()
     ax.set_xlim(max(0, lo), max(hi, CAP_PCT + 3))
     ax.set_ylim(top=0.82)
     x_right = ax.get_xlim()[1]
-    ax.axvspan(CAP_PCT, x_right, facecolor=INFEASIBLE_BG, edgecolor=INFEASIBLE_HATCH, hatch="/////", linewidth=0, alpha=0.5, zorder=0, label="Infeasible")     # right of the cap: light blue, fine grey diagonal hatch
+    ax.axvspan(CAP_PCT, x_right, facecolor=INFEASIBLE_BG, edgecolor=INFEASIBLE_HATCH, hatch="/////", linewidth=0, alpha=0.5, zorder=0)     # right of the cap: light blue, fine grey diagonal hatch
+    ax.text(CAP_PCT + 1, 0.8185, "Over cap\n(infeasible)", ha="left", va="top", color=INK, fontsize=fs_note, fontweight="bold", zorder=7)
     ax.set_xlim(max(0, lo), x_right)
-    ax.set_xticks(range(5 * int(-(-ax.get_xlim()[0] // 5)), int(x_right) + 1, 5))        # a tick (and a faint vertical line) every 5 %
+    ax.set_xticks(range(10 * int(-(-ax.get_xlim()[0] // 10)), int(x_right) + 1, 10))        # a tick (and a faint vertical line) every 10 %
     ax.grid(axis="x", color="#e1e0d9", linewidth=0.5, alpha=0.8, zorder=0)
+    ax.tick_params(labelsize=fs_tick)
     for t in ax.get_xticklabels() + ax.get_yticklabels():
         t.set_fontweight("bold")
     handles, labels = ax.get_legend_handles_labels()
     for m, name in EST_RESOURCE_STYLE.values():
-        handles.append(Line2D([], [], marker=m, color="none", markeredgecolor=SECONDARY_INK, markeredgewidth=EST_MARK_WIDTH, markersize=EST_MARK_SIZE))
+        handles.append(Line2D([], [], marker=m, color="none", markeredgecolor=SECONDARY_INK, markeredgewidth=EST_MARK_WIDTH, markersize=EST_MARK_SIZE - 1))
         labels.append(name)
-    leg = ax.legend(handles, labels, loc="lower right", frameon=True, facecolor=SURFACE, edgecolor=GUIDE_COLOR, fontsize=7.5, markerscale=0.75, borderpad=0.5, labelspacing=0.35, labelcolor=SECONDARY_INK)
+    leg = ax.legend(handles, labels, loc="lower right", frameon=True, facecolor=SURFACE, edgecolor=GUIDE_COLOR, fontsize=fs_leg, borderpad=0.4, labelspacing=0.3, handlelength=1.6, labelcolor=SECONDARY_INK)
     for t in leg.get_texts():
         t.set_fontweight("bold")
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=SURFACE)
+    fig.tight_layout(pad=0.4)
+    fig.savefig(out_path, dpi=300, bbox_inches="tight", facecolor=SURFACE)
     plt.close(fig)
     print(f"Wrote {out_path}")
 
 
 def main() -> int:
+    import argparse
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--only-estimated", action="store_true", help="write only the report figure (Dice vs estimated resources), skip the CSV and the other plots")
+    ap.add_argument("--estimated-out", type=Path, default=HERE / "s12_512_constrained_estimated.png", help="output path of the estimated-resources figure")
+    args = ap.parse_args()
     costs = load_costs()
+    dice, fp32 = load_dice()
+    if args.only_estimated:
+        plot_estimated(costs, dice, fp32, args.estimated_out)
+        return 0
     write_cost_csv(costs, HERE / "modelled_vs_real_cost.csv")
     print(open(HERE / "modelled_vs_real_cost.csv").read())
-    dice, fp32 = load_dice()
     for resource in RESOURCES:
         plot_one(resource, costs, dice, fp32, HERE / f"s12_512_constrained_{resource}.png")
-    plot_estimated(costs, dice, fp32, HERE / "s12_512_constrained_estimated.png")
+    plot_estimated(costs, dice, fp32, args.estimated_out)
     for key, c in costs.items():
         print(f"combined modelled {c['label']}: {pct(c, 'model', 'combined'):.2f}%  real: {pct(c, 'real', 'combined')}")
     return 0
