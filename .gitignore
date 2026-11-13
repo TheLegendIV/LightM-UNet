@@ -25,6 +25,15 @@ data/nnUNet_preprocessed/*
 # data/*.log
 *.pth
 
+# Exceptions for the checkpoints that reproduce_flow.ipynb reuses (each under 5 MB). Real .pth files, because
+# nnU-Net's -pretrained_weights, nas/collect_results.py and ILP/layer_sensitivity.py need that exact name (a
+# checkpoint_best.pth.txt copy is not enough for them). Ours-S run 1, Ours-S run 2, Ours-L (FP32), and the uniform
+# INT8 QAT checkpoint (restored from its tracked .pth.txt copy, which is byte-identical).
+!data/nnUNet_results/Dataset509_ARCADE_1x1_4c/nnUNetTrainerENet_12_dense_relu__nnUNetPlans__2d/fold_0/checkpoint_best.pth
+!data/nnUNet_results/Dataset509_ARCADE_1x1_4c/nnUNetTrainerENet_12_dense_relu_warmstart150ep__nnUNetPlans__2d/fold_0/checkpoint_best.pth
+!data/nnUNet_results/Dataset509_ARCADE_1x1_4c/nnUNetTrainerENet_12_dense_relu_u1__nnUNetPlans__2d/fold_0/checkpoint_best.pth
+!data/nnUNet_results/Dataset509_ARCADE_1x1_4c/nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_bilinear_upsample_256_perlayer_12_dense_relu_warmstart150ep_bilinear_uniform_int8_perlayer_ft15ep__nnUNetPlans__2d/fold_0/checkpoint_best.pth
+
 # Raw datasets: no longer pushed at all (both Dataset509_ARCADE_1x1_4c and
 # Dataset511_ARCADE_1x1_3c now exist as local files on the machines that need
 # them -- the 3c one is regenerable any time from Dataset509 via
