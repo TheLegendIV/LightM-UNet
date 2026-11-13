@@ -1,0 +1,12 @@
+1794097566.042665614 START
+1794097582.219414228 [11/08/2026-01:26:22] [TRT] [W] CUDA lazy loading is not enabled. Enabling it can significantly reduce device memory usage and speed up TensorRT initialization. See "Lazy Loading" section of CUDA documentation https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#lazy-loading
+1794097599.570079485 stream_warm run 1/5: 0.981 s (wall 0.991 s)
+1794097600.550921917 stream_warm run 2/5: 1.020 s (wall 1.021 s)
+1794097601.492411306 stream_warm run 3/5: 0.937 s (wall 0.937 s)
+1794097602.993435712 stream_warm run 4/5: 1.501 s (wall 1.501 s)
+1794097604.560300422 stream_warm run 5/5: 1.554 s (wall 1.558 s)
+1794097617.296887808 accuracy (300 images): dice 0.7915  binary 0.7293  LAD 0.6785  RCA 0.8930  LCX 0.8045  LM 0.7901
+1794097617.359130385 {'mode': 'stream_warm', 'runs': 5, 'total_s': 1.1986, 'total_s_std': 0.302, 'latency_ms_mean': 3.9953, 'latency_ms_std': 1.0066, 'throughput_fps': 250.293}
+1794097617.363951311 {'mode': 'single_image', 'runs': 200, 'latency_ms_mean': 4.1023, 'latency_ms_std': 1.2387, 'latency_ms_median': 3.4476}
+1794097617.369548659 wrote /workspace/LightM-UNet/report/hw/final_results/benchmark_s12_512.csv
+1794097620.040354743 END rc=0

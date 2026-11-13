@@ -18,6 +18,9 @@ Experiments (the `exp` column):
                    Same L2 norm per window as the real skip (4*(v/2)^2 = v^2),
                    so it removes the norm confound of nearest_quarter (whose
                    norm is halved); the window SUM is doubled instead.
+  nearest          no indices at all: v written unscaled into all 4 sub-pixels
+                   (plain nearest-neighbour 2x upsampling of the skip; window
+                   sum 4v, L2 norm 2v). Only available via skip_ablation.py.
 
 Per (width, exp) it records:
   * Dice on the validation split (nnU-Net fold-0 `val` list), same metric as
@@ -192,6 +195,8 @@ class SkipPatch:
                 main = F.interpolate(main, size=output_size[2:], mode="nearest") * 0.25
             elif patch.mode == "nearest_half":
                 main = F.interpolate(main, size=output_size[2:], mode="nearest") * 0.5
+            elif patch.mode == "nearest":
+                main = F.interpolate(main, size=output_size[2:], mode="nearest")
             else:
                 raise ValueError(patch.mode)
             out = block.reduce(x)

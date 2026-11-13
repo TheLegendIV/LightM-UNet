@@ -1,0 +1,7 @@
+run,device,rc,throughput_fps,timed_streams,timed_s,n_samples_timed,clock_mean_mhz,clock_median_mhz,clock_min_mhz,clock_max_mhz,clock_std_mhz,clock_pct_of_max,clock_mean_all_cores_mhz,p_core_mhz,e_core_mhz,util_pct,board_power_w,temp_c_start,temp_c_end,throttle_reasons,clock_whole_run_mean_mhz,whole_run_samples
+gpu_fp32_default,cuda,0,60.3,5,24.88,1206,1138.7,1192.0,615.0,1455.0,205.1,54.2,,,,33.0,13.4,62.0,64.0,GpuIdle,629.8,5186
+gpu_fp32_strict,cuda,0,58.899,5,25.47,1215,1042.5,1095.0,487.0,1327.0,220.2,49.6,,,,33.0,12.2,62.0,64.0,GpuIdle,606.5,4754
+gpu_fp16_autocast,cuda,0,49.529,5,30.29,1479,713.3,697.0,472.0,1327.0,167.5,34.0,,,,33.0,9.8,61.0,63.0,GpuIdle,538.7,5081
+gpu_int8_trt,cuda,0,305.983,5,4.9,112,1694.6,1702.0,1327.0,1710.0,50.7,80.7,,,,81.0,30.6,62.0,67.0,GpuIdle+SwPowerCap,669.7,3011
+cpu_fp32,cpu,0,10.478,5,143.16,479,1213.1,1201.2,879.2,2792.3,224.8,,1170.2,1423.4,917.1,36.0,,,,,1298.3,658
+cpu_int8_ort,cpu,0,44.709,5,33.55,110,1234.3,1019.9,864.8,2838.7,580.5,,1203.4,1384.7,1022.8,37.0,,,,,1389.7,287

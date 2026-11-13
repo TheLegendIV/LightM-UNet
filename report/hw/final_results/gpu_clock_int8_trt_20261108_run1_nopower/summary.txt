@@ -1,0 +1,12 @@
+GPU clock summary, 2363 NVML samples, median interval 21 ms
+
+idle before run (3 s)              n= 147   3.00s  SM mean   1327 med   1327 min  1327 max  1327 MHz (  63% of 2100)  mem  6000  P  10.2 W (max 10.5)  T 61->61 C  util   0%  throttle: GpuIdle
+stream_warm 1/5 (cuda 0.981 s)     n=  25   0.99s  SM mean   1631 med   1702 min  1327 max  1710 MHz (  78% of 2100)  mem  6000  P  15.3 W (max 29.0)  T 62->65 C  util  86%  throttle: GpuIdle+SwPowerCap
+stream_warm 2/5 (cuda 1.020 s)     n=  29   1.02s  SM mean   1695 med   1702 min  1680 max  1702 MHz (  81% of 2100)  mem  6000  P  33.3 W (max 34.0)  T 65->66 C  util  77%  throttle: SwPowerCap
+stream_warm 3/5 (cuda 0.937 s)     n=  17   0.94s  SM mean   1683 med   1680 min  1672 max  1702 MHz (  80% of 2100)  mem  6000  P  33.5 W (max 34.1)  T 66->67 C  util  82%  throttle: SwPowerCap
+stream_warm 4/5 (cuda 1.501 s)     n=   7   1.50s  SM mean   1702 med   1702 min  1702 max  1702 MHz (  81% of 2100)  mem  6000  P  27.1 W (max 27.3)  T 67->67 C  util  56%  throttle: GpuIdle
+stream_warm 5/5 (cuda 1.554 s)     n=  16   1.56s  SM mean   1702 med   1702 min  1702 max  1702 MHz (  81% of 2100)  mem  6000  P  27.3 W (max 28.7)  T 67->67 C  util  51%  throttle: none
+all timed streams                  n=  93   5.98s  SM mean   1677 med   1702 min  1327 max  1710 MHz (  80% of 2100)  mem  6000  P  27.0 W (max 34.1)  T 62->67 C  util  74%  throttle: GpuIdle+SwPowerCap
+single_image phase (~0.86 s, approx) n=  43   0.86s  SM mean   1666 med   1702 min  1342 max  1702 MHz (  79% of 2100)  mem  6000  P  28.9 W (max 30.1)  T 67->68 C  util  61%  throttle: SwThermalSlowdown
+whole script (load .. accuracy)    n=2094  54.00s  SM mean    791 med    562 min   210 max  1710 MHz (  38% of 2100)  mem  3824  P  10.6 W (max 34.1)  T 61->63 C  util  12%  throttle: GpuIdle+SwPowerCap+SwThermalSlowdown
+idle after run (3 s)               n= 122   3.00s  SM mean    210 med    210 min   210 max   210 MHz (  10% of 2100)  mem   468  P   7.2 W (max  7.5)  T 63->62 C  util   0%  throttle: GpuIdle

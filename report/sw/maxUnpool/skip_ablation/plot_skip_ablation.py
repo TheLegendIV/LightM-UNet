@@ -2,7 +2,8 @@
 skip_ablation_results.csv (test split). Needs pandas + matplotlib. Writes:
   dice_drop_vs_width.png/.csv  % Dice decrease from zeroing the skip, max-unpool vs bilinear
   dice_vs_width.png            absolute Dice of the five skip-branch arms on the max-unpool nets
-  dice_delta_vs_width.png      the same arms as Dice change vs control (points)
+  dice_delta_vs_width.png      the same arms as Dice change vs control (points); also written as .pdf and .svg (report figure)
+  dice_delta_vs_width_nearest.png  sister of the last: plain nearest-neighbour skip instead of the v/4 and v/2 arms
   maxunpool_arms.csv           the table behind the last two
 """
 from __future__ import annotations
@@ -16,6 +17,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.legend_handler import HandlerTuple  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
+from matplotlib.ticker import MultipleLocator  # noqa: E402
 from matplotlib.transforms import offset_copy  # noqa: E402
 import pandas as pd  # noqa: E402
 
@@ -67,13 +69,13 @@ print(wide.round(4).to_string(index=False))
 
 
 # --- Five skip-branch arms on the max-unpool nets -----------------------------
-def finish(ax, title: str, ylabel: str, legend_loc: str, ncol: int = 1) -> None:
+def finish(ax, title: str, ylabel: str, legend_loc: str, ncol: int = 1, xlabel: str = "Channel Width Multiplier") -> None:
     ax.set_xscale("log", base=2)
     ax.set_xticks(divs)
     ax.set_xticklabels([f"1/{int(d)}" if d > 1 else "1" for d in divs])
     ax.minorticks_off()
     ax.invert_xaxis()  # narrowest width (1/16) on the left
-    ns.style_title_and_labels(ax, title, "Channel Width Multiplier", ylabel)
+    ns.style_title_and_labels(ax, title, xlabel, ylabel)
     ax.figure.canvas.draw()
     for t in ax.get_xticklabels() + ax.get_yticklabels():
         t.set_fontweight("bold")
@@ -90,12 +92,12 @@ def finish(ax, title: str, ylabel: str, legend_loc: str, ncol: int = 1) -> None:
     ax.figure.tight_layout()
 
 
-RANDOM_LABEL = "Random Indices"
+RANDOM_LABEL = "v in random position"
 mu =wide[wide["curve"] == "maxunpool"].sort_values("divisor").reset_index(drop=True)
 rand_cols = sorted(c for c in mu.columns if c.startswith("random_pc_s") and mu[c].notna().all())
 mu["random"] = mu[rand_cols].mean(axis=1)
 mu["random_min"], mu["random_max"] = mu[rand_cols].min(axis=1), mu[rand_cols].max(axis=1)
-for col in ("noskip", "random", "random_min", "random_max", "nearest_quarter", "nearest_half"):
+for col in ("noskip", "random", "random_min", "random_max", "nearest_quarter", "nearest_half", "nearest"):
     mu[f"d_{col}"] = (mu[col] - mu["control"]) / mu["control"] * 100  # % change vs control
     mu[f"dpts_{col}"] = (mu[col] - mu["control"]) * 100  # Dice points
 bl = wide[wide["curve"] == "bilinear"].sort_values("divisor")
@@ -104,7 +106,7 @@ mu["bilinear"], mu["bilinear_noskip"] = bl["control"].values, bl["noskip"].value
 for col in ("bilinear", "bilinear_noskip"):  # change vs the MaxUnpool control, same baseline as the arms
     mu[f"d_{col}"] = (mu[col] - mu["control"]) / mu["control"] * 100
     mu[f"dpts_{col}"] = (mu[col] - mu["control"]) * 100
-keep = ["divisor", "control", "noskip", "random", "random_min", "random_max", "nearest_quarter", "nearest_half",
+keep = ["divisor", "control", "noskip", "random", "random_min", "random_max", "nearest_quarter", "nearest_half", "nearest",
         "bilinear", "bilinear_noskip"]
 mu[keep + [c for c in mu.columns if c.startswith(("d_", "dpts_"))]].to_csv(HERE / "maxunpool_arms.csv", index=False)
 print(f"random arm = mean of {rand_cols}")
@@ -114,8 +116,8 @@ print(f"random arm = mean of {rand_cols}")
 ARMS = [
     ("noskip", "MaxUnpool No Skip", ns.INK, (0, (3, 2)), 1.0, "+", 6),
     ("random", RANDOM_LABEL, ns.SERIES_COLORS[1], "-", 1.0, "x", 5),
-    ("nearest_quarter", "v/4", ns.SERIES_COLORS[4], "-", 1.0, (6, 2, 0), 6),  # asterisk
-    ("nearest_half", "v/2", ns.SERIES_COLORS[5], "-", 1.0, "o", 4),
+    ("nearest_quarter", "v/4 per 2×2 position", ns.SERIES_COLORS[4], "-", 1.0, (6, 2, 0), 6),  # asterisk
+    ("nearest_half", "v/2 per 2×2 position", ns.SERIES_COLORS[5], "-", 1.0, "o", 4),
 ]
 CONTROL = ("control", "MaxUnpool", ns.SERIES_COLORS[2], "-", 2.4)
 
@@ -155,16 +157,16 @@ class SideBySide(tuple):
 
 
 def add_legend(ax, loc: str, ncol: int = 1, extra=None, anchor=None, handlelength: float = 3.6,
-               columnspacing: float = 2.0) -> None:
+               columnspacing: float = 2.0, fontsize: float = 6.5) -> None:
     handles, labels = ax.get_legend_handles_labels()
     band = getattr(ax, "random_band", None)
     if band is not None:  # one legend entry: gray min-max band under the mean line
         handles = [(band, h) if lab == RANDOM_LABEL else h for h, lab in zip(handles, labels)]
     if extra:  # bilinear's line and the out-of-range triangle share one legend entry, side by side
-        handles = [SideBySide((h, extra[0])) if lab == "Bilinear" else h for h, lab in zip(handles, labels)]
+        handles = [SideBySide((h, extra[0])) if lab.startswith("Bilinear") else h for h, lab in zip(handles, labels)]
     ax.legend(handles, labels, loc=loc, ncol=ncol, frameon=True, facecolor=ns.SURFACE, edgecolor="#c3c2b7",
               handler_map={SideBySide: HandlerTuple(ndivide=None, pad=0.2)},
-              fontsize=6.5, labelcolor=ns.SECONDARY_INK, handlelength=handlelength, columnspacing=columnspacing,
+              fontsize=fontsize, labelcolor=ns.SECONDARY_INK, handlelength=handlelength, columnspacing=columnspacing,
               borderpad=0.4, labelspacing=0.3, **({"bbox_to_anchor": anchor} if anchor else {}))
     for t in ax.get_legend().get_texts():
         t.set_fontweight("bold")
@@ -195,31 +197,55 @@ def off_scale(ax, x, y, color) -> None:
                         ha="center", va="bottom", zorder=4)
 
 
-def delta_panel(ax, ylim=(-LIM, LIM)) -> None:
+def delta_panel(ax, ylim=(-LIM, LIM), arms=None) -> None:
     """% change vs the MaxUnpool control on a plain linear axis; values outside `ylim` are drawn as
     labelled triangles at the frame edge (only the bilinear control leaves the frame; the bilinear
     no-skip run is left out of this panel, see dice_vs_width.png)."""
+    arms = ARMS if arms is None else arms
     ax.axhline(0, color=CONTROL[2], linewidth=CONTROL[4], zorder=2, label=CONTROL[1])
-    draw(ax, *ARMS[0], delta=True)  # MaxUnpool No Skip
-    ax.plot(mu["divisor"], mu["d_bilinear"], color=BLUE, linewidth=CONTROL[4], zorder=2, label="Bilinear")
-    for arm in ARMS[1:]:
+    draw(ax, *arms[0], delta=True)  # MaxUnpool No Skip
+    ax.plot(mu["divisor"], mu["d_bilinear"], color=BLUE, linewidth=CONTROL[4], zorder=2, label="Bilinear (retrained)")  # a separately trained net, unlike the inference-time arms
+    for arm in arms[1:]:
         draw(ax, *arm, delta=True)
     ax.set_ylim(*ylim)
     off_scale(ax, mu["divisor"], mu["d_bilinear"], BLUE)
-    for arm in ARMS:
+    for arm in arms:
         off_scale(ax, mu["divisor"], mu[f"d_{arm[0]}"], arm[2])
 
 
 fig, ax = plt.subplots(figsize=(5.0, 3.8), facecolor=ns.SURFACE)
 ns.style_axes(ax)
 delta_panel(ax, ylim=(-18, LIM))  # extra room below the lines for the legend
-finish(ax, "Ablation of MaxUnpool at Various Channel Widths", "Dice Change (%)", "lower right")
-add_legend(ax, "lower right", ncol=2, extra=[OOR_HANDLE], handlelength=3.2, columnspacing=1.0)
+finish(ax, "", "Dice change (%)", "lower right", xlabel="Channel width reduction (× baseline stage width)")  # report figure: no title (the LaTeX caption describes it), sentence-case axis labels
+ax.xaxis.label.set_fontsize(10)  # the long x label at 11 pt is wider than the plot and runs off the right edge
+add_legend(ax, "lower right", ncol=2, extra=[OOR_HANDLE], handlelength=3.2, columnspacing=1.0, fontsize=8)
+ax.yaxis.set_minor_locator(MultipleLocator(1))  # unnumbered tick and finer grid line every 1 % between the numbered 5 % ones
+ax.grid(axis="y", which="minor", color="#e1e0d9", linewidth=0.4, alpha=0.6, zorder=0)
+ax.tick_params(axis="y", which="minor", length=2.5)
 out = HERE / "dice_delta_vs_width.png"
 fig.savefig(out, dpi=150, bbox_inches="tight", facecolor=ns.SURFACE)
-print(f"Wrote {out}")
+with plt.rc_context({"pdf.fonttype": 42, "svg.fonttype": "path"}):  # vector copies for the report (.pdf is picked by the extension-less \includegraphics); TrueType-embedded text, SVG text as outlines
+    for ext in (".pdf", ".svg"):
+        fig.savefig(out.with_suffix(ext), bbox_inches="tight", facecolor=ns.SURFACE)
+print(f"Wrote {out} (+ .pdf, .svg)")
 print(mu[keep].round(4).to_string(index=False))
 print(mu[["divisor"] + [c for c in mu.columns if c.startswith(("d_", "dpts_"))]].round(2).to_string(index=False))
+
+
+# --- Sister of the delta figure: plain nearest-neighbour skip (v into all 4 sub-pixels) instead of the scaled v/4 and v/2 arms
+ARMS_NEAREST = [ARMS[0], ARMS[1], ("nearest", "Nearest neighbour", ns.SERIES_COLORS[4], "-", 1.0, (6, 2, 0), 6)]
+fig, ax = plt.subplots(figsize=(5.0, 3.8), facecolor=ns.SURFACE)
+ns.style_axes(ax)
+delta_panel(ax, ylim=(-18, LIM), arms=ARMS_NEAREST)
+finish(ax, "", "Dice change (%)", "lower right", xlabel="Channel width reduction (× baseline stage width)")
+ax.xaxis.label.set_fontsize(10)
+add_legend(ax, "lower right", ncol=1, extra=[OOR_HANDLE], handlelength=3.2, fontsize=8)  # one column: the nearest line leaves the frame at 1/8, a two-column legend would hide its -39 % triangle
+ax.yaxis.set_minor_locator(MultipleLocator(1))
+ax.grid(axis="y", which="minor", color="#e1e0d9", linewidth=0.4, alpha=0.6, zorder=0)
+ax.tick_params(axis="y", which="minor", length=2.5)
+out = HERE / "dice_delta_vs_width_nearest.png"
+fig.savefig(out, dpi=150, bbox_inches="tight", facecolor=ns.SURFACE)
+print(f"Wrote {out}")
 
 
 # --- Combined figure: absolute Dice (top) over % change (bottom), shared x axis --

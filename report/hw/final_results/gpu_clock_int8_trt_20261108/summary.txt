@@ -1,0 +1,12 @@
+GPU clock summary, 4215 NVML samples, median interval 22 ms
+
+idle before run (3 s)              n= 145   3.00s  SM mean   1327 med   1327 min  1327 max  1327 MHz (  63% of 2100)  mem  6000  P  10.2 W (max 10.4)  T 59->60 C  util   0%  throttle: GpuIdle
+stream_warm 1/5 (cuda 1.527 s)     n=  10   1.53s  SM mean   1672 med   1710 min  1327 max  1710 MHz (  80% of 2100)  mem  6000  P  21.9 W (max 26.8)  T 64->65 C  util  57%  throttle: GpuIdle
+stream_warm 2/5 (cuda 1.317 s)     n=  26   1.32s  SM mean   1710 med   1710 min  1710 max  1710 MHz (  81% of 2100)  mem  6000  P  27.5 W (max 29.1)  T 65->66 C  util  54%  throttle: SwPowerCap
+stream_warm 3/5 (cuda 1.037 s)     n=  25   1.04s  SM mean   1706 med   1710 min  1687 max  1710 MHz (  81% of 2100)  mem  6000  P  31.8 W (max 33.1)  T 66->67 C  util  73%  throttle: SwPowerCap
+stream_warm 4/5 (cuda 1.168 s)     n=  34   1.17s  SM mean   1708 med   1710 min  1687 max  1710 MHz (  81% of 2100)  mem  6000  P  32.8 W (max 33.6)  T 67->67 C  util  67%  throttle: SwPowerCap
+stream_warm 5/5 (cuda 1.430 s)     n=  29   1.43s  SM mean   1710 med   1710 min  1710 max  1710 MHz (  81% of 2100)  mem  6000  P  28.7 W (max 31.0)  T 67->68 C  util  56%  throttle: SwPowerCap
+all timed streams                  n= 123   6.49s  SM mean   1705 med   1710 min  1327 max  1710 MHz (  81% of 2100)  mem  6000  P  29.8 W (max 33.6)  T 64->68 C  util  62%  throttle: GpuIdle+SwPowerCap
+single_image phase (~0.73 s, approx) n=  36   0.73s  SM mean   1710 med   1710 min  1710 max  1710 MHz (  81% of 2100)  mem  6000  P  24.2 W (max 28.5)  T 68->66 C  util  14%  throttle: none
+whole script (load .. accuracy)    n=3963  93.16s  SM mean    562 med    210 min   210 max  1710 MHz (  27% of 2100)  mem  2398  P   9.3 W (max 33.6)  T 60->62 C  util   6%  throttle: GpuIdle+SwPowerCap
+idle after run (3 s)               n= 107   3.00s  SM mean    210 med    210 min   210 max   210 MHz (  10% of 2100)  mem   405  P   6.7 W (max  6.8)  T 62->61 C  util   0%  throttle: GpuIdle

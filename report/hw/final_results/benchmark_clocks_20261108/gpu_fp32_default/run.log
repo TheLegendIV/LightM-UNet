@@ -1,0 +1,12 @@
+1794101595.791456414 START
+1794101650.757389121 stream_warm run 1/5: 5.373 s (wall 5.374 s)
+1794101655.179305493 stream_warm run 2/5: 4.408 s (wall 4.408 s)
+1794101660.369577931 stream_warm run 3/5: 5.174 s (wall 5.174 s)
+1794101665.789043272 stream_warm run 4/5: 5.432 s (wall 5.432 s)
+1794101670.283168656 stream_warm run 5/5: 4.490 s (wall 4.490 s)
+1794101690.316614108 energy over the 5 timed streams: active 13.03 W, idle 6.95 W before / 7.27 W after; 224.78 mJ/img total (median), 102.06 mJ/img above idle (median; mean 105.09 +- 11.00) (per run: 99.0, 112.9, 102.1, 92.1, 119.5)
+1794101704.732105552 accuracy (300 images): dice 0.7969  binary 0.7281  LAD 0.6727  RCA 0.9126  LCX 0.8100  LM 0.7922
+1794101704.862139726 {'mode': 'stream_warm', 'runs': 5, 'total_s': 4.9751, 'total_s_std': 0.4907, 'latency_ms_mean': 16.5838, 'latency_ms_std': 1.6357, 'throughput_fps': 60.3, 'throughput_fps_std': 6.174}
+1794101704.865264718 {'mode': 'single_image', 'runs': 200, 'latency_ms_mean': 13.2341, 'latency_ms_std': 4.1692, 'latency_ms_median': 11.9538, 'latency_ms_p95': 23.5823}
+1794101704.871275724 wrote /workspace/LightM-UNet/report/hw/final_results/benchmark_s12_512.csv
+1794101707.263603369 END rc=0

@@ -12,6 +12,7 @@ Arms (`exp` column):
                    indices, only WHERE the value lands is random.
   nearest_quarter  max-unpool nets only: v/4 into all 4 sub-pixels (same per-window sum)
   nearest_half     max-unpool nets only: v/2 into all 4 sub-pixels (same per-window L2 norm)
+  nearest          max-unpool nets only: v unscaled into all 4 sub-pixels (plain nearest-neighbour 2x upsampling)
 
 Run inside the dev container (host python has no torch):
   docker exec -e HOME=/tmp/home_dir lightmunet_dev python3 \
@@ -84,6 +85,7 @@ ARMS = {
     **{f"random_pc_s{s}": ("random", s, False) for s in RANDOM_SEEDS},
     "nearest_quarter": ("nearest_quarter", 0, False),
     "nearest_half": ("nearest_half", 0, False),
+    "nearest": ("nearest", 0, False),
 }
 BILINEAR_ARMS = ("control", "noskip")
 

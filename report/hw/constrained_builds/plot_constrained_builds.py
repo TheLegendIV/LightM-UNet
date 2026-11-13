@@ -43,7 +43,7 @@ CAP_PCT = 40.0
 INFEASIBLE_BG, INFEASIBLE_HATCH = "#cfe3f5", "#9a9a9a"      # shaded region beyond the resource cap
 INFEASIBLE_COLOR = "#c0392b"
 MIXED_COLOR = ALPHA_COLORS.get(0.25)
-EST_MARK_SIZE, EST_MARK_WIDTH = 7, 1.3     # estimated plot: line-only markers (x, +, asterisk), larger than the error plot's so the strokes read
+EST_MARK_SIZE, EST_MARK_WIDTH = 6, 1.3    # estimated plot: line-only markers (x, +, asterisk), larger than the error plot's so the strokes read
 EST_RESOURCE_STYLE = {"lut": ("x", "LUT"), "bram": ("+", "BRAM"), "dsp": ((6, 2, 0), "DSP")}      # estimated plot only (the error plot keeps plot_style.RESOURCE_STYLE): x, +, asterisk; "BRAM" = BRAM18K in the legend
 INT4_COLOR = "#2a78d6"      # INT4 and INT6 are both feasible uniform builds; own hue for INT4 so the two lines are told apart (INT6 keeps UNIFORM_COLOR)
 
@@ -175,12 +175,15 @@ def plot_estimated(costs: dict, dice: dict, fp32: float, out_path: Path) -> None
     """Dice vs resource: per scheme, three hollow markers (circle LUT, square BRAM18K, triangle DSP; shapes and line weight from plot_style.py, shared with s12_512_cost_model_error.png) on a dashed horizontal
     line at the scheme's Dice: the modelled (calibrated ILP + FIFO sim) % of the device. Colour = scheme (INT4 blue, INT6 purple, INT8 red = over the cap, Mixed teal), shape = resource. No real synthesis points."""
     import matplotlib.pyplot as plt
+    from matplotlib.colors import to_rgb
     from matplotlib.lines import Line2D
+    from matplotlib.ticker import MultipleLocator
 
-    # Report version: drawn at the final print width (3.5 in, one IEEE column) so the text below is its real size in the paper (no scaling down in LaTeX: \includegraphics[width=\columnwidth]).
-    fs_label, fs_tick, fs_note, fs_leg = 8.5, 8, 8, 7.5
+    # Report version: drawn at about the final print width (3.45 in canvas, ~3.5 in after the tight bbox; one IEEE column is 3.5 in) so the text below is close to its real size in the paper (\includegraphics[width=\columnwidth] barely rescales it).
+    fs_label, fs_tick = 8.75, 8.25
+    fs_note = fs_leg = 6.5      # all text inside the plot (scheme labels, notes, legend) shares one size
     plt.rcParams["hatch.linewidth"] = 0.5       # thin hatch lines
-    fig, ax = plt.subplots(figsize=(3.5, 3.4), facecolor=SURFACE)
+    fig, ax = plt.subplots(figsize=(3.45, 3.4), facecolor=SURFACE)
     _style_axes(ax)
     ax.axhline(fp32, color=INK, linestyle=":", linewidth=1.0, zorder=1, label=f"FP32 ({fp32:.4f})")
     ax.axvline(CAP_PCT, color=INK, linewidth=1.2, alpha=0.6, zorder=1, label=f"ILP cap ({CAP_PCT:.0f}%)")
@@ -190,40 +193,51 @@ def plot_estimated(costs: dict, dice: dict, fp32: float, out_path: Path) -> None
         c = costs[key]
         color = scheme_color(key)
         xs = {r: pct(c, "model", r) for r in EST_RESOURCE_STYLE}
-        emphasis = 1.8 if key == "mixed468" else 1.0     # the mixed-precision solution is drawn heavier
+        emphasis = 1.4 if key == "mixed468" else 1.0     # the mixed-precision solution's line is drawn heavier
         ax.plot([min(xs.values()), max(xs.values())], [y, y], color=color, linestyle=CAL_STYLE, linewidth=LINE_WIDTH * emphasis, alpha=LINE_ALPHA, zorder=3)
         for z, (r, (m, _)) in enumerate(EST_RESOURCE_STYLE.items()):
-            ax.plot([xs[r]], [y], marker=m, markersize=EST_MARK_SIZE - 1, markeredgecolor=color, markeredgewidth=EST_MARK_WIDTH * emphasis, alpha=MARK_ALPHA, linestyle="none", zorder=5 + z)
-        name = f"{c['label']} ({y:.3f})"     # scheme and its post-QAT Dice, so the accuracy gain per scheme reads off the plot
+            mcolor = tuple(0.5 * v for v in to_rgb(color)) if key == "mixed468" and r == "bram" else color      # Mixed's LUT x and BRAM + coincide at 40 %: the + (drawn above the x, zorder 6 vs 5) is a darker shade of the scheme colour so both read
+            ax.plot([xs[r]], [y], marker=m, markersize=EST_MARK_SIZE - 1, markeredgecolor=mcolor, markeredgewidth=EST_MARK_WIDTH, alpha=MARK_ALPHA, linestyle="none", zorder=5 + z)
+        name = c["label"]     # every build is labelled by name only (Dice reads off the y grid)
         if key == "mixed468":        # sits just under the INT8 line and above the INT6 line, so its label goes right of its markers
-            ax.annotate(name, (max(xs.values()), y), xytext=(7, 0), textcoords="offset points", ha="left", va="center", color=color, fontsize=fs_note, fontweight="bold")
+            ax.annotate(name, (max(xs.values()), y), xytext=(5, 0), textcoords="offset points", ha="left", va="center", color=color, fontsize=fs_note, fontweight="bold")
         else:
             ax.annotate(name, (min(xs.values()), y), xytext=(0, 5), textcoords="offset points", ha="left", color=color, fontsize=fs_note, fontweight="bold")
-    ax.set_xlabel("Estimated resource use (% of device)", color=INK, fontsize=fs_label, fontweight="bold")
+    ax.set_xlabel("Estimated resource use (% of XCZU7EV)", color=INK, fontsize=fs_label, fontweight="bold")
     ax.set_ylabel("Dice", color=INK, fontsize=fs_label, fontweight="bold")
     lo, hi = ax.get_xlim()
     ax.set_xlim(max(0, lo), max(hi, CAP_PCT + 3))
     ax.set_ylim(top=0.82)
     x_right = ax.get_xlim()[1]
     ax.axvspan(CAP_PCT, x_right, facecolor=INFEASIBLE_BG, edgecolor=INFEASIBLE_HATCH, hatch="/////", linewidth=0, alpha=0.5, zorder=0)     # right of the cap: light blue, fine grey diagonal hatch
-    ax.text(CAP_PCT + 1, 0.8185, "Over cap\n(infeasible)", ha="left", va="top", color=INK, fontsize=fs_note, fontweight="bold", zorder=7)
+    ax.text((CAP_PCT + x_right) / 2, sum(ax.get_ylim()) / 2, "Infeasible\nw.r.t. caps", ha="center", va="center", color=INK, fontsize=fs_note, fontweight="bold", zorder=7)
     ax.set_xlim(max(0, lo), x_right)
-    ax.set_xticks(range(10 * int(-(-ax.get_xlim()[0] // 10)), int(x_right) + 1, 10))        # a tick (and a faint vertical line) every 10 %
-    ax.grid(axis="x", color="#e1e0d9", linewidth=0.5, alpha=0.8, zorder=0)
+    x_lo = ax.get_xlim()[0]
+    ax.set_xticks(range(20 * int(-(-x_lo // 20)), int(x_right) + 1, 20))                                               # numbered tick (and a faint vertical line) every 20 %
+    ax.set_xticks([v for v in range(5 * int(-(-x_lo // 5)), int(x_right) + 1, 5) if v % 20], minor=True)               # unnumbered ticks / finer grid lines between the numbered ones, so vertical lines fall every 5 %
+    ax.grid(axis="x", which="major", color="#e1e0d9", linewidth=0.5, alpha=0.8, zorder=0)
+    ax.grid(axis="x", which="minor", color="#e1e0d9", linewidth=0.4, alpha=0.6, zorder=0)
     ax.tick_params(labelsize=fs_tick)
+    ax.tick_params(axis="x", which="minor", length=2.5)
+    ax.yaxis.set_minor_locator(MultipleLocator(0.005))                                                                  # unnumbered tick and finer grid line every 0.005 Dice
+    ax.grid(axis="y", which="minor", color="#e1e0d9", linewidth=0.4, alpha=0.6, zorder=0)
+    ax.tick_params(axis="y", which="minor", length=2.5)
     for t in ax.get_xticklabels() + ax.get_yticklabels():
         t.set_fontweight("bold")
     handles, labels = ax.get_legend_handles_labels()
     for m, name in EST_RESOURCE_STYLE.values():
         handles.append(Line2D([], [], marker=m, color="none", markeredgecolor=SECONDARY_INK, markeredgewidth=EST_MARK_WIDTH, markersize=EST_MARK_SIZE - 1))
         labels.append(name)
-    leg = ax.legend(handles, labels, loc="lower right", frameon=True, facecolor=SURFACE, edgecolor=GUIDE_COLOR, fontsize=fs_leg, borderpad=0.4, labelspacing=0.3, handlelength=1.6, labelcolor=SECONDARY_INK)
+    leg = ax.legend(handles, labels, loc="lower right", bbox_to_anchor=(1.0, 0.07), frameon=True, facecolor=SURFACE, edgecolor=GUIDE_COLOR, fontsize=fs_leg, borderpad=0.4, labelspacing=0.3, handlelength=1.6, labelcolor=SECONDARY_INK)
     for t in leg.get_texts():
         t.set_fontweight("bold")
     fig.tight_layout(pad=0.4)
     fig.savefig(out_path, dpi=300, bbox_inches="tight", facecolor=SURFACE)
+    with plt.rc_context({"pdf.fonttype": 42, "svg.fonttype": "path"}):      # vector copies for the report (.pdf is picked by the extension-less \includegraphics); TrueType-embedded text, SVG text as outlines
+        for ext in (".pdf", ".svg"):
+            fig.savefig(out_path.with_suffix(ext), bbox_inches="tight", facecolor=SURFACE)
     plt.close(fig)
-    print(f"Wrote {out_path}")
+    print(f"Wrote {out_path} (+ .pdf, .svg)")
 
 
 def main() -> int:

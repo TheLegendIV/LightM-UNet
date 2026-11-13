@@ -1,0 +1,13 @@
+1794102116.330577655 START
+1794102122.456312726 [11/08/2026-02:42:02] [TRT] [W] CUDA lazy loading is not enabled. Enabling it can significantly reduce device memory usage and speed up TensorRT initialization. See "Lazy Loading" section of CUDA documentation https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#lazy-loading
+1794102151.558921652 stream_warm run 1/5: 0.931 s (wall 0.932 s)
+1794102152.622223899 stream_warm run 2/5: 1.056 s (wall 1.056 s)
+1794102153.563295345 stream_warm run 3/5: 0.944 s (wall 0.945 s)
+1794102154.534425280 stream_warm run 4/5: 0.969 s (wall 0.969 s)
+1794102155.538254505 stream_warm run 5/5: 1.002 s (wall 1.002 s)
+1794102175.568334725 energy over the 5 timed streams: active 32.85 W, idle 6.79 W before / 7.74 W after; 109.76 mJ/img total (median), 85.49 mJ/img above idle (median; mean 82.70 +- 9.26) (per run: 69.5, 93.3, 77.6, 87.6, 85.5)
+1794102181.614809631 accuracy (300 images): dice 0.7915  binary 0.7293  LAD 0.6785  RCA 0.8930  LCX 0.8045  LM 0.7901
+1794102181.637380381 {'mode': 'stream_warm', 'runs': 5, 'total_s': 0.9804, 'total_s_std': 0.05, 'latency_ms_mean': 3.2682, 'latency_ms_std': 0.1665, 'throughput_fps': 305.983}
+1794102181.639912181 {'mode': 'single_image', 'runs': 200, 'latency_ms_mean': 3.6503, 'latency_ms_std': 0.7748, 'latency_ms_median': 3.2777}
+1794102181.642680340 wrote /workspace/LightM-UNet/report/hw/final_results/benchmark_s12_512.csv
+1794102182.253889553 END rc=0

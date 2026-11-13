@@ -11,23 +11,45 @@
     "cpu": "12th Gen Intel(R) Core(TM) i7-1260P",
     "gpu_driver_maxsmclk_powerlimit": "537.70, 2100 MHz, [N/A]",
     "python": "3.10.11",
-    "timestamp": "2026-10-16T17:07:27",
+    "timestamp": "2026-11-08T02:35:04",
     "warm_runs_s": [
-      2.5884384765625,
-      1.944374267578125,
-      2.1190400390625,
-      1.9056834716796875,
-      1.924969482421875
+      5.37259619140625,
+      4.40779052734375,
+      5.17366162109375,
+      5.43172998046875,
+      4.48991650390625
     ],
     "warm_runs_wall_s": [
-      2.5886963199882302,
-      1.944530656997813,
-      2.119208973017521,
-      1.905819229024928,
-      1.9251178019912913
+      5.373642595950514,
+      4.408472711918876,
+      5.174482905073091,
+      5.432405072962865,
+      4.490462735993788
     ],
     "batch_size": 1,
-    "warmup": 10
+    "warmup": 10,
+    "energy": {
+      "energy_dyn_j_per_image_mean": 0.10509076756211881,
+      "energy_dyn_j_per_image_std": 0.010999367665453837,
+      "energy_dyn_j_per_image_runs": [
+        0.09896905993113407,
+        0.11291145647242615,
+        0.10205543712626586,
+        0.09206223210805563,
+        0.11945565217271238
+      ],
+      "energy_j_per_image_runs": [
+        0.22646999999997205,
+        0.21747333333342492,
+        0.22478333333332556,
+        0.22091666666655024,
+        0.2258500000000155
+      ],
+      "power_idle_before_w": 6.950876596045192,
+      "power_idle_after_w": 7.27479428951148,
+      "idle_window_s": 20.021791219711304,
+      "energy_source": "NVML nvmlDeviceGetTotalEnergyConsumption (RTX 2050 board energy)"
+    }
   },
   "cpu:fp32": {
     "platform": "12th Gen Intel(R) Core(TM) i7-1260P",
@@ -41,23 +63,45 @@
     "cpu": "12th Gen Intel(R) Core(TM) i7-1260P",
     "gpu_driver_maxsmclk_powerlimit": null,
     "python": "3.10.11",
-    "timestamp": "2026-10-16T16:58:14",
+    "timestamp": "2026-11-08T02:48:05",
     "warm_runs_s": [
-      15.528191927005537,
-      16.036540592991514,
-      15.46140704798745,
-      15.348661297990475,
-      15.424985019024462
+      27.4241779060103,
+      28.875763080082834,
+      29.05432347813621,
+      28.906952360877767,
+      28.898662474006414
     ],
     "warm_runs_wall_s": [
-      15.528191927005537,
-      16.036540592991514,
-      15.46140704798745,
-      15.348661297990475,
-      15.424985019024462
+      27.4241779060103,
+      28.875763080082834,
+      29.05432347813621,
+      28.906952360877767,
+      28.898662474006414
     ],
     "batch_size": 1,
-    "warmup": 10
+    "warmup": 10,
+    "energy": {
+      "energy_dyn_j_per_image_mean": 0.4407864728727435,
+      "energy_dyn_j_per_image_std": 0.11218784643424917,
+      "energy_dyn_j_per_image_runs": [
+        0.641377454810638,
+        0.3862141346563097,
+        0.3896093215103586,
+        0.39081481911115473,
+        0.3959166342752561
+      ],
+      "energy_j_per_image_runs": [
+        1.6395500397558014,
+        1.4372682728618384,
+        1.4471397726920743,
+        1.4430819842405618,
+        1.4477997685223818
+      ],
+      "power_idle_before_w": 12.57740613801395,
+      "power_idle_after_w": 9.26366053932555,
+      "idle_window_s": 20.01914358139038,
+      "energy_source": "Windows Energy Meter RAPL_Package0_PKG (CPU package incl. iGPU, no DRAM / wall)"
+    }
   },
   "cuda:fp32_strict": {
     "platform": "NVIDIA GeForce RTX 2050",
@@ -71,23 +115,45 @@
     "cpu": "12th Gen Intel(R) Core(TM) i7-1260P",
     "gpu_driver_maxsmclk_powerlimit": "537.70, 2100 MHz, [N/A]",
     "python": "3.10.11",
-    "timestamp": "2026-10-16T16:52:49",
+    "timestamp": "2026-11-08T02:37:53",
     "warm_runs_s": [
-      2.427701171875,
-      2.46194482421875,
-      3.529527099609375,
-      3.326146484375,
-      3.499640869140625
+      4.59277197265625,
+      4.7781796875,
+      4.35137451171875,
+      6.85652685546875,
+      4.88846630859375
     ],
     "warm_runs_wall_s": [
-      2.4279106419999152,
-      2.462135481997393,
-      3.5297173529979773,
-      3.3263449530059006,
-      3.50001776200952
+      4.593314694007859,
+      4.778750743018463,
+      4.351875202031806,
+      6.857335004024208,
+      4.8890154249966145
     ],
     "batch_size": 1,
-    "warmup": 10
+    "warmup": 10,
+    "energy": {
+      "energy_dyn_j_per_image_mean": 0.08721697481131575,
+      "energy_dyn_j_per_image_std": 0.0040726987423235035,
+      "energy_dyn_j_per_image_runs": [
+        0.0875528727145395,
+        0.09083368126563775,
+        0.0896321527024802,
+        0.08035567307789716,
+        0.08771049429602411
+      ],
+      "energy_j_per_image_runs": [
+        0.19433333333329453,
+        0.20192333333330073,
+        0.1906533333333209,
+        0.2395266666666915,
+        0.20118333333327124
+      ],
+      "power_idle_before_w": 6.845908200735577,
+      "power_idle_after_w": 7.077384978552703,
+      "idle_window_s": 20.018527269363403,
+      "energy_source": "NVML nvmlDeviceGetTotalEnergyConsumption (RTX 2050 board energy)"
+    }
   },
   "cuda:fp16_autocast": {
     "platform": "NVIDIA GeForce RTX 2050",
@@ -101,63 +167,85 @@
     "cpu": "12th Gen Intel(R) Core(TM) i7-1260P",
     "gpu_driver_maxsmclk_powerlimit": "537.70, 2100 MHz, [N/A]",
     "python": "3.10.11",
-    "timestamp": "2026-10-16T16:54:40",
+    "timestamp": "2026-11-08T02:40:48",
     "warm_runs_s": [
-      3.610629150390625,
-      3.654331298828125,
-      4.630236328125,
-      4.51605419921875,
-      4.5064111328125
+      7.1264462890625,
+      5.9408291015625,
+      5.9135048828125,
+      5.49401416015625,
+      5.8105517578125
     ],
     "warm_runs_wall_s": [
-      3.610868071002187,
-      3.6545668610197026,
-      4.630489367002156,
-      4.51626940999995,
-      4.506679327983875
+      7.127247232943773,
+      5.941258772043511,
+      5.9139439021237195,
+      5.494589498033747,
+      5.811269798083231
     ],
     "batch_size": 1,
-    "warmup": 10
+    "warmup": 10,
+    "energy": {
+      "energy_dyn_j_per_image_mean": 0.057695193187886386,
+      "energy_dyn_j_per_image_std": 0.009235577716307997,
+      "energy_dyn_j_per_image_runs": [
+        0.07416631257718408,
+        0.054284920480889225,
+        0.052768999823513546,
+        0.05295623576032848,
+        0.054299497297516625
+      ],
+      "energy_j_per_image_runs": [
+        0.23885333333339076,
+        0.19160333333342958,
+        0.18932666666669926,
+        0.17988333333322468,
+        0.18855666666660303
+      ],
+      "power_idle_before_w": 6.745440717995205,
+      "power_idle_after_w": 7.11203833098681,
+      "idle_window_s": 20.020930528640747,
+      "energy_source": "NVML nvmlDeviceGetTotalEnergyConsumption (RTX 2050 board energy)"
+    }
   },
   "cpu:int8_ort": {
     "platform": "12th Gen Intel(R) Core(TM) i7-1260P",
     "checkpoint": "nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_bilinear_upsample_256_perlayer_12_dense_relu_warmstart150ep_bilinear_uniform_int8_perlayer_ft15ep",
     "input": "uint8 levels as float32, profile s12_512_bilinear_int8_maxfps",
     "warm_runs_s": [
-      3.2185404010815546,
-      3.098798298975453,
-      3.015893917065114,
-      3.0259163299342617,
-      3.077556059928611
+      3.0627538471017033,
+      5.920562596991658,
+      8.32139031495899,
+      8.155453846091405,
+      8.09050560486503
     ],
     "warmup": 10,
     "batch_size": 1,
-    "timestamp": "2026-10-30T17:26:50",
+    "timestamp": "2026-11-08T02:50:43",
     "runtime": "onnxruntime 1.23.2",
     "threads": 0,
     "providers": [
       "CPUExecutionProvider"
     ],
     "energy": {
-      "energy_dyn_j_per_image_mean": 0.3755159766417445,
-      "energy_dyn_j_per_image_std": 0.00864709631427057,
+      "energy_dyn_j_per_image_mean": 0.21921503782801258,
+      "energy_dyn_j_per_image_std": 0.09516919737509812,
       "energy_dyn_j_per_image_runs": [
-        0.3874455558896725,
-        0.3669931994844709,
-        0.36897867309569254,
-        0.3728092167284453,
-        0.38135323801044135
+        0.36709669331087935,
+        0.26385910440986426,
+        0.15373836997463064,
+        0.15777649796867835,
+        0.1536045234760102
       ],
       "energy_j_per_image_runs": [
-        0.49276194990302125,
-        0.4683904482672612,
-        0.46766164612645905,
-        0.47182028628264866,
-        0.4819747164224585
+        0.46027036036675173,
+        0.4439657629840076,
+        0.406879247824351,
+        0.40576724518711366,
+        0.399721757452935
       ],
-      "power_idle_before_w": 9.733613132286825,
-      "power_idle_after_w": 9.89883655224635,
-      "idle_window_s": 20.01838207244873,
+      "power_idle_before_w": 8.939800027217686,
+      "power_idle_after_w": 9.312458639502658,
+      "idle_window_s": 20.018527269363403,
       "energy_source": "Windows Energy Meter RAPL_Package0_PKG (CPU package incl. iGPU, no DRAM / wall)"
     }
   },
@@ -166,38 +254,38 @@
     "checkpoint": "nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_bilinear_upsample_256_perlayer_12_dense_relu_warmstart150ep_bilinear_uniform_int8_perlayer_ft15ep",
     "input": "uint8 levels as float32, profile s12_512_bilinear_int8_maxfps",
     "warm_runs_s": [
-      0.882545654296875,
-      1.0944910888671875,
-      1.106145263671875,
-      1.13343798828125,
-      1.10847900390625
+      0.931391357421875,
+      1.0558770751953126,
+      0.9443406982421875,
+      0.968933349609375,
+      1.0016890869140624
     ],
     "warmup": 10,
     "batch_size": 1,
-    "timestamp": "2026-10-30T16:55:36",
+    "timestamp": "2026-11-08T02:43:01",
     "runtime": "TensorRT 10.3.0",
     "builder_flags": "INT8",
     "engine_layers": 159,
     "energy": {
-      "energy_dyn_j_per_image_mean": 0.07086888406949547,
-      "energy_dyn_j_per_image_std": 0.004839732966710522,
+      "energy_dyn_j_per_image_mean": 0.08270486853872536,
+      "energy_dyn_j_per_image_std": 0.009257550518693368,
       "energy_dyn_j_per_image_runs": [
-        0.07947753582334631,
-        0.06828909168203166,
-        0.0691795943223408,
-        0.0681254203928992,
-        0.06927277812685939
+        0.06952395042495765,
+        0.09327633740276746,
+        0.07764064968417907,
+        0.08759704766840132,
+        0.08548635751332134
       ],
       "energy_j_per_image_runs": [
-        0.09439666666672565,
-        0.08682666666669926,
-        0.08793666666664648,
-        0.08730999999999767,
-        0.0880266666666527
+        0.09210000000001552,
+        0.11886666666677533,
+        0.10054000000003725,
+        0.11108333333317812,
+        0.10975666666675049
       ],
-      "power_idle_before_w": 4.925186983359762,
-      "power_idle_after_w": 5.204151070876086,
-      "idle_window_s": 20.02035665512085,
+      "power_idle_before_w": 6.787613497455735,
+      "power_idle_after_w": 7.73833594470805,
+      "idle_window_s": 20.018523454666138,
       "energy_source": "NVML nvmlDeviceGetTotalEnergyConsumption (RTX 2050 board energy)"
     }
   },
