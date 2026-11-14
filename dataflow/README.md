@@ -1,7 +1,7 @@
 # dataflow/ — FINN hardware build pipeline
 
-> See [`../PIPELINE.md`](../PIPELINE.md) for how this subsystem fits into the
-> full pipeline (diagram, artifact interfaces, target repo layout); this file
+> See [`../reproduce_flow.ipynb`](../reproduce_flow.ipynb) for how this subsystem fits into the
+> full pipeline (stage order, artifacts, directory tree); this file
 > covers implementation detail for the hardware-build stages only.
 
 This folder takes the Brevitas-quantized ENet-family segmentation network,

@@ -24,7 +24,7 @@ Only reports, configs and logs are kept (no `intermediate_models`, no IP / bitst
 
 ## Results (OOC synthesis of the 8 partitions, 100 MHz target)
 
-DSP is the real DSP48E2 count (`| DSPs |` row of each partition's Vivado `report_utilization`, via `dataflow/utils/dump_real_dsp_utilization.py`). The `DSP` field in the `ooc_synth_*.json` files of the `report/` folders is always 0 (broken Tcl filter) and was not corrected in place; per-partition real values for the constrained builds are in `report/MILP/constrained_builds/real_dsp_per_partition.json` (INT8 fps150: `relaxed_fps150/uniform_int8/real_dsp_per_partition.json`).
+DSP is the real DSP48E2 count (`| DSPs |` row of each partition's Vivado `report_utilization`, via `dataflow/utils/dump_real_dsp_utilization.py`). The `DSP` field in the `ooc_synth_*.json` files of the `report/` folders is always 0 (broken Tcl filter) and was not corrected in place; per-partition real values for the constrained builds are in `report/hw/constrained_builds/real_dsp_per_partition.json` (INT8 fps150: `relaxed_fps150/uniform_int8/real_dsp_per_partition.json`).
 
 | Arm | LUT | FF | DSP | BRAM18 + BRAM36 | Worst-partition Fmax (MHz) | FINN est. FPS @100 MHz | Combined rtlsim (cycles, 1 image) |
 |---|---|---|---|---|---|---|---|

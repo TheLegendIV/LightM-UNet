@@ -1,9 +1,9 @@
 """INT8 CPU / GPU benchmark of the uniform-INT8 QAT network (checkpoint nnUNetTrainerLayerQuantEnetFINN_12_dense_relu_bilinear_upsample_256_perlayer_12_dense_relu_warmstart150ep_bilinear_uniform_int8_
-perlayer_ft15ep, the network of the FPGA build s12_512_bilinear_int8_maxfps) -> rows of report/MILP/final_results/benchmark_s12_512.csv, same modes and timing rules as benchmark_fp32_cpu_gpu.py.
+perlayer_ft15ep, the network of the FPGA build s12_512_bilinear_int8_maxfps) -> rows of report/hw/final_results/benchmark_s12_512.csv, same modes and timing rules as benchmark_fp32_cpu_gpu.py.
 
   --backend ort-cpu   ONNX Runtime CPU, int8 kernels (QDQ graph -> QLinearConv, VNNI), i7-1260P
   --backend trt-gpu   TensorRT INT8 (explicit quantization; no FP16 flag, so layers without an int8 kernel run FP32), RTX 2050 laptop (TensorRT only exists for NVIDIA GPUs)
-The ONNX files are report/MILP/benchmark/export_int8_qcdq.py's QDQ conversion of the FPGA build's QONNX export (BatchNorm folded into per-channel int8 weight scales, an ArgMax appended: the timed unit is
+The ONNX files are report/hw/benchmark/export_int8_qcdq.py's QDQ conversion of the FPGA build's QONNX export (BatchNorm folded into per-channel int8 weight scales, an ArgMax appended: the timed unit is
 network + argmax, as everywhere else). The input is the board's UINT8 input contract (z-score, quantize with the input_profiles.json scale, +128) computed on the host BEFORE timing, as the FPGA host does.
 
 Timing (as the FP32 benchmark and the FPGA window): all 300 inputs resident on the device, ONE timed region from the first to the last inference (stream_warm, after --warmup untimed runs), batch 1,
@@ -11,8 +11,8 @@ no host-to-device or result transfer inside it; single_image = livestream of sin
 and only the compute (launch -> synchronize) is timed (mean/std/median/min/p95/p99). Accuracy: separate untimed pass, same Dice definitions as deployment/collect_results.py.
 
 Usage (lightmunet_dev; TensorRT is installed to /opt/trt_pkgs, see TRT_PKGS):
-    python report/MILP/benchmark/benchmark_int8_cpu_gpu.py --backend ort-cpu
-    PYTHONPATH=/opt/trt_pkgs python report/MILP/benchmark/benchmark_int8_cpu_gpu.py --backend trt-gpu
+    python report/hw/benchmark/benchmark_int8_cpu_gpu.py --backend ort-cpu
+    PYTHONPATH=/opt/trt_pkgs python report/hw/benchmark/benchmark_int8_cpu_gpu.py --backend trt-gpu
 """
 from __future__ import annotations
 

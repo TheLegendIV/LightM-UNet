@@ -1,4 +1,4 @@
-# Host-side CPU package energy logger (Windows "Energy Meter" RAPL counter), read by report/MILP/benchmark/power_meter.py from inside lightmunet_dev
+# Host-side CPU package energy logger (Windows "Energy Meter" RAPL counter), read by report/hw/benchmark/power_meter.py from inside lightmunet_dev
 # through the bind-mounted repo (WSL2 containers have no /sys/class/powercap). Run on the Windows host while the benchmark runs; stop with Ctrl+C.
 #   powershell -ExecutionPolicy Bypass -File analysis\benchmark\host_rapl_sampler.ps1
 # Columns: unix_s (host clock), energy_pwh (cumulative RAPL_Package0_PKG energy in picowatt-hours; 1 count = 3.6e-9 J), power_mw (Windows' own average, for cross-checking only).

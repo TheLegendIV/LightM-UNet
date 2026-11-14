@@ -4,7 +4,7 @@ error % = 100 * (model - real) / real, so + = overestimate, - = underestimate. T
 
 Reads modelled_vs_real_cost.csv (plot_constrained_builds.py); writes model_error_summary.csv (aggregate) and model_error_by_design.csv (every design).
 Cycles: no measured cycles exist for these four builds (no board / full-network rtlsim run), so the row is left empty rather than compared with a simulation.
-    python report/MILP/constrained_builds/build_error_summary.py
+    python report/hw/constrained_builds/build_error_summary.py
 """
 from __future__ import annotations
 

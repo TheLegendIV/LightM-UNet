@@ -5,7 +5,7 @@ INT4 / INT6 / INT8 rows are the uniform-bit QAT runs: the MILP only chooses the 
 is infeasible), so its MILP solve is the relaxed-caps one (relaxed_fps150/uniform_int8). The mixed 4/6/8 row is the cap40_fps150/mixed_468 allocation (QAT job qat_..._ablation_v2_cap40_fps150_mixed468_ft15ep).
 The FINN auto-fold INT6 build has the INT6 bits (same Dice) and is not listed.
 
-Run:  python report/MILP/constrained_builds/build_dice_csv.py
+Run:  python report/hw/constrained_builds/build_dice_csv.py
 """
 import csv
 import os

@@ -1,7 +1,7 @@
 # nas/
 
-> See [`../PIPELINE.md`](../PIPELINE.md) for how this subsystem fits into the
-> full pipeline (diagram, artifact interfaces, target repo layout); this file
+> See [`../reproduce_flow.ipynb`](../reproduce_flow.ipynb) for how this subsystem fits into the
+> full pipeline (stage order, artifacts, directory tree); this file
 > covers implementation detail for the compression stages only.
 
 > **Update:** the binary (single foreground class) coronary-vessel objective

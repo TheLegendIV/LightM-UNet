@@ -10,7 +10,7 @@ Resource estimates (ILP/artifacts/S12_dense_512_uniform_cap1_v1/<arm>/summary.cs
 INT8 needs 55.6 % of the LUTs, so it does not fit the 0.5 resource cap the mixed design is held to (red). Dice: the QAT evaluation table (FP32 is the dotted reference).
 
 Usage:
-    python report/MILP/quantization/plot_s12_512_quantization_vs_resources.py
+    python report/hw/constrained_builds/plot_s12_512_quantization_vs_resources.py
 """
 from __future__ import annotations
 

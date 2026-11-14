@@ -7,7 +7,7 @@ is also dashed for calibrated, solid for uncalibrated); the lines join all four 
 joins are a visual guide, not an interpolation. y is capped at 100 %.
 Source: modelled_vs_real_cost.csv (plot_constrained_builds.py); signed values also in model_error_by_design.csv (build_error_summary.py).
 Colours: slots 1-3 of the reference categorical palette (blue, orange, aqua), validated all-pairs; aqua is below 3:1 on the light surface, so identity also rides on the marker shape and the legend.
-    python report/MILP/constrained_builds/plot_model_error.py
+    python report/hw/constrained_builds/plot_model_error.py
 """
 from __future__ import annotations
 

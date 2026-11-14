@@ -11,8 +11,8 @@ an ArgMax over the class axis is appended (the FPGA chain ends in an argmax node
   *_ort.onnx  the conv bias as int32 (DequantizeLinear, scale = s_x * s_w per channel), the standard QDQ form ONNX Runtime fuses into QLinearConv (VNNI int8 kernels);
   *_trt.onnx  the conv bias as a float constant (TensorRT folds it; it does not take quantized biases).
 
-Run (lightmunet_dev, repo at /workspace/LightM-UNet):  python report/MILP/benchmark/export_int8_qcdq.py
-Output: report/MILP/benchmark/int8/s12_512_bilinear_int8_qcdq_{ort,trt}.onnx
+Run (lightmunet_dev, repo at /workspace/LightM-UNet):  python report/hw/benchmark/export_int8_qcdq.py
+Output: report/hw/benchmark/int8/s12_512_bilinear_int8_qcdq_{ort,trt}.onnx
 """
 import sys
 from pathlib import Path

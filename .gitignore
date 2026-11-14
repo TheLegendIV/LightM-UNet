@@ -77,6 +77,8 @@ deployment/FINN_interface/*
 !**/main.c*
 
 *.pdf
+# The report every stage of reproduce_flow.ipynb is checked against.
+!thesis_final_report.pdf
 
 
 # Exception to the raw-dataset rule above: the Dataset509 (512, 4c) test images (imagesTs) and test masks (labelsTs) stay tracked. Forward slashes (a backslash is an
@@ -85,6 +87,10 @@ deployment/FINN_interface/*
 data/nnUNet_raw/Dataset509_ARCADE_1x1_4c/*
 !data/nnUNet_raw/Dataset509_ARCADE_1x1_4c/imagesTs/
 !data/nnUNet_raw/Dataset509_ARCADE_1x1_4c/labelsTs/
+# Also kept: the small metadata files of Dataset509, which fix the train/validation split. The 1200 training images and masks (about 160 MB) are
+# not tracked: reproduce_flow.ipynb (Section 2) rebuilds them from the ARCADE download with archive/dataset-prep/prepare_arcade_multiclass.py.
+!data/nnUNet_raw/Dataset509_ARCADE_1x1_4c/dataset.json
+!data/nnUNet_raw/Dataset509_ARCADE_1x1_4c/splits_final.json
 
 !data/nnUNet_raw/videos/
 # Video-derived dataset 1 (unique frames, 512x512) stays tracked.

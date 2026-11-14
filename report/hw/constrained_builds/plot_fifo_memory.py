@@ -6,7 +6,7 @@
   Plot = the BRAM18 count of those FIFOs (the rest of the FIFOs sit in LUTs / SRLs); the CSV also has the allocated memory (depth x width, kbit) and the FIFO LUTs. The INT8 arm is the relaxed_fps150 solve (the
   40% cap one is infeasible).
 
-Usage:  python report/MILP/constrained_builds/plot_fifo_memory.py
+Usage:  python report/hw/constrained_builds/plot_fifo_memory.py
 """
 from __future__ import annotations
 

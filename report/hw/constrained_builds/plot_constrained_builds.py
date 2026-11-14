@@ -19,9 +19,9 @@ columns: the same final design priced by STOCK FINN v0.10.1's own estimators (no
 bridge leaves depth_trigger_uram at 0), from build_uncalibrated_cost.py -> uncalibrated_cost.json; blank when that file is missing; not plotted).
 
 Usage:
-    python report/MILP/constrained_builds/build_dice_csv.py      # dice_scores.csv
-    python report/MILP/constrained_builds/build_uncalibrated_cost.py   # uncalibrated_cost.json (MILP container: needs torch)
-    python report/MILP/constrained_builds/plot_constrained_builds.py
+    python report/hw/constrained_builds/build_dice_csv.py      # dice_scores.csv
+    python report/hw/constrained_builds/build_uncalibrated_cost.py   # uncalibrated_cost.json (MILP container: needs torch)
+    python report/hw/constrained_builds/plot_constrained_builds.py
 """
 from __future__ import annotations
 

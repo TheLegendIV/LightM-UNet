@@ -1,5 +1,5 @@
 """Shared pieces of the CPU / GPU benchmark tables (copied from the FP32 benchmark script, now in analysis/archive/benchmark/): paths, the CSV schema and its upsert, small helpers.
-Rows of report/MILP/final_results/benchmark_s12_512.csv are keyed by (platform, numeric_mode, mode); the env JSON next to it records software / hardware per device and mode."""
+Rows of report/hw/final_results/benchmark_s12_512.csv are keyed by (platform, numeric_mode, mode); the env JSON next to it records software / hardware per device and mode."""
 from __future__ import annotations
 
 import csv

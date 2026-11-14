@@ -1,8 +1,8 @@
 """Energy per image for the CPU / GPU benchmark rows: active energy minus idle energy.
 
   gpu  NVML cumulative board-energy counter (nvmlDeviceGetTotalEnergyConsumption, mJ) of the RTX 2050. Board power only, no CPU / DRAM share.
-  cpu  Windows "Energy Meter" RAPL_Package0_PKG (cores + uncore + iGPU, no DRAM / wall power). WSL2 containers have no /sys/class/powercap, so report/MILP/benchmark/host_rapl_sampler.ps1 must be
-       running on the Windows host; it logs (unix_s, cumulative energy in pWh) to report/MILP/benchmark/power_logs/rapl.csv, which the container reads through the bind mount.
+  cpu  Windows "Energy Meter" RAPL_Package0_PKG (cores + uncore + iGPU, no DRAM / wall power). WSL2 containers have no /sys/class/powercap, so report/hw/benchmark/host_rapl_sampler.ps1 must be
+       running on the Windows host; it logs (unix_s, cumulative energy in pWh) to report/hw/benchmark/power_logs/rapl.csv, which the container reads through the bind mount.
 
 summarize(): idle window (model loaded, nothing running) -> the 5 timed 300-image streams, each bracketed by energy reads -> idle window. Per run, dynamic energy = E_run - P_idle * t_run,
 P_idle = mean of the two idle windows; J/image = that / 300, median over the runs (the laptop CPU bursts on the first stream and then throttles, so the mean mixes two regimes; every run is kept in the env JSON). Energy is taken over the same streams that produce the latency row, so both see the same thermal state

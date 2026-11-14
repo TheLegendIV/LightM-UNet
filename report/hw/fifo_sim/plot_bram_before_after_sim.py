@@ -6,7 +6,7 @@ Data: ILP/artifacts/S12_dense_512_uniform_cap1_v1/<arm>/layer_bits_folding_<arm>
       <arm>_simfifo/layer_bits_folding_<arm>_simfifo.json (_diagnostics.total_bram18k_with_all_fifos, fifo_sim.chain.last.period). BRAM is shown as percent of the XCZU7EV's 624 BRAM18K.
 
 Usage:
-    python report/MILP/fifo_sim/plot_bram_before_after_sim.py
+    python report/hw/fifo_sim/plot_bram_before_after_sim.py
 """
 from __future__ import annotations
 

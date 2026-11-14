@@ -15,7 +15,7 @@ multi-day builds and cross-reference prior results before starting new ones.
 | `nas/` | Pruning/quantization sweep orchestration (Slurm), results tracking | [nas/README.md](nas/README.md), `nas/foundation_log.md` |
 | `dataflow/` | FINN export → HAWQ → build → OOC-synth pipeline for the active architecture | [dataflow/README.md](dataflow/README.md) |
 | `deployment/` | Bitstreams (.bit/.xsa), drivers, PC↔FPGA image transfer interface (`img_intf/`), board test-set `collect_results.py` → `deployment/results.csv` | [deployment/img_intf/README.md](deployment/img_intf/README.md) |
-| `report/` | Thesis report scripts/tables: `model_search/` (NAS + benchmark CSVs), `MILP/` (constrained builds, FIFO sim, final results, CPU/GPU `benchmark/`) | — |
+| `report/` | Thesis report scripts/tables: `sw/` (accuracy side: ablation, benchmarks, final-model plots), `hw/` (constrained builds, FIFO sim, final results, CPU/GPU `benchmark/`) | — |
 | `archive/` (any depth, e.g. `dataflow/archive/`) | Retired code/docs kept for history | — |
 
 **`**/archive/` is gitignored repo-wide.** New files created directly inside an
@@ -66,7 +66,7 @@ adding a new one.
    need to mirror the container.
    Vivado/Vitis HLS 2022.2 live at `/tools/Xilinx/{Vivado,Vitis_HLS}/2022.2`
    in-container but aren't on `PATH` — `source .../settings64.sh` first.
-3. **Host (Windows)** — for `nas/hawq/*.py` / `dataflow/collect_results.py`,
+3. **Host (Windows)** — for `ILP/*.py` / `dataflow/collect_results.py`,
    which need torch+pulp+the vendored `enet/nnunetv2` package but have no
    venv/conda set up in this repo. Default Windows `python`/`py` is 3.6 with
    no torch.
@@ -92,8 +92,9 @@ calibrate/evaluate path should be added before relying on this for PTQ numbers.
   (`finn/notebooks/enet/...`, persists) before assuming results are lost —
   only files under the container's ephemeral `/tmp/finn_dev_<user>/...` are
   actually at risk.
-- `FINN/` (repo root) is an intentionally empty placeholder — the real FINN
-  toolchain lives only inside the build container.
+- `sources/FINN/` is a reference clone of FINN at the container's base commit
+  (`v0.10.1-10-g39f0c9a6b`), without the container's cherry-picked MVAU fix — the
+  real FINN toolchain lives only inside the build container.
 
 For accumulated build-specific bugs, resource-model corrections, and per-build
 status, check this workspace's Copilot repo memory (`finn_gotchas.md`,

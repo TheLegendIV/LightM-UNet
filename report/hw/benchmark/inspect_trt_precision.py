@@ -4,8 +4,8 @@ Builds (or loads the cached) engine through TrtGpu, reads the per-layer descript
 int8 / half / float inputs and outputs, then lists every layer that has no int8 tensor on its input or output side. Needs the engine built with
 ProfilingVerbosity.DETAILED (set in TrtGpu); delete int8/*.plan if it was built before that.
 
-Usage (lightmunet_dev):  bash report/MILP/benchmark/run_trt_int8.sh is the benchmark; this one:
-    PYTHONPATH=/opt/trt_pkgs LD_LIBRARY_PATH=<as in run_trt_int8.sh> python3 report/MILP/benchmark/inspect_trt_precision.py
+Usage (lightmunet_dev):  bash report/hw/benchmark/run_trt_int8.sh is the benchmark; this one:
+    PYTHONPATH=/opt/trt_pkgs LD_LIBRARY_PATH=<as in run_trt_int8.sh> python3 report/hw/benchmark/inspect_trt_precision.py
 """
 from __future__ import annotations
 

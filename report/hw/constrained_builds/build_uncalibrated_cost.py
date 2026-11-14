@@ -14,7 +14,7 @@ thresholds is the model's own FINN-R bound.
 
 The script first re-prices every node with the CURRENT calibrated model and checks the totals against the stored `_diagnostics` (plumbing check, must match), then prices with stock FINN.
 Runs in the MILP container (needs torch for the geometry trace and qonnx for the FINN datatypes):
-    docker exec lightmunet_dev python3 report/MILP/constrained_builds/build_uncalibrated_cost.py
+    docker exec lightmunet_dev python3 report/hw/constrained_builds/build_uncalibrated_cost.py
 """
 from __future__ import annotations
 

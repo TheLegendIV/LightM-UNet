@@ -58,7 +58,7 @@ It copies the xmodel, `bench_board.py` and the 300 test images to the board (ove
 WSL ssh), runs the timed streams, single-image latency and the board power
 measurement there, scores the class maps with the repo Dice, and upserts the
 `stream_warm` / `single_image` rows (`int8_dpu`) into
-`report/MILP/final_results/benchmark_s12_512.csv` + `_env.json`.
+`report/hw/final_results/benchmark_s12_512.csv` + `_env.json`.
 Timing covers DPU input → class map after argmax; preprocessing is done before
 and excluded. Power follows the FINN flow (sum of the board's rail monitors, `deployment/FINN_interface/.../power_mon.c`):
 the ZCU104 has only one INA226 (12 V input), but its two IRPS5401 regulators (i2c-4, 0x43/0x44) report `READ_POUT`
